@@ -1194,6 +1194,32 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "the actual parent road may own the shared terminal without the branch modifier");
   assert.equal(parentWinner.terminalGeometryOnly, false,
     "an incident parent modifier removes the geometry-only evidence caveat");
+  const ownedParentTop = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
+    index === realSurfaces.length - 1
+      ? { ...surface, contributingModifierIds: [parentCode], groundMaterialOwnerId: parentCode }
+      : { ...surface, groundMaterialOwnerId: actual.code }), realParents);
+  assert.equal(ownedParentTop.sampledPass, true,
+    "the actual SEED parent may own the visible road at the exact shared site junction");
+  const hiddenBranch = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
+    index === 1
+      ? { ...surface, contributingModifierIds: [actual.code, "UNRELATED/OVERPASS"],
+          groundMaterialOwnerId: "UNRELATED/OVERPASS" }
+      : { ...surface, groundMaterialOwnerId: actual.code }), realParents);
+  assert.equal(hiddenBranch.topSurfaceOwned, false);
+  assert.equal(hiddenBranch.sampledPass, false,
+    "a contributing buried branch cannot certify a different road's visible top material");
+  assert.deepEqual([hiddenBranch.firstUnsafeStation, hiddenBranch.firstUnsafeCause],
+    [2, "unrelated winning site-access road surface"],
+    "first hidden interior road station must be named without extra final-surface probes");
+  const hiddenTerminal = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
+    index === realSurfaces.length - 1
+      ? { ...surface, contributingModifierIds: [actual.code, "UNRELATED/OVERPASS"],
+          groundMaterialOwnerId: "UNRELATED/OVERPASS" }
+      : { ...surface, groundMaterialOwnerId: actual.code }), realParents);
+  assert.equal(hiddenTerminal.sampledPass, false,
+    "a registered parent join cannot legalize an unrelated visible terminal road");
+  assert.deepEqual([hiddenTerminal.firstUnsafeStation, hiddenTerminal.firstUnsafeCause],
+    [realSurfaces.length, "unrelated winning site-access road surface"]);
 
   const edge = {
     code: "S005/SITE/ACCESS", from: "S005/NODE/SITE/EXAMPLE", roadClass: "access",
