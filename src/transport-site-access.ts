@@ -159,7 +159,7 @@ export function siteAccessSampleVerdict(
     surfaces.every((surface, index) => surface.traversal !== "difficult" &&
       (surface.traversal !== "open" ||
         (localRoadSlopes !== undefined && Number.isFinite(localRoadSlopes[index]) &&
-          localRoadSlopes[index]! <= .08)));
+          localRoadSlopes[index]! >= 0 && localRoadSlopes[index]! <= .08)));
   const sampledPass = full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
     supportedWater && walkable && topSurfaceOwned && gradeWithinLimit;
   // On-demand diagnostic only. Reuse already sampled <=49 stations; identify
@@ -193,7 +193,7 @@ export function siteAccessSampleVerdict(
         cause = "local site-access slope not sampled";
       else if (surface.traversal === "difficult" ||
         (surface.traversal === "open" &&
-          (!Number.isFinite(localRoadSlopes![index]) || localRoadSlopes![index]! > .08)))
+          (!Number.isFinite(localRoadSlopes![index]) || localRoadSlopes![index]! < 0 || localRoadSlopes![index]! > .08)))
         cause = "unsafe local site-access slope";
       else if (surface.deckHeight == null && surface.traversal !== "road" && surface.traversal !== "open")
         cause = "non-road site-access traversal";
