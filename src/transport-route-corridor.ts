@@ -26,7 +26,7 @@ export function corridorUnsafeRoadExclusion(station: CorridorStation): string | 
     ? null : station.edgeCode;
 }
 type Plan = Readonly<
-  | { status: "invalid"; reason?: "repeated-road" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
+  | { status: "invalid"; reason?: "repeated-road" | "repeated-node" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
   | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
@@ -56,6 +56,7 @@ export function planTransportRouteCorridor(
   // a detached later road or a path that never reaches its requested site.
   // This is bounded by graph edge count and does not sample final surfaces.
   let endpointAt = route.from;
+  const seenNodes = new Set([endpointAt]);
   for (const code of route.edgeCodes) {
     const edge = roads.get(code);
     if (!edge?.centerline || edge.centerline.length < 2)
@@ -71,6 +72,11 @@ export function planTransportRouteCorridor(
         !physicalMatch(first, origin) || !physicalMatch(last, destination) ||
         (incidentRoads && (!incidentRoads.has(endpointAt) || !incidentRoads.has(next))))
       return invalidSourceChain(code);
+    // Distinct roads may still form a cycle back through a visited Y/bank.
+    // A source-owned physical PASS must never describe that loop as non-retracing.
+    if (seenNodes.has(next))
+      return Object.freeze({ status: "invalid", reason: "repeated-node", edgeCode: code, stations: EMPTY });
+    seenNodes.add(next);
     endpointAt = next;
   }
   if (endpointAt !== route.to)

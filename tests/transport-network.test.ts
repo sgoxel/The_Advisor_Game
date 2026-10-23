@@ -876,6 +876,18 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     { from: "A", to: "C", edgeCodes: [a.code, b.code, a.code, b.code] }, registry, nodes,
   ), { status: "invalid", reason: "repeated-road", edgeCode: a.code, stations: [] },
   "a longer graph walk must name the FIRST duplicate road deterministically");
+  // Four unique graph roads can still revisit the departure node through a Y cycle.
+  const back = makeEdge("road/back", "C", "A", 5, 0),
+    exit = makeEdge("road/exit", "A", "E", 0, -2),
+    loopRoads = new Map([a, b, back, exit].map(edge => [edge.code, edge])),
+    loopNodes = new Map(nodes);
+  loopNodes.set("E", { x: -2, z: 0 });
+  const loop = { from: "A", to: "E", edgeCodes: [a.code, b.code, back.code, exit.code] };
+  const rejection = { status: "invalid", reason: "repeated-node", edgeCode: back.code, stations: [] };
+  assert.deepEqual(planTransportRouteCorridor(loop, loopRoads, loopNodes), rejection,
+    "a different road returning to an already visited graph node cannot certify non-retracing passage");
+  assert.deepEqual(planTransportRouteCorridorByLeg(loop, loopRoads, loopNodes), rejection,
+    "the bounded on-demand wrapper must also reject repeated graph nodes before physical sampling");
   assert.equal(withOwner.status, "ready");
   const joined = withOwner.stations[3];
   assert.deepEqual(joined.junctionOwnerCodes, [a.code, b.code, otherIncident.code],
