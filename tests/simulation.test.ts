@@ -12,6 +12,7 @@ import {
   populationOf,
   residentAt,
   residentFoundationAt,
+  continuousWalkableOffsetSegment,
 } from "../src/simulation.ts";
 
 import { localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -24,6 +25,16 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
+  const start = { eastM: 0, northM: 0 }, goal = { eastM: 12, northM: 0 };
+  assert.equal(continuousWalkableOffsetSegment(start, goal, point => point.eastM < 5 || point.eastM > 7), false,
+    "walkable endpoints cannot legalize an impassable middle crossing");
+  assert.equal(continuousWalkableOffsetSegment(start, goal, point => point.northM === 0), true,
+    "an unobstructed straight local segment remains eligible");
+  assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
+    "crossing legality cannot depend on direction");
+});
 
 test("every resident foundation owns one stable canonical house and entrance", () => {
   assert.equal(RESIDENTIAL_CAPACITY, 1);
