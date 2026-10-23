@@ -217,8 +217,8 @@ export function planTransportRouteCorridorByLeg(
     if (previousIndex >= 0) {
       const previous = stations[previousIndex], first = part.stations[0];
       if (!first || Math.hypot(wrapSourceX(first.x - previous.x), first.z - previous.z) > 1e-4 ||
-          !previous.junctionOwnerCodes?.includes(code) ||
-          !first.junctionOwnerCodes?.includes(previous.edgeCode))
+          (incidentRoads && (!previous.junctionOwnerCodes?.includes(code) ||
+            !first.junctionOwnerCodes?.includes(previous.edgeCode))))
         return Object.freeze({ status: "invalid", stations: EMPTY });
     }
     const extra = part.stations.length - (previousIndex >= 0 ? 1 : 0);
