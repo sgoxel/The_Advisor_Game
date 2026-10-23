@@ -880,7 +880,8 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   const back = makeEdge("road/back", "C", "A", 5, 0),
     exit = makeEdge("road/exit", "A", "E", 0, -2),
     loopRoads = new Map([a, b, back, exit].map(edge => [edge.code, edge])),
-    loopNodes = new Map([...nodes, ["E", { x: -2, z: 0 }]]);
+    loopNodes = new Map(nodes);
+  loopNodes.set("E", { x: -2, z: 0 });
   const loop = { from: "A", to: "E", edgeCodes: [a.code, b.code, back.code, exit.code] };
   const rejection = { status: "invalid", reason: "repeated-node", edgeCode: back.code, stations: [] };
   assert.deepEqual(planTransportRouteCorridor(loop, loopRoads, loopNodes), rejection,
