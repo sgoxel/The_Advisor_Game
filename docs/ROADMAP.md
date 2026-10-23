@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Continuous SEED-legal gate→Y→bridge→site passage: final-surface proof, truthful first-route UX
+- WP-S005-001-001 — Prove uninterrupted SEED-legal gate→Y→bridge→site route; fast truthful previews
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident home→work/guard travel: Fantasy-Time, fast inspection & bounded 2D actors
+- WP-S006-001-001 — Legal resident door→work/guard paths: Fantasy-Time, prompt inspection & pooled 2D actors
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Reference toon/GLB/2D world art: semantic zoom, legibility & mobile cost contracts
+- WP-S007-001-001 — Research toon/GLB/2D & semantic-zoom art: legibility and mobile cost contracts
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport atlas accessibility: readable UI, 44px touch, safe areas & keyboard inspection
+- WP-S008-001-001 — Seven-viewport atlas UX: 44px hit areas, readable safe-area panels & keyboard access
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA coherent/first-answer/final-detail latency, frame p95 & combined CPU+GPU proof
-- WP-S009-002-001 — Bounded canonical picking, input p95 & zero unchanged-frame DOM/layout churn
-- WP-S009-003-001 — Device-class DPR/shadows, WebGPU/WebGL2 recovery & shared resource budget
-- WP-S009-004-001 — README conformance ledger: atlas vs Advisor loop, campaign gaps & truthful UX
-- WP-S009-005-001 — Pure-zoom focus/coverage/3D-detail continuity, warm reuse & first authoritative response
+- WP-S009-001-001 — Exact-SHA first-use/final-detail latency, frame p95 & combined CPU+GPU evidence
+- WP-S009-002-001 — Bounded canonical picking & input p95: eliminate idle DOM/layout churn
+- WP-S009-003-001 — Adaptive DPR/shadows, WebGPU/WebGL2 recovery & combined CPU+GPU budget
+- WP-S009-004-001 — README conformance ledger: Advisor loop, FantasyClock, persistence & truthful atlas UX
+- WP-S009-005-001 — Pure-zoom coverage: authoritative first-use, stable 3D detail & warm-cache reuse
