@@ -50,8 +50,10 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
 function searchWalkingRoute(
   index: Index, from: string, destinations: ReadonlySet<string>,
   excludedEdgeCode?: string, unsafeRoadCodes?: ReadonlySet<string>,
+  excludedNodeCode?: string,
 ) {
   if (!index.adjacency.has(from) || !destinations.size ||
+      excludedNodeCode === from ||
       (unsafeRoadCodes?.size ?? 0) > WALKING_UNSAFE_EXCLUSION_LIMIT) return null;
   let cache = walkingRouteCaches.get(index);
   if (!cache) { cache = new Map(); walkingRouteCaches.set(index, cache); }
@@ -61,7 +63,8 @@ function searchWalkingRoute(
   // This produces only an alternate graph hypothesis, never a physical PASS.
   const excluded = new Set(unsafeRoadCodes);
   if (excludedEdgeCode) excluded.add(excludedEdgeCode);
-  const key = JSON.stringify([from, [...destinations].sort(), [...excluded].sort()]);
+  // A bridge preview's forbidden return bank is part of the cache identity.
+  const key = JSON.stringify([from, [...destinations].sort(), [...excluded].sort(), excludedNodeCode ?? null]);
   if (cache.has(key)) {
     const cached = cache.get(key)!;
     cache.delete(key); cache.set(key, cached);
@@ -126,7 +129,7 @@ function searchWalkingRoute(
       }));
     }
     for (const step of index.adjacency.get(current.code)!) {
-      if (excluded.has(step.edge.code) || settled.has(step.node)) continue;
+      if (excluded.has(step.edge.code) || step.node === excludedNodeCode || settled.has(step.node)) continue;
       const candidate = current.lengthM + step.edge.surfaceLengthM,
         duration = travelSeconds.get(current.code)! + step.edge.fantasyWalkSeconds,
         previous = distances.get(step.node);
@@ -194,7 +197,9 @@ export function transportWalkingRouteThroughEdge(
       step.edge.from === required.from && step.edge.to === required.to);
   if (!owned) return null;
   const destinations = new Set(siteCodes.filter(code => index.adjacency.has(code)));
-  const continuation = searchWalkingRoute(index, otherBank, destinations, required.code, unsafeRoadCodes);
+  // Crossing the selected bridge must not cycle back to its departure bank.
+  // Such a graph walk is not a non-retracing bridge-to-site preview.
+  const continuation = searchWalkingRoute(index, otherBank, destinations, required.code, unsafeRoadCodes, from);
   if (!continuation) return null;
   const edge = owned.edge,
     distanceM = edge.surfaceLengthM + continuation.distanceM,
