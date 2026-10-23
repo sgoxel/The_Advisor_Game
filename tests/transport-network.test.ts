@@ -603,10 +603,14 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
       { from: "A", to: "C", edgeCodes: [a.code, b.code] },
       registry, nodes, physicalY,
     );
-  assert.equal(planTransportRouteCorridor(
+  assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "A", edgeCodes: [a.code, a.code] }, registry, nodes,
-  ).status, "invalid",
-  "walking out and back on one canonical edge is a graph walk, not a non-retracing physical route");
+  ), { status: "invalid", reason: "repeated-road", edgeCode: a.code, stations: [] },
+  "walking out and back must name its first repeated SEED road and sample no false physical passage");
+  assert.deepEqual(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code, a.code, b.code] }, registry, nodes,
+  ), { status: "invalid", reason: "repeated-road", edgeCode: a.code, stations: [] },
+  "a longer graph walk must name the FIRST duplicate road deterministically");
   assert.equal(withOwner.status, "ready");
   const joined = withOwner.stations[3];
   assert.deepEqual(joined.junctionOwnerCodes, [a.code, b.code, otherIncident.code],
@@ -1674,6 +1678,10 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
     // Never let a short-enough repeated walk receive a physical corridor PASS.
     assert.equal(physicalPlan.status, "invalid",
       "a graph-connected walk that retraces a canonical road must refuse physical route certification");
+    assert.equal(physicalPlan.reason, "repeated-road",
+      "the real SEED witness must explain its first illegal repeated-road leg");
+    assert.equal(physicalPlan.edgeCode, repeatedRoads[0],
+      "route refusal must name the first repeated source road, not an unrelated failure");
     assert.equal(physicalPlan.stations.length, 0,
       "do not sample a partial loop as if it were a valid route");
   } else {
