@@ -147,6 +147,7 @@ export function planTransportRouteCorridor(
 export function sampledCorridorStationFailure(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
+  localRoadSlope?: number,
 ): string | null {
   const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
       !!station.junctionOwnerCodes?.includes(id),
@@ -179,7 +180,10 @@ export function sampledCorridorStationFailure(
       return "unrelated higher bridge deck";
     return null;
   }
-  if (surface.traversal === "difficult") return "unsafe local road slope";
+  if (surface.traversal === "difficult" ||
+      (surface.traversal === "open" && localRoadSlope !== undefined &&
+        (!Number.isFinite(localRoadSlope) || localRoadSlope > .08)))
+    return "unsafe local road slope";
   if (surface.traversal !== "road" && surface.traversal !== "open")
     return "non-road traversal";
   return null;
@@ -189,6 +193,7 @@ export function sampledCorridorStationFailure(
 export function sampledCorridorStationPass(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
+  localRoadSlope?: number,
 ) {
-  return sampledCorridorStationFailure(station, surface) === null;
+  return sampledCorridorStationFailure(station, surface, localRoadSlope) === null;
 }
