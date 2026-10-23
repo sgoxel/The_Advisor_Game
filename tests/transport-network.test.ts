@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2319,6 +2319,33 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       `real station 435 carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
     assert.ok(intervalGrade <= .08,
       `real station 435 physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
+    // Temporary decisive-failure cross-section probe; remove before merge.
+    for (const i of [433, 434, 435, 436]) {
+      const point = segmented.stations[i];
+      const road = roads.find(r => r.code === point.edgeCode);
+      const latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(point.x, point.z).lat)));
+      const dx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale);
+      const dz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT;
+      const locations = [
+        { x: point.x, z: point.z },
+        { x: point.x + dx, z: point.z },
+        { x: point.x - dx, z: point.z },
+        { x: point.x, z: point.z + dz },
+        { x: point.x, z: point.z - dz },
+      ];
+      console.log("S005_DECISIVE_ROADBED", JSON.stringify({
+        i: i + 1, road: point.edgeCode, p: point,
+        tangent: road ? roadTangentAt(point.x, point.z, road) : null,
+        slope: finalSurfaceLocalSlopeAt(point.x, point.z),
+        samples: locations.map(p => {
+          const q = finalSurfaceDebugAt(p.x, p.z);
+          return { p, natural: q.base.groundHeight,
+            ground: q.final.groundHeight, owner: q.final.groundMaterialOwnerId,
+            road: q.modifiers.filter(m => m.priority === 8).map(m => ({ id: m.id,
+              weight: m.weight, target: m.targetGroundHeight })) };
+        }),
+      }));
+    }
     assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
       "the same real route must exercise the bounded per-road fallback");
     // Cheap routine smoke: the first 32 canonical stations must genuinely
