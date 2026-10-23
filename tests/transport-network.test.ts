@@ -1631,6 +1631,51 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
       sampleY: farComponent.sampleY, sampleSites: farComponent.sampleSites },
   }));
 
+  // Evidence branch: try only immediate SEED graph junctions on either
+  // selected bridge endpoint, not arbitrary off-road source shortcuts.
+  const localWitnesses = [crossing!.from, crossing!.to].map(origin => {
+    const toward = origin === crossing!.from ? crossing!.to : crossing!.from;
+    const far = nodeByCode.get(toward)!;
+    const destinationCodes = network.nodes.filter(node => node.kind === "site" &&
+      node.countryCode === far.countryCode && node.continent === far.continent).map(node => node.code);
+    const bySite = destinationCodes.map(to =>
+      transportWalkingRouteThroughEdge(index, origin, crossing!, [to]))
+      .filter(route => route !== null);
+    const localY = (index.adjacency.get(origin) ?? []).filter(step =>
+      step.edge.code !== crossing!.code && nodeByCode.get(step.node)?.kind === "junction");
+    let gateCandidates = 0, distinctCandidates = 0, plannerReady = 0, budgetRefused = 0;
+    let example: unknown = null;
+    for (const toY of localY) {
+      const incoming = (index.adjacency.get(toY.node) ?? []).filter(step =>
+        step.node !== origin && nodeByCode.get(step.node)?.kind === "village");
+      for (const fromGate of incoming) {
+        const villageNode = nodeByCode.get(fromGate.node)!;
+        const village = villages.find(place => place.id === villageNode.sourceId);
+        const road = roads.find(road => road.code === fromGate.edge.code);
+        if (!village || !road || !settlementExteriorFor(village).gates.some(gate =>
+          roadDistanceAt(gate.x, gate.z, road) <= 1e-4)) continue;
+        gateCandidates++;
+        for (const bridgeToSite of bySite) {
+          const chain = [fromGate.edge.code, toY.edge.code, ...bridgeToSite!.edgeCodes];
+          if (new Set(chain).size !== chain.length) continue;
+          distinctCandidates++;
+          const plan = planTransportRouteCorridor(
+            { from: villageNode.code, to: bridgeToSite!.to, edgeCodes: chain },
+            edgeByCode, nodeByCode, index.adjacency);
+          if (plan.status === "ready") plannerReady++;
+          if (plan.status === "over-budget") budgetRefused++;
+          example ??= { gateVillage: villageNode.code, y: toY.node,
+            to: bridgeToSite!.to, roadEdges: chain.length, planStatus: plan.status,
+            stationCount: plan.stations.length,
+            budgetReason: plan.status === "over-budget" ? plan.reason : null };
+        }
+      }
+    }
+    return { origin, adjacentY: localY.length, candidateSites: destinationCodes.length,
+      possibleBridgeSiteRoutes: bySite.length, gateCandidates, distinctCandidates,
+      plannerReady, budgetRefused, example };
+  });
+  console.log("S005_SHORT_GATE_Y_BRIDGE_SITE " + JSON.stringify(localWitnesses));
   const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
     .find(node => node?.continent === bank!.continent);
   const site = network.nodes.find(node =>
