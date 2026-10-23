@@ -210,6 +210,59 @@ export function transportWalkingRouteThroughEdge(
 }
 
 /**
+ * Opt-in graph candidate from an arbitrary SEED gate to a specific site while
+ * requiring one selected bridge road. Try both orientations with bounded
+ * existing walking searches. The return is NOT an exhaustive disjoint-path
+ * search: a refused prefix/continuation means no candidate from this strategy,
+ * not proof that every possible route is impossible. Never certify physical
+ * grade, walkability, bridge banks, or actor movement from graph metadata.
+ */
+export function transportWalkingRouteViaRequiredEdge(
+  index: Index, from: string, to: string,
+  required: Pick<TransportRoadEdge, "code" | "from" | "to">,
+  unsafeRoadCodes?: ReadonlySet<string>,
+): WalkingResult {
+  if (!index.adjacency.has(from) || !index.adjacency.has(to) ||
+      unsafeRoadCodes?.has(required.code) ||
+      (unsafeRoadCodes?.size ?? 0) > WALKING_UNSAFE_EXCLUSION_LIMIT ||
+      required.from === required.to ||
+      !index.adjacency.get(required.from)?.some(step =>
+        step.edge.code === required.code && step.node === required.to &&
+        step.edge.from === required.from && step.edge.to === required.to)) return null;
+  let best: Exclude<WalkingResult, null> | null = null;
+  for (const [near, far] of [[required.from, required.to], [required.to, required.from]]) {
+    // The approach cannot cross the required bridge early, then retrace it.
+    const approach = searchWalkingRoute(index, from, new Set([near]), required.code, unsafeRoadCodes);
+    if (!approach) continue;
+    // Exclude every approach road from the continuation, as well as the bridge.
+    // The existing 12-exclusion limit bounds this source-owned candidate query.
+    const excluded = new Set(unsafeRoadCodes);
+    for (const code of approach.edgeCodes) excluded.add(code);
+    if (excluded.size > WALKING_UNSAFE_EXCLUSION_LIMIT) continue;
+    const remainder = searchWalkingRoute(index, far, new Set([to]), required.code, excluded);
+    if (!remainder) continue;
+    const roadCodes = [...approach.edgeCodes, required.code, ...remainder.edgeCodes];
+    if (new Set(roadCodes).size !== roadCodes.length) continue;
+    const owned = index.adjacency.get(near)!.find(step =>
+      step.edge.code === required.code && step.node === far)!;
+    const distanceM = approach.distanceM + owned.edge.surfaceLengthM + remainder.distanceM,
+      fantasyWalkSeconds = approach.fantasyWalkSeconds + owned.edge.fantasyWalkSeconds +
+        remainder.fantasyWalkSeconds;
+    if (!Number.isFinite(distanceM) || !Number.isFinite(fantasyWalkSeconds)) continue;
+    const candidate = Object.freeze({
+      from, to, edgeCodes: Object.freeze(roadCodes), distanceM, fantasyWalkSeconds,
+      exploredNodes: approach.exploredNodes + remainder.exploredNodes,
+    });
+    // Numeric distance first, fixed canonical road codes on exact ties.
+    if (!best || candidate.distanceM < best.distanceM ||
+        (candidate.distanceM === best.distanceM &&
+          candidate.edgeCodes.join("\u0000") < best.edgeCodes.join("\u0000")))
+      best = candidate;
+  }
+  return best;
+}
+
+/**
  * Source X/Z is a flat projection, not a physical distance at high latitudes.
  * Choose the real geodesically closest legal graph endpoint for a map preview.
  * This selects an inspection origin only; it never moves the character.
