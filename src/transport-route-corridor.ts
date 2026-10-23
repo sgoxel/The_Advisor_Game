@@ -71,6 +71,9 @@ export function planTransportRouteCorridor(
       if (Math.hypot(wrapSourceX(point.x - last.x), point.z - last.z) > 1e-4)
         points.push(point);
     }
+    // Collapsing a tiny final tail must still reach the original SEED endpoint
+    // exactly, especially when the same route is inspected in reverse.
+    if (points.length >= 2) points[points.length - 1] = sourcePoints[sourcePoints.length - 1];
     if (points.length < 2) return Object.freeze({ status: "invalid", stations: EMPTY });
     const start = nodes.get(at), endCode = forward ? edge.to : edge.from,
       end = nodes.get(endCode);
