@@ -428,6 +428,18 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "C", edgeCodes: [a.code, b.code] }, repeatedRoads, nodes,
   ), result, "redundant source points cannot create false infinite grade at the junction");
+  const nearDuplicateA = { ...a, centerline: [
+    { x: 0, z: 0 }, { x: 1e-8, z: 0 }, { x: 3, z: 0 },
+    { x: 3 + 1e-8, z: 0 }, { x: 3, z: 0 },
+  ] } as TransportRoadEdge;
+  const nearDuplicateB = { ...b, centerline: [
+    { x: 3, z: 0 }, { x: 3 + 1e-8, z: 0 }, { x: 5, z: 0 },
+  ] } as TransportRoadEdge;
+  assert.deepEqual(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] },
+    new Map([nearDuplicateA, nearDuplicateB].map(edge => [edge.code, edge])),
+    nodes,
+  ), result, "sub-millimetre duplicate vertices must not invent near-zero walking intervals or false local grade");
   const collapsed = { ...a, centerline: [{ x: 0, z: 0 }, { x: 0, z: 0 }] } as TransportRoadEdge;
   assert.equal(planTransportRouteCorridor(
     { from: "A", to: "B", edgeCodes: [collapsed.code] },
