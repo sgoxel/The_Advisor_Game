@@ -3,6 +3,11 @@ import { wrapSourceX } from "./planet.ts";
 import type { SettlementExteriorPlan } from "./settlement-exterior.ts";
 
 export const closeLightingEnabled = (scale:number) => scale>0 && scale<=1;
+/** Fade out before the nearest-stop label crosses from 1/1 to 1/2. */
+export function closeLightingWeight(scale:number){
+ const t=Math.max(0,Math.min(1,(scale-1)/(Math.SQRT2-1)));
+ return 1-t*t*(3-2*t);
+}
 export const eveningLightWeight = (daylight:number) => Math.max(0,Math.min(1,(.85-daylight)/.65));
 export type FacadeWindow={x:number;z:number;y:number;yaw:number;width:number;height:number};
 /** Metre-sized exterior openings only; no room or interior generation. */

@@ -1,5 +1,5 @@
 import {SETTLEMENT_ICON_FROM_SCALE} from "./political-presentation.ts";
-import {closeLightingEnabled, eveningLightWeight} from "./street-lighting.ts";
+import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
@@ -7,7 +7,7 @@ import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
-import { daylightAt } from "./daylight.ts";
+import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours, TIME_SCALE } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
@@ -174,7 +174,10 @@ let projectionTransition = 0,
   detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
 let nightGlowMaterial: pc.StandardMaterial | undefined, lampPoolMaterial: pc.StandardMaterial | undefined;
+const GLOW_VISIBILITY_EPSILON = 1e-4;
 let eveningGlow = 0;
+let displayedDaylight:Daylight|undefined, targetDaylight:Daylight|undefined;
+const daylightTintUniform = new Float32Array([1,1,1]);
 let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
@@ -720,7 +723,7 @@ function tileLayerVisible(name:string):boolean {
   if (name === "terrain") return true;
   if (name === "nature") return layers.nature;
   if (["closeDetail", "nightGlow", "lampPools"].includes(name))
-    return layers.structures && settlementDetailVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > .01);
+    return layers.structures && settlementDetailVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > GLOW_VISIBILITY_EPSILON);
   return layers.structures && settlementDetailVisible && (name === "structures" || layers.nature);
 }
 function setLayers() {
@@ -1447,31 +1450,29 @@ async function start() {
   app.root.addChild(sun);
   /**
    * Local-time lighting: the light, ambient, terrain tint and backdrop follow the local clock of the
-   * place at the map focus (time zones GMT+1..+14). Zooming out to the globe blends back to plain day.
+   * place at the map focus. Adjacent local zones and frame transitions blend; globe and flat terrain share the same displayed tint.
    */
-  let lastDaylightKey = "";
-  const applyDaylight = (tick: number) => {
-    const focusLon = flatToLonLat(view.x, view.z).lon, second = localSecondOfDay(tick, focusLon),
-      light = daylightAt(second), day = daylightAt(12 * 3600), globeBlend = Math.min(1, projectionTransition),
-      blend = (a: readonly number[], b: readonly number[]) => a.map((value, index) => value + (b[index] - value) * globeBlend),
-      key = `${Math.floor(second / 60)}|${globeBlend.toFixed(2)}`;
-    $("local-time").textContent = `local ${clockLabel(second)} · GMT+${timeZoneOffsetHours(focusLon)} · ${light.phase}`;
-    if (key === lastDaylightKey) return;
-    lastDaylightKey = key;
-    const hadGlow = eveningGlow > .01;
-    eveningGlow = eveningLightWeight(light.daylight) * (1 - globeBlend);
-    if (nightGlowMaterial) { nightGlowMaterial.emissiveIntensity = eveningGlow; nightGlowMaterial.update(); }
-    if (lampPoolMaterial) { lampPoolMaterial.opacity = .45 * eveningGlow; lampPoolMaterial.update(); }
-    if (hadGlow !== (eveningGlow > .01)) setLayers();
-    const sunColor = blend(light.sunColor, day.sunColor), ambient = blend(light.ambient, day.ambient), tint = blend(light.terrainTint, day.terrainTint), sky = blend(light.sky, day.sky);
-    sun.light!.color = new pc.Color(sunColor[0], sunColor[1], sunColor[2]);
-    sun.light!.intensity = light.sunIntensity + (day.sunIntensity - light.sunIntensity) * globeBlend;
-    sun.setEulerAngles(light.sunPitch + (day.sunPitch - light.sunPitch) * globeBlend, light.sunYaw + (day.sunYaw - light.sunYaw) * globeBlend, 0);
-    app.scene.ambientLight = new pc.Color(ambient[0], ambient[1], ambient[2]);
-    flatBackdrop.set(sky[0], sky[1], sky[2], 1);
-    for (const material of [terrainMaterial, coarseTerrainMaterial]) if (material) {
-      material.setParameter("surfaceDaylightTint", tint);
-    }
+  let lastDaylightLabel = "";
+  const applyDaylight = (tick:number,dt:number) => {
+    const focusLon=flatToLonLat(view.x,view.z).lon,second=localSecondOfDay(tick,focusLon),
+      phase=daylightAt(second).phase,label=`local ${clockLabel(second)} · GMT+${timeZoneOffsetHours(focusLon)} · ${phase}`;
+    if(label!==lastDaylightLabel){$("local-time").textContent=label;lastDaylightLabel=label;}
+    targetDaylight=daylightAtLongitude(tick,focusLon);
+    const light=displayedDaylight=advanceDaylight(displayedDaylight,targetDaylight,dt),hadGlow=eveningGlow>GLOW_VISIBILITY_EPSILON;
+    const continuousScale=canonicalFootprintForHalfHeight(view.halfHeight)/CANONICAL_PLANET_DIAMETER*10000;
+    eveningGlow=eveningLightWeight(light.daylight)*closeLightingWeight(continuousScale);
+    const glowOpacity=Math.pow(eveningGlow,2.2);
+    if(nightGlowMaterial){nightGlowMaterial.opacity=glowOpacity;nightGlowMaterial.update();}
+    if(lampPoolMaterial){lampPoolMaterial.opacity=.45*glowOpacity;lampPoolMaterial.update();}
+    if(hadGlow!==(eveningGlow>GLOW_VISIBILITY_EPSILON))setLayers();
+    sun.light!.color.set(...light.sunColor);
+    sun.light!.intensity=light.sunIntensity;
+    sun.setEulerAngles(light.sunPitch,light.sunYaw,0);
+    app.scene.ambientLight.set(...light.ambient);
+    flatBackdrop.set(...light.sky,1);
+    daylightTintUniform.set(light.terrainTint);
+    for(const material of [terrainMaterial,coarseTerrainMaterial]) material?.setParameter("surfaceDaylightTint",daylightTintUniform);
+    globe?.setDaylightTint(light.terrainTint);
   };
   const material = (worldMaterial = new pc.StandardMaterial());
   material.diffuse = new pc.Color(1, 1, 1);
@@ -1490,8 +1491,8 @@ async function start() {
     (glow as pc.StandardMaterial & {vertexColorGamma:boolean}).vertexColorGamma = true;
     glow.useLighting = false; glow.useSkybox = false; glow.useFog = false; glow.useTonemap = false;
     glow.cull = pc.CULLFACE_NONE;
-    if (pool) { glow.blendType = pc.BLEND_ADDITIVEALPHA; glow.depthWrite = false; glow.opacity = 0; }
-    else glow.emissiveIntensity = 0;
+    glow.blendType = pc.BLEND_ADDITIVEALPHA; glow.depthWrite = false; glow.opacity = 0;
+    glow.name = pool ? "Fading lantern light pools" : "Fading window and lantern glow";
     installLodCoverage(glow); glow.update(); return glow;
   };
   nightGlowMaterial = makeGlowMaterial(false);
@@ -1583,7 +1584,6 @@ async function start() {
       simulation.advance(Math.max(simulation.tick, simulationTick));
       lastSimulationRealSecond = realSecond;
       $("fantasy-time").textContent = clock.labelAt(now);
-      applyDaylight(simulationTick);
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
       const visible =
@@ -1669,6 +1669,7 @@ async function start() {
     }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
+    applyDaylight(simulationTick,dt);
     updateHandoff(dt);
     sun.light!.castShadows =
       view.halfHeight < 500 && projectionTransition <= 0.001;
@@ -2095,6 +2096,7 @@ async function start() {
           roadRepresentation: roadRepresentationAtScale(scaleValueForHalfHeight(view.halfHeight)),
           roadPresentation: roadVisibleAtScale(scaleValueForHalfHeight(view.halfHeight)) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
+          lighting: {displayed:displayedDaylight,target:targetDaylight},
           closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0},
           visibleResidents: actors.filter(actor => actor.enabled).length,
           residentPresentation: {

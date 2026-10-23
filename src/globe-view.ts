@@ -263,6 +263,14 @@ export class GlobeView {
     app.root.addChild(this.root);
   }
 
+  /** Small colour-uniform updates; retain the sphere and both textures. */
+  setDaylightTint(tint:readonly number[]) {
+    for(const material of [this.surfaceMaterial,this.shadeMaterial]) {
+      material.emissive.set(tint[0],tint[1],tint[2]); material.update();
+    }
+    this.backdropColor.set(INK[0]/255*tint[0],INK[1]/255*tint[1],INK[2]/255*tint[2]);
+  }
+
   private createSurface(width: number, height: number, pixels: Uint8Array) {
     this.stats.textureWidth = width;
     this.stats.textureHeight = height;

@@ -1,3 +1,4 @@
+import {fantasySecondOfDay, TIME_ZONE_COUNT} from "./clock.ts";
 /**
  * Day/night lighting from local time (see clock.ts time zones). Keyframes are
  * blended smoothly through the day: night is dark blue, dawn and sunrise are
@@ -53,11 +54,38 @@ export function daylightAt(localSecondOfDay: number): Daylight {
   const a = KEYS[i], b = KEYS[i + 1], t = smooth(Math.max(0, Math.min(1, (hour - a.hour) / Math.max(1e-6, b.hour - a.hour))));
   // The light travels east to west across the day; at night it is the moon, high in the south.
   // At noon the light comes from exactly where the original atlas sun stood (yaw -28°).
-  const sunYaw = hour >= 5 && hour <= 20 ? -28 + (hour - 12) * 14.7 : 180,
+  const dayYaw = -28 + (hour - 12) * 14.7,
+    sunYaw = hour < 4.6 || hour >= 21 ? 180 : hour < 5.4
+      ? mixAngle(180, dayYaw, smooth((hour - 4.6) / .8)) : hour > 19.8
+        ? mixAngle(dayYaw, 180, smooth((hour - 19.8) / 1.2)) : dayYaw,
     phase = hour < 5 || hour >= 20.5 ? "night" : hour < 6 ? "dawn" : hour < 8 ? "sunrise" : hour < 16.5 ? "day" : hour < 18.5 ? "golden hour" : "dusk";
   return {
     sunColor: mix3(a.sun, b.sun, t), sunIntensity: mix(a.intensity, b.intensity, t), sunPitch: mix(a.pitch, b.pitch, t), sunYaw,
     ambient: mix3(a.ambient, b.ambient, t), terrainTint: mix3(a.tint, b.tint, t), sky: mix3(a.sky, b.sky, t),
     daylight: mix(a.daylight, b.daylight, t), phase,
   };
+}
+
+
+const mixAngle = (a:number,b:number,t:number) => ((a + (((b-a+180)%360+360)%360-180)*t)%360+360)%360;
+export const LIGHTING_RESPONSE_SECONDS = .75;
+/** Blend rendered conditions, never the authoritative clock or NPC routines. */
+export function blendDaylight(a:Daylight,b:Daylight,t:number):Daylight {
+ return {sunColor:mix3(a.sunColor,b.sunColor,t),sunIntensity:mix(a.sunIntensity,b.sunIntensity,t),
+  sunPitch:mix(a.sunPitch,b.sunPitch,t),sunYaw:mixAngle(a.sunYaw,b.sunYaw,t),
+  ambient:mix3(a.ambient,b.ambient,t),terrainTint:mix3(a.terrainTint,b.terrainTint,t),sky:mix3(a.sky,b.sky,t),
+  daylight:mix(a.daylight,b.daylight,t),phase:t<.5?a.phase:b.phase};
+}
+/** Neighbouring zone centres blend continuously, including the longitude wrap. */
+export function daylightAtLongitude(tick:number,longitude:number):Daylight {
+ const turn=2*Math.PI,wrapped=((longitude+Math.PI)%turn+turn)%turn,
+  position=wrapped/turn*TIME_ZONE_COUNT-.5,index=Math.floor(position),t=smooth(position-index),
+  at=(i:number)=>daylightAt(fantasySecondOfDay(tick+(((i%TIME_ZONE_COUNT)+TIME_ZONE_COUNT)%TIME_ZONE_COUNT+1)*3600));
+ return blendDaylight(at(index),at(index+1),t);
+}
+/** Frame-rate independent easing; cap hitch/resume steps to prevent a flash. */
+export function advanceDaylight(current:Daylight|undefined,target:Daylight,dt:number):Daylight {
+ if(!current)return target;
+ const result=blendDaylight(current,target,1-Math.exp(-Math.max(0,Math.min(.05,dt))/LIGHTING_RESPONSE_SECONDS));
+ result.phase=target.phase;return result;
 }
