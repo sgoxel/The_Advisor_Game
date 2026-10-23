@@ -246,3 +246,81 @@ test("time zones GMT+1..+14 and local daylight drive lighting and routines", () 
   const east = villages.find((v) => timeZoneOffsetHours(v.canonicalPosition.lon) !== timeZoneOffsetHours(LON));
   if (east) assert.notEqual(localSecondOfDay(at(12), east.canonicalPosition.lon), 12 * HOUR);
 });
+
+
+test("outdoor trades use many real plots instead of one farmstead", () => {
+  for (const place of [villages[0], cities[0]]) {
+    const workers = Array.from({ length: populationOf(place) }, (_, i) => residentFoundationAt(place, i))
+      .filter(f => (f.role === "farmer" || f.role === "laborer") && f.index >= 6);
+    const counts = new Map<string, number>();
+    for (const f of workers) {
+      const site = `${f.workOffset.eastM.toFixed(2)}/${f.workOffset.northM.toFixed(2)}`;
+      counts.set(site, (counts.get(site) ?? 0) + 1);
+      assert.deepEqual(f.workOffset, residentFoundationAt(place, f.index).workOffset);
+    }
+    assert.ok(counts.size >= (place.kind === "city" ? 40 : 12), `${place.name}: ${counts.size} outdoor work sites`);
+    assert.ok(Math.max(...counts.values()) < workers.length * .25, "no single farmstead absorbs the workforce");
+  }
+});
+
+test("children and elders share several nearby gardens while retaining town-square visits", () => {
+  const place = cities[0], tick = tickAtLocalTime(WORKDAY, 10.5 * HOUR, place.canonicalPosition.lon), gardens = new Set<string>();
+  let square = 0;
+  for (let i = 0; i < populationOf(place); i++) {
+    const f = residentFoundationAt(place, i);
+    if (f.ageGroup !== "child" && f.ageGroup !== "elder") continue;
+    const r = residentAt(place, i, tick);
+    if (r.route.includes("/GARDEN/")) gardens.add(r.route);
+    if (r.task.includes("square") || r.task.includes("prayers")) square++;
+  }
+  assert.ok(gardens.size >= 10, `${gardens.size} neighbourhood gardens visited`);
+  assert.ok(square > 0, "a logical central gathering still exists");
+});
+
+test("nearby queries find residents at distributed farm and garden destinations", () => {
+  const place = villages[0], simulation = new LazySimulation(), tick = tickAtLocalTime(WORKDAY, 10.5 * HOUR, place.canonicalPosition.lon);
+  simulation.setFocus(place); simulation.advance(tick);
+  let checked = 0;
+  for (let i = 6; i < populationOf(place); i++) {
+    const r = residentAt(place, i, tick);
+    if (!r.route.includes("/PATCH/") && !r.route.includes("/GARDEN/")) continue;
+    assert.ok(simulation.focusedResidents(r.x, r.z, .15, 160).some(candidate => candidate.code === r.code), r.code);
+    checked++;
+  }
+  assert.ok(checked >= 10);
+});
+
+
+test("outlying woodland workers use real habitat and remain queryable away from town", async () => {
+  const { climateSampleAt } = await import("../src/climate.ts"), place = villages[0], simulation = new LazySimulation(), tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon);
+  simulation.setFocus(place); simulation.advance(tick);
+  let checked = 0;
+  for (let i = 6; i < populationOf(place); i++) {
+    const f = residentFoundationAt(place, i);
+    if (!f.workplace.includes("/WOODLAND/")) continue;
+    const r = residentAt(place, i, tick), surface = finalSurfaceAt(r.x, r.z);
+    assert.equal(r.activity, "work");
+    assert.ok(surface.walkable && surface.water.kind === "none" && surface.vegetationDensityScale > .5);
+    assert.ok(climateSampleAt(r.position, surface.groundHeight).forestFamily);
+    assert.ok(simulation.focusedResidents(r.x, r.z, .15, 160).some(candidate => candidate.code === r.code));
+    checked++;
+  }
+  assert.ok(checked >= 2, "woodland trades leave the central farmstead for actual habitat");
+});
+
+
+test("fishing destinations are dry banks beside actual water, with inland fallback", async () => {
+  const { CANONICAL_PLANET_RADIUS, lonLatToSource } = await import("../src/planet.ts");
+  const place = villages.find(p => p.name === "Falconham")!, f = residentFoundationAt(place, 70);
+  assert.equal(f.character, "fisherman_male");
+  const inland = residentFoundationAt(villages.find(p => p.name === "Willowstead")!, 59);
+  assert.ok(inland.workplace.includes("/PATCH/"), "unreachable bank falls back to a real farm patch");
+  assert.ok(f.workplace.includes("/SHORE/"), "waterside resident has a real fishing bank");
+  const tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon), r = residentAt(place, 70, tick);
+  assert.equal(r.task, "Fishing from the bank");
+  assert.equal(finalSurfaceAt(r.x,r.z).water.kind, "none");
+  assert.ok(Array.from({length:16},(_,i)=> {
+    const a=i*Math.PI/8, ll=r.position, p=lonLatToSource(ll.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(ll.lat)),ll.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
+    return finalSurfaceAt(p.x,p.z).water.kind !== "none";
+  }).some(Boolean), "water must be within 15 m of the dry bank");
+});

@@ -1,4 +1,5 @@
 import { compareText } from "./compare-text.ts";
+import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
@@ -7,6 +8,7 @@ import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
+import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -148,7 +150,7 @@ const DAY_SECONDS = 86_400;
 const HOUR = 3_600;
 const PLACE_BUCKET_SOURCE = 128;
 const RESIDENT_BUCKET_SOURCE = 4;
-const MAX_RESIDENT_ROAM_M = 320;
+const MAX_RESIDENT_ROAM_M = 3600; // Includes a bounded walk to outlying fishing/woodland work.
 const MAX_RESIDENT_ROAM_SOURCE =
   MAX_RESIDENT_ROAM_M / CANONICAL_METRES_PER_SOURCE_UNIT;
 const DEFAULT_VISIBLE_LIMIT = 128;
@@ -199,7 +201,8 @@ function offsetForSource(place: Place, x: number, z: number) {
   };
 }
 type Offset = { eastM: number; northM: number };
-type SettlementAnchors = { inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; fields: Offset[]; posts: Offset[][] };
+type ActivitySite = Offset & { id: string; label: string };
+type SettlementAnchors = { markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][] };
 const anchorCache = new Map<string, SettlementAnchors>();
 /** Real public places of the focused settlement (inn, market, well square, keep, workshops, fields, gate posts); bounded cache. */
 function settlementAnchors(place: Place): SettlementAnchors {
@@ -212,12 +215,76 @@ function settlementAnchors(place: Place): SettlementAnchors {
   const anchors: SettlementAnchors = {
     inn: at(plotPoint("service", "inn")), market: at(plotPoint("service", "market")),
     plaza: at(plotPoint("well")), keep: at(plotPoint("keep")), services,
-    fields: plan.plots.filter((plot) => plot.kind === "field").map((plot) => at(plot.candidates[0])),
+    // Public trading pitches at street edges, spread through neighbourhoods.
+    markets: plan.streets.flatMap(street => street.points.slice(0, -1).flatMap((point, i) => {
+      if (i % Math.max(1, Math.ceil(street.points.length / 4))) return [];
+      const next = street.points[i + 1], scale = sourceUnitsPerMetreAt(point.z),
+        dx = wrapSourceX(next.x - point.x) / scale.x, dz = (next.z - point.z) / scale.z,
+        length = Math.hypot(dx, dz);
+      if (length < 6) return [];
+      const side = (i % 2 ? -1 : 1) * (street.width * CANONICAL_METRES_PER_SOURCE_UNIT * .5 + .7);
+      return [{ ...at({ x: wrapSourceX(point.x + (next.x - point.x) * .5 - dz / length * side * scale.x),
+        z: (point.z + next.z) * .5 + dx / length * side * scale.z }),
+        id: `${street.id}/TRADING/${i}`, label: "Trading along the high street" }];
+    })).filter(site => outdoorSiteLegal(place, site)).slice(0, 16),
+    gardens: plan.plots.filter(plot => plot.kind === "garden").map(plot => ({ ...at(plot.candidates[0]), id: plot.id, label: "Neighbourhood garden" })).filter(site => outdoorSiteLegal(place, site)),
+    fieldsSites: plan.plots.filter(plot => plot.kind === "field").flatMap(plot => {
+      // Separate working patches across a real cultivated plot, not one shared centre.
+      const width = plot.width * CANONICAL_METRES_PER_SOURCE_UNIT,
+        depth = plot.depth * CANONICAL_METRES_PER_SOURCE_UNIT;
+      const columns = place.kind === "city" ? 5 : 3, rows = place.kind === "city" ? 5 : 2;
+      return Array.from({ length: columns * rows }, (_, i) => {
+        const x = ((i % columns + .5) / columns - .5) * width * .75, z = ((Math.floor(i / columns) + .5) / rows - .5) * depth * .75;
+        return { ...at({ x: plot.candidates[0].x + (Math.cos(plot.yawRad) * x + Math.sin(plot.yawRad) * z) * sourceUnitsPerMetreAt(plot.candidates[0].z).x,
+            z: plot.candidates[0].z + (-Math.sin(plot.yawRad) * x + Math.cos(plot.yawRad) * z) * sourceUnitsPerMetreAt(plot.candidates[0].z).z }),
+          id: `${plot.id}/PATCH/${i}`, label: plot.fieldForm === "orchard" ? "Tending the orchard" : "Working the farm" };
+      }).filter(site => outdoorSiteLegal(place, site));
+    }),
     posts: plan.gates.map((gate) => (gate.guardPosts.length ? gate.guardPosts : [gate]).map((post) => at(post))),
   };
   anchorCache.set(place.code, anchors);
   while (anchorCache.size > 16) anchorCache.delete(anchorCache.keys().next().value!);
   return anchors;
+}
+/** Check the canonical dry traversable surface once when choosing an activity destination. */
+function outdoorSiteLegal(place: Place, offset: Offset) {
+  const ll = canonicalOffset(place, offset.eastM, offset.northM), source = lonLatToSource(ll.lon, ll.lat), surface = finalSurfaceAt(source.x, source.z);
+  return surface.walkable && surface.water.kind === "none" && surface.groundHeight > .1;
+}
+/** Bounded, lazy habitat search; no fishing inland without a shore, no invented hunting site. */
+function natureSites(place: Place) {
+  const anchors = settlementAnchors(place);
+  if (anchors.nature) return anchors.nature;
+  const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place),
+    streetPoints = plan.streets.flatMap(street => street.points.map(point => offsetForSource(place, point.x, point.z)));
+  const reachable = (point: Offset) => {
+    const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
+    if (!start) return false;
+    const steps = Math.ceil(Math.hypot(start.eastM-point.eastM,start.northM-point.northM) / 20);
+    for (let i = 1; i <= steps; i++) if (!outdoorSiteLegal(place, { eastM: start.eastM + (point.eastM-start.eastM)*i/steps, northM: start.northM + (point.northM-start.northM)*i/steps })) return false;
+    return true;
+  };
+  for (let i = 0; i < 48; i++) {
+    const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
+      radius = [Math.max(65, plan.radiusM + 24), 900, 2400, 3500][i % 4],
+      point = { eastM: Math.cos(angle) * radius, northM: Math.sin(angle) * radius },
+      ll = canonicalOffset(place, point.eastM, point.northM), source = lonLatToSource(ll.lon, ll.lat), surface = finalSurfaceAt(source.x, source.z);
+    if (!surface.walkable || surface.water.kind !== "none" || surface.groundHeight <= .1 || (surface.reservedUse && surface.reservedUse !== place.code)) continue;
+    if (surface.vegetationDensityScale > .5 && climateSampleAt(ll, surface.groundHeight).forestFamily && woodland.length < 8 && reachable(point))
+      woodland.push({ ...point, id: `${place.code}/WOODLAND/${i}`, label: "Working in the woodland" });
+    if (fishing.length < 8 && [0, 1, 2, 3, 4, 5, 6, 7].some(n => {
+      const near = canonicalOffset(place, point.eastM + Math.cos(n * Math.PI / 4) * 12, point.northM + Math.sin(n * Math.PI / 4) * 12), p = lonLatToSource(near.lon, near.lat);
+      return finalSurfaceAt(p.x, p.z).water.kind !== "none";
+    }) && reachable(point)) fishing.push({ ...point, id: `${place.code}/SHORE/${i}`, label: "Fishing from the bank" });
+  }
+  return anchors.nature = { fishing, woodland };
+}
+function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
+  const anchors = settlementAnchors(place), nearby = [...(kind === "garden" ? anchors.gardens : anchors.markets)].sort((a,b) => Math.hypot(a.eastM-foundation.homeOffset.eastM,a.northM-foundation.homeOffset.northM)-Math.hypot(b.eastM-foundation.homeOffset.eastM,b.northM-foundation.homeOffset.northM)).slice(0,3);
+  return nearby[digest(`${foundation.code}/${kind}`) % nearby.length] ?? { ...(kind === "garden" ? anchors.plaza : anchors.market), id: `${place.code}/${kind.toUpperCase()}`, label: kind === "garden" ? "Town square" : "Market" };
+}
+function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
+  return neighbourhoodSite(place, foundation, "garden");
 }
 export function gateCountFor(place: Place) {
   return 1 + (digest(`${place.code}/GATE_COUNT`) % 2);
@@ -255,7 +322,7 @@ function residentRoleFor(place: Place, index: number): ResidentRole {
   ];
 }
 /** The real building or plot where a resident works. */
-function workOffsetFor(place: Place, index: number, role: ResidentRole, assignment: GuardAssignment | undefined, home: Offset): Offset {
+function workOffsetFor(place: Place, index: number, role: ResidentRole, assignment: GuardAssignment | undefined, home: Offset, character: string): Offset {
   const anchors = settlementAnchors(place), pick = <T>(list: readonly T[], salt: string) => list[digest(`${place.code}/RESIDENT/${index}/${salt}`) % list.length];
   if (assignment && anchors.posts.length) {
     const posts = anchors.posts[assignment.gateIndex % anchors.posts.length];
@@ -264,12 +331,16 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
   const service = (name: string) => anchors.services.get(name) ?? anchors.market;
   switch (role) {
     case "innkeeper": return anchors.inn;
-    case "merchant": case "trader": case "beggar": return anchors.market;
+    case "merchant": return anchors.market;
+    case "trader": case "beggar": return neighbourhoodSite(place, {code: `${place.code}/RESIDENT/${index}`, homeOffset: home}, "market");
     case "blacksmith": return service("blacksmith");
     case "butcher": return service("butcher");
     case "guard-officer": return service("guard-office");
-    case "farmer": return index < SERVICE_ROLES.length || !anchors.fields.length ? service("farmstead") : pick(anchors.fields, "FIELD");
-    case "laborer": return anchors.fields.length && digest(`${place.code}/RESIDENT/${index}/LABOUR`) % 3 ? pick(anchors.fields, "FIELD") : service("farmstead");
+    case "farmer": return index < SERVICE_ROLES.length || !anchors.fieldsSites.length ? service("farmstead") : pick(anchors.fieldsSites, "FIELD");
+    case "laborer": {
+      const habitat = natureSites(place), sites = character.startsWith("fisherman") ? habitat.fishing : /^(hunter|woodcutter|herbalist)/.test(character) ? habitat.woodland : [];
+      return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
+    }
     case "clergy": return anchors.plaza;
     case "noble": return anchors.keep;
     default: return home; // artisans keep their workshop at home; children and elders have no workplace
@@ -291,7 +362,8 @@ export function residentFoundationAt(
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
     // Home is the resident's own frontage lot (lazy lot lookup, focused settlement only).
     homeLot = settlementHomeFor(place, index).candidates[0],
-    homeOffset = offsetForSource(place, homeLot.x, homeLot.z);
+    homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
+    workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
   return {
     code,
     name: personName(code, character.sex, place.continent),
@@ -301,7 +373,7 @@ export function residentFoundationAt(
     homeEntrance: `${homeBuilding}/ENTRANCE`,
     homeOwner: code,
     workplace:
-      assignment?.gatePost ?? `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`,
+      assignment?.gatePost ?? (workOffset as ActivitySite).id ?? (workOffset === homeOffset ? `${homeBuilding}/${role === "artisan" ? "WORKSHOP" : "HOME"}` : `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`),
     role,
     gatePost: assignment?.gatePost,
     guardShift: assignment?.shift,
@@ -320,7 +392,7 @@ export function residentFoundationAt(
     ageGroup: character.age,
     traits: traitsFor(code, role, character.age),
     homeOffset,
-    workOffset: workOffsetFor(place, index, role, assignment, homeOffset),
+    workOffset,
   };
 }
 
@@ -370,15 +442,18 @@ function anchorOffset(place: Place, foundation: ResidentFoundation, anchor: Rout
   if (anchor === "home") return foundation.homeOffset;
   if (anchor === "work") return foundation.workOffset;
   const anchors = settlementAnchors(place);
-  return anchor === "inn" ? anchors.inn : anchor === "market" ? anchors.market : anchor === "keep" ? anchors.keep : anchors.plaza;
+  if (anchor === "garden") return gardenSite(place, foundation);
+  if (anchor === "market") return neighbourhoodSite(place, foundation, "market");
+  return anchor === "inn" ? anchors.inn : anchor === "keep" ? anchors.keep : anchors.plaza;
 }
-function anchorRoute(foundation: ResidentFoundation, anchor: RoutineAnchor) {
-  return anchor === "home" ? foundation.homeEntrance : anchor === "work" ? foundation.workplace : `${foundation.settlement}/${anchor.toUpperCase()}`;
+function anchorRoute(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor) {
+  if (anchor === "garden" || anchor === "market") return (anchorOffset(place, foundation, anchor) as ActivitySite).id;
+  return anchor === "home" ? foundation.homeEntrance : anchor === "work" ? ((foundation.workOffset as ActivitySite).id ?? foundation.workplace) : `${foundation.settlement}/${anchor.toUpperCase()}`;
 }
 /** Small seeded standing spot around an outdoor anchor, so a crowd at the market does not stack. */
 function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
   if (!outdoors || anchor === "home") return base;
-  const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
+  const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = (anchor === "garden" || (base as ActivitySite).id) ? .3 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 7) / 10 : 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
   return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
 }
 // ---------------------------------------------------------------- street paths
@@ -487,6 +562,11 @@ function pointAlong(path: readonly Offset[], distanceM: number): Offset {
  * moving between two places follows the settlement's streets at the canonical
  * good-road walking pace, so position and progress change smoothly over time.
  */
+function workTask(foundation: ResidentFoundation) {
+  const site = foundation.workOffset as ActivitySite;
+  if (site.id?.includes("/WOODLAND/")) return foundation.character.startsWith("hunter") ? "Hunting in the woodland" : foundation.character.startsWith("herbalist") ? "Gathering woodland herbs" : "Cutting timber in the woodland";
+  return site.label ?? "Working";
+}
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
@@ -509,14 +589,14 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
     if (elapsed < travel)
       return {
         task: plan[arrival].kind === "commute" ? plan[arrival].task : `Walking to ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}`,
-        route: `${anchorRoute(foundation, departure.anchor)} → ${anchorRoute(foundation, activity.anchor)}`,
+        route: `${anchorRoute(place, foundation, departure.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
         offset: pointAlong(path, (elapsed / travel) * lengthM), activity: "commute" as ActivityKind, indoors: false, mood,
         ...timing, travelProgress: elapsed / travel, travelDistanceM: lengthM,
       };
   }
   // A walk that arrived before the next step begins becomes waiting at the destination.
   const arrived = activity.kind === "commute";
-  return { task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` : activity.task, route: anchorRoute(foundation, activity.anchor), offset: target, activity: (arrived ? "rest" : activity.kind) as ActivityKind, indoors: activity.indoors, mood, ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined };
+  return { task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` : activity.anchor === "work" && activity.kind === "work" && (foundation.workOffset as ActivitySite).label ? workTask(foundation) : activity.task, route: anchorRoute(place, foundation, activity.anchor), offset: target, activity: (arrived ? "rest" : activity.kind) as ActivityKind, indoors: activity.indoors, mood, ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined };
 }
 function legalPosition(
   place: Place,
@@ -611,7 +691,7 @@ for (const place of places) {
 }
 function nearbyPlaces(x: number, z: number, radius: number) {
   const countX = Math.ceil(SOURCE_PRESENTATION_WIDTH / PLACE_BUCKET_SOURCE),
-    reach = radius + MAX_RESIDENT_ROAM_SOURCE,
+    reach = radius + MAX_RESIDENT_ROAM_SOURCE / Math.max(.05, Math.cos(sourceToLonLat(x,z).lat)),
     cellReach = Math.ceil(reach / PLACE_BUCKET_SOURCE),
     centerX = bucketX(x),
     centerZ = bucketZ(z),
@@ -651,7 +731,7 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index),
-      points = [foundation.homeOffset, foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep].map((offset) => relativeSourceForOffset(place, offset)),
+      points = [foundation.homeOffset, foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep, gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")].map((offset) => relativeSourceForOffset(place, offset)),
       // Street routes can bend away from the straight line between places: pad the box.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
       minX = Math.min(...points.map((point) => point.x)) - pad,

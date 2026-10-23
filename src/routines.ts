@@ -90,7 +90,7 @@ export function moodAt(code: string, traits: ResidentTraits, day: number, weekda
 // ---------------------------------------------------------------- routines
 
 /** Where an activity happens; the simulation maps each anchor to a real building or plot. */
-export type RoutineAnchor = "home" | "work" | "inn" | "market" | "plaza" | "keep";
+export type RoutineAnchor = "home" | "work" | "inn" | "market" | "plaza" | "keep" | "garden";
 export type ActivityKind = "sleep" | "wake" | "breakfast" | "commute" | "work" | "lunch" | "dinner" | "socialise" | "pray" | "play" | "stroll" | "errand" | "rest" | "guard";
 export type Activity = { kind: ActivityKind; anchor: RoutineAnchor; start: number; task: string; indoors: boolean };
 export type RoutineSubject = { code: string; role: ResidentRole; ageGroup: CharacterAge; guardShift?: 0 | 1 };
@@ -159,21 +159,21 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
   // Daytime by kind of person.
   let dayEnd: number;
   if (ageGroup === "child") {
-    add("play", "plaza", leave, "Playing in the square", false);
+    add("play", p.sociability > .65 ? "plaza" : "garden", leave, p.sociability > .65 ? "Playing in the square" : "Playing in a neighbourhood garden", false);
     add("lunch", "home", 12 * HOUR + d("LUNCH", 30), "Lunch at home", true);
-    add("play", p.curiosity > .5 ? "market" : "plaza", 13.5 * HOUR, "Playing with other children", false);
+    add("play", p.curiosity > .75 ? "market" : "garden", 13.5 * HOUR, "Playing with other children", false);
     dayEnd = 17.5 * HOUR + d("PLAYEND", 40);
   } else if (ageGroup === "elder" || role === "elder") {
-    add("stroll", p.piety > .6 ? "keep" : "plaza", leave + 30 * MINUTE, p.piety > .6 ? "Morning prayers" : "Morning stroll", false);
+    add("stroll", p.piety > .6 ? "plaza" : "garden", leave + 30 * MINUTE, p.piety > .6 ? "Morning prayers" : "Morning garden stroll", false);
     add("rest", "home", 11 * HOUR + d("ELDREST", 40), "Resting at home", true);
-    add("errand", "market", 15 * HOUR + d("ELDERRAND", 50), "Chatting at the market", false);
+    add("errand", p.sociability > .5 ? "market" : "garden", 15 * HOUR + d("ELDERRAND", 50), p.sociability > .5 ? "Chatting at the market" : "Visiting a neighbourhood garden", false);
     dayEnd = 17 * HOUR + d("ELDEND", 40);
   } else if (restDay && role !== "innkeeper" && role !== "clergy" && role !== "beggar") {
     // Rest day: worship, the market and company, then the usual evening.
     add("pray", "plaza", Math.max(leave, 9 * HOUR), p.piety > .4 ? "Attending the shrine" : "Gathering in the square", false);
     add("errand", "market", 10.5 * HOUR + d("RESTMKT", 40), "Visiting the market", false);
     add("lunch", p.sociability > .6 ? "inn" : "home", 12.5 * HOUR, "Rest-day lunch", true);
-    add("rest", "home", 14 * HOUR + d("RESTHOME", 40), "Resting at home", true);
+    add("stroll", p.sociability > .7 ? "plaza" : "garden", 14 * HOUR + d("RESTHOME", 60), p.sociability > .7 ? "Meeting neighbours in the square" : "Resting in a neighbourhood garden", false);
     dayEnd = 17 * HOUR;
   } else {
     const start = role === "innkeeper" ? 9.5 * HOUR : role === "clergy" ? Math.max(leave, 6 * HOUR) : leave,
