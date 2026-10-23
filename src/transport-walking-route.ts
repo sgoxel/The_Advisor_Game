@@ -210,56 +210,94 @@ export function transportWalkingRouteThroughEdge(
 }
 
 /**
- * Opt-in graph candidate from an arbitrary SEED gate to a specific site while
- * requiring one selected bridge road. Try both orientations with bounded
- * existing walking searches. The return is NOT an exhaustive disjoint-path
- * search: a refused prefix/continuation means no candidate from this strategy,
- * not proof that every possible route is impossible. Never certify physical
- * grade, walkability, bridge banks, or actor movement from graph metadata.
+ * Opt-in bounded candidate from a real SEED gate to a site while crossing one
+ * selected bridge road exactly once. A shortest approach may block the far
+ * bank, so search complete non-repeating graph paths by canonical length,
+ * with stable edge-code ties. The 12-road/4096-state budget is absolute; a
+ * null means no candidate found WITHIN that budget, not physical illegality.
  */
 export function transportWalkingRouteViaRequiredEdge(
   index: Index, from: string, to: string,
   required: Pick<TransportRoadEdge, "code" | "from" | "to">,
   unsafeRoadCodes?: ReadonlySet<string>,
 ): WalkingResult {
+  const MAX_ROADS = 12, MAX_STATES = 4096;
   if (!index.adjacency.has(from) || !index.adjacency.has(to) ||
-      unsafeRoadCodes?.has(required.code) ||
+      from === to || unsafeRoadCodes?.has(required.code) ||
       (unsafeRoadCodes?.size ?? 0) > WALKING_UNSAFE_EXCLUSION_LIMIT ||
       required.from === required.to ||
       !index.adjacency.get(required.from)?.some(step =>
         step.edge.code === required.code && step.node === required.to &&
         step.edge.from === required.from && step.edge.to === required.to)) return null;
-  let best: Exclude<WalkingResult, null> | null = null;
-  for (const [near, far] of [[required.from, required.to], [required.to, required.from]]) {
-    // The approach cannot cross the required bridge early, then retrace it.
-    const approach = searchWalkingRoute(index, from, new Set([near]), required.code, unsafeRoadCodes);
-    if (!approach) continue;
-    // Exclude every approach road from the continuation, as well as the bridge.
-    // The existing 12-exclusion limit bounds this source-owned candidate query.
-    const excluded = new Set(unsafeRoadCodes);
-    for (const code of approach.edgeCodes) excluded.add(code);
-    if (excluded.size > WALKING_UNSAFE_EXCLUSION_LIMIT) continue;
-    const remainder = searchWalkingRoute(index, far, new Set([to]), required.code, excluded);
-    if (!remainder) continue;
-    const roadCodes = [...approach.edgeCodes, required.code, ...remainder.edgeCodes];
-    if (new Set(roadCodes).size !== roadCodes.length) continue;
-    const owned = index.adjacency.get(near)!.find(step =>
-      step.edge.code === required.code && step.node === far)!;
-    const distanceM = approach.distanceM + owned.edge.surfaceLengthM + remainder.distanceM,
-      fantasyWalkSeconds = approach.fantasyWalkSeconds + owned.edge.fantasyWalkSeconds +
-        remainder.fantasyWalkSeconds;
-    if (!Number.isFinite(distanceM) || !Number.isFinite(fantasyWalkSeconds)) continue;
-    const candidate = Object.freeze({
-      from, to, edgeCodes: Object.freeze(roadCodes), distanceM, fantasyWalkSeconds,
-      exploredNodes: approach.exploredNodes + remainder.exploredNodes,
-    });
-    // Numeric distance first, fixed canonical road codes on exact ties.
-    if (!best || candidate.distanceM < best.distanceM ||
-        (candidate.distanceM === best.distanceM &&
-          candidate.edgeCodes.join("\u0000") < best.edgeCodes.join("\u0000")))
-      best = candidate;
+  type Candidate = {
+    node: string; visited: ReadonlySet<string>; roads: readonly string[];
+    distanceM: number; fantasyWalkSeconds: number; crossed: boolean; sortKey: string;
+  };
+  const earlierPath = (a: Candidate, b: Candidate) =>
+    a.distanceM < b.distanceM || (a.distanceM === b.distanceM && a.sortKey < b.sortKey);
+  const frontier: Candidate[] = [];
+  const push = (entry: Candidate) => {
+    let p = frontier.length;
+    frontier.push(entry);
+    while (p > 0) {
+      const parent = (p - 1) >> 1;
+      if (!earlierPath(entry, frontier[parent])) break;
+      frontier[p] = frontier[parent];
+      p = parent;
+    }
+    frontier[p] = entry;
+  };
+  const pop = (): Candidate => {
+    const first = frontier[0], tail = frontier.pop()!;
+    if (frontier.length) {
+      let p = 0;
+      while (p * 2 + 1 < frontier.length) {
+        let child = p * 2 + 1;
+        if (child + 1 < frontier.length && earlierPath(frontier[child + 1], frontier[child]))
+          child++;
+        if (!earlierPath(frontier[child], tail)) break;
+        frontier[p] = frontier[child];
+        p = child;
+      }
+      frontier[p] = tail;
+    }
+    return first;
+  };
+  push({ node: from, visited: new Set([from]), roads: [],
+    distanceM: 0, fantasyWalkSeconds: 0, crossed: false, sortKey: "" });
+  let admitted = 1, explored = 0;
+  while (frontier.length && explored < MAX_STATES) {
+    const current = pop();
+    explored++;
+    if (current.node === to) {
+      if (current.crossed) return Object.freeze({
+        from, to, edgeCodes: Object.freeze([...current.roads]),
+        distanceM: current.distanceM, fantasyWalkSeconds: current.fantasyWalkSeconds,
+        exploredNodes: explored,
+      });
+      continue;
+    }
+    if (current.roads.length === MAX_ROADS) continue;
+    for (const step of index.adjacency.get(current.node)!) {
+      if (unsafeRoadCodes?.has(step.edge.code) || current.visited.has(step.node)) continue;
+      const bridge = step.edge.code === required.code;
+      if (bridge && current.crossed) continue;
+      const distanceM = current.distanceM + step.edge.surfaceLengthM,
+        fantasyWalkSeconds = current.fantasyWalkSeconds + step.edge.fantasyWalkSeconds;
+      if (!Number.isFinite(distanceM) || !Number.isFinite(fantasyWalkSeconds)) continue;
+      // Both accepted frontier states and expanded states are finite, even
+      // in cyclic/high-branching campaign graphs. No global search is launched.
+      if (admitted === MAX_STATES) break;
+      push({
+        node: step.node, visited: new Set([...current.visited, step.node]),
+        roads: [...current.roads, step.edge.code],
+        distanceM, fantasyWalkSeconds, crossed: current.crossed || bridge,
+        sortKey: current.sortKey + "\u0000" + step.edge.code,
+      });
+      admitted++;
+    }
   }
-  return best;
+  return null;
 }
 
 /**
