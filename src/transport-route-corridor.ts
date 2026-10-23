@@ -58,12 +58,14 @@ export function planTransportRouteCorridor(
     if (incidentRoads && (!incidentRoads.has(at) || !incidentRoads.has(forward ? edge.to : edge.from)))
       return Object.freeze({ status: "invalid", stations: EMPTY });
     const sourcePoints = forward ? edge.centerline : [...edge.centerline].reverse();
-    // Redundant consecutive source vertices are not physical travel intervals.
-    // Keep checking every original waypoint; a wholly collapsed edge is invalid.
+    // Repeated or sub-millimetre-near source vertices are not travel intervals.
+    // Use the same physical join tolerance as canonical node endpoints; keep
+    // rejecting a wholly collapsed road rather than inventing movement.
     if (sourcePoints.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.z)))
       return Object.freeze({ status: "invalid", stations: EMPTY });
     const points = sourcePoints.filter((point, i) => i === 0 ||
-      wrapSourceX(point.x - sourcePoints[i - 1].x) !== 0 || point.z !== sourcePoints[i - 1].z);
+      Math.hypot(wrapSourceX(point.x - sourcePoints[i - 1].x),
+        point.z - sourcePoints[i - 1].z) > 1e-4);
     if (points.length < 2) return Object.freeze({ status: "invalid", stations: EMPTY });
     const start = nodes.get(at), endCode = forward ? edge.to : edge.from,
       end = nodes.get(endCode);
