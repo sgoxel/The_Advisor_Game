@@ -14,6 +14,7 @@ import {
   residentFoundationAt,
   legalPosition,
   continuousWalkableOffsetSegment,
+  legalEnclosureSegment,
   timedWalkOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -39,6 +40,30 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("settlement walls admit resident crossings only through SEED gate apertures", () => {
+  const p = (eastM: number, northM: number) => ({ eastM, northM }),
+    border = [p(-20, -20), p(20, -20), p(20, 20), p(-20, 20)],
+    gates = [p(20, 0)];
+  assert.equal(legalEnclosureSegment(p(0, 0), p(40, 0), border, gates), true,
+    "a connected crossing through the real east gate is allowed");
+  assert.equal(legalEnclosureSegment(p(40, 0), p(0, 0), border, gates), true,
+    "a lawful return through the same gate is symmetric");
+  assert.equal(legalEnclosureSegment(p(0, 12), p(40, 12), border, gates), false,
+    "dry endpoints cannot tunnel through the adjacent wall");
+  assert.equal(legalEnclosureSegment(p(40, 12), p(0, 12), border, gates), false,
+    "reversing an illegal trip cannot make a wall traversable");
+  assert.equal(legalEnclosureSegment(p(0, 0), p(-40, 0), border, gates), false,
+    "there is no west-side gate");
+  assert.equal(legalEnclosureSegment(p(0, 0), p(40, 0), border, []), false,
+    "a missing or blocked gate is not a traversable crossing");
+  assert.equal(legalEnclosureSegment(p(20, -18), p(20, 18), border, gates), false,
+    "walking along the solid wall cannot be mistaken for a gate route");
+  assert.equal(legalEnclosureSegment(p(20, -4), p(20, 4), border, gates), true,
+    "the actual nine-metre rendered gate aperture remains available");
+  assert.equal(legalEnclosureSegment(p(-10, -10), p(10, 10), border, gates), true,
+    "valid interior movement does not require exiting through a gate");
 });
 
 test("invalid resident terrain never silently moves the requested point toward town", () => {
@@ -491,11 +516,29 @@ test("fishing destinations are dry banks beside actual water, with inland fallba
   const inland = residentFoundationAt(villages.find(p => p.name === "Willowstead")!, 59);
   assert.ok(inland.workplace.includes("/PATCH/"), "unreachable bank falls back to a real farm patch");
   assert.ok(f.workplace.includes("/SHORE/"), "waterside resident has a real fishing bank");
-  const tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon), r = residentAt(place, 70, tick);
-  assert.equal(r.task, "Fishing from the bank");
-  assert.equal(finalSurfaceAt(r.x,r.z).water.kind, "none");
+  const tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon), r = residentAt(place, 70, tick),
+    // The site and the resident's actual location are different facts: an
+    // assigned fishing bank must exist even when the gate/shore route is blocked.
+    bank = {
+      lon: normalizeLongitude(place.canonicalPosition.lon + f.workOffset.eastM /
+        (CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat))))),
+      lat: place.canonicalPosition.lat + f.workOffset.northM / CANONICAL_PLANET_RADIUS,
+    },
+    bankSource = lonLatToSource(bank.lon, bank.lat);
+  assert.equal(finalSurfaceAt(bankSource.x, bankSource.z).water.kind, "none",
+    "the SEED-assigned fishing bank must be dry regardless of resident travel");
   assert.ok(Array.from({length:16},(_,i)=> {
-    const a=i*Math.PI/8, ll=r.position, p=lonLatToSource(ll.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(ll.lat)),ll.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
+    const a=i*Math.PI/8, p=lonLatToSource(bank.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(bank.lat)),bank.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
     return finalSurfaceAt(p.x,p.z).water.kind !== "none";
-  }).some(Boolean), "water must be within 15 m of the dry bank");
+  }).some(Boolean), "water must be within 15 m of the actual assigned bank");
+  if (r.route.startsWith("BLOCKED:")) {
+    assert.equal(r.activity, "rest", "a blocked resident cannot pretend to fish");
+    assert.equal(r.travelProgress, undefined, "an unreachable bank cannot have successful travel progress");
+    assert.notEqual(r.task, "Fishing from the bank", "assignment is not arrival");
+  } else {
+    assert.ok(r.grounded, "a working fisherman stands on legal ground");
+    assert.equal(r.task, "Fishing from the bank");
+    assert.equal(r.activity, "work");
+    assert.ok(greatCircleDistance(r.position, bank) < 2, "fishing work must occur at its assigned bank");
+  }
 });
