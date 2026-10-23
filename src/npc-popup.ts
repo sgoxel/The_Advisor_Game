@@ -13,7 +13,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { buildingName, familyName, type BuildingKind } from "./names.ts";
 import { activityAt, dailyPlan, type Activity } from "./routines.ts";
-import { fantasyDayIndex, fantasySecondOfDay, fantasyWeekday } from "./clock.ts";
+import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { settlementExteriorFor } from "./settlement-exterior.ts";
 import type { Resident } from "./simulation.ts";
 
@@ -96,7 +96,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
   if (!root) return;
   currentCode = resident.code;
   currentKind = "npc";
-  const t = resident.traits, names = anchorNames(resident), second = fantasySecondOfDay(tick), day = fantasyDayIndex(tick), weekday = fantasyWeekday(tick),
+  const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
     plan = dailyPlan({ code: resident.code, role: resident.role, ageGroup: resident.ageGroup, guardShift: resident.guardShift }, t, day, weekday),
     { index } = activityAt(plan, second),
     where = (activity: Activity) => names[activity.anchor] ?? activity.anchor,

@@ -1365,3 +1365,4 @@ body.globe-mode .travel-button {
 .info-list li { padding: 3px 0; border-bottom: 1px solid rgba(216, 185, 121, 0.1); }
 .info-list li:last-child { border-bottom: 0; }
 #npc-popup section > p { margin: 2px 0; }
+.world-clock .local-time { display: block; font-size: 10.5px; color: #cdbf9f; margin-top: 2px; letter-spacing: .02em; white-space: nowrap; }

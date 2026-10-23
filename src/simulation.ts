@@ -4,7 +4,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, heightAt } from "./world.ts";
 import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
-import { fantasyDayIndex, fantasySecondOfDay, fantasyWeekday } from "./clock.ts";
+import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import {
@@ -317,12 +317,13 @@ export function residentFoundationAt(
 }
 
 /** Second of the fantasy day as shown by the HUD clock (tick 0 is not midnight). */
-function daySecond(tick: number) {
-  return fantasySecondOfDay(tick);
+/** Local second of the day at a settlement (realm Fantasy Time shifted by its time zone). */
+function daySecond(tick: number, place: Place) {
+  return localSecondOfDay(tick, place.canonicalPosition.lon);
 }
-function isGuardOnDuty(foundation: ResidentFoundation, tick: number) {
+function isGuardOnDuty(foundation: ResidentFoundation, tick: number, place: Place) {
   if (foundation.role !== "guard") return false;
-  const daytime = daySecond(tick) >= 6 * HOUR && daySecond(tick) < 18 * HOUR;
+  const second = daySecond(tick, place), daytime = second >= 6 * HOUR && second < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
 }
 export function guardCoverageAt(place: Place, tick: number) {
@@ -337,7 +338,7 @@ export function guardCoverageAt(place: Place, tick: number) {
     for (let slot = 0; slot < coverage[gateIndex].required; slot++)
       for (let shift = 0; shift < 2; shift++, index++) {
         const foundation = residentFoundationAt(place, index);
-        if (isGuardOnDuty(foundation, tick)) {
+        if (isGuardOnDuty(foundation, tick, place)) {
           coverage[gateIndex].onDuty++;
           coverage[gateIndex].residentCodes.push(foundation.code);
         }
@@ -378,7 +379,7 @@ function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, bas
  * real walking time at the canonical good-road pace along the corridor between them.
  */
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) {
-  const day = fantasyDayIndex(tick), weekday = fantasyWeekday(tick), second = daySecond(tick),
+  const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
     { activity, previous } = activityAt(plan, second),

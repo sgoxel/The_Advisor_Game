@@ -3,6 +3,8 @@ import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
+import { daylightAt } from "./daylight.ts";
+import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -110,6 +112,8 @@ const GLOBE_PASSES = [
 /** Terrain color interpretation is identical in the globe and flat representations. */
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
+/** Backdrop behind the flat map, recoloured by local daylight (see applyDaylight). */
+const flatBackdrop = FLAT_BACKDROP.clone();
 let continuityWorkerBytes = 0;
 const NATURAL_WORKER_SCRATCH_RESERVE_BYTES=32*1024*1024;
 let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
@@ -563,9 +567,9 @@ function applyPresentation() {
     material?.setParameter("surfaceTransition", projectionTransition);
   }
   camera.camera!.clearColor.set(
-    FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
-    FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
-    FLAT_BACKDROP.b + (backdrop.b - FLAT_BACKDROP.b) * t,
+    flatBackdrop.r + (backdrop.r - flatBackdrop.r) * t,
+    flatBackdrop.g + (backdrop.g - flatBackdrop.g) * t,
+    flatBackdrop.b + (backdrop.b - flatBackdrop.b) * t,
     1,
   );
 }
@@ -1375,6 +1379,30 @@ async function start() {
   });
   sun.setEulerAngles(48, -28, 0);
   app.root.addChild(sun);
+  /**
+   * Local-time lighting: the light, ambient, terrain tint and backdrop follow the local clock of the
+   * place at the map focus (time zones GMT+1..+14). Zooming out to the globe blends back to plain day.
+   */
+  let lastDaylightKey = "";
+  const applyDaylight = (tick: number) => {
+    const focusLon = flatToLonLat(view.x, view.z).lon, second = localSecondOfDay(tick, focusLon),
+      light = daylightAt(second), day = daylightAt(12 * 3600), globeBlend = Math.min(1, projectionTransition),
+      blend = (a: readonly number[], b: readonly number[]) => a.map((value, index) => value + (b[index] - value) * globeBlend),
+      key = `${Math.floor(second / 60)}|${globeBlend.toFixed(2)}`;
+    $("local-time").textContent = `local ${clockLabel(second)} · GMT+${timeZoneOffsetHours(focusLon)} · ${light.phase}`;
+    if (key === lastDaylightKey) return;
+    lastDaylightKey = key;
+    const sunColor = blend(light.sunColor, day.sunColor), ambient = blend(light.ambient, day.ambient), tint = blend(light.terrainTint, day.terrainTint), sky = blend(light.sky, day.sky);
+    sun.light!.color = new pc.Color(sunColor[0], sunColor[1], sunColor[2]);
+    sun.light!.intensity = light.sunIntensity + (day.sunIntensity - light.sunIntensity) * globeBlend;
+    sun.setEulerAngles(light.sunPitch + (day.sunPitch - light.sunPitch) * globeBlend, light.sunYaw + (day.sunYaw - light.sunYaw) * globeBlend, 0);
+    app.scene.ambientLight = new pc.Color(ambient[0], ambient[1], ambient[2]);
+    flatBackdrop.set(sky[0], sky[1], sky[2], 1);
+    for (const material of [terrainMaterial, coarseTerrainMaterial]) if (material) {
+      material.emissive.set(tint[0], tint[1], tint[2]);
+      material.update();
+    }
+  };
   const material = (worldMaterial = new pc.StandardMaterial());
   material.diffuse = new pc.Color(1, 1, 1);
   material.diffuseVertexColor = true;
@@ -1471,6 +1499,7 @@ async function start() {
       simulation.advance(Math.max(simulation.tick, simulationTick));
       lastSimulationRealSecond = realSecond;
       $("fantasy-time").textContent = clock.labelAt(now);
+      applyDaylight(simulationTick);
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
       const visible =

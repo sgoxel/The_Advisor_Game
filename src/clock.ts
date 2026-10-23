@@ -68,3 +68,38 @@ export function fantasyWeekday(tick: number) {
 export function tickAtFantasyTime(day: number, secondOfDay: number) {
   return day * FANTASY_DAY_SECONDS + secondOfDay - ORIGIN_SECOND_OF_DAY;
 }
+
+/**
+ * Local time zones. The global fantasy clock above is realm time (the one
+ * authority for all settings). The world is split by longitude into 14 bands,
+ * GMT+1 (far west) to GMT+14 (far east); a place's local time is realm time
+ * plus its band's offset. Lighting and NPC routines use local time.
+ */
+export const TIME_ZONE_COUNT = 14;
+/** Zone offset in hours (1-14) for a longitude in radians. */
+export function timeZoneOffsetHours(lonRad: number) {
+  const lon = ((lonRad + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+  return 1 + Math.min(TIME_ZONE_COUNT - 1, Math.floor(lon / (2 * Math.PI) * TIME_ZONE_COUNT));
+}
+/** Realm tick shifted by the local zone: feed it to the fantasy* helpers to get local day, weekday and second. */
+export function localTick(tick: number, lonRad: number) {
+  return tick + timeZoneOffsetHours(lonRad) * 3600;
+}
+export function localSecondOfDay(tick: number, lonRad: number) {
+  return fantasySecondOfDay(localTick(tick, lonRad));
+}
+export function localDayIndex(tick: number, lonRad: number) {
+  return fantasyDayIndex(localTick(tick, lonRad));
+}
+export function localWeekday(tick: number, lonRad: number) {
+  return fantasyWeekday(localTick(tick, lonRad));
+}
+/** Realm tick at which a place's local clock shows `secondOfDay` on calendar day `day`. */
+export function tickAtLocalTime(day: number, secondOfDay: number, lonRad: number) {
+  return tickAtFantasyTime(day, secondOfDay) - timeZoneOffsetHours(lonRad) * 3600;
+}
+/** "HH:MM" for a second of the day. */
+export function clockLabel(secondOfDay: number) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(secondOfDay / 3600))}:${pad(Math.floor((secondOfDay % 3600) / 60))}`;
+}

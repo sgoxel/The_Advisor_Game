@@ -14,14 +14,16 @@ import {
   residentFoundationAt,
 } from "../src/simulation.ts";
 
-import { fantasySecondOfDay, fantasyWeekday, tickAtFantasyTime } from "../src/clock.ts";
+import { localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
+import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
 
 const HOUR = 3600;
-/** Tick at which calendar day 1 shows this HUD time (routines follow the displayed Fantasy Time). */
-const at = (hour: number, day = 1) => tickAtFantasyTime(day, hour * HOUR);
-/** First calendar day after the origin that is a workday (weekday 0-5). */
-const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => fantasyWeekday(tickAtFantasyTime(day, 12 * HOUR)) !== 6)!;
+/** Tick at which villages[0]'s local clock shows this time on calendar day `day` (routines follow local time). */
+const LON = villages[0].canonicalPosition.lon;
+const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
+/** First calendar day after the origin that is a local workday (weekday 0-5). */
+const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
 
 test("every resident foundation owns one stable canonical house and entrance", () => {
   assert.equal(RESIDENTIAL_CAPACITY, 1);
@@ -185,7 +187,7 @@ test("traits, mood and daily routines are reproducible from the SEED and follow 
   }
   const resident = residentAt(village, 9, at(10)), replay = residentAt(village, 9, at(10));
   assert.deepEqual(replay, resident);
-  assert.equal(fantasySecondOfDay(at(10)), 10 * HOUR, "simulation time of day equals the HUD clock");
+  assert.equal(localSecondOfDay(at(10), LON), 10 * HOUR, "routines run on the settlement's local clock");
 });
 
 test("an ordinary workday: asleep at night, breakfast at home, at the workplace by day, home or inn at dinner", () => {
@@ -225,4 +227,22 @@ test("seeded names: stable people, buildings and unique street names per settlem
   assert.equal(buildingName("inn", "PLOT/INN", "Alderwick", 0), buildingName("inn", "PLOT/INN", "Alderwick", 0));
   assert.match(buildingName("inn", "PLOT/INN", "Alderwick", 0), /^The [A-Z][a-z]+ [A-Z][a-z]+$/);
   assert.equal(buildingName("house", "PLOT/H", "Alderwick", 0, familyName("OWNER", 0)), `${familyName("OWNER", 0)} House`);
+});
+
+test("time zones GMT+1..+14 and local daylight drive lighting and routines", () => {
+  assert.equal(timeZoneOffsetHours(-Math.PI + 1e-6), 1);
+  assert.equal(timeZoneOffsetHours(Math.PI - 1e-6), 14);
+  for (let lon = -3.1; lon < 3.1; lon += .2) {
+    const zone = timeZoneOffsetHours(lon);
+    assert.ok(zone >= 1 && zone <= 14);
+    assert.equal(localSecondOfDay(tickAtLocalTime(3, 7 * HOUR, lon), lon), 7 * HOUR);
+  }
+  const night = daylightAt(0), dawn = daylightAt(6.3 * HOUR), noon = daylightAt(12 * HOUR);
+  assert.deepEqual([...noon.terrainTint], [1, 1, 1], "daytime keeps the original bright settings");
+  assert.equal(noon.sunIntensity, .9);
+  assert.ok(night.sky[2] > night.sky[0] && night.sunIntensity < .3, "midnight is dark blue");
+  assert.ok(dawn.sunColor[0] > dawn.sunColor[2] + .4 && dawn.terrainTint[0] > dawn.terrainTint[2], "dawn light is orange");
+  // Two settlements in different zones are at different local hours at the same realm tick.
+  const east = villages.find((v) => timeZoneOffsetHours(v.canonicalPosition.lon) !== timeZoneOffsetHours(LON));
+  if (east) assert.notEqual(localSecondOfDay(at(12), east.canonicalPosition.lon), 12 * HOUR);
 });
