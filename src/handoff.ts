@@ -7,7 +7,9 @@ export const HANDOFF_LOCAL_FOOTPRINT = 127_420;
 export const HANDOFF_GLOBE_FOOTPRINT = 318_550;
 export const HANDOFF_LOCAL_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_LOCAL_FOOTPRINT);
 export const HANDOFF_GLOBE_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_GLOBE_FOOTPRINT);
-export const SCALE_LADDER = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
+/** Closest zoom: about 2.7 m of half-height, so a 1.7 m character fills about a third of the screen (RPG close-up). */
+export const MIN_HALF_HEIGHT = 0.18;
+export const SCALE_LADDER = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 
 /**
  * The local mesh is authoritative at the inner anchor, but it becomes a coarse,
@@ -37,12 +39,20 @@ export function advanceProjectionTransition(current: number, target: number, dt:
   return Math.abs(target - next) < 0.001 ? target : next;
 }
 
-export function scaleLabelForHalfHeight(halfHeight: number): string {
+/** Nearest scale-ladder stop (the denominator of 1/x) for a zoom level. */
+export function scaleValueForHalfHeight(halfHeight: number): number {
   const footprint = canonicalFootprintForHalfHeight(halfHeight);
   const diameter = 1_274_200;
-  const denominator = Math.max(1, Math.min(10000, (footprint / diameter) * 10000));
+  const denominator = Math.max(SCALE_LADDER[0], Math.min(10000, (footprint / diameter) * 10000));
   let best: number = SCALE_LADDER[0];
   for (const candidate of SCALE_LADDER)
     if (Math.abs(Math.log(candidate / denominator)) < Math.abs(Math.log(best / denominator))) best = candidate;
-  return `1/${best}`;
+  return best;
+}
+export function scaleLabelForHalfHeight(halfHeight: number): string {
+  return scaleOptionLabel(scaleValueForHalfHeight(halfHeight));
+}
+/** Close-up stops read as character views; the rest keep the map-scale notation. */
+export function scaleOptionLabel(value: number) {
+  return value === .2 ? "Hero" : value === .5 ? "Close" : `1/${value}`;
 }

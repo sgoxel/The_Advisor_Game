@@ -73,6 +73,9 @@ import {
   advanceProjectionTransition,
   scaleLabelForHalfHeight,
   SCALE_LADDER,
+  MIN_HALF_HEIGHT,
+  scaleValueForHalfHeight,
+  scaleOptionLabel,
 } from "./handoff.ts";
 import {
   coordinateLabel,
@@ -213,7 +216,7 @@ const uploads: {
 }[] = [];
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
-let settlementDetailVisible = Number(scaleLabelForHalfHeight(view.halfHeight).slice(2)) < 50;
+let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < 50;
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
@@ -362,14 +365,13 @@ function updateNavigationHud() {
   const screenHeading = -view.yaw || 0;
   $("compass").title =
     `Heading ${(((((screenHeading * 180) / Math.PI) % 360) + 360) % 360).toFixed(0)}° · reset north`;
-  const scale = scaleLabelForHalfHeight(view.halfHeight);
-  $<HTMLSelectElement>("map-scale").value = scale.slice(2);
-  const anchor = (CANONICAL_PLANET_DIAMETER * Number(scale.slice(2))) / 10000;
+  $<HTMLSelectElement>("map-scale").value = String(scaleValueForHalfHeight(view.halfHeight));
+  const anchor = (CANONICAL_PLANET_DIAMETER * scaleValueForHalfHeight(view.halfHeight)) / 10000;
   const approximate =
     Math.abs(canonicalFootprintForHalfHeight(view.halfHeight) / anchor - 1) >
     0.001;
   for (const option of Array.from($<HTMLSelectElement>("map-scale").options))
-    option.textContent = `1/${option.value}${approximate && option.selected ? " ≈" : ""}`;
+    option.textContent = `${scaleOptionLabel(Number(option.value))}${approximate && option.selected ? " ≈" : ""}`;
   $("scale-caption").textContent = approximate ? "Scale ≈" : "Scale";
   let pixels = innerWidth < 700 ? 64 : 104;
   let start: LonLat | undefined, end: LonLat | undefined;
@@ -556,11 +558,11 @@ function applyPresentation() {
   );
 }
 function updateCamera() {
-  const roadRepresentation=roadRepresentationAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))),showRoads=roadRepresentation==='ground';
+  const roadRepresentation=roadRepresentationAtScale(scaleValueForHalfHeight(view.halfHeight)),showRoads=roadRepresentation==='ground';
   document.body.dataset.roadRepresentation=roadRepresentation;
   terrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
   coarseTerrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
-  const showDetails = Number(scaleLabelForHalfHeight(view.halfHeight).slice(2)) < 50;
+  const showDetails = scaleValueForHalfHeight(view.halfHeight) < 50;
   document.body.classList.toggle("settlement-overview", !showDetails);
   if (showDetails !== settlementDetailVisible) {
     settlementDetailVisible = showDetails;
@@ -648,7 +650,7 @@ function notePoleLimit(side: "north" | "south") {
 }
 function navigate(x: number, z: number, height = view.halfHeight) {
   view.halfHeight = Math.max(
-    2,
+    MIN_HALF_HEIGHT,
     Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
   );
   const boundedZ = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
@@ -980,7 +982,7 @@ function setupControls() {
     ...SCALE_LADDER.map((value) => {
       const option = document.createElement("option");
       option.value = String(value);
-      option.textContent = `1/${value}`;
+      option.textContent = scaleOptionLabel(value);
       return option;
     }),
   );
@@ -1876,8 +1878,8 @@ async function start() {
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
             activeKeys.every((key) => wanted.some((t) => t.key === key)),
-          roadRepresentation: roadRepresentationAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))),
-          roadPresentation: roadVisibleAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))) ? "visible" : "hidden",
+          roadRepresentation: roadRepresentationAtScale(scaleValueForHalfHeight(view.halfHeight)),
+          roadPresentation: roadVisibleAtScale(scaleValueForHalfHeight(view.halfHeight)) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
           visibleResidents: actors.filter(actor => actor.enabled).length,
           residentPresentation: {
