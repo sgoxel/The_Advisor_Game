@@ -2077,6 +2077,38 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     assert.notEqual(alternatePlan?.status, "invalid",
       "an alternate candidate must preserve canonical endpoint joins");
   }
+  // Inspect a small, focus-bounded set of OTHER already-SEED-owned river
+  // bridges. A candidate here only proves a source graph/profile recipe,
+  // not safe grades, both dry banks or Simulation travel. Unlike the fixed
+  // selected-bridge graph cut, this can distinguish an alternative crossing.
+  const otherBridgeCodes = [...new Set(transportRoadsNear(
+    bridge!.x, bridge!.z, 2048, 64).flatMap(edge => edge.bridgeCodes))]
+    .filter(code => code !== bridge!.code).sort().slice(0, 4);
+  let otherBridgeCandidate: {
+    bridge: string; roadCount: number; sourceRecipe: string;
+    sampledStations: number; firstRoad: string;
+  } | null = null;
+  for (const code of otherBridgeCodes) {
+    const otherBridge = transportBridgeByCode(code),
+      owner = otherBridge && edgeByCode.get(otherBridge.roadCode);
+    if (!owner) continue;
+    const route = transportWalkingRouteViaRequiredEdge(
+      index, villageNode!.code, site!.code, owner, new Set([firstUnsafeRoad]));
+    if (!route || !route.edgeCodes.includes(owner.code) ||
+        route.edgeCodes.includes(firstUnsafeRoad)) continue;
+    const recipe = planTransportRouteCorridorByLeg(
+      route, edgeByCode, nodeByCode, index.adjacency);
+    otherBridgeCandidate = { bridge: code, roadCount: route.edgeCodes.length,
+      sourceRecipe: recipe.status, sampledStations: recipe.status === "ready" ? recipe.stations.length : 0,
+      firstRoad: route.edgeCodes[0] };
+    break;
+  }
+  console.log("S005_REAL_SEED_OTHER_BRIDGE", JSON.stringify({
+    origin: villageNode!.code, site: site!.code, unsafeRoad: firstUnsafeRoad,
+    scannedNearbyCrossings: otherBridgeCodes.length,
+    candidate: otherBridgeCandidate,
+    caveat: "bounded local bridge search; no complete final-surface or actor legal passage",
+  }));
   const detour = transportWalkingRoute(index, villageNode!.code, site!.code,
     new Set([firstUnsafeRoad]));
   if (detour) {
