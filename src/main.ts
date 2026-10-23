@@ -1623,7 +1623,7 @@ async function start() {
                 return Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
               })(), 160)
               // People asleep, eating or working inside a building are not standing on the street.
-              .filter((resident) => !resident.indoors)
+              .filter((resident) => resident.grounded && !resident.indoors)
           : [];
       for (let i = 0; i < visible.length; i++) {
         if (!actors[i]) {
