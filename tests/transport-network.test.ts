@@ -1853,6 +1853,24 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     assert.equal(physicalPlan.stations.length, 0,
       "do not silently truncate over-budget real-route evidence");
   }
+  // Retry the same real nine-road witness in bounded, on-demand per-road
+  // windows. Station readiness proves a sampling recipe, not legal passage.
+  const segmented = planTransportRouteCorridorByLeg(
+    { from: villageNode!.code, to: site!.code, edgeCodes: chain },
+    edgeByCode, nodeByCode, index.adjacency,
+  );
+  assert.notEqual(segmented.status, "invalid",
+    "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
+  if (segmented.status === "ready") {
+    assert.ok(segmented.stations.length > 0 &&
+      segmented.stations.length <= ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT);
+    assert.equal(segmented.stations[0].edgeCode, chain[0]);
+    assert.equal(segmented.stations.at(-1)?.edgeCode, chain.at(-1));
+  } else {
+    assert.equal(segmented.status, "over-budget");
+    assert.equal(segmented.stations.length, 0,
+      "oversized individual SEED legs remain unproven, never truncated to a false PASS");
+  }
   // Test both endpoint physical probes in the SAME graph chain: a legal bridge
   // alone does not certify a disconnected site, and a site alone does not
   // certify an impossible river crossing. These are bounded sampled checks,
