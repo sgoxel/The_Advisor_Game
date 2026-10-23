@@ -18,11 +18,13 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
   Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
-  | { status: "invalid"; reason?: "repeated-road"; edgeCode?: string; stations: readonly CorridorStation[] }
+  | { status: "invalid"; reason?: "repeated-road" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
   | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
 const EMPTY = Object.freeze([] as CorridorStation[]);
+const invalidSourceChain = (edgeCode: string): Plan =>
+  Object.freeze({ status: "invalid", reason: "source-chain", edgeCode, stations: EMPTY });
 
 export function planTransportRouteCorridor(
   route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
@@ -49,10 +51,10 @@ export function planTransportRouteCorridor(
   for (const code of route.edgeCodes) {
     const edge = roads.get(code);
     if (!edge?.centerline || edge.centerline.length < 2)
-      return Object.freeze({ status: "invalid", stations: EMPTY });
+      return invalidSourceChain(code);
     const forward = edge.from === endpointAt;
     if (!forward && edge.to !== endpointAt)
-      return Object.freeze({ status: "invalid", stations: EMPTY });
+      return invalidSourceChain(code);
     const next = forward ? edge.to : edge.from,
       first = edge.centerline[forward ? 0 : edge.centerline.length - 1],
       last = edge.centerline[forward ? edge.centerline.length - 1 : 0],
@@ -60,11 +62,11 @@ export function planTransportRouteCorridor(
     if (!origin || !destination ||
         !physicalMatch(first, origin) || !physicalMatch(last, destination) ||
         (incidentRoads && (!incidentRoads.has(endpointAt) || !incidentRoads.has(next))))
-      return Object.freeze({ status: "invalid", stations: EMPTY });
+      return invalidSourceChain(code);
     endpointAt = next;
   }
   if (endpointAt !== route.to)
-    return Object.freeze({ status: "invalid", stations: EMPTY });
+    return invalidSourceChain(route.edgeCodes[route.edgeCodes.length - 1]);
   const stations: CorridorStation[] = [];
   // Only registered graph-incident roads whose source endpoints actually meet
   // the canonical node may own its winning final surface. Shared Y nodes and

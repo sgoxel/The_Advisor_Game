@@ -589,14 +589,16 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
       ["L", { x: ROUTE_CORRIDOR_STATION_LIMIT + 1, z: 0 }],
       ["Z", { x: ROUTE_CORRIDOR_STATION_LIMIT + 3, z: 0 }],
     ]);
-  assert.equal(planTransportRouteCorridor(
+  assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "Z", edgeCodes: [longFirst.code, detachedTail.code] },
     new Map([longFirst, detachedTail].map(edge => [edge.code, edge])), longNodes,
-  ).status, "invalid", "over-budget first road cannot hide a disconnected later source endpoint");
-  assert.equal(planTransportRouteCorridor(
+  ), { status: "invalid", reason: "source-chain", edgeCode: detachedTail.code, stations: [] },
+  "oversized first road must name the detached later source edge before refusing the route");
+  assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "A", edgeCodes: [longFirst.code, connectedTail.code] },
     new Map([longFirst, connectedTail].map(edge => [edge.code, edge])), longNodes,
-  ).status, "invalid", "over-budget first road cannot hide a route ending at another site");
+  ), { status: "invalid", reason: "source-chain", edgeCode: connectedTail.code, stations: [] },
+  "an oversized valid source chain ending at the wrong site must name its terminal road");
   assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "Z", edgeCodes: [longFirst.code, connectedTail.code] },
     new Map([longFirst, connectedTail].map(edge => [edge.code, edge])), longNodes,
