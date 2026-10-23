@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2307,51 +2307,29 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   assert.equal(segmented.status, "ready",
     "the real SEED-owned gate-to-site route must allow a bounded full-station physical check");
   if (segmented.status === "ready") {
-    // The historically decisive station 435 must be judged on the actual
-    // carriageway and its physical along-road interval, not nearby hillside.
-    const index = 434, at = segmented.stations[index], before = segmented.stations[index - 1];
-    assert.equal(at.edgeCode, firstUnsafeRoad);
-    const roadGrade = finalSurfaceLocalSlopeAt(at.x, at.z);
-    const here = finalSurfaceAt(at.x, at.z), prior = finalSurfaceAt(before.x, before.z),
-      metres = greatCircleDistance(sourceToLonLat(before.x, before.z), sourceToLonLat(at.x, at.z)),
-      intervalGrade = Math.abs(here.surfaceHeight - prior.surfaceHeight) / metres;
-    assert.ok(roadGrade <= .08,
-      `real station 435 carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
-    assert.ok(intervalGrade <= .08,
-      `real station 435 physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
-    // Temporary decisive-failure cross-section probe; remove before merge.
-    for (const i of [433, 434, 435, 436]) {
-      const point = segmented.stations[i];
-      const road = roads.find(r => r.code === point.edgeCode);
-      const latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(point.x, point.z).lat)));
-      const dx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale);
-      const dz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT;
-      const locations = [
-        { x: point.x, z: point.z },
-        { x: point.x + dx, z: point.z },
-        { x: point.x - dx, z: point.z },
-        { x: point.x, z: point.z + dz },
-        { x: point.x, z: point.z - dz },
-      ];
-      console.log("S005_DECISIVE_ROADBED", JSON.stringify({
-        i: i + 1, road: point.edgeCode, p: point,
-        tangent: road ? roadTangentAt(point.x, point.z, road) : null,
-        slope: finalSurfaceLocalSlopeAt(point.x, point.z),
-        samples: locations.map(p => {
-          const q = finalSurfaceDebugAt(p.x, p.z);
-          return { p, natural: q.base.groundHeight,
-            ground: q.final.groundHeight, owner: q.final.groundMaterialOwnerId,
-            road: q.modifiers.filter(m => m.priority === 8).map(m => ({ id: m.id,
-              weight: m.weight, target: m.targetGroundHeight })) };
-        }),
-      }));
+    // The three historically decisive stations are actual SEED final-surface
+    // roadbed samples. Neither source interpolation nor earthwork may evade
+    // the local 8% rule or introduce an unsafe along-road interval.
+    for (const stationNumber of [435, 436, 437]) {
+      const at = segmented.stations[stationNumber - 1],
+        before = segmented.stations[stationNumber - 2];
+      assert.equal(at.edgeCode, firstUnsafeRoad);
+      const roadGrade = finalSurfaceLocalSlopeAt(at.x, at.z),
+        here = finalSurfaceAt(at.x, at.z), prior = finalSurfaceAt(before.x, before.z),
+        metres = greatCircleDistance(sourceToLonLat(before.x, before.z), sourceToLonLat(at.x, at.z)),
+        intervalGrade = Math.abs(here.surfaceHeight - prior.surfaceHeight) / metres;
+      assert.ok(roadGrade <= .08,
+        `real station ${stationNumber} local carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
+      assert.ok(intervalGrade <= .08,
+        `real station ${stationNumber} physical interval ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
     }
     assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
       "the same real route must exercise the bounded per-road fallback");
     // Cheap routine smoke: the first 32 canonical stations must genuinely
     // be legal under the same local-slope and great-circle interval rules as
     // the interactive diagnostic. A deliberate full-route check is opt-in.
-    const full = process.env.S005_ROUTE_FULL_PROBE === "1";
+    // Candidate-only complete route acceptance; restore opt-in after this check.
+    const full = true;
     const limit = full ? segmented.stations.length : Math.min(32, segmented.stations.length);
     let previousHeight: number | null = null, maximumIntervalGrade = 0,
       firstUnsafe: { station: number; road: string; cause: string; x: number; z: number; grade?: number } | null = null;
@@ -2398,6 +2376,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       maximumIntervalGrade, elapsedMs: performance.now() - started,
       caveat: "sampled final surface only; between-station and actor passage not certified",
     }));
+    if (full) assert.equal(firstUnsafe, null, "selected route must remain physically legal at every station");
   }
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
