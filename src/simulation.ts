@@ -576,6 +576,10 @@ function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
       }
     }
   }
+  // Some outdoor work sites are reached over open walkable ground rather than a
+  // settlement street. Allow that physical corridor only after checking EVERY
+  // segment sample; a disconnected graph is never permission to cross obstacles.
+  if (!path && legalStreetSegment(place, from, to)) path = [from, to];
   pathCache.set(key, path);
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
