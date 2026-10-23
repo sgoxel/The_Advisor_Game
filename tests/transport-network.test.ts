@@ -2319,6 +2319,18 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       `real station 435 carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
     assert.ok(intervalGrade <= .08,
       `real station 435 physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
+    // The following historically unsafe source station must never remain
+    // Simulation-walkable while its actual final-surface road grade exceeds
+    // the existing 8% route rule. The assertion permits future legal repairs.
+    const next = segmented.stations[index + 1],
+      nextSlope = finalSurfaceLocalSlopeAt(next.x, next.z),
+      nextSurface = finalSurfaceAt(next.x, next.z);
+    assert.equal(next.edgeCode, firstUnsafeRoad);
+    assert.ok(nextSurface.contributingModifierIds.includes(next.edgeCode),
+      "the next physical sample must still belong to the same SEED road");
+    assert.ok(nextSlope <= .08 ||
+      (!nextSurface.walkable && nextSurface.traversal === "blocked"),
+      "a road grade rejected by S005 may not remain walkable in Simulation");
     assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
       "the same real route must exercise the bounded per-road fallback");
     // Cheap routine smoke: the first 32 canonical stations must genuinely
