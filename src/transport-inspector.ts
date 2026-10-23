@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridor, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridorByLeg, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -575,7 +575,7 @@ function resetCorridorProbe() {
 function probeRouteCorridor() {
   if (!siteRoute) return;
   const started = performance.now();
-  const plan = planTransportRouteCorridor(siteRoute, corridorEdges, transportNodesByCode, walkingIndex?.adjacency),
+  const plan = planTransportRouteCorridorByLeg(siteRoute, corridorEdges, transportNodesByCode, walkingIndex?.adjacency),
     revision = ++corridorProbeRevision;
   corridorProbeMs = null;
   corridorProbeStations = 0;
@@ -591,7 +591,9 @@ function probeRouteCorridor() {
     corridorProbeStatus = plan.status === "over-budget"
       ? plan.reason === "raw-source-waypoints"
         ? `raw source waypoint limit (${ROUTE_CORRIDOR_STATION_LIMIT * 2}) reached at ${plan.edgeCode}; not certified`
-        : `sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
+        : plan.reason === "route-legs"
+          ? `on-demand route limit (${ROUTE_CORRIDOR_LEG_LIMIT} canonical roads) reached at ${plan.edgeCode}; not certified`
+          : `per-road sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) or complete-route ceiling (${ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
       : plan.reason === "repeated-road"
         ? `repeated canonical road ${plan.edgeCode}; non-retracing physical passage not certified`
         : "invalid source-owned physical path; not certified";
