@@ -1886,6 +1886,34 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     edge.roadClass === "access" && edge.from === site!.code);
   assert.ok(access && chain.includes(access.code),
     "critical-site entry must traverse its own recorded access branch");
+  // Follow the real SEED slope failure (full diagnostic station 435) through
+  // the graph-only exclusion API. This is a bounded candidate search, NOT
+  // proof that an alternative preserves the bridge or legal final surface.
+  const firstUnsafeRoad = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1";
+  assert.ok(chain.includes(firstUnsafeRoad),
+    "the same real nine-road witness must retain its first previously unsafe road");
+  const detour = transportWalkingRoute(index, villageNode!.code, site!.code,
+    new Set([firstUnsafeRoad]));
+  if (detour) {
+    assert.ok(!detour.edgeCodes.includes(firstUnsafeRoad),
+      "physical-unsafe-road exclusion must never return the refused edge");
+    assert.ok(detour.exploredNodes <= index.nodeCount);
+    assert.equal(new Set(detour.edgeCodes).size, detour.edgeCodes.length,
+      "a detour candidate must not retrace a SEED road");
+  }
+  const detourPlan = detour ? planTransportRouteCorridorByLeg(detour, edgeByCode,
+    nodeByCode, index.adjacency) : null;
+  console.log("S005_REAL_SEED_DETOUR", JSON.stringify({
+    excludedRoad: firstUnsafeRoad,
+    graph: detour ? "candidate" : "unavailable",
+    roadCount: detour?.edgeCodes.length ?? 0,
+    preservesSelectedBridge: detour?.edgeCodes.includes(crossing!.code) ?? false,
+    sourceRecipe: detourPlan?.status ?? "not-available",
+    ...(detourPlan?.status === "over-budget" ? { reason: detourPlan.reason,
+      offendingRoad: detourPlan.edgeCode } : {}),
+    sampledStations: detourPlan?.status === "ready" ? detourPlan.stations.length : 0,
+    caveat: "graph/source recipe only; local grades and continuous physical travel unverified",
+  }));
   // Exercise the SAME real gate road -> Y -> selected river crossing -> site
   // chain in the player-facing physical corridor planner. A too-long route is honestly
   // reported as over budget, never as partially proven physical passage.
