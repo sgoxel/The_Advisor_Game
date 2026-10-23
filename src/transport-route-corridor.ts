@@ -19,7 +19,7 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
   | { status: "invalid"; reason?: "repeated-road" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
-  | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
+  | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
 const EMPTY = Object.freeze([] as CorridorStation[]);
@@ -225,7 +225,7 @@ export function planTransportRouteCorridorByLeg(
     }
     const extra = part.stations.length - (previousIndex >= 0 ? 1 : 0);
     if (stations.length + extra > ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT)
-      return Object.freeze({ status: "over-budget", reason: "sample-stations",
+      return Object.freeze({ status: "over-budget", reason: "route-stations",
         edgeCode: code, stations: EMPTY });
     if (previousIndex >= 0)
       stations[previousIndex] = Object.freeze({
