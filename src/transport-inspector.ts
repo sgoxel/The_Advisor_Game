@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, corridorUnsafeRoadExclusion, planTransportRouteCorridorByLeg, sampledCorridorStationFailure, transportProbeFrameBudgetReached } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, corridorStationEvidenceProgress, corridorUnsafeRoadExclusion, planTransportRouteCorridorByLeg, sampledCorridorStationFailure, transportProbeFrameBudgetReached } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -541,8 +541,8 @@ function renderSiteAccessProbe() {
 function renderCorridorProbe() {
   const target = panel.querySelector<HTMLElement>("#transport-corridor-result")!;
   const route = siteRoute ? `${siteRoute.from} → ${siteRoute.to} (${siteRoute.edgeCodes.length} canonical roads)` : "no selected walking route";
-  const progress = corridorProbePlannedStations
-    ? `${corridorProbeStations}/${corridorProbePlannedStations} validated stations` : "no station evidence";
+  const progress = corridorStationEvidenceProgress(
+    corridorProbeStations, corridorProbePlannedStations, corridorProbeFirstUnsafeStation);
   const source = corridorProbeFirstUnsafeSource
     ? ` · unsafe source x ${corridorProbeFirstUnsafeSource.x.toFixed(5)}, z ${corridorProbeFirstUnsafeSource.z.toFixed(5)}` : "";
   const localGrade = corridorProbeFirstUnsafeLocalGrade === null ? "" :
