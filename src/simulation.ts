@@ -915,9 +915,8 @@ export class LazySimulation {
             };
           }
         ).advisorWorld;
-        const focus = world?.navigation?.setFocus;
-        if (focus) {
-          focus(home.position.lon, home.position.lat);
+        if (world?.navigation?.setFocus) {
+          world.navigation.setFocus(home.position.lon, home.position.lat);
           output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on canonical entrance. Full identity below.`;
         } else output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focus unavailable. Full identity below.`;
       } else output.textContent = "Assigned home entrance unavailable. Full identity below.";
