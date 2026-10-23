@@ -392,6 +392,12 @@ test("S005 bridge-selected site preview must traverse its actual road rather tha
   assert.equal(through!.distanceM, 12);
   assert.equal(through!.fantasyWalkSeconds, 120);
   assert.ok(through!.exploredNodes <= index.nodeCount);
+  assert.ok(transportWalkingRoute(index, "bank-b", "near-site"),
+    "ordinary walking graph searches may legitimately reach the opposite bank");
+  assert.equal(transportWalkingRouteThroughEdge(index, "bank-a", selected, ["near-site"]), null,
+    "bridge-selected preview may not cross then loop by a different road to its starting bank");
+  assert.equal(transportWalkingRouteThroughEdge(index, "bank-b", selected, ["far-site"]), null,
+    "reverse bridge selection also refuses return-bank cycles");
   assert.deepEqual(transportWalkingRouteThroughEdge(index, "bank-a", selected, [...sites].reverse()), through,
     "changing destination input order never changes the canonical route");
   assert.deepEqual(transportWalkingRouteThroughEdge(index, "bank-b", selected, sites)?.edgeCodes,
