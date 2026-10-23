@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
@@ -1922,12 +1922,44 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     }
     if (!full)
       assert.equal(firstUnsafe, null, "first 32 stations of the real source route must retain legal top-surface passage");
-    else console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
-      canonicalRoads: chain.length, stationCount: segmented.stations.length,
-      checked: firstUnsafe?.station ?? limit, firstUnsafe,
-      maximumIntervalGrade, elapsedMs: performance.now() - started,
-      caveat: "sampled final surface only; between-station and actor passage not certified",
-    }));
+    else {
+      console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
+        canonicalRoads: chain.length, stationCount: segmented.stations.length,
+        checked: firstUnsafe?.station ?? limit, firstUnsafe,
+        maximumIntervalGrade, elapsedMs: performance.now() - started,
+        caveat: "sampled final surface only; between-station and actor passage not certified",
+      }));
+      if (firstUnsafe) {
+        const point = firstUnsafe, debug = finalSurfaceDebugAt(point.x, point.z),
+          physicalRoad = roads.find(road => road.code === point.road),
+          tangent = physicalRoad && roadTangentAt(point.x, point.z, physicalRoad),
+          norm = tangent && Math.hypot(tangent.x, tangent.z);
+        const sampledGrade = (ux: number, uz: number) => {
+          const a = { x: point.x - ux, z: point.z - uz },
+            b = { x: point.x + ux, z: point.z + uz },
+            distance = greatCircleDistance(sourceToLonLat(a.x, a.z), sourceToLonLat(b.x, b.z));
+          return distance > 0
+            ? Math.abs(finalSurfaceAt(a.x, a.z).groundHeight -
+              finalSurfaceAt(b.x, b.z).groundHeight) / distance : Infinity;
+        };
+        const ux = tangent && norm ? tangent.x / norm : 0,
+          uz = tangent && norm ? tangent.z / norm : 0;
+        console.log("S005_REAL_ROUTE_UNSAFE_CONTEXT", JSON.stringify({
+          station: point.station, road: point.road, x: point.x, z: point.z,
+          nativeLocalGrade: finalSurfaceLocalSlopeAt(point.x, point.z),
+          alongGrade: norm ? sampledGrade(ux, uz) : null,
+          acrossGrade: norm ? sampledGrade(-uz, ux) : null,
+          naturalHeight: debug.base.groundHeight, groundHeight: debug.final.groundHeight,
+          traversal: debug.final.traversal, groundMaterial: debug.final.groundMaterial,
+          roadContributes: debug.final.contributingModifierIds.includes(point.road),
+          deckHeight: debug.final.deckHeight,
+          modifiers: debug.modifiers.map(modifier => ({
+            id: modifier.id, priority: modifier.priority, weight: modifier.weight,
+            targetGroundHeight: modifier.targetGroundHeight, material: modifier.material,
+          })),
+        }));
+      }
+    }
   }
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
