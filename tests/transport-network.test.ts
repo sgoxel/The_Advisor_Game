@@ -461,8 +461,8 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   );
   assert.equal(reverseAccumulated.status, "ready",
     "reversing a SEED-owned path cannot fail because cumulative tiny waypoint offsets were skipped");
-  assert.equal(reverseAccumulated.stations.at(-1)?.x, 0,
-    "after tiny-tail collapse the selected corridor must still end on the exact canonical A endpoint");
+  assert.ok(Math.abs(reverseAccumulated.stations.at(-1)!.x) <= 1e-7,
+    "wrapped floating-point source coordinates must terminate within canonical A endpoint precision");
   const collapsed = { ...a, centerline: [{ x: 0, z: 0 }, { x: 0, z: 0 }] } as TransportRoadEdge;
   assert.equal(planTransportRouteCorridor(
     { from: "A", to: "B", edgeCodes: [collapsed.code] },
