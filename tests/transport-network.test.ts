@@ -24,6 +24,7 @@ import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
+import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2338,6 +2339,17 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     console.log("S005_ROADBED_ROOT_436", JSON.stringify({
       at: { x: at436.x, z: at436.z, edgeCode: at436.edgeCode },
       tangent,
+      crossings: failingRoad ? [segmented.stations[434], at436].map(p => {
+        const t = roadTangentAt(p.x, p.z, failingRoad);
+        const cr = freshwaterCrossingAt(t.cx, t.cz, t.x, t.z);
+        return {
+          x: p.x, z: p.z,
+          crossing: cr,
+          gapM: cr ? Math.max(cr.lo - Math.min(5,(120 - cr.spanM)/2) / cr.metresPerUnit,
+                                  -(cr.hi + Math.min(5,(120 - cr.spanM)/2) / cr.metresPerUnit)) *
+                       cr.metresPerUnit : null,
+        };
+      }) : null,
       neighbours: failingRoad ? {
         xp: roadTangentAt(at436.x + physicalStepX, at436.z, failingRoad),
         xm: roadTangentAt(at436.x - physicalStepX, at436.z, failingRoad),
