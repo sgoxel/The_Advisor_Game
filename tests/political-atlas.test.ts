@@ -282,3 +282,11 @@ test("generated roads use shared Y nodes and bounded terrain-selected physical p
  assert.ok(roads.some(r=>r.networkKind==='trunk'&&(uses.get(r.networkId)||0)>=2));
  for(const j of roadJunctions)assert.equal(roads.filter(r=>r.from===j.id||r.to===j.id).length,3);
 });
+
+
+test("small props and NPCs are hidden from displayed 1/2 outward, independently of building icons", async () => {
+  const { settlementSmallDetailsVisible, SETTLEMENT_ICON_FROM_SCALE } = await import("../src/political-presentation.ts");
+  for (const scale of [.2,.5,1,1.99]) assert.equal(settlementSmallDetailsVisible(scale),true);
+  for (const scale of [2,5,10,100,10000]) assert.equal(settlementSmallDetailsVisible(scale),false);
+  assert.equal(SETTLEMENT_ICON_FROM_SCALE,5);
+});

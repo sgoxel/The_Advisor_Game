@@ -39,14 +39,18 @@ const sortedKeys = (
     .map((tile) => tile.key)
     .sort();
 
-test("owner memory policy retains cache through 256 MB and enforces one combined 1 GB ceiling", () => {
- assert.deepEqual(STREAMING_MEMORY_POLICY,{cacheTrimStartBytes:256_000_000,combinedBytes:1_000_000_000});
+test("owner memory policy retains cache through 1 GB and enforces one combined 1 GB ceiling", () => {
+ assert.deepEqual(STREAMING_MEMORY_POLICY,{cacheTrimStartBytes:1_000_000_000,combinedBytes:1_000_000_000});
  for(const budget of Object.values(STREAMING_BUDGETS)){
-  assert.equal(budget.combinedBytes,1_000_000_000);assert.equal(budget.cacheTrimStartBytes,256_000_000);
+  assert.equal(budget.combinedBytes,1_000_000_000);assert.equal(budget.cacheTrimStartBytes,1_000_000_000);
   const state={generationReady:budget.generationReady,activePatches:budget.activePatches,cachedPatches:10_000,cpuBytes:200_000_000,gpuBytes:56_000_000};
   assert.equal(shouldTrimStreamingCache(state.cpuBytes,state.gpuBytes,budget),false);
   assert.equal(withinStreamingBudget(state,budget),true,"patch count alone cannot discard useful small cached data");
-  assert.equal(shouldTrimStreamingCache(200_000_001,56_000_000,budget),true);
+  assert.equal(shouldTrimStreamingCache(600_000_000,350_000_000,budget),false);
+  assert.equal(shouldTrimStreamingCache(600_000_000,400_000_000,budget),false);
+  assert.equal(shouldTrimStreamingCache(600_000_001,400_000_000,budget),true);
+  assert.equal(shouldTrimStreamingCache(600_000_000,350_000_000,budget,50_000_000),false);
+  assert.equal(shouldTrimStreamingCache(600_000_000,350_000_000,budget,50_000_001),true,"required work may reclaim only the space it needs");
   assert.equal(withinStreamingBudget({...state,cpuBytes:600_000_000,gpuBytes:400_000_000},budget),true);
   assert.equal(withinStreamingBudget({...state,cpuBytes:600_000_001,gpuBytes:400_000_000},budget),false,"CPU and GPU share one ceiling");
   assert.equal(streamingMemoryReservationFits(600_000_000,350_000_000,50_000_000,budget),true);

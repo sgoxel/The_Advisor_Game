@@ -1,5 +1,5 @@
 import { compareText } from "./compare-text.ts";
-import {SETTLEMENT_ICON_FROM_SCALE} from "./political-presentation.ts";
+import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
@@ -239,6 +239,7 @@ const uploads: {
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
 let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
+let smallDetailsVisible = settlementSmallDetailsVisible(scaleValueForHalfHeight(view.halfHeight));
 let closeLightingVisible = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
@@ -595,9 +596,11 @@ function updateCamera() {
   coarseTerrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
   const showDetails = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
   document.body.classList.toggle("settlement-overview", !showDetails);
+  const showSmallDetails = settlementSmallDetailsVisible(scaleValueForHalfHeight(view.halfHeight));
   const showLighting = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
-  if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible) {
+  if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible || showSmallDetails !== smallDetailsVisible) {
     settlementDetailVisible = showDetails;
+    smallDetailsVisible = showSmallDetails;
     closeLightingVisible = showLighting;
     setLayers();
   }
@@ -724,8 +727,9 @@ function uploadGeometry(
 function tileLayerVisible(name:string):boolean {
   if (name === "terrain") return true;
   if (name === "nature") return layers.nature;
+  if (name === "detail") return layers.structures && layers.nature && settlementDetailVisible && smallDetailsVisible;
   if (["closeDetail", "nightGlow", "lampPools"].includes(name))
-    return layers.structures && settlementDetailVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > GLOW_VISIBILITY_EPSILON);
+    return layers.structures && settlementDetailVisible && smallDetailsVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > GLOW_VISIBILITY_EPSILON);
   return layers.structures && settlementDetailVisible && (name === "structures" || layers.nature);
 }
 function setLayers() {
@@ -769,7 +773,7 @@ function prefetchNext(root: Tile) {
   const fingerprint = `${wanted.map((tile) => tile.key).join(",")}|${Math.round(view.x)}|${Math.round(view.z)}`;
   if (fingerprint !== prefetchFingerprint) { prefetchFingerprint = fingerprint; prefetchQueue = prefetchCandidates(); warmSettlements(); }
   const surfaceBytes = globe ? globe.stats.textureWidth * globe.stats.textureHeight * 4 : 0;
-  if (cachedGeometryBytes + surfaceBytes + continuityCpuBytes() > streamingBudget.cacheTrimStartBytes * .85) return;
+  if (2 * cachedGeometryBytes + surfaceBytes + Math.ceil(surfaceBytes * 4 / 3) + continuityCpuBytes() > streamingBudget.cacheTrimStartBytes * .85) return;
   while (prefetchQueue.length) {
     const tile = prefetchQueue.shift()!;
     if (tileCache.has(tile.key) || pending.has(tile.key)) continue;
@@ -940,9 +944,11 @@ function processStreaming(material: pc.StandardMaterial) {
   {
     const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
     const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
+    // Only urgent generation/upload may make room below the ceiling. Optional prefetch cannot evict reusable data.
+    const reservationBytes = readyBytes() + (inFlight === 0 && uploads.length === 0 && nextStreamingJob(root,wanted,coverageTiles,cachedKeys) ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0);
     const overCacheBudget = () =>
       shouldTrimStreamingCache(cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes(),
-        cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3),streamingBudget);
+        cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3),streamingBudget,reservationBytes);
     if (overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
@@ -1566,7 +1572,7 @@ async function start() {
     if (source) positionActor(actor, source.x, source.z);
   };
   let lastSimulationRealSecond = -1;
-  let lastResidentDetailVisible = settlementDetailVisible;
+  let lastResidentDetailVisible = smallDetailsVisible;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
   let labelFingerprint = "";
@@ -1581,8 +1587,8 @@ async function start() {
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
-    if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== settlementDetailVisible) {
-      lastResidentDetailVisible = settlementDetailVisible;
+    if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible) {
+      lastResidentDetailVisible = smallDetailsVisible;
       if (view.halfHeight < 900)
         simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
@@ -1593,7 +1599,7 @@ async function start() {
       const visible =
         // Villagers are only simulated for drawing once loading is done and a person is at least a few
         // pixels tall (half-height < 20 units ≈ 300 m); further out they would be sub-pixel specks.
-        ready && settlementDetailVisible && view.halfHeight < 20
+        ready && settlementDetailVisible && smallDetailsVisible && view.halfHeight < 20
           ? simulation
               // Everyone whose position can be on screen: the whole visible ground footprint
               // (rotated rectangle, low close-up camera included) plus a margin, so nobody
@@ -2100,6 +2106,7 @@ async function start() {
           roadRepresentation: roadRepresentationAtScale(scaleValueForHalfHeight(view.halfHeight)),
           roadPresentation: roadVisibleAtScale(scaleValueForHalfHeight(view.halfHeight)) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
+          smallDetailsVisible,
           lighting: {displayed:displayedDaylight,target:targetDaylight},
           closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0},
           visibleResidents: actors.filter(actor => actor.enabled).length,

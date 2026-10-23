@@ -1,3 +1,6 @@
+/** Small props and people are shown only closer than displayed 1/2. Visibility never evicts their cache. */
+export const SETTLEMENT_SMALL_DETAIL_FROM_SCALE = 2;
+export const settlementSmallDetailsVisible = (scale: number) => scale > 0 && scale < SETTLEMENT_SMALL_DETAIL_FROM_SCALE;
 /** Settlement meshes stay cached while icons own overview presentation. */
 export const SETTLEMENT_ICON_FROM_SCALE = 5;
 export function politicalScaleDenominator(label:string):number {

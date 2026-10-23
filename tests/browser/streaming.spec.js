@@ -12,7 +12,7 @@ async function expectStreamingBudget(page) {
   expect(p).toBeTruthy();
   expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
   expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
-  expect(p.budget.cacheTrimStartBytes).toBe(256_000_000);
+  expect(p.budget.cacheTrimStartBytes).toBe(1_000_000_000);
   expect(p.budget.combinedBytes).toBe(1_000_000_000);
   expect(p.cpuResourceBytesEstimated + p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.combinedBytes);
   expect(p.cpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.cpuBytes);
@@ -35,7 +35,7 @@ async function navigateAndSettleWithinBudget(page, lon, lat) {
     const p = state.performance;
     expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
     expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
-    expect(p.budget.cacheTrimStartBytes).toBe(256_000_000);
+    expect(p.budget.cacheTrimStartBytes).toBe(1_000_000_000);
     expect(p.budget.combinedBytes).toBe(1_000_000_000);
     expect(p.cpuResourceBytesEstimated + p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.combinedBytes);
     expect(p.cpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.cpuBytes);

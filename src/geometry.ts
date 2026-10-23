@@ -323,9 +323,9 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
       structures.boxYaw(x, y + .018, z, width || 1.5, .075, feature.length || depth || 3, yaw, color(154, 141, 111));
     } else if (feature.kind === "roadside-tree") {
       const h = 6.2 + (variant % 5) * .65, radius = 2 + ((variant >>> 3) % 6) * .18;
-      nature.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
-      nature.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
-      if (tile.size <= 32) nature.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
+      detail.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
+      detail.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
+      if (tile.size <= 32) detail.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
     }
   }
   return {

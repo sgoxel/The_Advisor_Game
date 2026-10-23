@@ -10,14 +10,14 @@ export type StreamingBudget = {
   gpuBytes: number;
 };
 
-/** Owner policy, 2026-10-15: decimal MB/GB, combined CPU+GPU estimates.
+/** Owner policy, 2026-10-23: decimal MB/GB, combined CPU+GPU estimates.
  * A55/Chrome reference; these are application policies, not browser RAM quotas. */
-export const STREAMING_MEMORY_POLICY=Object.freeze({cacheTrimStartBytes:256_000_000,combinedBytes:1_000_000_000});
+export const STREAMING_MEMORY_POLICY=Object.freeze({cacheTrimStartBytes:1_000_000_000,combinedBytes:1_000_000_000});
 
 /**
  * Queue and active-render bounds vary with viewport; cache retention is byte-based.
  * Old and incoming coverage stay protected while unused cache entries are trimmed
- * only after the owner's 256 MB threshold. SEED/content never depends on this policy.
+ * only at the owner's 1 GB ceiling, or when required work needs room. SEED/content never depends on this policy.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -116,7 +116,7 @@ export function withinStreamingBudget(
   );
 }
 
-/** Reusable terrain remains cached below the soft threshold, irrespective of
+/** Reusable terrain remains cached below the ceiling, irrespective of
  * patch count. A single optional reservation represents upcoming transient work. */
-export function shouldTrimStreamingCache(cpuBytes:number,gpuBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes>budget.cacheTrimStartBytes;}
+export function shouldTrimStreamingCache(cpuBytes:number,gpuBytes:number,budget:StreamingBudget,reservationBytes=0){return cpuBytes+gpuBytes+reservationBytes>budget.cacheTrimStartBytes;}
 export function streamingMemoryReservationFits(cpuBytes:number,gpuBytes:number,reservationBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes+reservationBytes<=budget.combinedBytes;}
