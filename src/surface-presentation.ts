@@ -53,6 +53,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   material.useTonemap = false;
   material.cull = pc.CULLFACE_NONE;
   material.setParameter("surfaceDetailWeight", 1);
+  material.setParameter("surfaceDaylightTint", [1, 1, 1]);
   material.setParameter("surfaceRoadVisibility", 1);
   material.setParameter("surfaceProjectionWeight", 0);
   material.setParameter("surfaceOrigin", [0, 0]);
@@ -138,6 +139,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("emissivePS", `
     uniform float surfaceDetailWeight;
     uniform float surfaceRoadVisibility;
+    uniform vec3 surfaceDaylightTint;
     void getEmission() {
       // Vertex coverage interpolates between road and off-road samples.
       // Tighten the road-tint footprint to avoid broad jagged terrain fringes.
@@ -147,11 +149,13 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, surfaceDetailWeight);
       #endif
+      dEmission *= pow(surfaceDaylightTint, vec3(2.2));
     }
   `);
   material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("emissivePS", `
     uniform surfaceDetailWeight: f32;
     uniform surfaceRoadVisibility: f32;
+    uniform surfaceDaylightTint: vec3f;
     fn getEmission() {
       let roadMask = smoothstep(0.68, 0.84, vVertexColor.a);
       dEmission = mix(vVertexColor.rgb, pow(vec3f(112.0,92.0,62.0)/255.0,vec3f(2.2)), roadMask * uniform.surfaceRoadVisibility);
@@ -159,6 +163,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, uniform.surfaceDetailWeight);
       #endif
+      dEmission *= pow(uniform.surfaceDaylightTint, vec3f(2.2));
     }
   `);
   installLodCoverage(material);

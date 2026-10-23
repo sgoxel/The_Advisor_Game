@@ -26,7 +26,7 @@ export type Daylight = {
 type Key = { hour: number; sun: RGB; intensity: number; pitch: number; ambient: RGB; tint: RGB; sky: RGB; daylight: number };
 // The "day" key is exactly the atlas's original bright lighting.
 const DAY: Omit<Key, "hour"> = { sun: [1, .94, .84], intensity: .9, pitch: 48, ambient: [.4, .46, .41], tint: [1, 1, 1], sky: [.65, .71, .65], daylight: 1 };
-const NIGHT: Omit<Key, "hour"> = { sun: [.55, .66, 1], intensity: .22, pitch: 38, ambient: [.09, .12, .24], tint: [.26, .31, .52], sky: [.06, .09, .19], daylight: 0 };
+const NIGHT: Omit<Key, "hour"> = { sun: [.55, .66, 1], intensity: .22, pitch: 38, ambient: [.24, .28, .4], tint: [.26, .31, .52], sky: [.06, .09, .19], daylight: 0 };
 const KEYS: readonly Key[] = [
   { hour: 0, ...NIGHT },
   { hour: 4.6, ...NIGHT },
@@ -37,7 +37,7 @@ const KEYS: readonly Key[] = [
   { hour: 16, ...DAY },
   { hour: 17.6, sun: [1, .8, .58], intensity: .82, pitch: 22, ambient: [.4, .39, .36], tint: [1, .9, .76], sky: [.8, .7, .55], daylight: .85 },
   { hour: 18.8, sun: [1, .52, .32], intensity: .55, pitch: 8, ambient: [.33, .25, .3], tint: [.9, .64, .56], sky: [.72, .44, .44], daylight: .5 },
-  { hour: 19.8, sun: [.75, .5, .7], intensity: .32, pitch: 4, ambient: [.18, .16, .28], tint: [.5, .42, .6], sky: [.3, .22, .36], daylight: .2 },
+  { hour: 19.8, sun: [.75, .5, .7], intensity: .32, pitch: 4, ambient: [.3, .25, .34], tint: [.5, .42, .6], sky: [.3, .22, .36], daylight: .2 },
   { hour: 21, ...NIGHT },
   { hour: 24, ...NIGHT },
 ];

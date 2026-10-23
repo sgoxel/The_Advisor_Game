@@ -1399,8 +1399,7 @@ async function start() {
     app.scene.ambientLight = new pc.Color(ambient[0], ambient[1], ambient[2]);
     flatBackdrop.set(sky[0], sky[1], sky[2], 1);
     for (const material of [terrainMaterial, coarseTerrainMaterial]) if (material) {
-      material.emissive.set(tint[0], tint[1], tint[2]);
-      material.update();
+      material.setParameter("surfaceDaylightTint", tint);
     }
   };
   const material = (worldMaterial = new pc.StandardMaterial());
