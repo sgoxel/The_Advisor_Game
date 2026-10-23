@@ -78,6 +78,7 @@ export function siteAccessRoadStations(edge: TransportRoadEdge) {
 export function siteAccessSampleVerdict(
   edge: TransportRoadEdge, surfaces: readonly FinalSurface[],
   junctionRoadCodes: ReadonlySet<string> = new Set(),
+  localRoadSlopes?: readonly (number | null)[],
 ) {
   const stations = siteAccessRoadStations(edge), full = stations.length > 0 &&
     stations.length === surfaces.length,
@@ -148,8 +149,11 @@ export function siteAccessSampleVerdict(
   // Average span grades can hide a steep local surface between checkpoints.
   // finalSurfaceAt classifies an >8% road slope as "difficult" even when
   // its endpoints stay walkable; never report that approach as legal-grade.
-  const gradeWithinLimit = maximumGrade !== null && maximumGrade <= 0.08 &&
-    surfaces.every(surface => surface.traversal !== "difficult");
+  const gradeWithinLimit = maximumGrade !== null && maximumGrade <= .08 &&
+    (localRoadSlopes === undefined || localRoadSlopes.length === stations.length) &&
+    surfaces.every((surface, index) => surface.traversal !== "difficult" &&
+      (surface.traversal !== "open" || localRoadSlopes === undefined ||
+        (Number.isFinite(localRoadSlopes[index]) && localRoadSlopes[index]! <= .08)));
   const sampledPass = full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
     dry && walkable && topSurfaceOwned && gradeWithinLimit;
   // On-demand diagnostic only. Reuse already sampled <=49 stations; identify
@@ -175,7 +179,10 @@ export function siteAccessSampleVerdict(
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
-      else if (surface.traversal === "difficult") cause = "unsafe local site-access slope";
+      else if (surface.traversal === "difficult" ||
+        (surface.traversal === "open" && localRoadSlopes !== undefined &&
+          (!Number.isFinite(localRoadSlopes[index]) || localRoadSlopes[index]! > .08)))
+        cause = "unsafe local site-access slope";
       else if (surface.deckHeight == null && surface.traversal !== "road" && surface.traversal !== "open")
         cause = "non-road site-access traversal";
       else if (!deckLegal) cause = "unrelated or invalid top bridge deck";

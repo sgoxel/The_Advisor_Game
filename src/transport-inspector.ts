@@ -688,7 +688,8 @@ function probeSiteAccess() {
     renderCorridorProbe();
   }
   const revision = ++siteProbeRevision, started = performance.now(),
-    surfaces: ReturnType<typeof finalSurfaceAt>[] = [];
+    surfaces: ReturnType<typeof finalSurfaceAt>[] = [],
+    localRoadSlopes: (number | null)[] = [];
   siteProbe = null;
   siteProbeStatus = "checking final surface in bounded frame batches";
   panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = true;
@@ -698,7 +699,12 @@ function probeSiteAccess() {
     const limit = Math.min(stations.length, surfaces.length + 4);
     while (surfaces.length < limit) {
       const point = stations[surfaces.length];
-      surfaces.push(finalSurfaceAt(point.x, point.z));
+      const surface = finalSurfaceAt(point.x, point.z);
+      surfaces.push(surface);
+      // Only a user-requested bounded site probe pays for open-ground
+      // gradients; ordinary finalSurfaceAt already flags >8% "road" grade.
+      localRoadSlopes.push(surface.deckHeight === null && surface.traversal === "open" && surface.walkable
+        ? finalSurfaceLocalSlopeAt(point.x, point.z) : null);
     }
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {
@@ -710,7 +716,7 @@ function probeSiteAccess() {
       const junctionRoadCodes = new Set((walkingIndex?.adjacency.get(branch.to) ?? [])
         .map(step => step.edge.code));
       if (parentCode && !junctionRoadCodes.has(parentCode)) junctionRoadCodes.clear();
-      siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
+      siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes, localRoadSlopes);
       siteProbeStatus = !siteProbe.sampledPass ? "sampled physical approach not certified"
         : siteProbe.terminalGeometryOnly ? "sampled profile pass; terminal surface road owner unverified"
         : "sampled physical approach pass";

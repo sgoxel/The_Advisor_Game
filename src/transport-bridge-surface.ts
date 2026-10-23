@@ -6,10 +6,17 @@ import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts"
 
 /** Bridge and route probes must name the SAME first unsafe canonical surface reason. */
 export function sampledBridgeTopFailure(
-  edgeCode: string, surface: ReturnType<typeof finalSurfaceAt>,
+  edgeCode: string, surface: ReturnType<typeof finalSurfaceAt>, localRoadSlope?: number,
 ): string {
-  return sampledCorridorStationFailure({ x: 0, z: 0, edgeCode }, surface) ??
+  return sampledCorridorStationFailure({ x: 0, z: 0, edgeCode }, surface, localRoadSlope) ??
     "physical traversal not certified";
+}
+
+// On-demand only: "open" remains Simulation-walkable between 8% and 15%,
+// but a selected road must satisfy the same stricter <=8% grade as the route probe.
+function openRoadSlope(point: { x: number; z: number }, surface: ReturnType<typeof finalSurfaceAt>) {
+  return surface.deckHeight === null && surface.traversal === "open" && surface.walkable
+    ? finalSurfaceLocalSlopeAt(point.x, point.z) : undefined;
 }
 
 /**
@@ -277,22 +284,29 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       crossing.lo * crossing.metresPerUnit - 18,
       crossing.hi * crossing.metresPerUnit + 18, segmentCount),
     routeStationsOnRoad = roadStations.length === segmentCount + 1,
-    routeStations = roadStations.map(point => ({ point, surface: finalSurfaceAt(point.x, point.z) })),
-    // Existing walkability / average grade alone cannot certify a locally
-    // difficult slope or an unrelated top bridge hiding this selected road.
-    routeFirstUnsafeIndex = routeStations.findIndex(({ point, surface }) =>
-      !sampledCorridorStationPass({ ...point, edgeCode: edge.code }, surface)),
+    routeStations = roadStations.map(point => {
+      const surface = finalSurfaceAt(point.x, point.z);
+      return { point, surface, localRoadSlope: openRoadSlope(point, surface) };
+    }),
+    approachLocalSlopes = [bankPoints.left, bankPoints.right].map((points, sideIndex) =>
+      points.map((point, index) => openRoadSlope(point, approaches[sideIndex][index]))),
+    // A walkable "open" bank can still exceed the road's 8% local grade.
+    // Reuse the selected-corridor predicate for the same final-surface owner.
+    routeFirstUnsafeIndex = routeStations.findIndex(({ point, surface, localRoadSlope }) =>
+      !sampledCorridorStationPass({ ...point, edgeCode: edge.code }, surface, localRoadSlope)),
     routeStationsTopLegal = routeStationsOnRoad && routeFirstUnsafeIndex < 0,
     approachUnsafe = approaches.map((side, sideIndex) => side.findIndex((surface, index) =>
       surface.water.kind !== "none" || !sampledCorridorStationPass({
         ...bankPoints[sideIndex === 0 ? "left" : "right"][index], edgeCode: edge.code,
-      }, surface))),
+      }, surface, approachLocalSlopes[sideIndex][index]))),
     approachStationsTopLegal = approachStationsOnRoad && approachUnsafe.every(index => index < 0),
     firstUnsafeBankIndex = approachUnsafe[0] >= 0 ? 0 : approachUnsafe[1] >= 0 ? 1 : -1,
     firstUnsafeBankStation = firstUnsafeBankIndex < 0 ? null :
       bankPoints[firstUnsafeBankIndex === 0 ? "left" : "right"][approachUnsafe[firstUnsafeBankIndex]],
     firstUnsafeBankSurface = firstUnsafeBankIndex < 0 ? null :
       approaches[firstUnsafeBankIndex][approachUnsafe[firstUnsafeBankIndex]],
+    firstUnsafeBankLocalSlope = firstUnsafeBankIndex < 0 ? undefined :
+      approachLocalSlopes[firstUnsafeBankIndex][approachUnsafe[firstUnsafeBankIndex]],
     // Coordinate agreement is not enough: a walkable field/another road
     // must never certify the graph-selected road's physical crossing.
     routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
@@ -331,25 +345,30 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsTopLegal,
     routeFirstUnsafeStation: routeFirstUnsafeIndex < 0 ? null : routeFirstUnsafeIndex + 1,
     routeFirstUnsafeCause: routeFirstUnsafeIndex < 0 ? null :
-      sampledBridgeTopFailure(edge.code, routeStations[routeFirstUnsafeIndex].surface),
+      sampledBridgeTopFailure(edge.code, routeStations[routeFirstUnsafeIndex].surface,
+        routeStations[routeFirstUnsafeIndex].localRoadSlope),
     routeFirstUnsafeIntervalStation: routeGrades.firstUnsafeStation,
     routeFirstUnsafeIntervalGrade: routeGrades.firstUnsafeGrade,
-    // Only on a detected difficult station: measure the SAME four-point local
-    // canonical gradient used by finalSurfaceAt. Sampled interval grade is different.
-    routeFirstUnsafeLocalGrade: routeFirstUnsafeIndex >= 0 &&
-      routeStations[routeFirstUnsafeIndex].surface.traversal === "difficult"
-      ? finalSurfaceLocalSlopeAt(routeStations[routeFirstUnsafeIndex].point.x,
-        routeStations[routeFirstUnsafeIndex].point.z) : null,
+    // Reuse an already measured open-bank slope, or measure a difficult
+    // station only after its failure. Never confuse it with interval grade.
+    routeFirstUnsafeLocalGrade: routeFirstUnsafeIndex < 0 ? null :
+      routeStations[routeFirstUnsafeIndex].localRoadSlope ??
+      (routeStations[routeFirstUnsafeIndex].surface.traversal === "difficult"
+        ? finalSurfaceLocalSlopeAt(routeStations[routeFirstUnsafeIndex].point.x,
+          routeStations[routeFirstUnsafeIndex].point.z) : null),
     approachStationsTopLegal,
     approachFirstUnsafeBank: approachUnsafe[0] >= 0 ? `left station ${approachUnsafe[0] + 1}` :
       approachUnsafe[1] >= 0 ? `right station ${approachUnsafe[1] + 1}` : null,
     approachFirstUnsafeCause: approachUnsafe[0] >= 0 ? (approaches[0][approachUnsafe[0]].water.kind !== "none"
-      ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[0][approachUnsafe[0]])) :
+      ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[0][approachUnsafe[0]],
+        approachLocalSlopes[0][approachUnsafe[0]])) :
       approachUnsafe[1] >= 0 ? (approaches[1][approachUnsafe[1]].water.kind !== "none"
-        ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[1][approachUnsafe[1]])) : null,
-    approachFirstUnsafeLocalGrade: firstUnsafeBankStation && firstUnsafeBankSurface?.water.kind === "none" &&
-      firstUnsafeBankSurface.traversal === "difficult"
-      ? finalSurfaceLocalSlopeAt(firstUnsafeBankStation.x, firstUnsafeBankStation.z) : null,
+        ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[1][approachUnsafe[1]],
+          approachLocalSlopes[1][approachUnsafe[1]])) : null,
+    approachFirstUnsafeLocalGrade: firstUnsafeBankLocalSlope ??
+      (firstUnsafeBankStation && firstUnsafeBankSurface?.water.kind === "none" &&
+        firstUnsafeBankSurface.traversal === "difficult"
+        ? finalSurfaceLocalSlopeAt(firstUnsafeBankStation.x, firstUnsafeBankStation.z) : null),
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });

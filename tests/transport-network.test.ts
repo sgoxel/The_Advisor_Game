@@ -947,6 +947,25 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
     { ...surface, traversal: "open" } : surface), junctionRoadCodes).sampledPass, true,
     "a dry walkable site-pad transition remains legal when local slope is safe");
+  // An "open" pad remains Simulation-walkable up to 15%, but the
+  // selected access-road physical proof must enforce the stricter 8%.
+  const openPad = connectedSurfaces.map((surface, i) => i === 2 ?
+    { ...surface, traversal: "open" as const } : surface);
+  const safeSlopes = [null, null, .08, null, null];
+  assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes, safeSlopes).sampledPass, true);
+  const overSlopes = [null, null, .081, null, null];
+  const overVerdict = siteAccessSampleVerdict(edge, openPad, junctionRoadCodes, overSlopes);
+  assert.equal(overVerdict.gradeWithinLimit, false);
+  assert.equal(overVerdict.sampledPass, false);
+  assert.deepEqual([overVerdict.firstUnsafeStation, overVerdict.firstUnsafeCause],
+    [3, "unsafe local site-access slope"],
+    "a locally steep open pad must not hide behind short low-grade intervals");
+  assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes,
+    [null, null, Infinity, null, null]).sampledPass, false,
+    "nonfinite open-pad local gradient cannot certify the selected site approach");
+  assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes,
+    [null, null, null, null, null]).sampledPass, false,
+    "a supplied but missing open-pad slope cannot be treated as zero");
   assert.deepEqual(siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes), good);
   const incomplete = siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes);
   assert.equal(incomplete.sampledPass, false,
@@ -1205,6 +1224,15 @@ test("S005 selected bridge and walking route give the same first unsafe final-su
   }
   assert.equal(sampledBridgeTopFailure(edgeCode, surface), "unsupported water under bridge deck",
     "unsupported water must not be hidden by a competing overpass diagnosis");
+  const openBank = { ...surface, water: { kind: "none" as const },
+    deckHeight: null, deckOwnerIds: [], traversal: "open" as const,
+    contributingModifierIds: [edgeCode], surfaceHeight: 4 };
+  assert.equal(sampledBridgeTopFailure(edgeCode, openBank, .08), "physical traversal not certified",
+    "an at-limit open dry bank is legal, including at a selected river crossing");
+  assert.equal(sampledBridgeTopFailure(edgeCode, openBank, .081), "unsafe local road slope",
+    "selected bridge bank and full-route probes agree about >8% open-ground grade");
+  assert.equal(sampledBridgeTopFailure(edgeCode, openBank, NaN), "unsafe local road slope",
+    "nonfinite local open-bank slope fails closed with the same first-unsafe cause");
   // Unwalkable wet surfaces are common at a missing or disconnected deck;
   // reporting only 'blocked final surface' conceals the real crossing defect.
   const exposedRiver = { ...surface, walkable: false, water: { kind: "river" },
