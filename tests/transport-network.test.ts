@@ -1583,11 +1583,20 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     "the selected crossing must remain on its actual graph edge");
   const bank = nodeByCode.get(crossing!.from);
   assert.ok(bank, "crossing approach must be a canonical walking node");
-  const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
-    .find(node => node?.continent === bank!.continent);
-  const site = network.nodes.find(node =>
-    node.kind === "site" && node.countryCode === bank!.countryCode);
-  assert.ok(y && site, "the bridge continent must have a real Y and road-linked site");
+  const nearY = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
+    .filter(node => node?.continent === bank!.continent && node.countryCode === bank!.countryCode)
+    .map(node => ({ node: node!, approach: transportWalkingRoute(index, node!.code, crossing!.from) }))
+    .find(candidate => candidate.approach && !candidate.approach.edgeCodes.includes(crossing!.code));
+  const farBank = nodeByCode.get(crossing!.to);
+  assert.ok(farBank, "selected bridge must have a canonical far-bank endpoint");
+  const farSite = network.nodes.filter(node => node.kind === "site" &&
+    node.countryCode === farBank!.countryCode && node.continent === farBank!.continent)
+    .map(node => ({ node, continuation: transportWalkingRoute(index, farBank!.code, node.code) }))
+    .find(candidate => candidate.continuation &&
+      !candidate.continuation.edgeCodes.includes(crossing!.code));
+  const y = nearY?.node, site = farSite?.node;
+  assert.ok(y && site,
+    "the selected bridge needs a reachable near-bank Y and far-bank site without retracing its road");
   // Extend this SAME canonical Y -> bridge -> site witness backwards to one
   // real settlement gate. The gate is an exterior feature, not an invented
   // graph node: its registered incoming road must physically pass through it,
@@ -1612,7 +1621,9 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
             edgeByCode.get(road.code)!, [y!.code]),
         })));
     })
-    .find(item => item.toY !== null && !item.toY.edgeCodes.includes(crossing!.code));
+    .find(item => item.toY !== null &&
+      !item.toY.edgeCodes.includes(crossing!.code) &&
+      !item.toY.edgeCodes.some(code => nearY!.approach!.edgeCodes.includes(code)));
   assert.ok(gateWitness,
     "a real source-owned gate must reach Y without retracing the selected bridge road");
   const gateSurface = finalSurfaceAt(gateWitness!.gate.x, gateWitness!.gate.z);
@@ -1621,8 +1632,7 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   assert.notEqual(gateSurface.traversal, "blocked", "actual gate is not a blocked Simulation surface");
   // A single sampled gate is a physical start witness, not an uninterrupted
   // route pass or a claim that the protagonist was moved.
-  const approach = transportWalkingRoute(index, y!.code, crossing!.from),
-    continuation = transportWalkingRoute(index, crossing!.to, site!.code);
+  const approach = nearY!.approach, continuation = farSite!.continuation;
   assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
   const chain = [...gateWitness!.toY!.edgeCodes, ...approach!.edgeCodes,
     crossing!.code, ...continuation!.edgeCodes];
