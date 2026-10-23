@@ -39,6 +39,30 @@ export function planTransportRouteCorridor(
       return Object.freeze({ status: "invalid", reason: "repeated-road", edgeCode: code, stations: EMPTY });
     seenRoads.add(code);
   }
+  // Inspect every SEED edge's *endpoint geometry* before applying the heavier
+  // raw-point/station budget. Otherwise an oversized first road could mask
+  // a detached later road or a path that never reaches its requested site.
+  // This is bounded by graph edge count and does not sample final surfaces.
+  let endpointAt = route.from;
+  for (const code of route.edgeCodes) {
+    const edge = roads.get(code);
+    if (!edge?.centerline || edge.centerline.length < 2)
+      return Object.freeze({ status: "invalid", stations: EMPTY });
+    const forward = edge.from === endpointAt;
+    if (!forward && edge.to !== endpointAt)
+      return Object.freeze({ status: "invalid", stations: EMPTY });
+    const next = forward ? edge.to : edge.from,
+      first = edge.centerline[forward ? 0 : edge.centerline.length - 1],
+      last = edge.centerline[forward ? edge.centerline.length - 1 : 0],
+      origin = nodes.get(endpointAt), destination = nodes.get(next);
+    if (!origin || !destination ||
+        !physicalMatch(first, origin) || !physicalMatch(last, destination) ||
+        (incidentRoads && (!incidentRoads.has(endpointAt) || !incidentRoads.has(next))))
+      return Object.freeze({ status: "invalid", stations: EMPTY });
+    endpointAt = next;
+  }
+  if (endpointAt !== route.to)
+    return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
   // Only registered graph-incident roads whose source endpoints actually meet
   // the canonical node may own its winning final surface. Shared Y nodes and
