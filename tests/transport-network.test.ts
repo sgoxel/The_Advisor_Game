@@ -915,6 +915,25 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     [3, "unrelated or invalid top bridge deck"]);
   assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
     "the site branch's own bridge deck is legal when sampled grade remains safe");
+  const riverBridge = deckSample(edge.code).map((surface, index) => index === 2
+    ? { ...surface, water: { ...surface.water, kind: "river" as const } } : surface);
+  const bridged = siteAccessSampleVerdict(edge, riverBridge, junctionRoadCodes);
+  assert.equal(bridged.dry, false, "river water remains authoritative below a bridge");
+  assert.equal(bridged.supportedWater, true, "the river deck is a supported crossing, not open water");
+  assert.equal(bridged.sampledPass, true,
+    "the selected road's actual walkable top deck may cross a river at a sampled access station");
+  for (const kind of ["lake", "ocean"] as const) {
+    const unsupported = siteAccessSampleVerdict(edge, riverBridge.map((surface, index) => index === 2
+      ? { ...surface, water: { ...surface.water, kind } } : surface), junctionRoadCodes);
+    assert.equal(unsupported.sampledPass, false, "non-river water cannot borrow a bridge deck");
+    assert.deepEqual([unsupported.firstUnsafeStation, unsupported.firstUnsafeCause],
+      [3, "unsupported water under site-access deck"]);
+  }
+  const exposedRiver = siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, index) => index === 2
+    ? { ...surface, water: { ...surface.water, kind: "river" as const } } : surface), junctionRoadCodes);
+  assert.equal(exposedRiver.sampledPass, false, "a road without a physical deck cannot cross a river");
+  assert.deepEqual([exposedRiver.firstUnsafeStation, exposedRiver.firstUnsafeCause],
+    [3, "wet site-access surface"]);
   for (const mismatched of [0.05, -0.05]) {
     const invalidTop = deckSample(edge.code).map((surface, index) => index === 2
       ? { ...surface, deckHeight: surface.surfaceHeight + mismatched } : surface);
