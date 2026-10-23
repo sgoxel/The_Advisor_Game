@@ -13,6 +13,7 @@ import {
   residentAt,
   residentFoundationAt,
   continuousWalkableOffsetSegment,
+  lastReachableRoutineStop,
   readableResidentSite,
 } from "../src/simulation.ts";
 
@@ -35,6 +36,20 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("a blocked leg never becomes the origin of a later resident activity", () => {
+  const home = "home", work = "work", market = "market";
+  const allowed = (from: string, to: string) =>
+    from === to || (from === home && to === market);
+  assert.equal(lastReachableRoutineStop([home, work], allowed), home,
+    "an impassable home-to-work leg leaves the resident at home");
+  assert.equal(lastReachableRoutineStop([home, work, market], allowed), market,
+    "a later legal errand starts from the actual reached home, not unreachable work");
+  assert.equal(lastReachableRoutineStop([home, work, market, work], allowed), market,
+    "a later blocked return cannot teleport from an unvisited worksite");
+  assert.equal(lastReachableRoutineStop([home, work, home], allowed), home,
+    "homecoming after a blocked commute does not invent worksite occupancy");
 });
 
 test("resident captions are short while authoritative site IDs stay unchanged", () => {

@@ -584,6 +584,16 @@ function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
 }
+/** Replay earlier routine destinations from the last place actually reached. A failed
+ * leg cannot become the origin of a later move just because Fantasy Time advances. */
+export function lastReachableRoutineStop<T>(
+  stops: readonly T[], canTravel: (from: T, to: T) => boolean,
+): T {
+  let reached = stops[0];
+  for (let i = 1; i < stops.length; i++)
+    if (canTravel(reached, stops[i])) reached = stops[i];
+  return reached;
+}
 function pathLength(path: readonly Offset[]) {
   let total = 0;
   for (let i = 1; i < path.length; i++) total += Math.hypot(path[i].eastM - path[i - 1].eastM, path[i].northM - path[i - 1].northM);
@@ -629,13 +639,21 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
   while (arrival > 0 && plan[arrival - 1].anchor === activity.anchor) arrival--;
   const departure = plan[arrival - 1];
   if (departure && previous) {
-    const from = standingSpot(foundation, departure.anchor, anchorOffset(place, foundation, departure.anchor), !departure.indoors),
-      path = streetPath(place, from, target);
+    const earlier = plan.slice(0, arrival);
+    const stops = earlier
+      .filter((step, i) => i === earlier.length - 1 || step.anchor !== earlier[i + 1].anchor)
+      .map(step => ({
+        anchor: step.anchor,
+        indoors: step.indoors,
+        offset: standingSpot(foundation, step.anchor, anchorOffset(place, foundation, step.anchor), !step.indoors),
+      }));
+    const reached = lastReachableRoutineStop(stops, (a, b) => streetPath(place, a.offset, b.offset) !== null),
+      from = reached.offset, path = streetPath(place, from, target);
     if (!path)
       return {
         task: `Blocked: no legal walking route to ${activity.anchor}`,
-        route: `BLOCKED: ${anchorRoute(place, foundation, departure.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
-        offset: from, activity: "rest" as ActivityKind, indoors: departure.indoors, mood,
+        route: `BLOCKED: ${anchorRoute(place, foundation, reached.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
+        offset: from, activity: "rest" as ActivityKind, indoors: reached.indoors, mood,
         ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
       };
     const lengthM = pathLength(path),
