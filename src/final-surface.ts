@@ -69,6 +69,8 @@ export type FinalSurface = SurfaceBase & {
   surfaceHeight: number;
   /** Ground material remains inspectable even when a bridge deck is the top surface. */
   groundMaterial: SurfaceMaterial;
+  /** Highest-priority modifier that actually chose exposed ground material. */
+  groundMaterialOwnerId: string | null;
   deckHeight: number | null;
   /** Only canonical modifiers providing the highest actual traversed deck. */
   deckOwnerIds: readonly string[];
@@ -139,6 +141,7 @@ export function composeFinalSurface(
 ): FinalSurface {
   let groundHeight = base.groundHeight,
     groundMaterial = base.material,
+    groundMaterialOwnerId: string | null = null,
     walkable = base.walkable,
     vegetationDensityScale = clamp01(base.vegetationDensityScale),
     reservedUse = base.reservedUse,
@@ -163,8 +166,10 @@ export function composeFinalSurface(
       } else if (modifier.deckHeight === deckHeight) deckOwnerIds.push(modifier.id);
     }
 
-    if (modifier.material && weight >= 0.5 && base.water.kind === "none")
+    if (modifier.material && weight >= 0.5 && base.water.kind === "none") {
       groundMaterial = modifier.material;
+      groundMaterialOwnerId = modifier.id;
+    }
     if (modifier.walkable !== undefined && weight >= 0.5) walkable = modifier.walkable;
     if (modifier.vegetationDensityScale !== undefined)
       vegetationDensityScale = Math.min(
@@ -197,6 +202,7 @@ export function composeFinalSurface(
     surfaceHeight: deckHeight ?? groundHeight,
     material,
     groundMaterial,
+    groundMaterialOwnerId,
     deckHeight,
     deckOwnerIds: Object.freeze(deckOwnerIds),
     deckMaterial: deckHeight === null ? null : "Bridge",
