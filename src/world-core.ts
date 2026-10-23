@@ -498,13 +498,14 @@ function surfaceCacheKey(x: number, z: number) {
   return `${GENERATOR_VERSION}/${x}/${z}`;
 }
 
-/** The exact canonical local ground slope; read-only diagnostic, independent of sampled span averages. */
+/** Actual one-metre road-local grade, not a 30-metre hillside stencil. */
 export function finalSurfaceLocalSlopeAt(x: number, z: number) {
-  const sx = composePointAt(x + 1, z).final.groundHeight - composePointAt(x - 1, z).final.groundHeight,
-    sz = composePointAt(x, z + 1).final.groundHeight - composePointAt(x, z - 1).final.groundHeight,
-    latitude = sourceToLonLat(x, z).lat;
-  return Math.hypot(sx / Math.max(.1, Math.abs(Math.cos(latitude))), sz) /
-    (2 * CANONICAL_METRES_PER_SOURCE_UNIT);
+  const latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(x, z).lat))),
+    dx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale),
+    dz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
+    sx = composePointAt(x + dx, z).final.groundHeight - composePointAt(x - dx, z).final.groundHeight,
+    sz = composePointAt(x, z + dz).final.groundHeight - composePointAt(x, z - dz).final.groundHeight;
+  return Math.hypot(sx, sz) / 2;
 }
 
 /** One player-relevant final surface for render, collision, vegetation and routing. */
