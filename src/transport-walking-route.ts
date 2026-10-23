@@ -301,6 +301,67 @@ export function transportWalkingRouteViaRequiredEdge(
 }
 
 /**
+ * On-demand necessary-condition proof for a selected bridge after excluding
+ * known physically unsafe SEED roads. Remove the required bridge and flood
+ * only the components containing the four relevant canonical graph nodes.
+ * If neither bank orientation can join gate and site, ANY walking path through
+ * the required bridge is impossible under these exclusions (a graph cut).
+ * Otherwise the result is inconclusive: component connectivity does not prove
+ * one non-repeating route or any final-surface/Simulation legality.
+ *
+ * Never uses camera/LOD/renderer or changes graph, SEED, actor or caches.
+ */
+export function transportWalkingRequiredBridgeCut(
+  index: Index, from: string, to: string,
+  required: Pick<TransportRoadEdge, "code" | "from" | "to">,
+  unsafeRoadCodes?: ReadonlySet<string>,
+): Readonly<{
+  status: "invalid" | "graph-cut" | "not-proven";
+  orientation: "none" | "forward" | "reverse" | "both";
+  exploredNodes: number;
+}> {
+  const invalid = Object.freeze({ status: "invalid" as const,
+    orientation: "none" as const, exploredNodes: 0 });
+  if (!index.adjacency.has(from) || !index.adjacency.has(to) ||
+      from === to || required.from === required.to ||
+      unsafeRoadCodes?.has(required.code) ||
+      (unsafeRoadCodes?.size ?? 0) > WALKING_UNSAFE_EXCLUSION_LIMIT ||
+      !index.adjacency.get(required.from)?.some(step =>
+        step.edge.code === required.code && step.node === required.to &&
+        step.edge.from === required.from && step.edge.to === required.to))
+    return invalid;
+  const component = new Map<string, number>();
+  let exploredNodes = 0, group = 0;
+  for (const root of [from, to, required.from, required.to]) {
+    if (component.has(root)) continue;
+    const queue = [root];
+    component.set(root, group);
+    for (let i = 0; i < queue.length; i++) {
+      const node = queue[i];
+      exploredNodes++;
+      for (const step of index.adjacency.get(node)!) {
+        if (step.edge.code === required.code ||
+            unsafeRoadCodes?.has(step.edge.code) ||
+            component.has(step.node)) continue;
+        component.set(step.node, group);
+        queue.push(step.node);
+      }
+    }
+    group++;
+  }
+  const forward = component.get(from) === component.get(required.from) &&
+      component.get(required.to) === component.get(to);
+  const reverse = component.get(from) === component.get(required.to) &&
+      component.get(required.from) === component.get(to);
+  return Object.freeze({
+    status: forward || reverse ? "not-proven" as const : "graph-cut" as const,
+    orientation: forward && reverse ? "both" as const :
+      forward ? "forward" as const : reverse ? "reverse" as const : "none" as const,
+    exploredNodes,
+  });
+}
+
+/**
  * Source X/Z is a flat projection, not a physical distance at high latitudes.
  * Choose the real geodesically closest legal graph endpoint for a map preview.
  * This selects an inspection origin only; it never moves the character.
