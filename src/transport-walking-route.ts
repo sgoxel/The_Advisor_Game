@@ -38,6 +38,7 @@ type WalkingResult = Readonly<{
   distanceM: number; fantasyWalkSeconds: number; exploredNodes: number;
 }> | null;
 const WALKING_ROUTE_CACHE_LIMIT = 12;
+const WALKING_UNSAFE_EXCLUSION_LIMIT = 12;
 // A SEED walking index is fixed for the campaign; reuse only its own finite,
 // read-only graph answers across repeated selections and semantic zoom levels.
 const walkingRouteCaches = new WeakMap<Index, Map<string, WalkingResult>>();
@@ -50,7 +51,8 @@ function searchWalkingRoute(
   index: Index, from: string, destinations: ReadonlySet<string>,
   excludedEdgeCode?: string, unsafeRoadCodes?: ReadonlySet<string>,
 ) {
-  if (!index.adjacency.has(from) || !destinations.size) return null;
+  if (!index.adjacency.has(from) || !destinations.size ||
+      (unsafeRoadCodes?.size ?? 0) > WALKING_UNSAFE_EXCLUSION_LIMIT) return null;
   let cache = walkingRouteCaches.get(index);
   if (!cache) { cache = new Map(); walkingRouteCaches.set(index, cache); }
   // Destination order/duplicates cannot alter an authoritative route, while a
