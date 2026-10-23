@@ -898,6 +898,8 @@ test("S005 on-demand segmented corridor validates continuous multi-road route wi
   assert.equal(full.stations[600].joinedEdgeCode, "road/1");
   assert.deepEqual(full.stations[600].junctionOwnerCodes, ["road/0", "road/1"]);
   assert.equal(full.stations.at(-1)?.edgeCode, "road/8");
+  assert.equal(planTransportRouteCorridorByLeg(chain.route, chain.roads, chain.nodes).status, "ready",
+    "an optional walking index cannot fabricate an invalid join on physically matched SEED endpoints");
   assert.ok(full.stations.every(station => Number.isFinite(station.x) && Number.isFinite(station.z)));
   const dry = { water: { kind: "none" }, walkable: true, traversal: "road",
     deckHeight: null, deckOwnerIds: [] } as unknown as FinalSurface;
