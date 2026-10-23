@@ -2307,18 +2307,20 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   assert.equal(segmented.status, "ready",
     "the real SEED-owned gate-to-site route must allow a bounded full-station physical check");
   if (segmented.status === "ready") {
-    // The historically decisive station 435 must be judged on the actual
-    // carriageway and its physical along-road interval, not nearby hillside.
-    const index = 434, at = segmented.stations[index], before = segmented.stations[index - 1];
-    assert.equal(at.edgeCode, firstUnsafeRoad);
-    const roadGrade = finalSurfaceLocalSlopeAt(at.x, at.z);
-    const here = finalSurfaceAt(at.x, at.z), prior = finalSurfaceAt(before.x, before.z),
-      metres = greatCircleDistance(sourceToLonLat(before.x, before.z), sourceToLonLat(at.x, at.z)),
-      intervalGrade = Math.abs(here.surfaceHeight - prior.surfaceHeight) / metres;
-    assert.ok(roadGrade <= .08,
-      `real station 435 carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
-    assert.ok(intervalGrade <= .08,
-      `real station 435 physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
+    // Both consecutive historically unsafe approach stations must have real
+    // <=8% carriageway-local and geodesic along-road grades.
+    for (const index of [434, 435]) {
+      const at = segmented.stations[index], before = segmented.stations[index - 1];
+      assert.equal(at.edgeCode, firstUnsafeRoad);
+      const roadGrade = finalSurfaceLocalSlopeAt(at.x, at.z);
+      const here = finalSurfaceAt(at.x, at.z), prior = finalSurfaceAt(before.x, before.z),
+        metres = greatCircleDistance(sourceToLonLat(before.x, before.z), sourceToLonLat(at.x, at.z)),
+        intervalGrade = Math.abs(here.surfaceHeight - prior.surfaceHeight) / metres;
+      assert.ok(roadGrade <= .08,
+        `real station ${index + 1} carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
+      assert.ok(intervalGrade <= .08,
+        `real station ${index + 1} physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
+    }
     assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
       "the same real route must exercise the bounded per-road fallback");
     // Cheap routine smoke: the first 32 canonical stations must genuinely
