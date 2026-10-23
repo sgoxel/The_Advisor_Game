@@ -604,14 +604,18 @@ function probeRouteCorridor() {
     for (let i = 0; i < 8 && corridorProbeStations < plan.stations.length; i++) {
       const index = corridorProbeStations, station = plan.stations[index],
         surface = finalSurfaceAt(station.x, station.z);
-      const failure = sampledCorridorStationFailure(station, surface);
+      // "open" can remain walkable at 8–15% slope; the selected road
+      // corridor still requires the stricter canonical 8% road limit.
+      const localRoadSlope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
+        ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined;
+      const failure = sampledCorridorStationFailure(station, surface, localRoadSlope);
       if (failure !== null) {
         corridorProbeFirstUnsafeRoad = station.edgeCode;
         corridorProbeFirstUnsafeStation = index + 1;
         corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
         // Only a failing on-demand station incurs this extra canonical gradient.
         if (failure === "unsafe local road slope")
-          corridorProbeFirstUnsafeLocalGrade = finalSurfaceLocalSlopeAt(station.x, station.z);
+          corridorProbeFirstUnsafeLocalGrade = localRoadSlope ?? finalSurfaceLocalSlopeAt(station.x, station.z);
         corridorProbeStatus = `station ${index + 1}: ${failure}; not certified`;
         break;
       }
