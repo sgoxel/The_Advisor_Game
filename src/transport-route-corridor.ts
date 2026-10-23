@@ -63,9 +63,17 @@ export function planTransportRouteCorridor(
     // rejecting a wholly collapsed road rather than inventing movement.
     if (sourcePoints.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.z)))
       return Object.freeze({ status: "invalid", stations: EMPTY });
-    const points = sourcePoints.filter((point, i) => i === 0 ||
-      Math.hypot(wrapSourceX(point.x - sourcePoints[i - 1].x),
-        point.z - sourcePoints[i - 1].z) > 1e-4);
+    const points = [sourcePoints[0]];
+    for (let i = 1; i < sourcePoints.length; i++) {
+      const last = points[points.length - 1], point = sourcePoints[i];
+      // Compare against the last RETAINED vertex: a chain of individually
+      // tiny offsets can still cross a real canonical sampling interval.
+      if (Math.hypot(wrapSourceX(point.x - last.x), point.z - last.z) > 1e-4)
+        points.push(point);
+    }
+    // Collapsing a tiny final tail must still reach the original SEED endpoint
+    // exactly, especially when the same route is inspected in reverse.
+    if (points.length >= 2) points[points.length - 1] = sourcePoints[sourcePoints.length - 1];
     if (points.length < 2) return Object.freeze({ status: "invalid", stations: EMPTY });
     const start = nodes.get(at), endCode = forward ? edge.to : edge.from,
       end = nodes.get(endCode);

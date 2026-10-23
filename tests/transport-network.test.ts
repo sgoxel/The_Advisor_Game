@@ -440,6 +440,29 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     new Map([nearDuplicateA, nearDuplicateB].map(edge => [edge.code, edge])),
     nodes,
   ), result, "sub-millimetre duplicate vertices must not invent near-zero walking intervals or false local grade");
+  // Each raw step is tiny, but their cumulative displacement is not. Comparing
+  // only adjacent raw vertices used to drop the real bend and reject the same
+  // physical road when walked in reverse (its last retained point missed A).
+  const accumulated = { ...a, centerline: [
+    { x: 0, z: 0 }, { x: 0.00006, z: 0 }, { x: 0.00012, z: 0 },
+    { x: 0.00018, z: 0 }, { x: 3, z: 0 },
+  ] } as TransportRoadEdge;
+  const accumulatedRoads = new Map([[accumulated.code, accumulated]]);
+  const forwardAccumulated = planTransportRouteCorridor(
+    { from: "A", to: "B", edgeCodes: [accumulated.code] },
+    accumulatedRoads, nodes,
+  );
+  assert.equal(forwardAccumulated.status, "ready");
+  assert.ok(forwardAccumulated.stations.some(station => station.x > 0 && station.x < 0.001),
+    "cumulative micro-offsets cannot erase a real intermediate canonical source waypoint");
+  const reverseAccumulated = planTransportRouteCorridor(
+    { from: "B", to: "A", edgeCodes: [accumulated.code] },
+    accumulatedRoads, nodes,
+  );
+  assert.equal(reverseAccumulated.status, "ready",
+    "reversing a SEED-owned path cannot fail because cumulative tiny waypoint offsets were skipped");
+  assert.ok(Math.abs(reverseAccumulated.stations.at(-1)!.x) <= 1e-7,
+    "wrapped floating-point source coordinates must terminate within canonical A endpoint precision");
   const collapsed = { ...a, centerline: [{ x: 0, z: 0 }, { x: 0, z: 0 }] } as TransportRoadEdge;
   assert.equal(planTransportRouteCorridor(
     { from: "A", to: "B", edgeCodes: [collapsed.code] },
