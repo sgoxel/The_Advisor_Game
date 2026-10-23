@@ -1870,6 +1870,47 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   );
   assert.notEqual(segmented.status, "invalid",
     "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
+  // Exact-SEED read-only execution probe: diagnose why the real nine-road
+  // source witness has not yet earned a complete final-surface PASS.
+  // This is diagnostic evidence, not a traversal or screenshot assertion.
+  const probeHead: { station: number; road: string; cause: string }[] = [];
+  if (segmented.status === "ready") {
+    let previousHeight: number | null = null;
+    for (let i = 0; i < Math.min(32, segmented.stations.length); i++) {
+      const station = segmented.stations[i], surface = finalSurfaceAt(station.x, station.z),
+        slope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
+          ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined,
+        reason = sampledCorridorStationFailure(station, surface, slope);
+      if (reason) {
+        probeHead.push({ station: i + 1, road: station.edgeCode, cause: reason });
+        break;
+      }
+      if (previousHeight !== null) {
+        const previous = segmented.stations[i - 1],
+          dx = wrapSourceX(station.x - previous.x), dz = station.z - previous.z,
+          // Only an approximate diagnostics hint: the inspector uses the exact
+          // great-circle length for the true interval-grade predicate.
+          metresApprox = Math.hypot(dx, dz) * CANONICAL_METRES_PER_SOURCE_UNIT;
+        if (!(metresApprox > 0) ||
+            Math.abs(surface.surfaceHeight - previousHeight) / metresApprox > .08) {
+          probeHead.push({ station: i + 1, road: station.edgeCode,
+            cause: "approximate initial interval grade or invalid distance" });
+          break;
+        }
+      }
+      previousHeight = surface.surfaceHeight;
+    }
+  }
+  console.log("S005_REAL_ROUTE_DIAGNOSTIC", JSON.stringify({
+    edges: chain.length, sourceWaypoints: chain.reduce((total, code) =>
+      total + edgeByCode.get(code)!.centerline.length, 0),
+    whole: { status: physicalPlan.status, reason: physicalPlan.status === "over-budget" ? physicalPlan.reason : undefined,
+      road: physicalPlan.status === "over-budget" ? physicalPlan.edgeCode : undefined },
+    extended: { status: segmented.status, reason: segmented.status === "over-budget" ? segmented.reason : undefined,
+      road: segmented.status === "over-budget" ? segmented.edgeCode : undefined,
+      stations: segmented.stations.length },
+    probeHead,
+  }));
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
       segmented.stations.length <= ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT);
