@@ -29,8 +29,6 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — SEED-legal gate→Y→bridge→site passage: repair grades/banks, truthful route UX & backend proof
-
 ## STAGE S006 — Living World & Usable Buildings
 
 - WP-S006-001-001 — SEED-legal resident door→street→work/guard travel: no teleport, stable occupancy & Fantasy-Time UX
