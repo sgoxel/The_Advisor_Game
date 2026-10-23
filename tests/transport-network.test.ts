@@ -1580,7 +1580,7 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
   assert.equal(afterSummary.roads, beforeSummary.roads, "static topology coverage must remain unchanged");
 });
 
-test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evidence", () => {
+test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical endpoints", () => {
   const network = siteTransportNetwork, index = createTransportWalkingIndex(network),
     nodeByCode = new Map(network.nodes.map(node => [node.code, node])),
     edgeByCode = new Map(network.roadEdges.map(edge => [edge.code, edge])),
@@ -1589,43 +1589,64 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
   const crossing = edgeByCode.get(bridge!.roadCode);
   assert.ok(crossing && crossing.bridgeCodes.includes(bridge!.code),
     "the selected crossing must remain on its actual graph edge");
-  const bank = nodeByCode.get(crossing!.from);
-  assert.ok(bank, "crossing approach must be a canonical walking node");
-  const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
-    .find(node => node?.continent === bank!.continent);
-  const site = network.nodes.find(node =>
-    node.kind === "site" && node.countryCode === bank!.countryCode);
-  assert.ok(y && site, "the bridge continent must have a real Y and road-linked site");
-  // Extend this SAME canonical Y -> bridge -> site witness backwards to one
-  // real settlement gate. The gate is an exterior feature, not an invented
-  // graph node: its registered incoming road must physically pass through it,
-  // and that selected road must have a land-only continuation to the Y.
-  const villageNode = network.nodes.find(node => node.kind === "village" &&
-    node.continent === bank!.continent && node.countryCode === bank!.countryCode);
-  const village = villages.find(place => place.id === villageNode?.sourceId);
-  assert.ok(villageNode && village, "selected bridge bank must have a real source-owned settlement");
-  const gatePlan = settlementExteriorFor(village!);
-  const gateWitness = gatePlan.gates.flatMap(gate => roads
-    .filter(road => (road.from === village!.id || road.to === village!.id) &&
-      edgeByCode.has(road.code) && roadDistanceAt(gate.x, gate.z, road) <= 1e-4)
-    .map(road => ({
-      gate, road, edge: edgeByCode.get(road.code)!,
-      toY: transportWalkingRouteThroughEdge(index, villageNode!.code,
-        edgeByCode.get(road.code)!, [y!.code]),
-    })))
-    .find(item => item.toY !== null);
-  assert.ok(gateWitness, "a visible village gate must lie on a real incident walking road reaching the selected Y");
+  // The source graph remains connected when this bridge edge is removed.
+  // A naive concatenation of unrelated shortest paths can therefore visit
+  // the bridge twice. Start from an actual village gate that enters a real Y
+  // next to a selected bridge endpoint, then traverse the bridge exactly once
+  // into a site-owned access branch. SEED order and graph edge codes decide.
+  const witness = [crossing!.from, crossing!.to].flatMap(originCode => {
+    const farCode = originCode === crossing!.from ? crossing!.to : crossing!.from,
+      farNode = nodeByCode.get(farCode);
+    if (!farNode) return [];
+    const bridgeSiteRoutes = network.nodes.filter(node => node.kind === "site" &&
+      node.continent === farNode.continent && node.countryCode === farNode.countryCode)
+      .flatMap(node => {
+        const route = transportWalkingRouteThroughEdge(index, originCode, crossing!, [node.code]);
+        return route ? [route] : [];
+      });
+    return (index.adjacency.get(originCode) ?? [])
+      .filter(step => step.edge.code !== crossing!.code &&
+        nodeByCode.get(step.node)?.kind === "junction")
+      .flatMap(toY => (index.adjacency.get(toY.node) ?? [])
+        .filter(step => step.node !== originCode &&
+          nodeByCode.get(step.node)?.kind === "village")
+        .flatMap(fromGate => {
+          const villageNode = nodeByCode.get(fromGate.node)!,
+            village = villages.find(place => place.id === villageNode.sourceId),
+            road = roads.find(road => road.code === fromGate.edge.code),
+            gate = village && road ? settlementExteriorFor(village).gates.find(g =>
+              roadDistanceAt(g.x, g.z, road) <= 1e-4) : undefined;
+          if (!village || !road || !gate) return [];
+          const y = nodeByCode.get(toY.node)!,
+            toYRoute = transportWalkingRouteThroughEdge(index, villageNode.code,
+              fromGate.edge, [y.code]);
+          if (!toYRoute || toYRoute.edgeCodes.length !== 1 ||
+              toYRoute.edgeCodes[0] !== fromGate.edge.code) return [];
+          return bridgeSiteRoutes.flatMap(bridgeToSite => {
+            const chain = [fromGate.edge.code, toY.edge.code, ...bridgeToSite.edgeCodes];
+            return new Set(chain).size === chain.length
+              ? [{ villageNode, gate, road, edge: fromGate.edge, toY: toYRoute,
+                  y, site: nodeByCode.get(bridgeToSite.to)!, originCode, toYEdge: toY.edge,
+                  bridgeToSite, chain }]
+              : [];
+          });
+        }));
+  }).find(candidate => candidate.chain.includes(crossing!.code));
+  assert.ok(witness,
+    "actual SEED village gate must reach a physical Y then the selected bridge exactly once en route to a real site");
+  const { villageNode, y, site, chain } = witness!,
+    gateWitness = { gate: witness!.gate, road: witness!.road,
+      edge: witness!.edge, toY: witness!.toY };
   const gateSurface = finalSurfaceAt(gateWitness!.gate.x, gateWitness!.gate.z);
   assert.equal(gateSurface.water.kind, "none", "actual settlement entry gate cannot land in exposed water");
   assert.equal(gateSurface.walkable, true, "actual settlement gate must have a walkable final surface");
   assert.notEqual(gateSurface.traversal, "blocked", "actual gate is not a blocked Simulation surface");
   // A single sampled gate is a physical start witness, not an uninterrupted
   // route pass or a claim that the protagonist was moved.
-  const approach = transportWalkingRoute(index, y!.code, crossing!.from),
-    continuation = transportWalkingRoute(index, crossing!.to, site!.code);
-  assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
-  const chain = [...gateWitness!.toY!.edgeCodes, ...approach!.edgeCodes,
-    crossing!.code, ...continuation!.edgeCodes];
+  assert.equal(chain.filter(code => code === crossing!.code).length, 1,
+    "chosen bridge road must occur exactly once in the same gate-to-site graph route");
+  assert.equal(new Set(chain).size, chain.length,
+    "one SEED walking route must not silently retrace any canonical road");
   assert.equal(chain[0], gateWitness!.edge.code,
     "the same ordered walking route must begin on the physical settlement gate road");
   assert.equal(gateWitness!.toY!.to, y!.code,
@@ -1671,33 +1692,19 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
     { from: villageNode!.code, to: site!.code, edgeCodes: chain },
     edgeByCode, nodeByCode, index.adjacency,
   );
-  const repeatedRoads = chain.filter((code, index) => chain.indexOf(code) !== index);
-  if (repeatedRoads.length) {
-    // A connected source walk may cross the selected bridge, return along the
-    // same road, then cross again. That is NOT an un-retraced gate-to-site route.
-    // Never let a short-enough repeated walk receive a physical corridor PASS.
-    assert.equal(physicalPlan.status, "invalid",
-      "a graph-connected walk that retraces a canonical road must refuse physical route certification");
-    assert.equal(physicalPlan.reason, "repeated-road",
-      "the real SEED witness must explain its first illegal repeated-road leg");
-    assert.equal(physicalPlan.edgeCode, repeatedRoads[0],
-      "route refusal must name the first repeated source road, not an unrelated failure");
-    assert.equal(physicalPlan.stations.length, 0,
-      "do not sample a partial loop as if it were a valid route");
+  assert.notEqual(physicalPlan.status, "invalid",
+    "the real non-retracing gate/Y/bridge/site path must preserve physical source endpoint joins");
+  if (physicalPlan.status === "ready") {
+    assert.ok(physicalPlan.stations.length > 0 &&
+      physicalPlan.stations.length <= ROUTE_CORRIDOR_STATION_LIMIT,
+      "a bounded real corridor plan must retain every source-owned station");
+    assert.equal(physicalPlan.stations[0].edgeCode, chain[0]);
+    assert.equal(physicalPlan.stations.at(-1)?.edgeCode, chain.at(-1));
   } else {
-    assert.notEqual(physicalPlan.status, "invalid",
-      "an un-retraced connected source path must preserve physical road-to-node continuity");
-    if (physicalPlan.status === "ready") {
-      assert.ok(physicalPlan.stations.length > 0 &&
-        physicalPlan.stations.length <= ROUTE_CORRIDOR_STATION_LIMIT,
-      "real source-owned route probes must never exceed the fixed station budget");
-      assert.equal(physicalPlan.stations[0].edgeCode, chain[0]);
-      assert.equal(physicalPlan.stations.at(-1)?.edgeCode, chain.at(-1));
-    } else {
-      assert.equal(physicalPlan.status, "over-budget");
-      assert.equal(physicalPlan.stations.length, 0,
-        "an oversized actual route must refuse sampling rather than silently truncate");
-    }
+    assert.equal(physicalPlan.status, "over-budget",
+      "an actual too-long route must be unavailable rather than a partial physical PASS");
+    assert.equal(physicalPlan.stations.length, 0,
+      "do not silently truncate over-budget real-route evidence");
   }
   // Test both endpoint physical probes in the SAME graph chain: a legal bridge
   // alone does not certify a disconnected site, and a site alone does not
@@ -1766,15 +1773,16 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
     `selected site access ${access!.code} (parent ${parentCode}) must remain dry, walkable, source-owned and grade-safe at every sampled station: ${JSON.stringify(siteVerdict)}; terminal contributors: ${JSON.stringify(surfaces.at(-1)?.contributingModifierIds)}`);
   assert.equal(siteVerdict.terminalGeometryOnly, false,
     "a sampled site PASS must have an actual joined-road surface winner, not geometric overlap alone");
-  const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
-    fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
-      continuation!.fantasyWalkSeconds;
+  const distance = gateWitness.toY!.distanceM + witness!.toYEdge.surfaceLengthM +
+      witness!.bridgeToSite.distanceM,
+    fantasySeconds = gateWitness.toY!.fantasyWalkSeconds + witness!.toYEdge.fantasyWalkSeconds +
+      witness!.bridgeToSite.fantasyWalkSeconds;
   assert.ok(distance > crossing!.surfaceLengthM && fantasySeconds > crossing!.fantasyWalkSeconds);
-  assert.ok(approach!.exploredNodes <= index.nodeCount && continuation!.exploredNodes <= index.nodeCount,
-    "canonical road queries must stay graph-bounded");
-  assert.deepEqual(transportWalkingRoute(index, y!.code, crossing!.from), approach);
-  assert.deepEqual(transportWalkingRoute(index, crossing!.to, site!.code), continuation,
-    "repeat queries cannot change seeded road identities or good-road estimates");
+  assert.ok(witness!.bridgeToSite.exploredNodes <= index.nodeCount,
+    "source graph preview must remain deterministically bounded");
+  assert.deepEqual(transportWalkingRouteThroughEdge(
+    index, witness!.originCode, crossing!, [site!.code]), witness!.bridgeToSite,
+    "repeated queries must retain the identical selected crossing and source-owned site");
   // Graph connectivity only: sampled bank grade, bridge deck and uninterrupted
   // final-surface travel remain separate required acceptance evidence.
 });
