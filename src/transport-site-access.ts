@@ -126,6 +126,21 @@ export function siteAccessSampleVerdict(
         ? parentCode ? exactParentJoin : surface.contributingModifierIds.some(code =>
             code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
+  // Contribution does not imply ownership of the visible road. An unrelated
+  // overlapping road may win exposed material while the selected site branch
+  // remains a lower modifier. Only a physically incident registered road at
+  // the branch's actual parent junction may substitute at the terminal.
+  const dryRoadTopOwnerLegal = (surface: FinalSurface, index: number) => {
+    if (surface.deckHeight !== null || surface.traversal !== "road" ||
+        surface.groundMaterialOwnerId === undefined) return true;
+    const winner = surface.groundMaterialOwnerId;
+    if (!winner || !surface.contributingModifierIds.includes(winner)) return false;
+    if (winner === edge.code) return true;
+    if (index !== surfaces.length - 1 || !exactParentJoin || !terminal ||
+        !junctionRoadCodes.has(winner)) return false;
+    const joinedRoad = roadsByCode.get(winner);
+    return !!joinedRoad && roadEndpointMeetsTerminal(joinedRoad, terminal);
+  };
   let maximumGrade: number | null = null;
   if (full) {
     maximumGrade = 0;
@@ -146,7 +161,8 @@ export function siteAccessSampleVerdict(
   // contributing a road modifier below an unrelated overpass is not passage.
   const topSurfaceOwned = full && surfaces.every((surface, index) =>
     surface.deckHeight == null
-      ? surface.traversal === "road" || surface.traversal === "open"
+      ? (surface.traversal === "road" || surface.traversal === "open") &&
+        dryRoadTopOwnerLegal(surface, index)
       : Number.isFinite(surface.deckHeight) && surface.surfaceHeight === surface.deckHeight &&
         surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
           (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === terminalIncidentRoad)) &&
@@ -188,6 +204,9 @@ export function siteAccessSampleVerdict(
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
+      else if (surface.deckHeight === null && surface.traversal === "road" &&
+               !dryRoadTopOwnerLegal(surface, index))
+        cause = "unrelated winning site-access road surface";
       else if (surface.traversal === "open" &&
         (localRoadSlopes === undefined || localRoadSlopes[index] == null))
         cause = "local site-access slope not sampled";
