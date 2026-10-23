@@ -596,7 +596,9 @@ function probeRouteCorridor() {
           : `per-road sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) or complete-route ceiling (${ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
       : plan.reason === "repeated-road"
         ? `repeated canonical road ${plan.edgeCode}; non-retracing physical passage not certified`
-        : "invalid source-owned physical path; not certified";
+        : plan.reason === "source-chain"
+          ? `source road ${plan.edgeCode} has invalid endpoint, graph incidence or destination; not certified`
+          : "invalid source-owned physical path; not certified";
     corridorProbeMs = performance.now() - started;
     renderCorridorProbe();
     renderMetrics();
