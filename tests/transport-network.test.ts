@@ -300,9 +300,37 @@ test("S005 site preview picks shortest reachable road path rather than nearer di
   assert.deepEqual(route!.edgeCodes, ["a", "b"]);
   assert.equal(route!.distanceM, 3);
   assert.equal(route!.fantasyWalkSeconds, 30);
-  assert.deepEqual(transportWalkingRouteToNearest(index, "start", [...sites].reverse()), route);
+  assert.strictEqual(transportWalkingRouteToNearest(index, "start", [...sites].reverse()), route,
+    "repeated cross-scale selections reuse one immutable route despite destination ordering");
+  assert.strictEqual(transportWalkingRouteToNearest(index, "start",
+    ["far-by-map", "far-by-map", "long-by-road", "near-but-disconnected"]), route,
+    "duplicate target codes cannot invalidate canonical preview reuse");
   assert.equal(transportWalkingRouteToNearest(index, "start", ["near-but-disconnected"]), null);
   assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
+});
+
+test("S005 preview cache is finite and never reuses a different canonical endpoint", () => {
+  const roadEdges = Array.from({ length: 14 }, (_, i) => ({
+    code: `edge-${i}`, from: "origin", to: `site-${i}`,
+    surfaceLengthM: i + 1, fantasyWalkSeconds: (i + 1) * 10,
+  }));
+  const index = createTransportWalkingIndex({
+    nodes: ["origin", ...roadEdges.map(edge => edge.to)].map(code => ({ code })),
+    roadEdges,
+  } as unknown as TransportNetwork);
+  const first = transportWalkingRoute(index, "origin", "site-0");
+  assert.ok(first);
+  assert.strictEqual(transportWalkingRoute(index, "origin", "site-0"), first,
+    "the second same-SEED query returns its cached immutable graph answer");
+  for (let i = 1; i < 14; i++) {
+    const route = transportWalkingRoute(index, "origin", `site-${i}`);
+    assert.equal(route?.to, `site-${i}`, "different endpoints never alias cached answers");
+  }
+  const rebuilt = transportWalkingRoute(index, "origin", "site-0");
+  assert.deepEqual(rebuilt, first, "eviction changes no deterministic route facts");
+  assert.notStrictEqual(rebuilt, first, "the oldest result was evicted from the 12-entry cache");
+  assert.strictEqual(transportWalkingRoute(index, "origin", "site-0"), rebuilt,
+    "recently revisited routes are reused again without graph search");
 });
 
 test("S005 walking previews reject duplicated canonical node identity", () => {
