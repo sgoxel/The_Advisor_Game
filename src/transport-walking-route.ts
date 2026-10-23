@@ -46,13 +46,20 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
   (a.lengthM === b.lengthM && a.code < b.code);
 
 /** Bounded by canonical graph size; no recursive search, viewport or LOD inputs. */
-function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>, excludedEdgeCode?: string) {
+function searchWalkingRoute(
+  index: Index, from: string, destinations: ReadonlySet<string>,
+  excludedEdgeCode?: string, unsafeRoadCodes?: ReadonlySet<string>,
+) {
   if (!index.adjacency.has(from) || !destinations.size) return null;
   let cache = walkingRouteCaches.get(index);
   if (!cache) { cache = new Map(); walkingRouteCaches.set(index, cache); }
   // Destination order/duplicates cannot alter an authoritative route, while a
   // bridge's excluded road must never borrow an unconstrained cached answer.
-  const key = JSON.stringify([from, [...destinations].sort(), excludedEdgeCode ?? null]);
+  // Explicitly unsafe physical roads may be excluded from a new graph preview.
+  // This produces only an alternate graph hypothesis, never a physical PASS.
+  const excluded = new Set(unsafeRoadCodes);
+  if (excludedEdgeCode) excluded.add(excludedEdgeCode);
+  const key = JSON.stringify([from, [...destinations].sort(), [...excluded].sort()]);
   if (cache.has(key)) {
     const cached = cache.get(key)!;
     cache.delete(key); cache.set(key, cached);
@@ -117,7 +124,7 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
       }));
     }
     for (const step of index.adjacency.get(current.code)!) {
-      if (step.edge.code === excludedEdgeCode || settled.has(step.node)) continue;
+      if (excluded.has(step.edge.code) || settled.has(step.node)) continue;
       const candidate = current.lengthM + step.edge.surfaceLengthM,
         duration = travelSeconds.get(current.code)! + step.edge.fantasyWalkSeconds,
         previous = distances.get(step.node);
@@ -135,13 +142,21 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
 }
 
 /** One graph search picks the shortest reachable destination, not the closest unverified straight-line target. */
-export function transportWalkingRouteToNearest(index: Index, from: string, siteCodes: readonly string[]) {
-  return searchWalkingRoute(index, from, new Set(siteCodes.filter(code => index.adjacency.has(code))));
+export function transportWalkingRouteToNearest(
+  index: Index, from: string, siteCodes: readonly string[],
+  unsafeRoadCodes?: ReadonlySet<string>,
+) {
+  return searchWalkingRoute(index, from,
+    new Set(siteCodes.filter(code => index.adjacency.has(code))), undefined, unsafeRoadCodes);
 }
 
 /** A specific requested endpoint retains the same deterministic route semantics. */
-export function transportWalkingRoute(index: Index, from: string, to: string) {
-  return searchWalkingRoute(index, from, new Set([to].filter(code => index.adjacency.has(code))));
+export function transportWalkingRoute(
+  index: Index, from: string, to: string,
+  unsafeRoadCodes?: ReadonlySet<string>,
+) {
+  return searchWalkingRoute(index, from, new Set([to].filter(code => index.adjacency.has(code))),
+    undefined, unsafeRoadCodes);
 }
 
 /**
@@ -167,16 +182,17 @@ export function selectedBridgePreviewDestinationBank(
  */
 export function transportWalkingRouteThroughEdge(
   index: Index, from: string, required: Pick<TransportRoadEdge, "code" | "from" | "to">,
-  siteCodes: readonly string[],
+  siteCodes: readonly string[], unsafeRoadCodes?: ReadonlySet<string>,
 ) {
-  if (from !== required.from && from !== required.to) return null;
+  // A required selected bridge cannot be certified by a route which excludes it.
+  if (unsafeRoadCodes?.has(required.code) || (from !== required.from && from !== required.to)) return null;
   const otherBank = from === required.from ? required.to : required.from,
     owned = index.adjacency.get(from)?.find(step =>
       step.edge.code === required.code && step.node === otherBank &&
       step.edge.from === required.from && step.edge.to === required.to);
   if (!owned) return null;
   const destinations = new Set(siteCodes.filter(code => index.adjacency.has(code)));
-  const continuation = searchWalkingRoute(index, otherBank, destinations, required.code);
+  const continuation = searchWalkingRoute(index, otherBank, destinations, required.code, unsafeRoadCodes);
   if (!continuation) return null;
   const edge = owned.edge,
     distanceM = edge.surfaceLengthM + continuation.distanceM,
