@@ -1887,6 +1887,16 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       firstUnsafe: { station: number; road: string; cause: string; x: number; z: number; grade?: number } | null = null;
     const started = performance.now();
     for (let i = 0; i < limit; i++) {
+      if (full && performance.now() - started > 6 * 60_000) {
+        const station = segmented.stations[i];
+        firstUnsafe = { station: i + 1, road: station.edgeCode,
+          cause: "finite diagnostic time budget exhausted; not certified",
+          x: station.x, z: station.z };
+        break;
+      }
+      if (full && i > 0 && i % 512 === 0)
+        console.log("S005_REAL_ROUTE_PROGRESS", JSON.stringify({
+          checked: i, total: limit, elapsedMs: performance.now() - started }));
       const station = segmented.stations[i], surface = finalSurfaceAt(station.x, station.z),
         localRoadSlope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
           ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined,
