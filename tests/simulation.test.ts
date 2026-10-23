@@ -12,6 +12,7 @@ import {
   populationOf,
   residentAt,
   residentFoundationAt,
+  legalPosition,
   continuousWalkableOffsetSegment,
   timedWalkOnPath,
   lastReachableRoutineStop,
@@ -38,6 +39,43 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("invalid resident terrain never silently moves the requested point toward town", () => {
+  const place = villages[0], lat = place.canonicalPosition.lat;
+  let ungrounded = 0;
+  for (const radius of [0, 15_000, 40_000, 120_000, 250_000])
+    for (let n = 0; n < 16; n++) {
+      const eastM = radius * Math.cos(n * Math.PI / 8),
+        northM = radius * Math.sin(n * Math.PI / 8),
+        actual = legalPosition(place, eastM, northM),
+        expected = {
+          lon: normalizeLongitude(place.canonicalPosition.lon + eastM /
+            (CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(lat))))),
+          lat: lat + northM / CANONICAL_PLANET_RADIUS,
+        },
+        surface = finalSurfaceAt(actual.x, actual.z);
+      assert.ok(greatCircleDistance(actual.position, expected) < .05,
+        "position must not be shrunk to an unrelated, apparently legal location");
+      assert.equal(actual.grounded, surface.walkable && actual.position.elevation > .1);
+      if (!actual.grounded) ungrounded++;
+    }
+  assert.ok(ungrounded > 0, "fixture must include real non-walkable or submerged surface");
+});
+
+test("unresolved houses keep resident identity without inventing lawful travel", () => {
+  for (const place of [villages[0], cities[0]])
+    for (let index = 0; index < 16; index++) {
+      if (resolvedSettlementHomeDoorFor(place, index)) continue;
+      const resident = residentAt(place, index, tickAtLocalTime(WORKDAY, 9 * HOUR, place.canonicalPosition.lon));
+      assert.equal(resident.code, residentFoundationAt(place, index).code);
+      assert.equal(resident.grounded, false);
+      assert.equal(resident.indoors, false);
+      assert.equal(resident.activity, "rest");
+      assert.ok(resident.task.includes("no legally resolved doorway"));
+      assert.ok(resident.route.startsWith("BLOCKED:"));
+      assert.equal(resident.travelProgress, undefined);
+    }
 });
 
 test("time-bounded legal paths never jump to an unfinished endpoint", () => {
@@ -314,13 +352,23 @@ test("traits, mood and daily routines are reproducible from the SEED and follow 
 
 test("an ordinary workday: asleep at night, breakfast at home, at the workplace by day, home or inn at dinner", () => {
   const village = villages[0];
-  let checked = 0;
-  for (let index = 6; index < populationOf(village) && checked < 12; index++) {
+  let checked = 0, sampled = 0;
+  for (let index = 6; index < populationOf(village) && sampled < 24 && checked < 12; index++) {
     const f = residentFoundationAt(village, index);
     if (f.role === "guard" || f.ageGroup !== "adult" || f.role === "innkeeper") continue;
-    checked++;
+    sampled++;
     const night = residentAt(village, index, at(2, WORKDAY)), noon = residentAt(village, index, at(10.5, WORKDAY)),
       evening = residentAt(village, index, at(19.5, WORKDAY)), late = residentAt(village, index, at(23.9, WORKDAY));
+    const states = [night, noon, evening, late];
+    if (states.some(state => !state.grounded)) {
+      for (const state of states.filter(state => !state.grounded)) {
+        assert.ok(state.route.startsWith("BLOCKED:"), `${f.code}: an ungrounded activity is explicitly blocked`);
+        assert.equal(state.indoors, false, `${f.code}: an unverified home cannot claim indoor occupancy`);
+        assert.equal(state.travelProgress, undefined);
+      }
+      continue; // Do not pretend the resident slept or worked at a missing physical home.
+    }
+    checked++;
     assert.equal(night.activity, "sleep", `${f.code} sleeps at 02:00`);
     assert.ok(night.indoors);
     assert.ok(["work", "commute", "rest"].includes(noon.activity), `${f.code} works at 10:30 (got ${noon.activity})`);
@@ -421,6 +469,11 @@ test("outlying woodland workers use real habitat and remain queryable away from 
     const f = residentFoundationAt(place, i);
     if (!f.workplace.includes("/WOODLAND/")) continue;
     const r = residentAt(place, i, tick), surface = finalSurfaceAt(r.x, r.z);
+    if (!r.grounded) {
+      assert.ok(r.route.startsWith("BLOCKED:"), "unverified woodland arrival is never reported as work");
+      assert.equal(r.activity, "rest");
+      continue;
+    }
     assert.equal(r.activity, "work");
     assert.ok(surface.walkable && surface.water.kind === "none" && surface.vegetationDensityScale > .5);
     assert.ok(climateSampleAt(r.position, surface.groundHeight).forestFamily);
