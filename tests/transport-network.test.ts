@@ -30,7 +30,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
-import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
+import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -2548,4 +2548,15 @@ test("S005 first-authoritative-route timing stays bounded by scale and distingui
   assert.equal(snap["1/50"].displayFrameOpportunityP95Ms, 13);
   assert.equal(snap["1/100"].calculationP95Ms, null,
     "no physical-browser samples must never be mislabeled measured PASS");
+});
+
+test("S005 on-demand surface batch always advances one station and yields after finite frame budget", () => {
+  assert.equal(TRANSPORT_PROBE_FRAME_BUDGET_MS, 6);
+  assert.equal(transportProbeFrameBudgetReached(0, 100), false,
+    "a slow first station cannot create a zero-progress animation-frame loop");
+  assert.equal(transportProbeFrameBudgetReached(1, 5.99), false);
+  assert.equal(transportProbeFrameBudgetReached(1, 6), true);
+  assert.equal(transportProbeFrameBudgetReached(4, 12), true);
+  assert.equal(transportProbeFrameBudgetReached(8, Infinity), true,
+    "invalid elapsed time cannot authorize more expensive station queries");
 });
