@@ -155,3 +155,6 @@
   #resident-inspector dt,
   #resident-inspector dd { font-size: 12px; line-height: 1.3; }
 }
+/* Illustrated character picture replaces the drawn placeholder once a resident is selected. */
+#resident-avatar[data-character] { background-size: contain; background-repeat: no-repeat; background-position: center bottom; background-color: #233831; }
+#resident-avatar[data-character]::before, #resident-avatar[data-character]::after, #resident-avatar[data-character] i { display: none; }

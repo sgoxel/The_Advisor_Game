@@ -1,4 +1,6 @@
 import { countries, places, type Place } from "./geography.ts";
+import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
+import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, heightAt } from "./world.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -21,7 +23,12 @@ export type ResidentRole =
   | "guard"
   | "artisan"
   | "laborer"
-  | "trader";
+  | "trader"
+  | "clergy"
+  | "noble"
+  | "beggar"
+  | "child"
+  | "elder";
 
 export type ResidentFoundation = {
   code: string;
@@ -43,6 +50,10 @@ export type ResidentFoundation = {
     hair: number;
     clothing: number;
   };
+  /** Illustrated character type (public/characters/<character>.webp); its sex and age match the picture. */
+  character: string;
+  sex: CharacterSex;
+  ageGroup: CharacterAge;
   homeOffset: { eastM: number; northM: number };
   workOffset: { eastM: number; northM: number };
 };
@@ -90,12 +101,11 @@ const SERVICE_ROLES: readonly ResidentRole[] = [
   "butcher",
   "guard-officer",
 ];
-const CITIZEN_ROLES: readonly ResidentRole[] = [
-  "artisan",
-  "laborer",
-  "farmer",
-  "trader",
-];
+/** Weighted townsfolk mix (per 100): farmers and craft/labour dominate; clergy, nobles and beggars are few. */
+const CITIZEN_ROLES: readonly ResidentRole[] = ([
+  ["farmer", 24], ["artisan", 22], ["laborer", 21], ["trader", 8], ["child", 9], ["elder", 7],
+  ["clergy", 3], ["beggar", 3], ["noble", 2],
+] as const).flatMap(([role, weight]) => Array.from({ length: weight }, () => role));
 const ROLE_WORKPLACE: Readonly<Record<ResidentRole, string>> = {
   innkeeper: "INN",
   merchant: "MARKET",
@@ -107,25 +117,17 @@ const ROLE_WORKPLACE: Readonly<Record<ResidentRole, string>> = {
   artisan: "WORKSHOP",
   laborer: "YARD",
   trader: "MARKET",
+  clergy: "CHAPEL",
+  noble: "KEEP",
+  beggar: "MARKET",
+  child: "HOME",
+  elder: "HOME",
 };
-const GIVEN_NAMES = [
-  "Alda",
-  "Beren",
-  "Cora",
-  "Dain",
-  "Elin",
-  "Fenn",
-  "Garrick",
-  "Hale",
-  "Iris",
-  "Jorin",
-  "Kestrel",
-  "Lysa",
-  "Marek",
-  "Nella",
-  "Orin",
-  "Perrin",
-] as const;
+/** Given names by sex, so a name always matches the resident's picture. */
+const GIVEN_NAMES: Readonly<Record<CharacterSex, readonly string[]>> = {
+  female: ["Alda", "Cora", "Elin", "Iris", "Kestrel", "Lysa", "Nella", "Mira", "Tessa", "Wren", "Brenna", "Hild"],
+  male: ["Beren", "Dain", "Fenn", "Garrick", "Hale", "Jorin", "Marek", "Orin", "Perrin", "Aldric", "Bram", "Tomas"],
+};
 const FAMILY_NAMES = [
   "Ash",
   "Briar",
@@ -267,7 +269,10 @@ export function residentFoundationAt(
     role = residentRoleFor(place, index),
     assignment = guardAssignmentFor(place, index),
     homeBuilding = `${place.code}/RESIDENCE/${index}`,
-    first = GIVEN_NAMES[variant % GIVEN_NAMES.length],
+    waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
+    character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
+    names = GIVEN_NAMES[character.sex],
+    first = names[variant % names.length],
     family = FAMILY_NAMES[digest(`${code}/FAMILY`) % FAMILY_NAMES.length];
   return {
     code,
@@ -284,12 +289,17 @@ export function residentFoundationAt(
     guardShift: assignment?.shift,
     index,
     variant,
-    birthDay: digest(`${code}/BIRTH_DAY`) % (90 * 365),
+    // Age in days, inside the range the picture shows (child 6-12 y, adult 16-59 y, elder 60-80 y).
+    birthDay: (character.age === "child" ? 6 * 365 : character.age === "elder" ? 60 * 365 : 16 * 365) +
+      digest(`${code}/BIRTH_DAY`) % ((character.age === "child" ? 7 : character.age === "elder" ? 21 : 44) * 365),
     appearance: {
       silhouette: digest(`${code}/SILHOUETTE`) % 5,
       hair: digest(`${code}/HAIR`) % 8,
       clothing: digest(`${code}/CLOTHING`) % 9,
     },
+    character: character.key,
+    sex: character.sex,
+    ageGroup: character.age,
     homeOffset: seededOffset(
       `${homeBuilding}/POSITION`,
       10,
@@ -599,7 +609,7 @@ export class LazySimulation {
         <dt>Workplace / post</dt><dd id="resident-workplace">—</dd>
         <dt>Current route</dt><dd id="resident-route">—</dd>
         <dt>Guard assignment</dt><dd id="resident-guard">—</dd>
-        <dt>Appearance seed</dt><dd id="resident-appearance">—</dd>
+        <dt>Character</dt><dd id="resident-appearance">—</dd>
       </dl>
       <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
       <p class="hint" id="resident-house-details" aria-live="polite"></p>
@@ -657,13 +667,15 @@ export class LazySimulation {
     );
     text(
       "resident-appearance",
-      `silhouette ${resident.appearance.silhouette + 1} · hair ${resident.appearance.hair + 1} · clothing ${resident.appearance.clothing + 1}`,
+      `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,
     );
     const avatar = document.getElementById("resident-avatar");
     if (avatar) {
       avatar.dataset.silhouette = String(resident.appearance.silhouette);
       avatar.dataset.hair = String(resident.appearance.hair);
       avatar.dataset.clothing = String(resident.appearance.clothing);
+      avatar.dataset.character = resident.character;
+      avatar.style.backgroundImage = `url("${new URL(`characters/${resident.character}.webp`, document.baseURI).href}")`;
     }
     const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
     if (button) button.disabled = false;

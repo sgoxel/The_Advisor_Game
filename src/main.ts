@@ -1,7 +1,7 @@
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
-import { residentDimensionsFor } from "./physical-scale.ts";
+import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import "./style.css";
 import {
   WORLD_SEED,
@@ -1200,78 +1200,35 @@ function setupTravel() {
     $("travel-panel").hidden = true;
   };
 }
-function characterMaterial(variant: number): pc.StandardMaterial {
-  const image = document.createElement("canvas");
-  image.width = 64;
-  image.height = 96;
-  const ctx = image.getContext("2d")!;
-  const coats = ["#785137", "#687b69", "#aa7950", "#5d6f83", "#855d6d", "#8b7b4d", "#4f736f", "#76658d", "#8b5f46"],
-    hairs = ["#30241d", "#4e3525", "#745238", "#a77a4c", "#b8a17a", "#6f6b62", "#2d2a28", "#8a4f37"],
-    silhouette = variant % 5,
-    coat = coats[(variant * 5 + Math.floor(variant / 3)) % coats.length],
-    hair = hairs[(variant * 3 + Math.floor(variant / 5)) % hairs.length],
-    torsoHalf = 12 + (silhouette % 3) * 2,
-    shoulderY = 35 + (silhouette === 4 ? 2 : 0);
-  ctx.fillStyle = "#3a382c";
-  ctx.fillRect(22 - (silhouette === 1 ? 2 : 0), 69, 9, 22);
-  ctx.fillRect(35 + (silhouette === 1 ? 2 : 0), 69, 9, 22);
-  ctx.fillStyle = "#d2b17e";
-  ctx.fillRect(16 - (silhouette === 3 ? 2 : 0), 40, 8, 27);
-  ctx.fillRect(44 + (silhouette === 3 ? 2 : 0), 40, 8, 27);
-  ctx.fillStyle = coat;
-  ctx.beginPath();
-  ctx.moveTo(33 - torsoHalf, shoulderY);
-  ctx.lineTo(33 + torsoHalf, shoulderY);
-  ctx.lineTo(49 - (silhouette === 2 ? 3 : 0), 75);
-  ctx.lineTo(17 + (silhouette === 2 ? 3 : 0), 75);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#463b2c";
-  ctx.fillRect(20, 61 + (silhouette % 2), 26, 4);
-  ctx.fillStyle = "#d7b487";
-  ctx.beginPath();
-  ctx.ellipse(33, 25, silhouette === 2 ? 12 : 11, silhouette === 4 ? 15 : 14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = hair;
-  if (variant % 4 === 0) {
-    ctx.fillRect(20, 13, 26, 8);
-    ctx.fillRect(20, 18, 5, 14);
-  } else if (variant % 4 === 1) {
-    ctx.beginPath(); ctx.ellipse(33, 16, 14, 9, 0, Math.PI, Math.PI * 2); ctx.fill();
-    ctx.fillRect(20, 15, 27, 4);
-  } else if (variant % 4 === 2) {
-    ctx.fillRect(24, 10, 18, 11);
-    ctx.fillRect(21, 17, 24, 4);
-  } else {
-    ctx.beginPath(); ctx.arc(33, 16, 13, Math.PI, Math.PI * 2); ctx.fill();
-    ctx.fillRect(42, 16, 5, 13);
-  }
-  ctx.fillStyle = "#493b2c";
-  ctx.fillRect(27, 26, 2, 2);
-  ctx.fillRect(37, 26, 2, 2);
-  if (variant % 6 === 0) ctx.fillRect(29, 34, 9, 3);
-  const texture = new pc.Texture(app.graphicsDevice, { width: 64, height: 96, mipmaps: true });
-  // Crop transparent padding so the actor's declared height is its visible
-  // head-to-foot height, rather than the height of an empty padded canvas.
-  const pixels = ctx.getImageData(0, 0, 64, 96).data;
-  let left = 64, top = 96, right = 0, bottom = 0;
-  for (let y = 0; y < 96; y++) for (let x = 0; x < 64; x++) if (pixels[(y * 64 + x) * 4 + 3]) {
-    left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
-  }
-  const cropped = document.createElement("canvas"); cropped.width = 64; cropped.height = 96;
-  cropped.getContext("2d")!.drawImage(image, left, top, right - left + 1, bottom - top + 1, 0, 0, 64, 96);
-  texture.setSource(cropped);
+/**
+ * One material per illustrated character type, created on first use. The
+ * picture loads asynchronously; until then the material discards every pixel
+ * (alpha test with zero opacity), so a resident never flashes as a blank card.
+ */
+const characterMaterials = new Map<string, pc.StandardMaterial>();
+function characterMaterialFor(key: string): pc.StandardMaterial {
+  const existing = characterMaterials.get(key);
+  if (existing) return existing;
   const material = new pc.StandardMaterial();
-  material.diffuseMap = texture;
-  material.opacityMap = texture;
-  material.opacityMapChannel = "a";
+  material.opacity = 0;
   material.alphaTest = 0.4;
   material.cull = pc.CULLFACE_NONE;
   material.update();
+  characterMaterials.set(key, material);
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.onload = () => {
+    const texture = new pc.Texture(app.graphicsDevice, { width: image.width, height: image.height, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
+    texture.setSource(image);
+    material.diffuseMap = texture;
+    material.opacityMap = texture;
+    material.opacityMapChannel = "a";
+    material.opacity = 1;
+    material.update();
+  };
+  image.onerror = () => { if (key !== "default") { characterMaterials.delete(key); characterMaterials.set(key, characterMaterialFor("default")); } };
+  image.src = new URL(`characters/${key}.webp`, document.baseURI).href;
   return material;
-}
-function residentMaterialIndex(resident: { appearance: { silhouette: number; hair: number; clothing: number } }) {
-  return (resident.appearance.silhouette * 72 + resident.appearance.hair * 9 + resident.appearance.clothing) % 24;
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
@@ -1376,7 +1333,6 @@ async function start() {
   updateCamera();
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
-  const characterMaterials = Array.from({ length: 24 }, (_, variant) => characterMaterial(variant));
   const actors: pc.Entity[] = [];
   let lastActorFacingX = Number.NaN,
     lastActorFacingY = Number.NaN,
@@ -1427,13 +1383,14 @@ async function start() {
             type: "plane",
             castShadows: false,
             receiveShadows: false,
-            material: characterMaterials[residentMaterialIndex(visible[i])],
+            material: characterMaterialFor(visible[i].character),
           });
           flatRoot.addChild(actor);
           actors.push(actor);
         }
-        const residentMaterial = characterMaterials[residentMaterialIndex(visible[i])];
-        const dimensions = residentDimensionsFor(visible[i].appearance.silhouette);
+        const residentMaterial = characterMaterialFor(visible[i].character);
+        // True metre size: the person's real height for their sex and age, the picture's own width.
+        const dimensions = characterSpriteM(CHARACTER_TYPES[visible[i].character] || CHARACTER_TYPES.default, visible[i].appearance.silhouette);
         actors[i].setLocalScale(elevationToRenderY(dimensions.widthM), 1, elevationToRenderY(dimensions.heightM));
         for (const meshInstance of actors[i].render?.meshInstances ?? [])
           if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
@@ -1886,7 +1843,7 @@ async function start() {
             logicalResidents: simulation.stats.logicalResidents,
             pooledActors: actors.length,
             visibleActors: actors.filter(actor => actor.enabled).length,
-            reusableMaterials: characterMaterials.length,
+            reusableMaterials: characterMaterials.size,
             physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().z * CANONICAL_METRES_PER_SOURCE_UNIT),
             worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
