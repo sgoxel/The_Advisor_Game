@@ -1355,3 +1355,13 @@ body.globe-mode .travel-button {
   #npc-popup { top: auto; right: 16px; left: 16px; bottom: 76px; width: auto; max-height: 62vh; }
   .npc-columns { grid-template-columns: 1fr; gap: 0; }
 }
+/* Town/village labels open the settlement card. */
+.map-label.clickable { pointer-events: auto; cursor: pointer; }
+.map-label.clickable:hover { opacity: 1; border-color: #d8b979aa; color: #fff3d4; }
+/* Building and settlement cards share the character popup frame. */
+.info-head { grid-template-columns: 1fr auto; }
+.npc-label.info-label { width: 82px; }
+.info-list { list-style: none; margin: 0; padding: 0; }
+.info-list li { padding: 3px 0; border-bottom: 1px solid rgba(216, 185, 121, 0.1); }
+.info-list li:last-child { border-bottom: 0; }
+#npc-popup section > p { margin: 2px 0; }

@@ -3,7 +3,7 @@ import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
-import { hideNpcPopup, npcPopupCode, showNpcPopup } from "./npc-popup.ts";
+import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -30,6 +30,7 @@ import {
   countries,
   cities,
   villages,
+  places,
   roads,
   macroPopulationSummary,
   roadJunctions, roadConnections, roadNetworkTelemetry,
@@ -40,7 +41,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation } from "./simulation.ts";
+import { LazySimulation, populationOf } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -916,6 +917,43 @@ function processStreaming(material: pc.StandardMaterial) {
         : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
     poleFeedback;
 }
+const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post"]);
+/** Centre the view on a source point, keeping the zoom unless it is too far out to see the target. */
+function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
+  navigate(x, z, Math.min(view.halfHeight, maxHalfHeight));
+}
+function openSettlementCard(place: (typeof places)[number]) {
+  centreOn(place.x, place.z, place.kind === "city" ? 60 : 25);
+  showSettlementPopup(place, populationOf(place));
+}
+/**
+ * Game-facing click: a building (or gate, field, well) under the point opens its card; ground inside a
+ * settlement opens the town card. Both centre the view. Returns false for open country.
+ */
+function openGameInfoAt(x: number, z: number) {
+  const features = featuresFor(tileForPosition(x, z, 12)) as unknown as (BuildingInfo & { x: number; z: number; footprintWidth?: number; footprintDepth?: number })[];
+  let best: (typeof features)[number] | undefined, bestDistance = Infinity;
+  for (const feature of features) {
+    if (!CLICKABLE_KINDS.has(feature.kind) || !feature.name) continue;
+    const reach = feature.widthM !== undefined ? metresToSource(Math.max(feature.widthM, feature.depthM ?? feature.widthM) * .55 + 1.5) : Math.max(feature.footprintWidth ?? 0, feature.footprintDepth ?? 0) * .55 + metresToSource(1.5),
+      distance = Math.hypot(wrapSourceX(feature.x - x), feature.z - z);
+    if (distance <= reach && distance < bestDistance) { best = feature; bestDistance = distance; }
+  }
+  const settlement = places.find((place) => Math.hypot(wrapSourceX(place.x - x), place.z - z) < (place.kind === "city" ? metresToSource(760) : metresToSource(300)));
+  if (best) {
+    const owner = best.ownerId ? simulation.residentByCode(best.ownerId) : undefined,
+      halfSize = metresToSource(Math.max(best.widthM ?? 6, best.depthM ?? 6) * .5 + 1),
+      inside = simulation.focusedResidents(best.x, best.z, halfSize, 40).filter((resident) => resident.indoors);
+    centreOn(best.x, best.z);
+    showBuildingPopup(best, settlement, owner, inside);
+    return true;
+  }
+  if (settlement) {
+    openSettlementCard(settlement);
+    return true;
+  }
+  return false;
+}
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
   const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
@@ -942,6 +980,10 @@ function inspectCell(screenX: number, screenY: number) {
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
+  {
+    const ground = renderFrame.renderToSource(point.x, point.z);
+    if (openGameInfoAt(ground.x, ground.z)) { $("cell-panel").hidden = true; return; }
+  }
   try {
     const source = renderFrame.renderToSource(point.x, point.z),
       canonical = renderFrame.renderToLonLat(point.x, point.z),
@@ -1067,7 +1109,7 @@ function setupControls() {
     if (!moved && pointers.size === 1 && projectionTransition <= 0.001) {
       // A click on a villager opens its character popup; anywhere else inspects the ground.
       const resident = pickResidentAt?.(event.clientX, event.clientY);
-      if (resident) showNpcPopup(resident, simulation.tick);
+      if (resident) { centreOn(resident.x, resident.z); showNpcPopup(resident, simulation.tick); }
       else { hideNpcPopup(); inspectCell(event.clientX, event.clientY); }
     }
     pointers.delete(event.pointerId);
@@ -1567,6 +1609,12 @@ async function start() {
         label = document.createElement("div");
         label.className = `map-label ${place.kind}`;
         label.textContent = place.name;
+        // Town and village labels are buttons: click to centre on the settlement and open its card.
+        if (place.kind === "city" || place.kind === "village") {
+          label.classList.add("clickable");
+          label.title = `About ${place.name}`;
+          label.addEventListener("click", (event) => { event.stopPropagation(); openSettlementCard(place as (typeof places)[number]); });
+        }
         labels.append(label);
         labelNodes.set(id, label);
       }
