@@ -27,7 +27,7 @@ import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
@@ -529,6 +529,50 @@ test("S005 required bridge searches longer simple approaches if the shortest pre
   assert.equal(transportWalkingRouteViaRequiredEdge(createTransportWalkingIndex(long),
     "N0", "N14", long.roadEdges[7]), null,
   "13+ road journeys cannot bypass the bounded physical corridor's 12-road ceiling");
+});
+
+test("S005 required bridge exclusion yields definitive cuts or only necessary reachability", () => {
+  const edge = (code: string, from: string, to: string) => ({
+    code, from, to, surfaceLengthM: 1, fantasyWalkSeconds: 1,
+  });
+  const network = {
+    nodes: ["G", "L", "R", "S", "X"].map(code => ({ code })),
+    roadEdges: [
+      edge("unsafe", "G", "L"),
+      edge("bridge", "L", "R"),
+      edge("site", "R", "S"),
+      edge("bypass", "G", "S"),
+      edge("detour-a", "G", "X"),
+      edge("detour-b", "X", "L"),
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network), bridge = network.roadEdges[1];
+  const original = transportWalkingRequiredBridgeCut(index, "G", "S", bridge);
+  assert.equal(original.status, "not-proven",
+    "reachable banks are a necessary condition, not proof of a simple physical crossing");
+  assert.equal(original.orientation, "both",
+    "a bypass joining the other bank does not invent a physical traversal");
+  const alternate = transportWalkingRequiredBridgeCut(index, "G", "S", bridge, new Set(["unsafe"]));
+  assert.equal(alternate.status, "not-proven",
+    "an actual alternative approach must not be declared disconnected");
+  assert.ok(alternate.exploredNodes <= index.nodeCount);
+  const excluded = new Set(["unsafe", "detour-b"]);
+  const cut = transportWalkingRequiredBridgeCut(index, "G", "S", bridge, excluded);
+  assert.deepEqual({ status: cut.status, orientation: cut.orientation },
+    { status: "graph-cut", orientation: "none" },
+    "no gate-side access to one bridge bank proves impossibility with these exclusions");
+  assert.ok(cut.exploredNodes <= index.nodeCount);
+  assert.deepEqual([...excluded], ["unsafe", "detour-b"],
+    "graph proof cannot mutate caller exclusions");
+  assert.deepEqual(transportWalkingRequiredBridgeCut(index, "G", "S", bridge, excluded), cut,
+    "component proof is deterministic across repeated calls");
+  assert.equal(transportWalkingRequiredBridgeCut(index, "G", "S", bridge, new Set(["bridge"])).status,
+    "invalid", "excluded mandatory bridge cannot be valid evidence");
+  assert.equal(transportWalkingRequiredBridgeCut(index, "G", "S",
+    { ...bridge, code: "invented" }).status, "invalid");
+  assert.equal(transportWalkingRequiredBridgeCut(index, "G", "S", bridge,
+    new Set(Array.from({ length: 13 }, (_, i) => `blocked-${i}`))).status,
+    "invalid", "proof uses the existing bounded unsafe-road set");
 });
 
 test("S005 selected border bridge previews the far-bank country's site rather than retracing the crossing", () => {
@@ -1991,6 +2035,16 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       offendingRoad: detourPlan.edgeCode } : {}),
     sampledStations: detourPlan?.status === "ready" ? detourPlan.stations.length : 0,
     caveat: "graph/source recipe only; local grades and continuous physical travel unverified",
+  }));
+  const bridgeCut = transportWalkingRequiredBridgeCut(
+    index, villageNode!.code, site!.code, crossing!, new Set([firstUnsafeRoad]));
+  assert.ok(bridgeCut.exploredNodes <= index.nodeCount,
+    "the exact-SEED graph-cut probe visits each node at most once");
+  console.log("S005_REAL_SEED_BRIDGE_CUT", JSON.stringify({
+    excludedRoad: firstUnsafeRoad, result: bridgeCut.status,
+    orientation: bridgeCut.orientation, exploredNodes: bridgeCut.exploredNodes,
+    bound: index.nodeCount,
+    caveat: "graph-cut rules out required bridge route; not-proven does not certify physical walking",
   }));
   const bridgeDetour = transportWalkingRouteViaRequiredEdge(
     index, villageNode!.code, site!.code, crossing!, new Set([firstUnsafeRoad]));
