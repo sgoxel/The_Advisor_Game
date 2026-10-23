@@ -104,10 +104,11 @@ import {
 } from "./navigation.ts";
 import {
   estimateGeometryBytes,
-  streamingBudgetForViewport,
   withinStreamingBudget,
   shouldTrimStreamingCache,
   streamingMemoryReservationFits,
+  generationWorkerCount,
+  streamingBudgetForPool,
   type StreamingBudget,
 } from "./streaming.ts";
 
@@ -130,7 +131,7 @@ let discardedPresentationJobs = 0;
 const continuityCpuBytes = () => {
   const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
   const atlasBytes=(window as unknown as {politicalAtlas?:{state:{presentationBytesEstimated?:number}}}).politicalAtlas?.state.presentationBytesEstimated||0;
-  return atlasBytes + continuityWorkerBytes + (inFlight ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0) + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+  return atlasBytes + continuityWorkerBytes + inFlight * NATURAL_WORKER_SCRATCH_RESERVE_BYTES + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -223,10 +224,9 @@ let revision = 0,
   uploadsThisFrame = 0,
   maxUploadsPerFrame = 0,
   poleStopCount = 0;
-let streamingBudget: StreamingBudget = streamingBudgetForViewport(
-  innerWidth,
-  innerHeight,
-);
+/** Tile-generation worker pool size: one worker per spare core (see generationWorkerCount). */
+const generationWorkers = generationWorkerCount(navigator.hardwareConcurrency, (navigator as { deviceMemory?: number }).deviceMemory);
+let streamingBudget: StreamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers);
 let poleLimit: "north" | "south" | null = null,
   poleLimitUntil = 0;
 const previousWantedKeys = new Set<string>();
@@ -238,7 +238,11 @@ const uploads: {
   data: TileGeometry;
   precision: PatchConversionStats;
 }[] = [];
-let worker: Worker;
+/** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
+const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
+let readyWorkers = 0;
+/** Jobs in flight plus generated meshes waiting for upload; enough to keep every worker busy. */
+const generationLimit = () => streamingBudget.generationReady;
 const layers = { structures: true, nature: true, grid: false };
 let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
 let smallDetailsVisible = settlementSmallDetailsVisible(scaleValueForHalfHeight(view.halfHeight));
@@ -805,8 +809,8 @@ function warmSettlements() {
 function request(tile: Tile, kind: TileJobKind = "detail") {
   const job = {tile,kind}, key = tileJobKey(job);
   if (tileCache.has(key) || pending.has(key)) return;
-  // A single worker can execute one job; do not feed it an obsolete FIFO queue.
-  if (inFlight > 0 || inFlight + uploads.length >= streamingBudget.generationReady) return;
+  // Each idle worker takes one job; priorities are recomputed every frame, never queued FIFO.
+  if (!idleWorkers.length || inFlight + uploads.length >= generationLimit()) return;
   const surfaceBytes=globe?globe.stats.textureWidth*globe.stats.textureHeight*4:0,
     readyBytes=uploads.reduce((sum,job)=>sum+estimateGeometryBytes(job.data),0),
     cpuBytes=cachedGeometryBytes+readyBytes+surfaceBytes+continuityCpuBytes(),
@@ -815,7 +819,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   pending.add(key);
   inFlight++;
   if(kind === "detail")detailGenerationJobs++;else coverageGenerationJobs++;
-  worker.postMessage(job);
+  idleWorkers.pop()!.postMessage(job);
 }
 function refreshSelection() {
   // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
@@ -942,11 +946,17 @@ function processStreaming(material: pc.StandardMaterial) {
     if(record.entity.enabled)record.used=revision;
   }
   if(coverageComplete && !ready){ready=true;setLoadingProgress(100);setTimeout(()=>$("loading").classList.add("done"),350);}
-  if(inFlight===0 && inFlight+uploads.length<streamingBudget.generationReady){
-    const job=nextStreamingJob(root,wanted,coverageTiles,cachedKeys);
-    if(job)request(job.tile,job.kind);
-    // Nothing urgent left: keep warming the cache around the player in the background.
-    else if(ready && !lodTransition)prefetchNext(root);
+  {
+    // Fill every idle worker: urgent on-screen work first (skipping tiles already being built),
+    // then background prefetch around the player.
+    const cachedOrPending={has:(key:string)=>cachedKeys.has(key)||pending.has(key)};
+    while(idleWorkers.length && inFlight+uploads.length<generationLimit()){
+      const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
+      if(job)request(job.tile,job.kind);
+      // Nothing urgent left: keep warming the cache around the player in the background.
+      else if(ready && !lodTransition)prefetchNext(root);
+      if(inFlight===before)break;
+    }
   }
   {
     const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
@@ -1286,7 +1296,7 @@ function setupControls() {
     if (innerWidth < 1 || innerHeight < 1) return;
     view.aspect = innerWidth / innerHeight;
     view.pixels = Math.min(innerHeight, 1000);
-    streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
+    streamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers);
     if (projectionTransition > 0.001)
       globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
     updateCamera();
@@ -1524,24 +1534,31 @@ async function start() {
   coarseTerrainMaterial.depthTest = false;
   coarseTerrainMaterial.update();
   workerStartedAt=performance.now();
-  worker = new Worker(new URL("./tile-worker.ts", import.meta.url), {
-    type: "module",
-  });
-  worker.onmessage = (event) => {
-    if(event.data.ready){workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);return;}
-    inFlight--;
-    lastGenerationTiming=event.data.timing||{};
-    continuityWorkerBytes = event.data.continuity?.cpuBytesEstimated || 0;
-    continuityWorkerState = event.data.continuity;
-    if (event.data.error) {
-      pending.delete(event.data.jobKey);
-      fail(`Tile generation failed: ${event.data.error}`);
-      return;
-    }
-    uploads.push(event.data);
-  };
-  worker.onerror = (event) =>
-    fail(`World worker could not start: ${event.message}`);
+  for (let index = 0; index < generationWorkers; index++) {
+    const worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module" });
+    workers.push(worker);
+    worker.onmessage = (event) => {
+      if(event.data.ready){
+        if(++readyWorkers===1){workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);}
+        idleWorkers.push(worker);
+        return;
+      }
+      inFlight--;
+      idleWorkers.push(worker);
+      lastGenerationTiming=event.data.timing||{};
+      continuityBytesByWorker.set(worker, event.data.continuity?.cpuBytesEstimated || 0);
+      continuityWorkerBytes = [...continuityBytesByWorker.values()].reduce((sum, bytes) => sum + bytes, 0);
+      continuityWorkerState = event.data.continuity;
+      if (event.data.error) {
+        pending.delete(event.data.jobKey);
+        fail(`Tile generation failed: ${event.data.error}`);
+        return;
+      }
+      uploads.push(event.data);
+    };
+    worker.onerror = (event) =>
+      fail(`World worker could not start: ${event.message}`);
+  }
   setupControls();
   updateCamera();
   simulation.setFocus(villages[0]);
@@ -2102,7 +2119,7 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
-          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight, lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
           simulation: simulation.stats,
           settled:
             !lodTransition &&

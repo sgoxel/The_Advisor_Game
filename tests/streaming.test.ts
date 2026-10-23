@@ -120,3 +120,21 @@ test("exact pole coverage is unique bounded and independent of degenerate longit
   }
   assert.deepEqual(sortedKeys(northA), sortedKeys(northB));
 });
+
+test("tile generation uses every spare core, limited only by device memory", async () => {
+  const { generationWorkerCount, streamingBudgetForPool, streamingBudgetForViewport } = await import("../src/streaming.ts");
+  assert.equal(generationWorkerCount(12, 8), 11, "12-core PC: 11 workers");
+  assert.equal(generationWorkerCount(8, 8), 7, "8-core phone with 8 GB: 7 workers");
+  assert.equal(generationWorkerCount(8, 4), 7, "8-core phone with 4 GB: 7 workers");
+  assert.equal(generationWorkerCount(8, 2), 4, "a 2 GB device is held back only by memory");
+  assert.equal(generationWorkerCount(2, 8), 1, "two cores: one worker, one core left for rendering");
+  assert.equal(generationWorkerCount(1, 1), 1, "always at least one worker");
+  assert.equal(generationWorkerCount(undefined, undefined), 3, "unknown hardware is treated as 4 cores and 4 GB");
+  assert.equal(generationWorkerCount(64, 8), 16, "memory caps very large core counts");
+  for (const [width, height] of [[390, 844], [1024, 768], [1440, 900]]) {
+    const base = streamingBudgetForViewport(width, height);
+    assert.equal(streamingBudgetForPool(width, height, 1).generationReady, base.generationReady, "a single worker keeps the viewport budget");
+    assert.equal(streamingBudgetForPool(width, height, 11).generationReady, Math.max(base.generationReady, 13), "a large pool gets a slot per worker plus two uploads");
+    assert.deepEqual({ ...streamingBudgetForPool(width, height, 11), generationReady: 0 }, { ...base, generationReady: 0 }, "only the job slots change");
+  }
+});
