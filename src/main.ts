@@ -1505,7 +1505,9 @@ async function start() {
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
       const visible =
-        settlementDetailVisible && view.halfHeight < 240
+        // Villagers are only simulated for drawing once loading is done and a person is at least a few
+        // pixels tall (half-height < 20 units ≈ 300 m); further out they would be sub-pixel specks.
+        ready && settlementDetailVisible && view.halfHeight < 20
           ? simulation
               // Everyone whose position can be on screen: the whole visible ground footprint
               // (rotated rectangle, low close-up camera included) plus a margin, so nobody
