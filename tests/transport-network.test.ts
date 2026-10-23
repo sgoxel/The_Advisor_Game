@@ -19,7 +19,7 @@ import {
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
@@ -1870,6 +1870,65 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   );
   assert.notEqual(segmented.status, "invalid",
     "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
+  // Current Campaign-SEED's real selected gate/Y/bridge/site route fits
+  // the unchanged finite 12-leg / 16384-station diagnostic. A valid source
+  // recipe is necessary, but not sufficient, for actual legal passage.
+  assert.equal(segmented.status, "ready",
+    "the real SEED-owned gate-to-site route must allow a bounded full-station physical check");
+  if (segmented.status === "ready") {
+    assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
+      "the same real route must exercise the bounded per-road fallback");
+    // Cheap routine smoke: the first 32 canonical stations must genuinely
+    // be legal under the same local-slope and great-circle interval rules as
+    // the interactive diagnostic. A deliberate full-route check is opt-in.
+    const full = process.env.S005_ROUTE_FULL_PROBE === "1";
+    const limit = full ? segmented.stations.length : Math.min(32, segmented.stations.length);
+    let previousHeight: number | null = null, maximumIntervalGrade = 0,
+      firstUnsafe: { station: number; road: string; cause: string; x: number; z: number; grade?: number } | null = null;
+    const started = performance.now();
+    for (let i = 0; i < limit; i++) {
+      if (full && performance.now() - started > 6 * 60_000) {
+        const station = segmented.stations[i];
+        firstUnsafe = { station: i + 1, road: station.edgeCode,
+          cause: "finite diagnostic time budget exhausted; not certified",
+          x: station.x, z: station.z };
+        break;
+      }
+      if (full && i > 0 && i % 512 === 0)
+        console.log("S005_REAL_ROUTE_PROGRESS", JSON.stringify({
+          checked: i, total: limit, elapsedMs: performance.now() - started }));
+      const station = segmented.stations[i], surface = finalSurfaceAt(station.x, station.z),
+        localRoadSlope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
+          ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined,
+        failure = sampledCorridorStationFailure(station, surface, localRoadSlope);
+      if (failure) {
+        firstUnsafe = { station: i + 1, road: station.edgeCode, cause: failure,
+          x: station.x, z: station.z };
+        break;
+      }
+      if (previousHeight !== null) {
+        const previous = segmented.stations[i - 1],
+          distance = greatCircleDistance(sourceToLonLat(previous.x, previous.z),
+            sourceToLonLat(station.x, station.z)),
+          grade = distance > 0 ? Math.abs(surface.surfaceHeight - previousHeight) / distance : Infinity;
+        maximumIntervalGrade = Math.max(maximumIntervalGrade, grade);
+        if (!Number.isFinite(grade) || grade > .08) {
+          firstUnsafe = { station: i + 1, road: station.edgeCode,
+            cause: "unsafe measured surface interval grade", x: station.x, z: station.z, grade };
+          break;
+        }
+      }
+      previousHeight = surface.surfaceHeight;
+    }
+    if (!full)
+      assert.equal(firstUnsafe, null, "first 32 stations of the real source route must retain legal top-surface passage");
+    else console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
+      canonicalRoads: chain.length, stationCount: segmented.stations.length,
+      checked: firstUnsafe?.station ?? limit, firstUnsafe,
+      maximumIntervalGrade, elapsedMs: performance.now() - started,
+      caveat: "sampled final surface only; between-station and actor passage not certified",
+    }));
+  }
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
       segmented.stations.length <= ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT);
