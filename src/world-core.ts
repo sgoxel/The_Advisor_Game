@@ -1,4 +1,4 @@
-import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
+import { roadNormalSource, roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
@@ -339,6 +339,80 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   }
   return result;
 }
+// Only steep SEED source segments need a source-owned, cut/fill-constrained
+// grade profile. Cache the deterministic samples, never create a viewport- or
+// query-order-dependent surface height.
+const GRADE_LIMIT = .08;
+const GRADED_SEGMENT_SAMPLE_LIMIT = 1024;
+const GRADED_PROFILE_CACHE_LIMIT = 64;
+type SupportedProfile = Readonly<{ heights: readonly number[]; steps: number }>;
+const supportedRoadProfiles = new Map<string, SupportedProfile | null>();
+
+/** A bounded physically supported vertical profile, not a changed road graph.
+ * A full-width carriageway shares one elevation at each source chainage.
+ * The lower/upper 8% Lipschitz envelopes prove the cut/fill constraints
+ * compatible before any projected surface is used. Null is not legal ground. */
+function supportedRoadProfileAt(road: Road, segment: number, a: {x: number; z: number}, b: {x: number; z: number},
+  endHeights: readonly [number, number]): SupportedProfile | null {
+  const key = `${road.code}/GRADE/${segment}`;
+  if (supportedRoadProfiles.has(key)) return supportedRoadProfiles.get(key)!;
+  const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+    latitudeScale = Math.max(.01, Math.abs(Math.cos(sourceToLonLat(a.x, a.z).lat))),
+    sourceLength = Math.hypot(dx * latitudeScale, dz),
+    metres = sourceLength * CANONICAL_METRES_PER_SOURCE_UNIT,
+    steps = Math.ceil(sourceLength),
+    maxRise = GRADE_LIMIT * metres;
+  // Do not sample enormous or impossible source legs synchronously.
+  if (!Number.isFinite(metres) || steps < 2 || steps > GRADED_SEGMENT_SAMPLE_LIMIT ||
+      Math.abs(endHeights[1] - endHeights[0]) > maxRise + 7) {
+    supportedRoadProfiles.set(key, null);
+    return null;
+  }
+  const halfWidth = roadWidthM(road) / 2,
+    normal = roadNormalSource(dx, dz, a.z, halfWidth),
+    lower: number[] = [], upper: number[] = [], center: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, px = wrapSourceX(a.x + dx * t), pz = a.z + dz * t,
+      heights = [naturalSurfaceBaseAt(px, pz).groundHeight,
+        naturalSurfaceBaseAt(wrapSourceX(px + normal.x), pz + normal.z).groundHeight,
+        naturalSurfaceBaseAt(wrapSourceX(px - normal.x), pz - normal.z).groundHeight];
+    if (!heights.every(Number.isFinite)) {
+      supportedRoadProfiles.set(key, null); return null;
+    }
+    center.push(heights[0]);
+    lower.push(Math.max(...heights) - 4);
+    upper.push(Math.min(...heights) + 3);
+  }
+  // Graph-owned adjacent road segments must meet their existing source node
+  // elevations; moving endpoints independently would manufacture false joins.
+  lower[0] = upper[0] = endHeights[0];
+  lower[steps] = upper[steps] = endHeights[1];
+  const reach = maxRise / steps;
+  // All four envelopes are <=8% Lipschitz on this physical chainage.
+  const bounds = (input: readonly number[], isLower: boolean) => {
+    const values = [...input],
+      combine = isLower ? Math.max : Math.min,
+      move = isLower ? -reach : reach;
+    for (let i = 1; i < values.length; i++)
+      values[i] = combine(values[i], values[i-1] + move);
+    for (let i = values.length-2; i >= 0; i--)
+      values[i] = combine(values[i], values[i+1] + move);
+    return values;
+  };
+  const lo = bounds(lower, true), hi = bounds(upper, false),
+    desiredLo = bounds(center, true), desiredHi = bounds(center, false);
+  if (lo.some((v, i) => v > hi[i] + 1e-7)) {
+    supportedRoadProfiles.set(key, null); return null;
+  }
+  const heights = lo.map((v, i) =>
+    Math.max(v, Math.min(hi[i], (desiredLo[i] + desiredHi[i]) / 2)));
+  const result: SupportedProfile = { heights: Object.freeze(heights), steps };
+  supportedRoadProfiles.set(key, result);
+  if (supportedRoadProfiles.size > GRADED_PROFILE_CACHE_LIMIT)
+    supportedRoadProfiles.delete(supportedRoadProfiles.keys().next().value!);
+  return result;
+}
+
 const roadProfileHeights = new Map<string, readonly [number, number]>();
 function roadProfileHeightAt(x: number, z: number, road: Road) {
   const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
@@ -348,6 +422,17 @@ function roadProfileHeightAt(x: number, z: number, road: Road) {
     profile=[naturalSurfaceBaseAt(a.x,a.z).groundHeight,naturalSurfaceBaseAt(b.x,b.z).groundHeight];
     roadProfileHeights.set(key,profile);
     if(roadProfileHeights.size>2048)roadProfileHeights.delete(roadProfileHeights.keys().next().value!);
+  }
+  const metres = Math.hypot(
+    wrapSourceX(b.x - a.x) * Math.max(.01, Math.abs(Math.cos(sourceToLonLat(a.x, a.z).lat))),
+    b.z - a.z) * CANONICAL_METRES_PER_SOURCE_UNIT;
+  if (Number.isFinite(metres) && metres > 0 &&
+      Math.abs(profile[1] - profile[0]) / metres > GRADE_LIMIT) {
+    const repaired = supportedRoadProfileAt(road, nearest.segment, a, b, profile);
+    if (repaired) {
+      const index = nearest.t * repaired.steps, low = Math.min(repaired.steps - 1, Math.floor(index));
+      return lerp(repaired.heights[low], repaired.heights[low + 1], index - low);
+    }
   }
   return lerp(profile[0],profile[1],nearest.t);
 }
