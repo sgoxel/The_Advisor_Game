@@ -14,6 +14,7 @@ import {
   residentFoundationAt,
   continuousWalkableOffsetSegment,
   lastReachableRoutineStop,
+  residentOccupiesBuilding,
   readableResidentSite,
 } from "../src/simulation.ts";
 
@@ -50,6 +51,25 @@ test("a blocked leg never becomes the origin of a later resident activity", () =
     "a later blocked return cannot teleport from an unvisited worksite");
   assert.equal(lastReachableRoutineStop([home, work, home], allowed), home,
     "homecoming after a blocked commute does not invent worksite occupancy");
+});
+
+test("building occupancy requires the exact canonical site, not nearby indoor status", () => {
+  const foundation = residentFoundationAt(villages[0], 12), home = foundation.homeBuilding,
+    residence = { code: `seed/version/F/${villages[0].id}/${home}`, kind: "residence" },
+    adjacent = { code: `seed/version/F/${villages[0].id}/${villages[0].code}/RESIDENCE/13`, kind: "residence" },
+    resident = { ...foundation, indoors: true, route: foundation.homeEntrance };
+  assert.equal(residentOccupiesBuilding(resident, residence), true);
+  assert.equal(residentOccupiesBuilding(resident, adjacent), false, "a neighbouring house does not own this resident");
+  assert.equal(residentOccupiesBuilding({ ...resident, indoors: false }, residence), false);
+  assert.equal(residentOccupiesBuilding({ ...resident, route: "BLOCKED: home → work" }, residence), false);
+  assert.equal(residentOccupiesBuilding({ ...resident, route: `${villages[0].code}/INN` }, residence), false);
+  assert.equal(residentOccupiesBuilding({ ...resident, route: `${home}/WORKSHOP` }, residence), true,
+    "a home workshop remains inside its owned home");
+  const service = { code: `seed/version/F/${villages[0].id}/${villages[0].code}/PLOT/7`, kind: "service", service: "inn" };
+  assert.equal(residentOccupiesBuilding({ ...resident, route: `${villages[0].code}/INN` }, service), true);
+  assert.equal(residentOccupiesBuilding({ ...resident, route: `${villages[0].code}/MARKET` }, service), false);
+  assert.equal(residentOccupiesBuilding({ ...resident, route: `${cities[0].code}/INN` }, service), false,
+    "residents from another settlement do not occupy this inn");
 });
 
 test("resident captions are short while authoritative site IDs stay unchanged", () => {
