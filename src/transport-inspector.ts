@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridorByLeg, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridorByLeg, sampledCorridorStationFailure, transportProbeFrameBudgetReached } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -642,6 +642,7 @@ function probeRouteCorridor() {
   let previousHeight: number | null = null;
   const step = () => {
     if (revision !== corridorProbeRevision) return;
+    const frameStarted = performance.now(), previousProgress = corridorProbeStations;
     for (let i = 0; i < 8 && corridorProbeStations < plan.stations.length; i++) {
       const index = corridorProbeStations, station = plan.stations[index],
         surface = finalSurfaceAt(station.x, station.z);
@@ -679,6 +680,9 @@ function probeRouteCorridor() {
       }
       previousHeight = surface.surfaceHeight;
       corridorProbeStations++;
+      // One complete station per frame minimum; expensive final-surface reads
+      // yield before the next one instead of monopolizing a phone frame.
+      if (transportProbeFrameBudgetReached(i + 1, performance.now() - frameStarted)) break;
     }
     if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
       // Only after a demonstrated failed physical station: a single cached,
@@ -702,9 +706,9 @@ function probeRouteCorridor() {
       renderCorridorProbe();
       renderMetrics();
     } else if (corridorProbeStations < plan.stations.length) {
-      // Optional long probes must show progress without rewriting the panel every frame.
-      // Eight stations per frame: one status refresh per 64 verified stations at most.
-      if (corridorProbeStations > 0 && corridorProbeStations % 64 === 0) renderCorridorProbe();
+      // Variable-size batches may jump across station 64 without landing on it.
+      // Update at most once per frame when a 64-station milestone is crossed.
+      if (Math.floor(corridorProbeStations / 64) > Math.floor(previousProgress / 64)) renderCorridorProbe();
       requestAnimationFrame(step);
     } else {
       corridorProbeStatus = "sampled centerline passes at every planned station; between-station and actor passage not certified";
@@ -757,7 +761,8 @@ function probeSiteAccess() {
   renderSiteAccessProbe();
   const step = () => {
     if (revision !== siteProbeRevision) return;
-    const limit = Math.min(stations.length, surfaces.length + 4);
+    const frameStarted = performance.now(), firstStation = surfaces.length;
+    const limit = Math.min(stations.length, firstStation + 4);
     while (surfaces.length < limit) {
       const point = stations[surfaces.length];
       const surface = finalSurfaceAt(point.x, point.z);
@@ -766,6 +771,8 @@ function probeSiteAccess() {
       // gradients; ordinary finalSurfaceAt already flags >8% "road" grade.
       localRoadSlopes.push(surface.deckHeight === null && surface.traversal === "open" && surface.walkable
         ? finalSurfaceLocalSlopeAt(point.x, point.z) : null);
+      if (transportProbeFrameBudgetReached(surfaces.length - firstStation,
+        performance.now() - frameStarted)) break;
     }
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {

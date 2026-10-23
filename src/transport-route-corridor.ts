@@ -239,6 +239,13 @@ export function planTransportRouteCorridorByLeg(
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
 
+/** Yield only after a complete station. This is a UI scheduling budget, never
+ * a surface sampling limit or a change to deterministic SEED/Simulation truth. */
+export const TRANSPORT_PROBE_FRAME_BUDGET_MS = 6;
+export function transportProbeFrameBudgetReached(completed: number, elapsedMs: number) {
+  return completed > 0 && (!Number.isFinite(elapsedMs) || elapsedMs >= TRANSPORT_PROBE_FRAME_BUDGET_MS);
+}
+
 /** One read-only reason for the selected station's actual upper final surface. */
 export function sampledCorridorStationFailure(
   station: CorridorStation,
