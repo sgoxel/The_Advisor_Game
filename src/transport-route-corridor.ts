@@ -29,7 +29,12 @@ export function planTransportRouteCorridor(
   // Already-built canonical walking adjacency; never infer joins from map overlap.
   incidentRoads?: ReadonlyMap<string, readonly { edge: Edge }[]>,
 ): Plan {
-  if (!route.from || !route.to || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
+  // A selected route must be a non-retracing walk. A connected graph can
+  // traverse the same bridge/road outward and back; that is not evidence of
+  // one continuous gate-to-site passage and must never receive a sampled PASS.
+  if (!route.from || !route.to || !route.edgeCodes.length ||
+      new Set(route.edgeCodes).size !== route.edgeCodes.length)
+    return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
   // Only registered graph-incident roads whose source endpoints actually meet
   // the canonical node may own its winning final surface. Shared Y nodes and
