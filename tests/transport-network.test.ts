@@ -731,6 +731,10 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     "unsafe local road slope", "open final-surface traversal cannot hide an 8–15% road grade");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }, Infinity), false,
     "nonfinite local road grade fails closed instead of certifying the selected passage");
+  assert.equal(sampledCorridorStationFailure(station, { ...dry, traversal: "open" }, -.01),
+    "unsafe local road slope", "signed negative local grade is invalid measurement, not legal ascent");
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }, -.01), false,
+    "a malformed negative grade must not certify selected road surface");
   assert.equal(sampledCorridorStationPass(station, {
     ...dry, deckHeight: 7, traversal: "bridge", deckOwnerIds: ["unrelated-overpass"],
   }), false, "unrelated upper bridge deck must never certify a road below a dry overpass");
@@ -986,6 +990,13 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     { ...surface, traversal: "open" as const } : surface);
   const safeSlopes = [null, null, .08, null, null];
   assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes, safeSlopes).sampledPass, true);
+  const negativeSlopes = [null, null, -.01, null, null];
+  const negativeVerdict = siteAccessSampleVerdict(edge, openPad, junctionRoadCodes, negativeSlopes);
+  assert.equal(negativeVerdict.gradeWithinLimit, false,
+    "negative local site slope is invalid physical evidence, not a safe road grade");
+  assert.equal(negativeVerdict.sampledPass, false);
+  assert.deepEqual([negativeVerdict.firstUnsafeStation, negativeVerdict.firstUnsafeCause],
+    [3, "unsafe local site-access slope"]);
   const overSlopes = [null, null, .081, null, null];
   const overVerdict = siteAccessSampleVerdict(edge, openPad, junctionRoadCodes, overSlopes);
   assert.equal(overVerdict.gradeWithinLimit, false);
