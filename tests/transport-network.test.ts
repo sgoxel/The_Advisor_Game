@@ -1917,7 +1917,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   // the bridge twice. Start from an actual village gate that enters a real Y
   // next to a selected bridge endpoint, then traverse the bridge exactly once
   // into a site-owned access branch. SEED order and graph edge codes decide.
-  const witness = [crossing!.from, crossing!.to].flatMap(originCode => {
+  const witnesses = [crossing!.from, crossing!.to].flatMap(originCode => {
     const farCode = originCode === crossing!.from ? crossing!.to : crossing!.from,
       farNode = nodeByCode.get(farCode);
     if (!farNode) return [];
@@ -1954,7 +1954,8 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
               : [];
           });
         }));
-  }).find(candidate => candidate.chain.includes(crossing!.code));
+  }).filter(candidate => candidate.chain.includes(crossing!.code));
+  const witness = witnesses[0];
   assert.ok(witness,
     "actual SEED village gate must reach a physical Y then the selected bridge exactly once en route to a real site");
   const { villageNode, y, site, chain } = witness!,
@@ -2014,6 +2015,68 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   const firstUnsafeRoad = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1";
   assert.ok(chain.includes(firstUnsafeRoad),
     "the same real nine-road witness must retain its first previously unsafe road");
+  // The original witness is graph-cut after excluding the unsafe road.
+  // Reuse its already-materialized SEED gate/Y/bridge/site candidates rather
+  // than inventing a destination or another route/asset generator. Consider a
+  // finite prefix of alternatives; no result is an exhaustive impossibility
+  // proof. A graph/source recipe is not a legal final-surface walk.
+  const candidateBudget = 64;
+  let examined = 0, unsafeGateY = 0, noContinuation = 0, repeatedNode = 0;
+  let alternative: { from: string; to: string; edgeCodes: readonly string[];
+    gateCode: string; junctionCode: string; siteCode: string } | null = null;
+  for (const candidate of witnesses.slice(0, candidateBudget)) {
+    examined++;
+    const prefix = [candidate.edge.code, candidate.toYEdge.code];
+    if (prefix.includes(firstUnsafeRoad)) { unsafeGateY++; continue; }
+    const continuation = transportWalkingRouteThroughEdge(
+      index, candidate.originCode, crossing!, [candidate.site.code],
+      new Set([firstUnsafeRoad]));
+    if (!continuation) { noContinuation++; continue; }
+    const edgeCodes = [...prefix, ...continuation.edgeCodes];
+    if (edgeCodes.includes(firstUnsafeRoad) ||
+        edgeCodes.filter(code => code === crossing!.code).length !== 1 ||
+        new Set(edgeCodes).size !== edgeCodes.length) { repeatedNode++; continue; }
+    // Check node-simple incidence as well as the planner's road-simple rule.
+    let current = candidate.villageNode.code;
+    const seenNodes = new Set([current]);
+    let valid = true;
+    for (const code of edgeCodes) {
+      const edge = edgeByCode.get(code);
+      if (!edge || (edge.from !== current && edge.to !== current)) { valid = false; break; }
+      current = edge.from === current ? edge.to : edge.from;
+      if (seenNodes.has(current)) { valid = false; break; }
+      seenNodes.add(current);
+    }
+    if (!valid || current !== candidate.site.code) { repeatedNode++; continue; }
+    alternative = { from: candidate.villageNode.code, to: candidate.site.code,
+      edgeCodes, gateCode: candidate.villageNode.code,
+      junctionCode: candidate.y.code, siteCode: candidate.site.code };
+    break;
+  }
+  const alternatePlan = alternative ? planTransportRouteCorridorByLeg(
+    alternative, edgeByCode, nodeByCode, index.adjacency) : null;
+  console.log("S005_REAL_SEED_ALTERNATE_WITNESS", JSON.stringify({
+    originalUnsafeLeg: chain.indexOf(firstUnsafeRoad) + 1,
+    enumerated: witnesses.length, budget: candidateBudget, examined,
+    unsafeGateY, noContinuation, repeatedNode,
+    graph: alternative ? "candidate" : "not-found-within-candidate-budget",
+    sameOriginalGate: alternative?.gateCode === villageNode!.code,
+    sameOriginalSite: alternative?.siteCode === site!.code,
+    selectedBridge: alternative?.edgeCodes.includes(crossing!.code) ?? false,
+    selectedY: alternative?.junctionCode ?? null,
+    roadCount: alternative?.edgeCodes.length ?? 0,
+    sourceRecipe: alternatePlan?.status ?? "not-available",
+    sampledStations: alternatePlan?.status === "ready" ? alternatePlan.stations.length : 0,
+    caveat: "only enumerated gate/Y/site prefixes; not exhaustive or physically certified",
+  }));
+  if (alternative) {
+    assert.ok(alternative.edgeCodes.length > 0 &&
+      alternative.edgeCodes.filter(code => code === crossing!.code).length === 1 &&
+      !alternative.edgeCodes.includes(firstUnsafeRoad),
+      "alternate real witness must cross the selected bridge once and exclude unsafe road");
+    assert.notEqual(alternatePlan?.status, "invalid",
+      "an alternate candidate must preserve canonical endpoint joins");
+  }
   const detour = transportWalkingRoute(index, villageNode!.code, site!.code,
     new Set([firstUnsafeRoad]));
   if (detour) {
