@@ -2621,10 +2621,11 @@ test("S005 first-authoritative-route timing stays bounded by scale and distingui
   const timings = createSiteRouteTimings();
   const unavailable = timings.record("1/50", 6, false);
   assert.ok(unavailable);
-  timings.markFrame(unavailable, 13);
+  timings.markFrame(unavailable, 13, "1/50");
   const ready = timings.record("1/50", 4, true);
   assert.ok(ready);
-  timings.markFrame(ready, 3); // An impossible earlier-frame timestamp must not count.
+  timings.markFrame(ready, 14, "1/20"); // A scale switch cannot count under 1/50.
+  timings.markFrame(ready, 3, "1/50"); // An impossible earlier-frame timestamp must not count.
   assert.equal(timings.record("≈ 1/50", 1, true), null,
     "interpolated zoom is not falsely reported as an exact acceptance scale");
   assert.equal(timings.record("1/250", Infinity, true), null);
@@ -2638,7 +2639,8 @@ test("S005 first-authoritative-route timing stays bounded by scale and distingui
   assert.equal(snap["1/50"].samples, 2);
   assert.equal(snap["1/50"].ready, 1);
   assert.equal(snap["1/50"].unavailable, 1);
-  assert.equal(snap["1/50"].displayOpportunities, 1);
+  assert.equal(snap["1/50"].displayOpportunities, 1,
+    "a display opportunity at another scale cannot contaminate 1/50 timing");
   assert.equal(snap["1/50"].displayFrameOpportunityP95Ms, 13);
   assert.equal(snap["1/100"].calculationP95Ms, null,
     "no physical-browser samples must never be mislabeled measured PASS");
