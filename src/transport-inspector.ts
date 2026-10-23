@@ -17,7 +17,7 @@ import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 
@@ -132,6 +132,9 @@ let corridorProbeFirstUnsafeIntervalGrade: number | null = null;
 let corridorProbeFirstUnsafeSource: Readonly<{ x: number; z: number }> | null = null;
 let corridorProbeFirstUnsafeLocalGrade: number | null = null;
 let corridorProbeMaximumGrade: number | null = null;
+// A failed physical probe may offer a different SEED graph hypothesis.
+// This is never a validated walking route or a new selected map path.
+let corridorGraphDetour: ReturnType<typeof transportWalkingRoute> = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
 function compareCanonical(a: string, b: string) {
@@ -542,6 +545,11 @@ function renderCorridorProbe() {
     ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
   const intervalGrade = corridorProbeFirstUnsafeIntervalGrade === null ? "" :
     ` · first unsafe sampled interval grade ${Number.isFinite(corridorProbeFirstUnsafeIntervalGrade) ? `${(corridorProbeFirstUnsafeIntervalGrade * 100).toFixed(1)}%` : "invalid"}`;
+  const detour = corridorProbeFirstUnsafeRoad
+    ? corridorGraphDetour
+      ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
+      : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
+    : "";
   if (corridorProbeStatus === "not requested") {
     target.textContent = siteRoute
       ? "Selected-route physical access: PENDING — final-surface road and bridge passage not yet probed. Graph distance and Fantasy-Time are a preview, not certified traversal; use Probe walking route surface for bounded samples. Character has not moved."
@@ -552,7 +560,7 @@ function renderCorridorProbe() {
     return;
   }
   target.textContent =
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}${detour}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
@@ -568,6 +576,7 @@ function resetCorridorProbe() {
   corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
+  corridorGraphDetour = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
 }
@@ -587,6 +596,7 @@ function probeRouteCorridor() {
   corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
+  corridorGraphDetour = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget"
       ? plan.reason === "raw-source-waypoints"
@@ -659,6 +669,11 @@ function probeRouteCorridor() {
       corridorProbeStations++;
     }
     if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
+      // Only after a demonstrated failed physical station: a single cached,
+      // graph-bounded search, never extra per-frame sampling or an implicit reroute.
+      if (corridorProbeFirstUnsafeRoad && walkingIndex)
+        corridorGraphDetour = transportWalkingRoute(
+          walkingIndex, siteRoute!.from, siteRoute!.to, new Set([corridorProbeFirstUnsafeRoad]));
       corridorProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
       renderCorridorProbe();
