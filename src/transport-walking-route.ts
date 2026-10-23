@@ -33,6 +33,14 @@ export function createTransportWalkingIndex(network: TransportNetwork) {
 }
 
 type Index = ReturnType<typeof createTransportWalkingIndex>;
+type WalkingResult = Readonly<{
+  from: string; to: string; edgeCodes: readonly string[];
+  distanceM: number; fantasyWalkSeconds: number; exploredNodes: number;
+}> | null;
+const WALKING_ROUTE_CACHE_LIMIT = 12;
+// A SEED walking index is fixed for the campaign; reuse only its own finite,
+// read-only graph answers across repeated selections and semantic zoom levels.
+const walkingRouteCaches = new WeakMap<Index, Map<string, WalkingResult>>();
 type HeapEntry = { code: string; lengthM: number };
 const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
   (a.lengthM === b.lengthM && a.code < b.code);
@@ -40,6 +48,22 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
 /** Bounded by canonical graph size; no recursive search, viewport or LOD inputs. */
 function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>, excludedEdgeCode?: string) {
   if (!index.adjacency.has(from) || !destinations.size) return null;
+  let cache = walkingRouteCaches.get(index);
+  if (!cache) { cache = new Map(); walkingRouteCaches.set(index, cache); }
+  // Destination order/duplicates cannot alter an authoritative route, while a
+  // bridge's excluded road must never borrow an unconstrained cached answer.
+  const key = JSON.stringify([from, [...destinations].sort(), excludedEdgeCode ?? null]);
+  if (cache.has(key)) {
+    const cached = cache.get(key)!;
+    cache.delete(key); cache.set(key, cached);
+    return cached;
+  }
+  const remember = (answer: WalkingResult) => {
+    cache!.set(key, answer);
+    if (cache!.size > WALKING_ROUTE_CACHE_LIMIT)
+      cache!.delete(cache!.keys().next().value!);
+    return answer;
+  };
   const heap: HeapEntry[] = [], distances = new Map([[from, 0]]),
     travelSeconds = new Map([[from, 0]]),
     parent = new Map<string, { previous: string; edge: TransportRoadEdge }>(),
@@ -84,13 +108,13 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
         cursor = previous.previous;
       }
       edges.reverse();
-      return Object.freeze({
+      return remember(Object.freeze({
         from, to: current.code,
         edgeCodes: Object.freeze(edges.map(edge => edge.code)),
         distanceM: current.lengthM,
         fantasyWalkSeconds: travelSeconds.get(current.code)!,
         exploredNodes: settled.size,
-      });
+      }));
     }
     for (const step of index.adjacency.get(current.code)!) {
       if (step.edge.code === excludedEdgeCode || settled.has(step.node)) continue;
@@ -107,7 +131,7 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
       }
     }
   }
-  return null; // Explicitly disconnected walking graph; never use maritime shortcuts.
+  return remember(null); // Explicitly disconnected walking graph; never use maritime shortcuts.
 }
 
 /** One graph search picks the shortest reachable destination, not the closest unverified straight-line target. */
