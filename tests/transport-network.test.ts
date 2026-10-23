@@ -2337,7 +2337,20 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     };
     console.log("S005_ROADBED_ROOT_436", JSON.stringify({
       at: { x: at436.x, z: at436.z, edgeCode: at436.edgeCode },
-      tangent, prior: sampleDebug(segmented.stations[434].x, segmented.stations[434].z),
+      tangent,
+      neighbours: failingRoad ? {
+        xp: roadTangentAt(at436.x + physicalStepX, at436.z, failingRoad),
+        xm: roadTangentAt(at436.x - physicalStepX, at436.z, failingRoad),
+        zp: roadTangentAt(at436.x, at436.z + physicalStepZ, failingRoad),
+        zm: roadTangentAt(at436.x, at436.z - physicalStepZ, failingRoad),
+        count: failingRoad.centerline?.length,
+        nearPoints: (failingRoad.centerline ?? []).slice(
+          Math.max(0, (tangent?.segment ?? 0) - 1),
+          (tangent?.segment ?? 0) + 3).map(p => ({
+            x: p.x, z: p.z, natural: finalSurfaceDebugAt(p.x, p.z).base.groundHeight
+          })),
+      } : null,
+      prior: sampleDebug(segmented.stations[434].x, segmented.stations[434].z),
       here: sampleDebug(at436.x, at436.z),
       xp: sampleDebug(at436.x + physicalStepX, at436.z),
       xm: sampleDebug(at436.x - physicalStepX, at436.z),
