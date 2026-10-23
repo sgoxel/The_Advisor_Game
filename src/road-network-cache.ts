@@ -34,6 +34,7 @@ export function cachedRoadNetwork(fingerprint: string): RoadNetwork | undefined 
     if (typeof console !== "undefined") console.warn(`World cache: road network ${stored.network ? "is stale" : "missing"}; routing roads live (slow start).`);
     return undefined;
   }
-  // Fresh arrays per load: geography releases its edge list after deriving roads.
-  return { ...stored.network, edges: [...stored.network.edges] } as RoadNetwork;
+  // Fresh arrays per load: geography releases its edge list after deriving roads and the transport
+  // network appends its extension connections, so the shipped JSON module object is never mutated.
+  return { ...stored.network, edges: [...stored.network.edges], connections: [...stored.network.connections], junctions: [...stored.network.junctions] } as RoadNetwork;
 }
