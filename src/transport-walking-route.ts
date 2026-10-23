@@ -211,11 +211,10 @@ export function transportWalkingRouteThroughEdge(
 
 /**
  * Opt-in bounded candidate from a real SEED gate to a site while crossing one
- * selected bridge road exactly once. Explore canonical edge-ordered simple
- * paths; the shortest *prefix* is not necessarily compatible with the
- * remainder after crossing. A fixed 12-road/4096-state cap prevents runaway
- * work. Returning null means no candidate within that search budget, NOT
- * proof no route exists or a physical grade/deck/collision verdict.
+ * selected bridge road exactly once. A shortest approach may block the far
+ * bank, so search complete non-repeating graph paths by canonical length,
+ * with stable edge-code ties. The 12-road/4096-state budget is absolute; a
+ * null means no candidate found WITHIN that budget, not physical illegality.
  */
 export function transportWalkingRouteViaRequiredEdge(
   index: Index, from: string, to: string,
@@ -232,21 +231,49 @@ export function transportWalkingRouteViaRequiredEdge(
         step.edge.from === required.from && step.edge.to === required.to)) return null;
   type Candidate = {
     node: string; visited: ReadonlySet<string>; roads: readonly string[];
-    distanceM: number; fantasyWalkSeconds: number; crossed: boolean;
+    distanceM: number; fantasyWalkSeconds: number; crossed: boolean; sortKey: string;
   };
-  const queue: Candidate[] = [{
-    node: from, visited: new Set([from]), roads: [],
-    distanceM: 0, fantasyWalkSeconds: 0, crossed: false,
-  }];
-  // Breadth-first: fewest canonical roads first, stable SEED edge-code order
-  // within that hop count. The result is a hypothesis, not shortest by metres.
-  for (let cursor = 0; cursor < queue.length && cursor < MAX_STATES; cursor++) {
-    const current = queue[cursor];
+  const earlierPath = (a: Candidate, b: Candidate) =>
+    a.distanceM < b.distanceM || (a.distanceM === b.distanceM && a.sortKey < b.sortKey);
+  const frontier: Candidate[] = [];
+  const push = (entry: Candidate) => {
+    let p = frontier.length;
+    frontier.push(entry);
+    while (p > 0) {
+      const parent = (p - 1) >> 1;
+      if (!earlierPath(entry, frontier[parent])) break;
+      frontier[p] = frontier[parent];
+      p = parent;
+    }
+    frontier[p] = entry;
+  };
+  const pop = (): Candidate => {
+    const first = frontier[0], tail = frontier.pop()!;
+    if (frontier.length) {
+      let p = 0;
+      while (p * 2 + 1 < frontier.length) {
+        let child = p * 2 + 1;
+        if (child + 1 < frontier.length && earlierPath(frontier[child + 1], frontier[child]))
+          child++;
+        if (!earlierPath(frontier[child], tail)) break;
+        frontier[p] = frontier[child];
+        p = child;
+      }
+      frontier[p] = tail;
+    }
+    return first;
+  };
+  push({ node: from, visited: new Set([from]), roads: [],
+    distanceM: 0, fantasyWalkSeconds: 0, crossed: false, sortKey: "" });
+  let admitted = 1, explored = 0;
+  while (frontier.length && explored < MAX_STATES) {
+    const current = pop();
+    explored++;
     if (current.node === to) {
       if (current.crossed) return Object.freeze({
         from, to, edgeCodes: Object.freeze([...current.roads]),
         distanceM: current.distanceM, fantasyWalkSeconds: current.fantasyWalkSeconds,
-        exploredNodes: cursor + 1,
+        exploredNodes: explored,
       });
       continue;
     }
@@ -258,14 +285,16 @@ export function transportWalkingRouteViaRequiredEdge(
       const distanceM = current.distanceM + step.edge.surfaceLengthM,
         fantasyWalkSeconds = current.fantasyWalkSeconds + step.edge.fantasyWalkSeconds;
       if (!Number.isFinite(distanceM) || !Number.isFinite(fantasyWalkSeconds)) continue;
-      // Bound both expanded and queued states; never build an unbounded
-      // frontier merely because a late matching bridge candidate is absent.
-      if (queue.length === MAX_STATES) break;
-      queue.push({
+      // Both accepted frontier states and expanded states are finite, even
+      // in cyclic/high-branching campaign graphs. No global search is launched.
+      if (admitted === MAX_STATES) break;
+      push({
         node: step.node, visited: new Set([...current.visited, step.node]),
         roads: [...current.roads, step.edge.code],
         distanceM, fantasyWalkSeconds, crossed: current.crossed || bridge,
+        sortKey: current.sortKey + "\u0000" + step.edge.code,
       });
+      admitted++;
     }
   }
   return null;
