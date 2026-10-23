@@ -21,13 +21,20 @@
 #resident-inspector select { width: 100%; min-height: 44px; }
 #resident-home, #resident-workplace, #resident-route {
   color: #e0cfaa;
-  font-family: Consolas, monospace;
-  font-size: 11px !important;
-  white-space: normal;
+  font-family: inherit;
+  font-size: 12px !important;
+  line-height: 1.4;
   overflow-wrap: anywhere;
-  word-break: break-word;
   padding-bottom: 2px;
 }
+#resident-inspector .resident-short-id { color: #b5cbb8; font-size: 12px; line-height: 1.4; }
+#resident-inspector .resident-technical { margin-top: 9px; border-top: 1px solid #d8b97932; }
+#resident-inspector .resident-technical summary {
+  display: flex; align-items: center; min-height: 44px; cursor: pointer;
+  font-size: 12px; color: #decfae;
+}
+#resident-inspector .resident-technical code { white-space: normal; overflow-wrap: anywhere; }
+#resident-inspector .resident-technical dl { margin: 6px 0; }
 #resident-home-inspect { width: 100%; min-height: 44px; margin-top: 5px; }
 #resident-house-details, #resident-performance { margin-top: 9px !important; font-size: 11px !important; line-height: 1.4 !important; overflow-wrap: anywhere; }
 #resident-performance { padding-top: 8px; border-top: 1px solid #d8b97920; color: #a9bcb0 !important; }
