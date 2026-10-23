@@ -549,7 +549,7 @@ function renderCorridorProbe() {
     ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
   const intervalGrade = corridorProbeFirstUnsafeIntervalGrade === null ? "" :
     ` · first unsafe sampled interval grade ${Number.isFinite(corridorProbeFirstUnsafeIntervalGrade) ? `${(corridorProbeFirstUnsafeIntervalGrade * 100).toFixed(1)}%` : "invalid"}`;
-  const detour = corridorProbeFirstUnsafeRoad
+  const detour = corridorProbeFirstUnsafeRoad && corridorSelectedBridgeConstraint !== "selected-bridge-unsafe"
     ? corridorGraphDetourPending ? " · Checking an alternative SEED graph path; physical passage not certified"
     : corridorGraphDetour
       ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km, ${(corridorGraphDetour.fantasyWalkSeconds / 3600).toFixed(2)} estimated fantasy hours (graph only)${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
@@ -699,14 +699,18 @@ function probeRouteCorridor() {
       const route = siteRoute, unsafeRoad = corridorProbeFirstUnsafeRoad,
         bridgeCode = selection?.kind === "bridge" ? selection.code : null,
         index = walkingIndex;
-      corridorGraphDetourPending = !!unsafeRoad && !!route && !!index;
+      const selectedBridge = bridgeCode ? transportBridgeByCode(bridgeCode) : undefined;
+      const bridgeRoad = selectedBridge && corridorEdges.get(selectedBridge.roadCode);
+      // Once the exact chosen bridge road fails, an alternate path cannot
+      // preserve it. Explain that decisive fact now, without a fake search.
+      const selectedBridgeUnsafe = !!unsafeRoad && !!bridgeRoad && unsafeRoad === bridgeRoad.code;
+      if (selectedBridgeUnsafe) corridorSelectedBridgeConstraint = "selected-bridge-unsafe";
+      corridorGraphDetourPending = !!unsafeRoad && !!route && !!index && !selectedBridgeUnsafe;
       renderCorridorProbe();
       renderMetrics();
-      if (unsafeRoad && route && index) requestAnimationFrame(() => {
+      if (unsafeRoad && route && index && !selectedBridgeUnsafe) requestAnimationFrame(() => {
         if (revision !== corridorProbeRevision) return;
         const excluded = new Set([unsafeRoad]);
-        const selectedBridge = bridgeCode ? transportBridgeByCode(bridgeCode) : undefined;
-        const bridgeRoad = selectedBridge && corridorEdges.get(selectedBridge.roadCode);
         corridorGraphDetour = bridgeCode && !bridgeRoad ? null :
           transportWalkingDetourAfterUnsafeRoad(index, route.from, route.to, unsafeRoad, bridgeRoad);
         corridorGraphDetourPending = false;
@@ -717,12 +721,9 @@ function probeRouteCorridor() {
         requestAnimationFrame(() => {
           if (revision !== corridorProbeRevision) return;
           if (!bridgeRoad) return;
-          if (excluded.has(bridgeRoad.code)) corridorSelectedBridgeConstraint = "selected-bridge-unsafe";
-          else {
-            const cut = transportWalkingRequiredBridgeCut(
-              index, route.from, route.to, bridgeRoad, excluded);
-            corridorSelectedBridgeConstraint = cut.status === "invalid" ? null : cut.status;
-          }
+          const cut = transportWalkingRequiredBridgeCut(
+            index, route.from, route.to, bridgeRoad, excluded);
+          corridorSelectedBridgeConstraint = cut.status === "invalid" ? null : cut.status;
           renderCorridorProbe();
         });
       });
