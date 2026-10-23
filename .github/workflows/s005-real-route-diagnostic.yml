@@ -19,3 +19,4 @@ jobs:
       - run: npm ci
       - name: Check exact selected gate to site surface without moving an actor
         run: timeout 9m env S005_ROUTE_FULL_PROBE=1 node --experimental-strip-types --test --test-name-pattern="S005 real non-retracing gate-Y-bridge-site graph chain has exact physical endpoints" tests/transport-network.test.ts
+# Candidate two: 7.8% source profile below unchanged 8% physical safety limit.
