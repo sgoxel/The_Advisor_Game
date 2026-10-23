@@ -755,16 +755,23 @@ function chooseNearestSiteRoute() {
     frameRevision = ++siteRouteFrameRevision;
   lastSiteRouteFrameMs = null;
   siteRoute = null;
-  pendingSiteRouteOnWorld = !runtime;
-  if (!runtime) lastSiteRouteStatus = "world authority pending";
+  // The SEED graph is authoritative without a graphics device. An explicitly
+  // selected road/bridge/Y has its own canonical focus even during WebGPU
+  // initialization/failure; only a map-focus search needs renderer view state.
+  const waitingForMapFocus = !runtime && !selection;
+  pendingSiteRouteOnWorld = waitingForMapFocus;
+  if (waitingForMapFocus) lastSiteRouteStatus = "world authority pending";
   else {
+    const selectedFocus = runtime
+      ? sourceToLonLat(runtime.state.view.x, runtime.state.view.z)
+      : selectedEntityPosition();
     // A chosen Y/harbor is an exact graph node, and a chosen road/crossing
     // starts from its own endpoint. Only no-selection uses the nearest road.
-    const fallback = selection ? undefined : roadQuery(runtime.state).edges[0];
+    const fallback = !selection && runtime ? roadQuery(runtime.state).edges[0] : undefined;
     const selectedBridge = selection?.kind === "bridge"
       ? transportBridgeByCode(selection.code) : undefined;
-    const from = selectedWalkingPreviewOrigin(
-      selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
+    const from = selectedFocus && selectedWalkingPreviewOrigin(
+      selection, selectedFocus,
       transportNetwork, transportNodesByCode, fallback, selectedBridge,
     );
     const selectedBridgeRoad = selectedBridge
@@ -796,18 +803,18 @@ function chooseNearestSiteRoute() {
         : "no reachable same-country site by walking road";
     }
   }
-  // Before readiness the player is still waiting; only resolved graph facts
-  // have a click-to-answer duration (including the one-shot readiness wait).
-  lastSiteRouteMs = runtime ? performance.now() - started : null;
+  // SEED-selected graph facts are useful without a renderer. Only a route
+  // depending on an unknown map focus remains pending until graphics is ready.
+  lastSiteRouteMs = waitingForMapFocus ? null : performance.now() - started;
   lastSiteRouteAnswerContext = runtime ? firstAnswerContext(runtime.state) : null;
-  if (runtime) siteRouteRequestedAt = null;
+  if (!waitingForMapFocus) siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   renderSiteRoute();
   renderMetrics();
   // Route state is independent of map navigation; repaint the local overlay now.
   lastFingerprint = "";
   refreshOverlay(true);
-  if (runtime) {
+  if (!waitingForMapFocus) {
     // Two one-shot animation frames allow the new route DOM and SVG preview
     // a display opportunity. This is NOT a measured pixel-paint timestamp,
     // nor a 3D mesh-settling timer. Stale/cancelled views cannot win.
