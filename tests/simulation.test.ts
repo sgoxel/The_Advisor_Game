@@ -17,6 +17,9 @@ import {
 import { localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
 import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
+import { sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
+import { settlementExteriorFor } from "../src/settlement-exterior.ts";
+import { wrapSourceX } from "../src/planet.ts";
 
 const HOUR = 3600;
 /** Tick at which villages[0]'s local clock shows this time on calendar day `day` (routines follow local time). */
@@ -323,4 +326,59 @@ test("fishing destinations are dry banks beside actual water, with inland fallba
     const a=i*Math.PI/8, ll=r.position, p=lonLatToSource(ll.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(ll.lat)),ll.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
     return finalSurfaceAt(p.x,p.z).water.kind !== "none";
   }).some(Boolean), "water must be within 15 m of the dry bank");
+});
+
+/** Tick at which a place's own local clock shows `hour` on its first local workday (not the weekly rest day). */
+function workdayTick(place: (typeof villages)[number], hour: number) {
+  const lon = place.canonicalPosition.lon, day = [1, 2, 3, 4, 5, 6, 7].find((d) => localWeekday(tickAtLocalTime(d, 12 * HOUR, lon), lon) !== 6)!;
+  return tickAtLocalTime(day, hour * HOUR, lon);
+}
+
+test("townspeople who stand outdoors at local midday never share a spot or stand on a street", () => {
+  for (const place of [cities[0], cities[2], villages[0]]) {
+    const tick = workdayTick(place, 12), metre = sourceUnitsPerMetreAt(place.z), plan = settlementExteriorFor(place), standing: { code: string; task: string; e: number; n: number; x: number; z: number }[] = [];
+    for (let index = 0; index < populationOf(place); index++) {
+      const r = residentAt(place, index, tick);
+      assert.deepEqual(residentAt(place, index, tick).x, r.x, "standing slots are a pure function of place, resident and tick");
+      if (r.indoors || r.travelProgress !== undefined) continue;
+      standing.push({ code: r.code, task: r.task, e: r.x / metre.x, n: r.z / metre.z, x: r.x, z: r.z });
+    }
+    assert.ok(standing.length > populationOf(place) * .3, `${place.name}: many townspeople are outdoors at midday (${standing.length})`);
+    // Grid of 2 m cells: every pair within 0.6 m is in the same or an adjacent cell.
+    const cells = new Map<string, typeof standing>();
+    for (const p of standing) {
+      const key = `${Math.floor(p.e / 2)}/${Math.floor(p.n / 2)}`;
+      (cells.get(key) ?? cells.set(key, []).get(key)!).push(p);
+    }
+    let closest = Infinity;
+    for (const [key, list] of cells) {
+      const [cx, cz] = key.split("/").map(Number);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (const a of list) for (const b of cells.get(`${cx + dx}/${cz + dz}`) ?? []) {
+        if (a === b) continue;
+        const d = Math.hypot(a.e - b.e, a.n - b.n);
+        closest = Math.min(closest, d);
+        assert.ok(d >= .6, `${place.name}: ${a.code} (${a.task}) and ${b.code} (${b.task}) are ${d.toFixed(2)} m apart`);
+      }
+    }
+    // Nobody stands on the carriageway of a street.
+    for (const p of standing) for (const street of plan.streets) for (let i = 1; i < street.points.length; i++) {
+      const a = street.points[i - 1], b = street.points[i], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, qx = wrapSourceX(p.x - a.x), qz = p.z - a.z,
+        t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / (dx * dx + dz * dz || 1)));
+      assert.ok(Math.hypot(qx - dx * t, qz - dz * t) >= street.width / 2, `${place.name}: ${p.code} (${p.task}) stands on ${street.id}`);
+    }
+  }
+});
+
+test("a city does not pile its clergy and children onto one spot at the well", () => {
+  const place = cities[2], tick = workdayTick(place, 12), well = settlementExteriorFor(place).plots.find((plot) => plot.kind === "well")!.candidates[0], metre = sourceUnitsPerMetreAt(place.z);
+  let nearWell = 0, within1m = 0;
+  for (let index = 0; index < populationOf(place); index++) {
+    const r = residentAt(place, index, tick);
+    if (r.indoors || r.travelProgress !== undefined) continue;
+    const d = Math.hypot(wrapSourceX(r.x - well.x) / metre.x, (r.z - well.z) / metre.z);
+    if (d < 15) nearWell++;
+    if (d < 1) within1m++;
+  }
+  assert.ok(nearWell < 120, `${nearWell} townspeople within 15 m of the well`);
+  assert.equal(within1m, 0, "nobody stands on the well itself");
 });
