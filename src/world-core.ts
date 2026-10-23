@@ -340,8 +340,8 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
-function roadProfileHeightAt(x: number, z: number, road: Road) {
-  const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
+function roadProfileHeightAt(x: number, z: number, road: Road, nearest = roadTangentAt(x,z,road)) {
+  const path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
     a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
   let profile=roadProfileHeights.get(key);
   if(!profile){
@@ -432,13 +432,17 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
     const distance = roadMatch.distance,
       carriagewayRadius = roadWidthM(road) / (2 * CANONICAL_METRES_PER_SOURCE_UNIT),
       weight = 1 - smooth(clamp01((distance - carriagewayRadius) / (ROAD_SHOULDER_M / CANONICAL_METRES_PER_SOURCE_UNIT))),
+      tangent = roadTangentAt(x,z,road),
+      // Earthwork limits belong to one canonical road cross-section. Applying
+      // cut/fill separately to each off-center natural point can tilt a flat
+      // roadbed >8% across its actual 4–8 metre carriageway.
+      centerGroundHeight = naturalSurfaceBaseAt(tangent.cx,tangent.cz).groundHeight,
       initialRoadHeight = boundedEarthwork(
-        roadProfileHeightAt(x, z, road),
-        base.groundHeight,
+        roadProfileHeightAt(x, z, road, tangent),
+        centerGroundHeight,
         4,
         3,
       ),
-      tangent = roadTangentAt(x,z,road),
       crossing = freshwaterCrossingAt(tangent.cx,tangent.cz,tangent.x,tangent.z),
       pierM = crossing ? Math.min(5,(RURAL_BRIDGE_MAX_LENGTH_M-crossing.spanM)/2) : 0;
     let roadHeight=initialRoadHeight,deckHeight:number|undefined;
