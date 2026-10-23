@@ -518,7 +518,10 @@ function applyPresentation() {
     globe.setVisible(false);
     globe.setBlend(0);
     const distance = view.halfHeight * 2.2 + 200;
-    const elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : Math.PI / 3;
+    // RPG close-up: the camera lowers from a 60° map view to 34° at character zoom, so upright
+    // people and buildings keep true relative proportions and painted characters read as drawn.
+    const closeUp = Math.max(0, Math.min(1, (Math.log(4) - Math.log(Math.max(view.halfHeight, 1e-6))) / (Math.log(4) - Math.log(0.5)))),
+      elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : (60 - 26 * closeUp) * Math.PI / 180;
     const horizontal = distance * Math.cos(elevationAngle);
     camera.setPosition(
       focusRender.x + Math.sin(view.yaw) * horizontal,
