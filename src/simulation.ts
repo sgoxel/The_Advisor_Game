@@ -500,10 +500,13 @@ function streetGraphFor(place: Place): StreetGraph {
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
   return graph;
 }
-function nearestNode(graph: StreetGraph, offset: Offset) {
+/** Find the actual closest indexed street vertex, not the first occupied
+ * grid bucket. An adjacent cell can contain a closer vertex, especially at
+ * cell boundaries. After ring r, unseen cells start at least r cells away. */
+export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">, offset: Offset) {
   let best = -1, bestDistance = Infinity;
   const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
-  for (let ring = 0; ring < 40 && best < 0; ring++)
+  for (let ring = 0; ring < 40; ring++) {
     for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
       for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
@@ -511,6 +514,8 @@ function nearestNode(graph: StreetGraph, offset: Offset) {
         if (d < bestDistance) { best = id; bestDistance = d; }
       }
     }
+    if (best >= 0 && bestDistance <= ring * graph.cell) break;
+  }
   return best;
 }
 /** Sample the authoritative final surface every 2 physical metres, including endpoints.
