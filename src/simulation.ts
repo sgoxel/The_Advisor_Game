@@ -666,6 +666,8 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
   for (let step = 1; step <= index; step++) {
     if (plan[step].anchor === plan[step - 1].anchor) continue;
     advance(plan[step].start);
+    if (!leg && !blocked && actualAnchor === plan[step - 1].anchor)
+      actuallyIndoors = plan[step - 1].indoors;
     const next = plan[step],
       destination = standingSpot(foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
       origin = actualAnchor,
