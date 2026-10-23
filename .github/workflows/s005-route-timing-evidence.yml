@@ -1,0 +1,24 @@
+name: S005 temporary four-scale route timing evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - tests/browser/routes.spec.js
+      - .github/workflows/s005-route-timing-evidence.yml
+permissions:
+  contents: read
+jobs:
+  route-timings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Four-scale explicit route answers on software WebGL2
+        run: timeout 8m xvfb-run -a npx playwright test --config playwright.fallback.config.js tests/browser/routes.spec.js --grep "S005 selected route has a bounded first display opportunity"
