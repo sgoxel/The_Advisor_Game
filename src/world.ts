@@ -167,6 +167,23 @@ function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: Res
   resolution.homes.set(plot.id, chosen);
   return plot;
 }
+/** Resolve one canonical home against the same legal lot and street frontage as
+ * the rendered building. Unlike candidate[0], this may be absent or shifted. */
+export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x: number; z: number } | undefined {
+  const plan = settlementExteriorFor(place),
+    resolution = resolveStaticPlan(place, plan),
+    plot = resolveHome(place, plan, resolution, index),
+    point = resolution.homes.get(plot.id);
+  if (!point) return undefined;
+  const street = settlementStreetAt(plan, point.x, point.z);
+  if (!street) return point;
+  const dx = wrapSourceX(street.x - point.x), dz = street.z - point.z,
+    distance = Math.hypot(dx, dz);
+  if (!distance) return point;
+  const edgeOffset = Math.min(distance * .9, plot.depth * .5);
+  return { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset };
+}
+
 export function settlementPresentationCacheState() {
   let homeAnchors = 0;
   for (const resolution of resolvedSettlements.values()) homeAnchors += resolution.homes.size;
