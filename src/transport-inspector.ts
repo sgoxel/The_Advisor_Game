@@ -17,7 +17,7 @@ import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRequiredBridgeCut, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRequiredBridgeCut, transportWalkingRoute, transportWalkingDetourAfterUnsafeRoad, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 import { createSiteRouteTimings } from "./transport-answer-timings.ts";
@@ -553,7 +553,9 @@ function renderCorridorProbe() {
     ? corridorGraphDetourPending ? " · Checking an alternative SEED graph path; physical passage not certified"
     : corridorGraphDetour
       ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km, ${(corridorGraphDetour.fantasyWalkSeconds / 3600).toFixed(2)} estimated fantasy hours (graph only)${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
-      : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
+      : selection?.kind === "bridge"
+        ? " · No non-retracing selected-bridge graph candidate found within 12 roads / 4096 states with that unsafe road excluded; physical passage NOT certified"
+        : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
     : "";
   const bridgeConstraint = corridorSelectedBridgeConstraint === "selected-bridge-unsafe"
     ? " · The selected bridge road itself failed physical sampling; excluding it cannot preserve this crossing"
@@ -703,7 +705,10 @@ function probeRouteCorridor() {
       if (unsafeRoad && route && index) requestAnimationFrame(() => {
         if (revision !== corridorProbeRevision) return;
         const excluded = new Set([unsafeRoad]);
-        corridorGraphDetour = transportWalkingRoute(index, route.from, route.to, excluded);
+        const selectedBridge = bridgeCode ? transportBridgeByCode(bridgeCode) : undefined;
+        const bridgeRoad = selectedBridge && corridorEdges.get(selectedBridge.roadCode);
+        corridorGraphDetour = bridgeCode && !bridgeRoad ? null :
+          transportWalkingDetourAfterUnsafeRoad(index, route.from, route.to, unsafeRoad, bridgeRoad);
         corridorGraphDetourPending = false;
         renderCorridorProbe();
         if (!bridgeCode) return;
@@ -711,8 +716,6 @@ function probeRouteCorridor() {
         // from stacking with the alternate path search in a single phone frame.
         requestAnimationFrame(() => {
           if (revision !== corridorProbeRevision) return;
-          const bridge = transportBridgeByCode(bridgeCode),
-            bridgeRoad = bridge && corridorEdges.get(bridge.roadCode);
           if (!bridgeRoad) return;
           if (excluded.has(bridgeRoad.code)) corridorSelectedBridgeConstraint = "selected-bridge-unsafe";
           else {

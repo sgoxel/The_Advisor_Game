@@ -306,6 +306,23 @@ export function transportWalkingRouteViaRequiredEdge(
 }
 
 /**
+ * After a physically unsafe road is observed, preserve a player's explicitly
+ * selected SEED bridge in any alternate graph hypothesis. An unconstrained
+ * shortest path may bypass it and cannot answer the same crossing question.
+ * Both algorithms are finite; a null constrained result proves no candidate
+ * within its 12-road/4096-state budget, not physical disconnection.
+ */
+export function transportWalkingDetourAfterUnsafeRoad(
+  index: Index, from: string, to: string, unsafeRoadCode: string,
+  requiredBridge?: Pick<TransportRoadEdge, "code" | "from" | "to">,
+): WalkingResult {
+  const excluded = new Set([unsafeRoadCode]);
+  return requiredBridge
+    ? transportWalkingRouteViaRequiredEdge(index, from, to, requiredBridge, excluded)
+    : transportWalkingRoute(index, from, to, excluded);
+}
+
+/**
  * On-demand necessary-condition proof for a selected bridge after excluding
  * known physically unsafe SEED roads. Remove the required bridge and flood
  * only the components containing the four relevant canonical graph nodes.
