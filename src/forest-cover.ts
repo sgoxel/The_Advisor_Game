@@ -11,7 +11,7 @@ export function forestCoverForTile(tile: Tile) {
     patches: ForestCover[] = [];
   if (tile.size > 256) return { patches, fine };
   const clearings = nearbyWilderness(tile.minX+tile.size/2,tile.minZ+tile.size/2,tile.size+8,24)
-    .filter(site=>!["forest","lake","waterfall","hill"].includes(site.kind));
+    .filter(site=>!["forest","lake","waterfall","hill"].includes(site.kind)&&!(site.kind==='cliff'&&site.code.includes('/COUNTRYSIDE/')));
   for (let gz = Math.floor(tile.minZ / spacing); gz < Math.ceil((tile.minZ + tile.size) / spacing); gz++) {
     const latitude = sourceToLonLat(0, (gz + .5) * spacing).lat,
       columns = Math.max(1, Math.floor(SOURCE_PRESENTATION_WIDTH * (fine ? Math.max(.15, Math.cos(latitude)) : 1) / spacing)),

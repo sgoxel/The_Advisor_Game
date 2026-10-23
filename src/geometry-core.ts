@@ -1,4 +1,5 @@
 import { roadWidthM, roadNormalSource } from "./road-dimensions.ts";
+import { landformAt } from './wilderness-terrain.ts';
 import {elevationToRenderY} from "./render-frame.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
@@ -221,7 +222,19 @@ export function terrainTint(
 
   // Hydrology and prepared ground come from the composed surface, never from a
   // parallel river/road/settlement hit test in presentation code.
-  if (surface.water.kind === "river" && !featureFootprintSource) return color(76, 128, 148);
+  if (surface.water.kind === "river" && !featureFootprintSource) {
+    const fall=landformAt(x,z);
+    return fall?.f.kind==='waterfall'&&Math.abs(fall.b)<6?color(211,232,228):color(76,128,148);
+  }
+  if(surface.water.kind==='lake'){
+    const local=featureFootprintSource>0?landformAt(x,z):undefined;
+    if(local){
+      const coverage=Math.min(1,(local.f.radiusM*2/(featureFootprintSource*CANONICAL_METRES_PER_SOURCE_UNIT))**2*.65),
+        ground=sample.forestFamily==='conifer-boreal'?TERRAIN_PALETTE['conifer-forest']:sample.forestFamily?TERRAIN_PALETTE['temperate-forest']:TERRAIN_PALETTE.grassland;
+      return blendColor(ground,TERRAIN_PALETTE.lake,coverage);
+    }
+    return [...TERRAIN_PALETTE.lake];
+  }
 
   if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")
     return color(112, 92, 62);
@@ -331,6 +344,13 @@ export function terrainTint(
       shade=Math.max(.58,Math.min(1.25,(Math.SQRT1_2-(gx+gz)*.5)/(Math.SQRT1_2*Math.sqrt(1+gx*gx+gz*gz))));
     const reliefWeight=smoothstep(.15,.4,macro.mountainIntensity);
     result=result.map(v=>Math.max(0,Math.min(255,v*(1+(shade-1)*reliefWeight)))) as [number,number,number];
+  }
+  const formation=landformAt(x,z);
+  if(formation&&surface.water.kind==='none'){
+    const {f,a,b,r}=formation;
+    if((f.kind==='cliff'||f.kind==='waterfall')&&Math.abs(b)<7)result=blendColor(result,TERRAIN_PALETTE.cliff,(1-r)*.95);
+    const shade=1+(1-r)*(-a/f.radiusM*.35-b/f.radiusM*.25);
+    result=result.map(v=>Math.max(0,Math.min(255,v*shade))) as [number,number,number];
   }
   return result;
 }

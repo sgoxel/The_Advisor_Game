@@ -1,4 +1,5 @@
 import { macroLakes } from "./macro-geography.ts";
+import { nearbyLandforms } from './wilderness-terrain.ts';
 import { climateSampleAt } from "./climate.ts";
 import { nearestPlace } from "./geography.ts";
 import { naturalSurfaceAt, drainageSegmentsInBounds } from "./hydrology.ts";
@@ -88,6 +89,16 @@ export function nearbyWilderness(x:number,z:number,radius:number,limit=18) {
     if(Math.hypot(wrapSourceX(p.x-x),p.z-z)>radius)continue;
     const water=naturalSurfaceAt(p.x,p.z);if(water.water.kind!=="lake")continue;
     const variant=digest(lake.code);found.push({code:lake.code,name:`${["Silver","Reed","Still","Moon"][variant%4]} Lake`,kind:"lake",x:p.x,z:p.z,canonicalPosition:{...lake.center,elevation:water.water.level},radiusM:100,variant,yaw:0,description:descriptions.lake});
+  }
+  for(const f of nearbyLandforms(x,z,radius)){
+    if(Math.hypot(wrapSourceX(f.x-x),f.z-z)>radius)continue;
+    const surface=finalSurfaceAt(f.x,f.z),prefix=['Raven','Silver','Briar','Moss'][f.variant%4],suffix=names[f.kind][(f.variant>>>4)%names[f.kind].length];
+    found.push({code:f.code,name:`${prefix} ${suffix}`,kind:f.kind,x:f.x,z:f.z,canonicalPosition:{...sourceToLonLat(f.x,f.z),elevation:surface.water.kind==='none'?surface.groundHeight:surface.water.level},radiusM:f.radiusM,variant:f.variant,yaw:f.yaw,description:descriptions[f.kind]});
+    if(f.kind==='cliff'){
+      const metric=sourceUnitsPerMetreAt(f.z),px=wrapSourceX(f.x+Math.sin(f.yaw)*5*metric.x),pz=f.z-Math.cos(f.yaw)*5*metric.z,
+        kind=(f.variant>>>13)&1?'cave':'mine',ground=finalSurfaceAt(px,pz);
+      if(ground.water.kind==='none'&&ground.walkable)found.push({code:`${f.code}/ENTRANCE`,name:`${prefix} ${names[kind][f.variant%3]}`,kind,x:px,z:pz,canonicalPosition:{...sourceToLonLat(px,pz),elevation:ground.groundHeight},radiusM:16,variant:f.variant,yaw:f.yaw,description:descriptions[kind]});
+    }
   }
   return found.sort((a,b)=>Math.hypot(wrapSourceX(a.x-x),a.z-z)-Math.hypot(wrapSourceX(b.x-x),b.z-z)).slice(0,limit);
 }

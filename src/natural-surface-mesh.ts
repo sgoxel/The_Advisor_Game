@@ -1,4 +1,6 @@
 import type { Geometry } from "./geometry.ts";
+import { nearbyLandforms } from './wilderness-terrain.ts';
+import { sourceUnitsPerMetreAt } from './physical-scale.ts';
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
@@ -59,6 +61,7 @@ export function rebuildNaturalSurface(
   };
   if (tile.size > NATURAL_MESH_LIMITS.maximumTile) return unchanged;
 
+  const formations=tile.size<=512?nearbyLandforms(tile.minX+tile.size/2,tile.minZ+tile.size/2,tile.size):[];
   const segments =
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
@@ -113,7 +116,7 @@ export function rebuildNaturalSurface(
       if (initialWet === undefined) initialWet = major;
       else if (major !== initialWet) majorBoundary = true;
     }
-  if (!segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace) return unchanged;
+  if (!formations.length && !segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace) return unchanged;
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
@@ -288,13 +291,14 @@ export function rebuildNaturalSurface(
         preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) <= size * Math.SQRT2 / 2 + 2),
       materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
       prepared = road || (preparedPlace && materialBoundary),
-      target = bridgeBank ? Math.max(0.25, tile.size / 256) : river
+      formation=formations.find(f=>{const m=sourceUnitsPerMetreAt(f.z);return Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z;}),
+      target = formation ? Math.max(tile.size/128,formation.kind==='waterfall'?.125:formation.kind==='hill'?1:.5) : bridgeBank ? Math.max(0.25, tile.size / 256) : river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
             tile.size / 32,
           ))
         : prepared ? Math.max(0.5, tile.size / 64) : Math.max(2, tile.size / 128);
-    if (size > target && (river || major || nearCoast || prepared)) {
+    if (size > target && (formation || river || major || nearCoast || prepared)) {
       visit(x, z, half);
       visit(x, z + half, half);
       visit(x + half, z + half, half);
@@ -322,7 +326,7 @@ export function rebuildNaturalSurface(
   // normalled edge vertices. Tests can validate canonical top heights directly.
   const surfaceVertices = positions.length / 3;
 
-  const borderStep = segments.length
+  const borderStep = formations.length ? Math.max(tile.size/128,.125) : segments.length
     ? Math.max(tile.size / 128, Math.min(tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5, tile.size / 32))
     : Math.max(4, tile.size / 128);
   for (let edge = 0; edge < 4; edge++)

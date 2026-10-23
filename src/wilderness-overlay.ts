@@ -6,7 +6,7 @@ export function createWildernessOverlay(inspect:(site:WildernessSite)=>void) {
   const root=document.createElement("div");root.id="wilderness-labels";document.body.append(root);
   const nodes=new Map<string,HTMLButtonElement>();let last=0;
   return (x:number,z:number,halfHeight:number,scale:number,transition:number,project:(x:number,z:number)=>{x:number;y:number})=>{
-    if(transition>.01||scale>250){root.hidden=true;return;}root.hidden=false;
+    if(transition>.01||scale>250||scale<1){root.hidden=true;return;}root.hidden=false;
     const now=performance.now();if(now-last<180)return;last=now;
     const visible=new Set<string>(),positions:{x:number;y:number}[]=[],limit=innerWidth<600?8:16;
     for(const site of nearbyWilderness(x,z,Math.min(600,Math.max(24,halfHeight*2)),40)) {

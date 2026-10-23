@@ -82,9 +82,10 @@ class Builder {
   }
 
   groundCanopy(x:number,z:number,radiusM:number,variant:number,originX:number,originZ:number,tint:RGB){
-    const metric=sourceUnitsPerMetreAt(z),angle=variantAngle(variant),ground=(dx:number,dz:number):Point=>{
+    const metric=sourceUnitsPerMetreAt(z),angle=variantAngle(variant),ground=(dx:number,dz:number)=>{
       const px=x+dx*metric.x,pz=z+dz*metric.z;
-      return[px-originX,elevationToRenderY(finalSurfaceAt(px,pz).groundHeight+.045),pz-originZ];
+      const surface=finalSurfaceAt(px,pz);
+      return {p:[px-originX,elevationToRenderY(surface.groundHeight+.045),pz-originZ] as Point,valid:surface.water.kind==='none'&&surface.walkable&&surface.vegetationDensityScale>=.4};
     };
     // Coordinates already in source/render units. Six terrain-conforming triangles, no trunks, volume or shadows.
     this.origin={x:0,y:0,z:0,sx:1,sy:1,sz:1};
@@ -92,7 +93,8 @@ class Builder {
     for(let i=0;i<6;i++){
       const a=angle+i*Math.PI/3,b=a+Math.PI/3,r=radiusM*(.88+((variant>>>(i*3))&7)*.025),
         A=ground(Math.cos(a)*r,Math.sin(a)*r),B=ground(Math.cos(b)*radiusM,Math.sin(b)*radiusM);
-      this.triangle(centre,B,A,tint);
+      const middle=ground((Math.cos(a)*r+Math.cos(b)*radiusM)/3,(Math.sin(a)*r+Math.sin(b)*radiusM)/3);
+      if(centre.valid&&A.valid&&B.valid&&middle.valid&&Math.max(Math.abs(A.p[1]-centre.p[1]),Math.abs(B.p[1]-centre.p[1]))<radiusM*metric.z*.35)this.triangle(centre.p,B.p,A.p,tint);
     }
   }
 

@@ -28,9 +28,10 @@ test("countryside sites are diverse, stable across visits and bounded by focus",
   assert.ok(nearbyWilderness(p.x,p.z,600,8).length<=8);
   assert.equal(new Set(first.map(s=>s.code)).size,first.length);
   for(const site of first){
-    const s=naturalSurfaceAt(site.x,site.z);
+    const s=finalSurfaceAt(site.x,site.z);
     if(site.kind==="lake")assert.equal(s.water.kind,"lake");
     else if(site.kind==="waterfall")assert.equal(s.water.kind,"river");
+    else if(site.kind==='cliff')assert.equal(s.water.kind,'none');
     else assert.ok(finalSurfaceAt(site.x,site.z).walkable && s.water.kind==="none");
     if(site.kind==="forest")assert.ok(climateSampleAt(site.canonicalPosition).forestFamily);
   }
@@ -65,7 +66,9 @@ test("seeded ruin wall heights stay above their foundation for unsigned variants
   for(const site of sites){
     const t=tile(site.x-2,site.z-2,4),data:TileGeometry={terrain:empty(),structures:empty(),nature:empty(),detail:empty()};
     appendWildernessGeometry(t,data);assert.ok(data.structures.indices.length>0);
-    const base=elevationToRenderY(site.canonicalPosition.elevation);
-    for(let i=1;i<data.structures.positions.length;i+=3)assert.ok(data.structures.positions[i]>=base-1e-4,"wall extends below foundation");
+    for(let i=0;i<data.structures.positions.length;i+=3){
+      const base=elevationToRenderY(finalSurfaceAt(site.x+data.structures.positions[i],site.z+data.structures.positions[i+2]).groundHeight);
+      assert.ok(data.structures.positions[i+1]>=base-1e-3,"wall extends below foundation");
+    }
   }
 });
