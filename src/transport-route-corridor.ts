@@ -249,7 +249,7 @@ export function transportProbeFrameBudgetReached(completed: number, elapsedMs: n
 /** One read-only reason for the selected station's actual upper final surface. */
 export function sampledCorridorStationFailure(
   station: CorridorStation,
-  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
+  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight" | "groundMaterialOwnerId">>,
   localRoadSlope?: number,
 ): string | null {
   const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
@@ -275,6 +275,13 @@ export function sampledCorridorStationFailure(
     return "unsupported water under bridge deck";
   if (!surface.walkable) return "blocked final surface";
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
+  // A selected road may contribute lower ground while another overlapping road
+  // wins the exposed top material. Only that actual winner is traversable here;
+  // at a real Y, the already-proven incident owners may share the junction.
+  if (surface.deckHeight === null && surface.traversal === "road" &&
+      surface.groundMaterialOwnerId !== undefined &&
+      (surface.groundMaterialOwnerId === null || !incident(surface.groundMaterialOwnerId)))
+    return "unrelated winning road surface";
   // A real shared Y has one winning final-surface modifier; it may be either
   // selected incident road. The next separate station checks the outgoing road.
   if (surface.deckHeight !== null) {
@@ -296,7 +303,7 @@ export function sampledCorridorStationFailure(
 /** A sampled PASS and its first-failure reason always use identical criteria. */
 export function sampledCorridorStationPass(
   station: CorridorStation,
-  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
+  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight" | "groundMaterialOwnerId">>,
   localRoadSlope?: number,
 ) {
   return sampledCorridorStationFailure(station, surface, localRoadSlope) === null;
