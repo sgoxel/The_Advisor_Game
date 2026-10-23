@@ -612,6 +612,16 @@ function pointAlong(path: readonly Offset[], distanceM: number): Offset {
   return path[path.length - 1];
 }
 
+/** Advance a legal path only by the Fantasy Time actually available. */
+export function timedWalkOnPath(
+  path: readonly Offset[], elapsedSeconds: number,
+): { offset: Offset; progress: number; durationSeconds: number; lengthM: number } {
+  const lengthM = pathLength(path),
+    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+    progress = Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
+  return { offset: pointAlong(path, progress * lengthM), progress, durationSeconds, lengthM };
+}
+
 /**
  * The resident's state at an absolute tick: today's seeded plan (role, age,
  * weekday, traits, mood) gives the activity and how far through it they are;
@@ -627,48 +637,75 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
-    { activity, previous, index } = activityAt(plan, second),
+    { activity, index } = activityAt(plan, second),
     end = plan[index + 1]?.start ?? 24 * HOUR,
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
-    target = standingSpot(foundation, activity.anchor, anchorOffset(place, foundation, activity.anchor), !activity.indoors),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // The walk to this place began with the first step of the run of steps at this anchor; it
-  // continues until it arrives, even if a later step at the same place has already started.
-  let arrival = index;
-  while (arrival > 0 && plan[arrival - 1].anchor === activity.anchor) arrival--;
-  const departure = plan[arrival - 1];
-  if (departure && previous) {
-    const earlier = plan.slice(0, arrival);
-    const stops = earlier
-      .filter((step, i) => i === earlier.length - 1 || step.anchor !== earlier[i + 1].anchor)
-      .map(step => ({
-        anchor: step.anchor,
-        indoors: step.indoors,
-        offset: standingSpot(foundation, step.anchor, anchorOffset(place, foundation, step.anchor), !step.indoors),
-      }));
-    const reached = lastReachableRoutineStop(stops, (a, b) => streetPath(place, a.offset, b.offset) !== null),
-      from = reached.offset, path = streetPath(place, from, target);
-    if (!path)
-      return {
-        task: `Blocked: no legal walking route to ${activity.anchor}`,
-        route: `BLOCKED: ${anchorRoute(place, foundation, reached.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
-        offset: from, activity: "rest" as ActivityKind, indoors: reached.indoors, mood,
-        ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
-      };
-    const lengthM = pathLength(path),
-      travel = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS), elapsed = second - plan[arrival].start;
-    if (elapsed < travel)
-      return {
-        task: plan[arrival].kind === "commute" ? plan[arrival].task : `Walking to ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}`,
-        route: `${anchorRoute(place, foundation, departure.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
-        offset: pointAlong(path, (elapsed / travel) * lengthM), activity: "commute" as ActivityKind, indoors: false, mood,
-        ...timing, travelProgress: elapsed / travel, travelDistanceM: lengthM,
-      };
+  // Replay only changed anchors from absolute Fantasy Time. A later routine
+  // never starts from an endpoint that an earlier walk did not actually reach.
+  let offset = standingSpot(foundation, plan[0].anchor, anchorOffset(place, foundation, plan[0].anchor), !plan[0].indoors),
+    actualAnchor: RoutineAnchor | "en route" = plan[0].anchor,
+    actuallyIndoors = plan[0].indoors;
+  type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
+  let leg: Leg | undefined;
+  let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
+  const advance = (atSecond: number) => {
+    if (!leg) return;
+    const moved = timedWalkOnPath(leg.path, atSecond - leg.start);
+    offset = moved.offset;
+    if (moved.progress >= 1) {
+      actualAnchor = leg.destination;
+      actuallyIndoors = false;
+      leg = undefined;
+    } else {
+      actualAnchor = "en route";
+      actuallyIndoors = false;
+    }
+  };
+  for (let step = 1; step <= index; step++) {
+    if (plan[step].anchor === plan[step - 1].anchor) continue;
+    advance(plan[step].start);
+    const next = plan[step],
+      destination = standingSpot(foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
+      origin = actualAnchor,
+      path = streetPath(place, offset, destination);
+    if (!path) {
+      leg = undefined;
+      blocked = { origin, destination: next.anchor };
+    } else {
+      leg = { path, start: next.start, origin, destination: next.anchor };
+      blocked = undefined;
+    }
   }
+  if (leg) {
+    const moved = timedWalkOnPath(leg.path, second - leg.start);
+    if (moved.progress < 1)
+      return {
+        task: `Walking to ${leg.destination === "work" ? "work" : leg.destination === "home" ? "home" : `the ${leg.destination}`}`,
+        route: `${leg.origin === "en route" ? "En route" : anchorRoute(place, foundation, leg.origin)} → ${anchorRoute(place, foundation, leg.destination)}`,
+        offset: moved.offset, activity: "commute" as ActivityKind, indoors: false, mood,
+        ...timing, travelProgress: moved.progress, travelDistanceM: moved.lengthM,
+      };
+    offset = moved.offset;
+  }
+  if (blocked)
+    return {
+      task: `Blocked: no legal walking route to ${blocked.destination}`,
+      route: `BLOCKED: ${blocked.origin === "en route" ? "en route" : anchorRoute(place, foundation, blocked.origin)} → ${anchorRoute(place, foundation, blocked.destination)}`,
+      offset, activity: "rest" as ActivityKind, indoors: actuallyIndoors, mood,
+      ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+    };
   // A walk that arrived before the next step begins becomes waiting at the destination.
   const arrived = activity.kind === "commute";
-  return { task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` : activity.anchor === "work" && activity.kind === "work" && (foundation.workOffset as ActivitySite).label ? workTask(foundation) : activity.task, route: anchorRoute(place, foundation, activity.anchor), offset: target, activity: (arrived ? "rest" : activity.kind) as ActivityKind, indoors: activity.indoors, mood, ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined };
+  return {
+    task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` :
+      activity.anchor === "work" && activity.kind === "work" && (foundation.workOffset as ActivitySite).label ? workTask(foundation) : activity.task,
+    route: anchorRoute(place, foundation, activity.anchor), offset,
+    activity: (arrived ? "rest" : activity.kind) as ActivityKind,
+    indoors: activity.indoors, mood, ...timing,
+    travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+  };
 }
 function legalPosition(
   place: Place,
