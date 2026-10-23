@@ -13,6 +13,9 @@ on:
       - ".github/workflows/s004-settlement-evidence.yml"
 permissions:
   contents: read
+concurrency:
+  group: s004-settlement-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   evidence:
     strategy:
@@ -20,6 +23,7 @@ jobs:
       matrix:
         renderer: [webgpu, webgl2]
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -19,6 +19,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: s004-site-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   webgl2-evidence:
     runs-on: macos-latest
