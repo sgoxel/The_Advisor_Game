@@ -874,6 +874,15 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.equal(sampledCorridorStationPass(joined, {
     ...dry, contributingModifierIds: [otherIncident.code],
   }), true, "an actual third graph-incident Y winner may own the single sampled junction");
+  assert.equal(sampledCorridorStationPass(joined, {
+    ...dry, groundMaterialOwnerId: otherIncident.code,
+    contributingModifierIds: [a.code, otherIncident.code],
+  }), true, "the actual physically incident third road may win the top material at a shared Y");
+  assert.equal(sampledCorridorStationFailure(station, {
+    ...dry, groundMaterialOwnerId: unrelatedCrossing.code,
+    contributingModifierIds: [a.code, unrelatedCrossing.code],
+  }), "unrelated winning road surface",
+  "a lower selected road modifier cannot make an unrelated top road traversable");
   assert.equal(sampledCorridorStationPass(result.stations[3], {
     ...dry, contributingModifierIds: [otherIncident.code],
   }), false, "the legacy two-route-edge verdict cannot infer an unregistered junction");

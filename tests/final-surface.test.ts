@@ -86,10 +86,18 @@ test("road grading changes exposed-ground channels coherently", () => {
   assert.equal(result.surfaceHeight, 3);
   assert.equal(result.material, "Road");
   assert.equal(result.groundMaterial, "Road");
+  assert.equal(result.groundMaterialOwnerId, "road/1");
   assert.equal(result.walkable, true);
   assert.equal(result.traversal, "road");
   assert.equal(result.vegetationDensityScale, 0);
   assert.equal(result.reservedUse, "road/1");
+  const shared = composeFinalSurface(dry, [
+    { id: "road/z", priority: WORLD_BUILDING_PRIORITIES.road, material: "Road" },
+    { id: "road/a", priority: WORLD_BUILDING_PRIORITIES.road, material: "Road" },
+  ]);
+  assert.deepEqual(shared.contributingModifierIds, ["road/a", "road/z"]);
+  assert.equal(shared.groundMaterialOwnerId, "road/z",
+    "the last canonical material modifier is the actual top ground owner");
 });
 
 test("later earthwork cannot erase hydrology; legal crossing uses a separate deck", () => {
