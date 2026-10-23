@@ -16,6 +16,7 @@ import { WORLD_SEED } from "./config.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
 import {
+  SETTLEMENT_ICON_FROM_SCALE, politicalScaleDenominator,
   POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
   POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
   politicalOverlayOpacity,
@@ -92,11 +93,7 @@ function publishLabelLayout(signature: string) {
   window.dispatchEvent(new Event("advisor-political-label-layout"));
 }
 
-function denominator(scaleLabel: string) {
-  const match = /1\/(\d+)/.exec(scaleLabel),
-    value = match ? Number(match[1]) : Number.NaN;
-  return Number.isFinite(value) ? value : 10_000;
-}
+const denominator = politicalScaleDenominator;
 
 function projectionTransition(state: AtlasState) {
   if (Number.isFinite(state.handoff?.projectionTransition))
@@ -328,8 +325,8 @@ function focusedSiteLabelClearance(state: AtlasState, scale: number): Rect[] {
 }
 
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
-  if (iconsShown !== (scale >= 50)) {
-    iconsShown = scale >= 50;
+  if (iconsShown !== (scale >= SETTLEMENT_ICON_FROM_SCALE)) {
+    iconsShown = scale >= SETTLEMENT_ICON_FROM_SCALE;
     labelSizes.clear();
   }
   const root = $("political-labels"),

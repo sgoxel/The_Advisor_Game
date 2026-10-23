@@ -40,3 +40,15 @@ test("player-facing labels use the canonical slash scale form", () => {
   for (const halfHeight of [HANDOFF_LOCAL_HALF_HEIGHT, HANDOFF_GLOBE_HALF_HEIGHT, 97])
     assert.match(scaleLabelForHalfHeight(halfHeight), /^1\/(10|20|50|100|250|500|1000|2500|5000|10000)$/);
 });
+
+
+test("Hero/Close labels stay inward of the shared 1/5 settlement icon boundary", async () => {
+  const {SETTLEMENT_ICON_FROM_SCALE, politicalScaleDenominator:scale} = await import("../src/political-presentation.ts");
+  const {MIN_HALF_HEIGHT, HERO_HALF_HEIGHT} = await import("../src/handoff.ts");
+  assert.equal(scaleLabelForHalfHeight(MIN_HALF_HEIGHT), "Hero");
+  assert.equal(scaleLabelForHalfHeight(HERO_HALF_HEIGHT), "Hero");
+  assert.ok(Math.abs(canonicalFootprintForHalfHeight(HERO_HALF_HEIGHT) - 1274200*.2/10000)<1e-8);
+  assert.equal(SETTLEMENT_ICON_FROM_SCALE, 5);
+  for (const label of ["Hero", "Close", "1/1", "1/2"]) assert.ok(scale(label)<SETTLEMENT_ICON_FROM_SCALE);
+  for (const label of ["1/5", "1/10", "1/100"]) assert.ok(scale(label)>=SETTLEMENT_ICON_FROM_SCALE);
+});

@@ -1,4 +1,5 @@
 import {
+  CANONICAL_PLANET_DIAMETER,
   canonicalFootprintForHalfHeight,
   halfHeightForCanonicalFootprint,
 } from "./planet.ts";
@@ -10,6 +11,8 @@ export const HANDOFF_GLOBE_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF
 /** Closest zoom: about 2.7 m of half-height, so a 1.7 m character fills about a third of the screen (RPG close-up). */
 export const MIN_HALF_HEIGHT = 0.18;
 export const SCALE_LADDER = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
+/** Startup and Home use the exact Hero menu stop, above the wheel zoom clamp. */
+export const HERO_HALF_HEIGHT = halfHeightForCanonicalFootprint(CANONICAL_PLANET_DIAMETER * SCALE_LADDER[0] / 10000);
 
 /**
  * The local mesh is authoritative at the inner anchor, but it becomes a coarse,

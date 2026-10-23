@@ -1,3 +1,4 @@
+import {SETTLEMENT_ICON_FROM_SCALE} from "./political-presentation.ts";
 import {closeLightingEnabled, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
@@ -83,7 +84,7 @@ import {
   advanceProjectionTransition,
   scaleLabelForHalfHeight,
   SCALE_LADDER,
-  MIN_HALF_HEIGHT,
+  MIN_HALF_HEIGHT, HERO_HALF_HEIGHT,
   scaleValueForHalfHeight,
   scaleOptionLabel,
 } from "./handoff.ts";
@@ -132,8 +133,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
 let canvas = $<HTMLCanvasElement>("world");
 const view: View = {
   x: villages[0].x,
-  z: villages[0].z + 14,
-  halfHeight: 97,
+  z: villages[0].z + metresToSource(6),
+  halfHeight: HERO_HALF_HEIGHT,
   aspect: innerWidth / innerHeight,
   yaw: -0.22,
   pixels: innerHeight,
@@ -230,7 +231,7 @@ const uploads: {
 }[] = [];
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
-let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < 50;
+let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
 let closeLightingVisible = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
@@ -585,7 +586,7 @@ function updateCamera() {
   document.body.dataset.roadRepresentation=roadRepresentation;
   terrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
   coarseTerrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
-  const showDetails = scaleValueForHalfHeight(view.halfHeight) < 50;
+  const showDetails = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
   document.body.classList.toggle("settlement-overview", !showDetails);
   const showLighting = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
   if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible) {
@@ -1139,7 +1140,7 @@ function setupControls() {
   );
   $("home").onclick = () => {
     view.yaw = -0.22;
-    navigate(villages[0].x, villages[0].z + 14, 97);
+    navigate(villages[0].x, villages[0].z + metresToSource(6), HERO_HALF_HEIGHT);
     $("cell-panel").hidden = true;
   };
   $("overview").onclick = () => {

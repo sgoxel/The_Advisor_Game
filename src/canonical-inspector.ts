@@ -415,24 +415,7 @@ function install(world: AdvisorWorld) {
     { capture: true },
   );
 
-  const home = (world.geography.villages as Array<{
-    canonicalPosition?: { lon: number; lat: number };
-  }> | undefined)?.[0]?.canonicalPosition;
-  const navigateHome = () => {
-    if (!home || !world.navigation?.setFocus) return;
-    world.navigation.setFocus(home.lon, home.lat);
-    world.setHalfHeight?.(97);
-  };
-  navigateHome();
-  $("home")?.addEventListener(
-    "click",
-    (event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      navigateHome();
-    },
-    { capture: true },
-  );
+
 }
 
 function waitForWorld() {

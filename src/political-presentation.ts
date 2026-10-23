@@ -1,3 +1,12 @@
+/** Settlement meshes stay cached while icons own overview presentation. */
+export const SETTLEMENT_ICON_FROM_SCALE = 5;
+export function politicalScaleDenominator(label:string):number {
+  if (label === "Hero") return .2;
+  if (label === "Close") return .5;
+  const match = /1\/(\d+(?:\.\d+)?)/.exec(label);
+  return match ? Number(match[1]) : 10_000;
+}
+
 export type PoliticalPresentation = "flat" | "globe" | "transition";
 
 /** Country borders are a Country-and-closer aid; Realm views stay uncluttered. */
