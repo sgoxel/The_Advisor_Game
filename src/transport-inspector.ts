@@ -107,6 +107,9 @@ let lastRoadAnswerContext: FirstAnswerContext | null = null;
 let pendingNearestRoadOnWorld = false;
 let roadRequestedAt: number | null = null;
 let lastSiteRouteMs: number | null = null;
+// One-shot time through a display opportunity, separate from graph computation.
+let lastSiteRouteFrameMs: number | null = null;
+let siteRouteFrameRevision = 0;
 let lastSiteRouteStatus = "not requested";
 let lastSiteRouteAnswerContext: FirstAnswerContext | null = null;
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
@@ -734,7 +737,9 @@ function chooseNearestSiteRoute() {
   if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled by site-route request before world readiness";
   pendingNearestRoadOnWorld = false;
   roadRequestedAt = null;
-  const started = siteRouteRequestedAt ?? performance.now(), runtime = world();
+  const started = siteRouteRequestedAt ?? performance.now(), runtime = world(),
+    frameRevision = ++siteRouteFrameRevision;
+  lastSiteRouteFrameMs = null;
   siteRoute = null;
   pendingSiteRouteOnWorld = !runtime;
   if (!runtime) lastSiteRouteStatus = "world authority pending";
@@ -788,6 +793,16 @@ function chooseNearestSiteRoute() {
   // Route state is independent of map navigation; repaint the local overlay now.
   lastFingerprint = "";
   refreshOverlay(true);
+  if (runtime) {
+    // Two one-shot animation frames allow the new route DOM and SVG preview
+    // a display opportunity. This is NOT a measured pixel-paint timestamp,
+    // nor a 3D mesh-settling timer. Stale/cancelled views cannot win.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (frameRevision !== siteRouteFrameRevision || panel.hidden) return;
+      lastSiteRouteFrameMs = performance.now() - started;
+      renderMetrics();
+    }));
+  }
 }
 
 let lastSummaryMarkup = "";
@@ -819,7 +834,7 @@ function renderMetrics() {
       <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions + ${transportAcceptanceSummary().siteAccessBranches} canonical site branches</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
       <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}${firstAnswerContextText(lastRoadAnswerContext)}</dd>
-      <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}${firstAnswerContextText(lastSiteRouteAnswerContext)}</dd>
+      <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms calculation`}${lastSiteRouteFrameMs === null ? "" : ` · ${lastSiteRouteFrameMs.toFixed(2)} ms display-frame opportunity`}${firstAnswerContextText(lastSiteRouteAnswerContext)}</dd>
       <dt>Physical site approach</dt><dd>${siteProbeStatus}${siteProbeMs === null ? "" : ` · ${siteProbeMs.toFixed(2)} ms`}</dd>
       <dt>Selected-route surface diagnostic</dt><dd>${corridorProbeStatus}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
@@ -845,6 +860,8 @@ function openPanel() {
 }
 
 function chooseNearestRoad() {
+  siteRouteFrameRevision++;
+  lastSiteRouteFrameMs = null;
   pendingSiteRouteOnWorld = false;
   siteRouteRequestedAt = null;
   const started = roadRequestedAt ?? performance.now(), runtime = world();
@@ -933,6 +950,8 @@ function refreshOverlay(force = false) {
 }
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
+  siteRouteFrameRevision++;
+  lastSiteRouteFrameMs = null;
   // An explicit new selection cancels an older deferred first-road request.
   if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled by evidence selection before world readiness";
   pendingNearestRoadOnWorld = false;
@@ -1011,6 +1030,7 @@ function telemetry() {
     firstRoadInspectionStatus: lastRoadInspectionStatus,
     firstRoadInspectionContext: lastRoadAnswerContext,
     firstSiteRouteMs: lastSiteRouteMs,
+    firstSiteRouteFrameMs: lastSiteRouteFrameMs,
     firstSiteRouteStatus: lastSiteRouteStatus,
     firstSiteRouteContext: lastSiteRouteAnswerContext,
     siteAccessProbeStatus: siteProbeStatus,
@@ -1037,6 +1057,7 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  siteRouteFrameRevision++;
   if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled when inspector closed before world readiness";
   if (pendingSiteRouteOnWorld) lastSiteRouteStatus = "canceled when inspector closed before world readiness";
   pendingNearestRoadOnWorld = false;
@@ -1085,6 +1106,7 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
 };
 panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
   if (!inspectBridgeIn3D()) return;
+  siteRouteFrameRevision++;
   // Suspend unrelated route probes and deferred requests in map-only view.
   if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled for bridge clear view before world readiness";
   if (pendingSiteRouteOnWorld) lastSiteRouteStatus = "canceled for bridge clear view before world readiness";
