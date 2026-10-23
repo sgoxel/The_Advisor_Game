@@ -408,6 +408,48 @@ test("S005 bridge-selected site preview must traverse its actual road rather tha
     "do not silently retrace the selected bridge if the far bank has no other walking way to a site");
 });
 
+test("S005 unsafe canonical roads can be excluded without inventing a physically certified detour", () => {
+  const network = {
+    nodes: ["A", "B", "C", "SITE"].map(code => ({ code })),
+    roadEdges: [
+      { code: "short", from: "A", to: "B", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "unsafe", from: "B", to: "SITE", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "detour-a", from: "A", to: "C", surfaceLengthM: 4, fantasyWalkSeconds: 40 },
+      { code: "detour-b", from: "C", to: "SITE", surfaceLengthM: 3, fantasyWalkSeconds: 30 },
+      { code: "bridge", from: "B", to: "C", surfaceLengthM: 2, fantasyWalkSeconds: 20 },
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network);
+  const original = transportWalkingRoute(index, "A", "SITE");
+  assert.deepEqual(original?.edgeCodes, ["short", "unsafe"]);
+  const excluded = new Set(["unsafe"]);
+  const alternate = transportWalkingRoute(index, "A", "SITE", excluded);
+  assert.deepEqual(alternate?.edgeCodes, ["short", "bridge", "detour-b"]);
+  assert.equal(alternate?.distanceM, 6);
+  assert.equal(alternate?.fantasyWalkSeconds, 60);
+  assert.strictEqual(transportWalkingRoute(index, "A", "SITE", new Set(["unsafe"])), alternate,
+    "normalized canonical exclusions reuse the bounded per-index cache");
+  assert.strictEqual(transportWalkingRoute(index, "A", "SITE"), original,
+    "a physically unsafe exclusion must not poison ordinary preview cache entries");
+  assert.deepEqual(transportWalkingRoute(index, "A", "SITE",
+    new Set(["bridge", "unsafe"]))?.edgeCodes, ["detour-a", "detour-b"],
+    "two excluded roads cannot return through a shared junction as a fake shortcut");
+  assert.equal(transportWalkingRoute(index, "A", "SITE",
+    new Set(["unsafe", "bridge", "detour-a"])), null,
+    "no source-owned graph detour is UNAVAILABLE, not a fabricated walk");
+  assert.deepEqual(transportWalkingRouteToNearest(index, "A", ["SITE"],
+    new Set(["unsafe"]))?.edgeCodes, alternate?.edgeCodes);
+  const selectedBridge = network.roadEdges.find(edge => edge.code === "bridge")!;
+  assert.deepEqual(transportWalkingRouteThroughEdge(index, "B", selectedBridge,
+    ["SITE"], new Set(["unsafe"]))?.edgeCodes, ["bridge", "detour-b"],
+    "selected bridge is still a required real road even when avoiding a different unsafe one");
+  assert.equal(transportWalkingRouteThroughEdge(index, "B", selectedBridge,
+    ["SITE"], new Set(["bridge"])), null,
+    "a required bridge cannot be physically accepted after its own road was excluded");
+  assert.ok((alternate?.exploredNodes ?? Infinity) <= index.nodeCount,
+    "an alternative remains one finite Dijkstra graph preview, not a physical PASS");
+});
+
 test("S005 selected border bridge previews the far-bank country's site rather than retracing the crossing", () => {
   const bankA = { code: "bank-a", countryCode: "A", continent: 0 } as TransportNode,
     bankB = { code: "bank-b", countryCode: "B", continent: 0 } as TransportNode,
