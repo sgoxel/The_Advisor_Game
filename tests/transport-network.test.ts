@@ -1591,6 +1591,46 @@ test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evi
     "the selected crossing must remain on its actual graph edge");
   const bank = nodeByCode.get(crossing!.from);
   assert.ok(bank, "crossing approach must be a canonical walking node");
+
+  // Evidence-branch only: inspect the seeded graph after removing this single
+  // chosen bridge road, without changing any game route or canonical SEED data.
+  const withoutBridge = (origin: string) => {
+    const visited = new Set([origin]), todo = [origin];
+    for (let i = 0; i < todo.length; i++) {
+      for (const step of index.adjacency.get(todo[i]) ?? []) {
+        if (step.edge.code === crossing!.code || visited.has(step.node)) continue;
+        visited.add(step.node); todo.push(step.node);
+      }
+    }
+    const nodes = network.nodes.filter(node => visited.has(node.code));
+    return {
+      allCodes: visited,
+      count: visited.size,
+      y: nodes.filter(node => node.kind === "junction").length,
+      sites: nodes.filter(node => node.kind === "site").length,
+      villages: nodes.filter(node => node.kind === "village").length,
+      sameCountrySites: nodes.filter(node =>
+        node.kind === "site" && node.countryCode === nodeByCode.get(origin)?.countryCode).length,
+      sampleY: nodes.filter(node => node.kind === "junction").slice(0, 2).map(node => node.code),
+      sampleSites: nodes.filter(node => node.kind === "site").slice(0, 2).map(node => node.code),
+    };
+  };
+  const nearComponent = withoutBridge(crossing!.from),
+    farComponent = withoutBridge(crossing!.to);
+  console.log("S005_BRIDGE_CUT " + JSON.stringify({
+    bridgeRoad: crossing!.code,
+    bankFromKind: nodeByCode.get(crossing!.from)?.kind,
+    bankToKind: nodeByCode.get(crossing!.to)?.kind,
+    countries: [nodeByCode.get(crossing!.from)?.countryCode, nodeByCode.get(crossing!.to)?.countryCode],
+    alternateNonBridgePath: nearComponent.allCodes.has(crossing!.to),
+    from: { count: nearComponent.count, y: nearComponent.y, sites: nearComponent.sites,
+      villages: nearComponent.villages, sameCountrySites: nearComponent.sameCountrySites,
+      sampleY: nearComponent.sampleY, sampleSites: nearComponent.sampleSites },
+    to: { count: farComponent.count, y: farComponent.y, sites: farComponent.sites,
+      villages: farComponent.villages, sameCountrySites: farComponent.sameCountrySites,
+      sampleY: farComponent.sampleY, sampleSites: farComponent.sampleSites },
+  }));
+
   const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
     .find(node => node?.continent === bank!.continent);
   const site = network.nodes.find(node =>
