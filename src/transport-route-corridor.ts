@@ -47,10 +47,17 @@ export function planTransportRouteCorridor(
     }))].sort());
   };
   let at = route.from;
+  // A path with thousands of near-identical raw points could bypass the 4096
+  // sampled-station limit yet consume unbounded synchronous planning time.
+  // Retire it before scanning/reversing vertices; never claim a partial PASS.
+  let remainingSourcePoints = ROUTE_CORRIDOR_STATION_LIMIT * 2;
   for (const code of route.edgeCodes) {
     const edge = roads.get(code);
     if (!edge || !edge.centerline || edge.centerline.length < 2)
       return Object.freeze({ status: "invalid", stations: EMPTY });
+    if (edge.centerline.length > remainingSourcePoints)
+      return Object.freeze({ status: "over-budget", stations: EMPTY });
+    remainingSourcePoints -= edge.centerline.length;
     const forward = edge.from === at;
     if (!forward && edge.to !== at) return Object.freeze({ status: "invalid", stations: EMPTY });
     // When the caller provides an authoritative walking index, a missing
