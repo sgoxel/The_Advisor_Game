@@ -9,6 +9,8 @@ import type { TransportNode, TransportRoadEdge } from "./transport-network.ts";
  * and report a false full-profile PASS.
  */
 export const ROUTE_CORRIDOR_STATION_LIMIT = 4096;
+export const ROUTE_CORRIDOR_LEG_LIMIT = 12;
+export const ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT = ROUTE_CORRIDOR_STATION_LIMIT * 4;
 type Edge = Pick<TransportRoadEdge, "code" | "from" | "to" | "centerline">;
 type Node = Pick<TransportNode, "x" | "z">;
 const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) =>
@@ -17,7 +19,7 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
   | { status: "invalid"; reason?: "repeated-road"; edgeCode?: string; stations: readonly CorridorStation[] }
-  | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations"; edgeCode: string; stations: readonly CorridorStation[] }
+  | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
 const EMPTY = Object.freeze([] as CorridorStation[]);
@@ -173,6 +175,65 @@ export function planTransportRouteCorridor(
       return Object.freeze({ status: "invalid", stations: EMPTY });
     stations[last] = Object.freeze({ ...stations[last], junctionOwnerCodes: destinationOwners });
   }
+  return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
+}
+
+/**
+ * Explicit on-demand fallback for multi-road routes refused by the 4096-station
+ * whole-route planner. Each SEED road retains the SAME <=4096-station proof,
+ * including canonical incident owner checks at its endpoints. Shared nodes
+ * are inspected exactly once with both incident route legs recorded.
+ *
+ * A strict 12-road / 16384-station / 8192-raw-waypoint ceiling prevents an
+ * unbounded diagnostic. No source data is changed or invented and no
+ * partial profile can be reported as ready.
+ */
+export function planTransportRouteCorridorByLeg(
+  route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
+  roads: ReadonlyMap<string, Edge>,
+  nodes: ReadonlyMap<string, Node>,
+  incidentRoads?: ReadonlyMap<string, readonly { edge: Edge }[]>,
+): Plan {
+  const whole = planTransportRouteCorridor(route, roads, nodes, incidentRoads);
+  if (whole.status !== "over-budget" || whole.reason !== "sample-stations") return whole;
+  if (route.edgeCodes.length > ROUTE_CORRIDOR_LEG_LIMIT)
+    return Object.freeze({ status: "over-budget", reason: "route-legs",
+      edgeCode: route.edgeCodes[ROUTE_CORRIDOR_LEG_LIMIT], stations: EMPTY });
+  const stations: CorridorStation[] = [];
+  let at = route.from, remainingRawPoints = ROUTE_CORRIDOR_STATION_LIMIT * 2;
+  for (const code of route.edgeCodes) {
+    const edge = roads.get(code);
+    // The whole-route source preflight already checked every join; preserve
+    // its refusal if source inputs change or prove malformed in a leg.
+    if (!edge || !edge.centerline || edge.centerline.length > remainingRawPoints)
+      return Object.freeze({ status: "over-budget", reason: "raw-source-waypoints",
+        edgeCode: code, stations: EMPTY });
+    remainingRawPoints -= edge.centerline.length;
+    const next = edge.from === at ? edge.to : edge.from,
+      part = planTransportRouteCorridor(
+        { from: at, to: next, edgeCodes: [code] }, roads, nodes, incidentRoads);
+    if (part.status !== "ready") return part;
+    const previousIndex = stations.length - 1;
+    if (previousIndex >= 0) {
+      const previous = stations[previousIndex], first = part.stations[0];
+      if (!first || Math.hypot(wrapSourceX(first.x - previous.x), first.z - previous.z) > 1e-4 ||
+          !previous.junctionOwnerCodes?.includes(code) ||
+          !first.junctionOwnerCodes?.includes(previous.edgeCode))
+        return Object.freeze({ status: "invalid", stations: EMPTY });
+    }
+    const extra = part.stations.length - (previousIndex >= 0 ? 1 : 0);
+    if (stations.length + extra > ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT)
+      return Object.freeze({ status: "over-budget", reason: "sample-stations",
+        edgeCode: code, stations: EMPTY });
+    if (previousIndex >= 0)
+      stations[previousIndex] = Object.freeze({
+        ...stations[previousIndex], joinedEdgeCode: code,
+      });
+    for (let i = previousIndex >= 0 ? 1 : 0; i < part.stations.length; i++)
+      stations.push(part.stations[i]);
+    at = next;
+  }
+  if (at !== route.to) return Object.freeze({ status: "invalid", stations: EMPTY });
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
 
