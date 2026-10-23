@@ -521,7 +521,7 @@ function renderSiteAccessProbe() {
       <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "Source-owned branch and/or exact parent junction geometry" : "Missing canonical branch/junction evidence"}</dd>
       <dt>Terminal surface evidence</dt><dd>${siteProbe.terminalGeometryOnly ? "SEED parent geometry joins; incident final-surface road owner unverified" : "No geometry-only terminal fallback"}</dd>
       <dt>Samples</dt><dd>${siteProbe.stationCount}/${siteProbe.expectedStations} · each profile span's ends and midpoint</dd>
-      <dt>Ground passage</dt><dd>${siteProbe.dry && siteProbe.walkable ? "Sampled stations dry and walkable" : "One or more samples wet, blocked or missing"}</dd>
+      <dt>Ground/deck passage</dt><dd>${siteProbe.supportedWater && siteProbe.walkable ? siteProbe.dry ? "Sampled stations dry and walkable" : "Sampled dry ground / river-deck stations walkable; deck ownership checked separately" : "One or more samples have unsupported water, blocked ground/deck or missing evidence"}</dd>
       <dt>Top bridge ownership</dt><dd>${siteProbe.topSurfaceOwned ? "No unrelated top deck at sampled stations" : "Top deck or traversal mismatch; not certified"}</dd>
       <dt>Sampled span max grade</dt><dd>${grade} · ${siteProbe.gradeWithinLimit ? "spans and local road slopes within limit" : "span or local surface grade not certified"}</dd>
       <dt>First unsafe station</dt><dd>${siteProbe.firstUnsafeCause
