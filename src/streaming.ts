@@ -120,3 +120,24 @@ export function withinStreamingBudget(
  * patch count. A single optional reservation represents upcoming transient work. */
 export function shouldTrimStreamingCache(cpuBytes:number,gpuBytes:number,budget:StreamingBudget,reservationBytes=0){return cpuBytes+gpuBytes+reservationBytes>budget.cacheTrimStartBytes;}
 export function streamingMemoryReservationFits(cpuBytes:number,gpuBytes:number,reservationBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes+reservationBytes<=budget.combinedBytes;}
+
+/**
+ * Tile-generation worker pool size: every logical core except one (kept for the main thread,
+ * rendering and input). The only other limit guards against the browser killing the tab for
+ * memory: a worker holds ~120 MB at most, and the pool may use up to a quarter of device RAM.
+ * `deviceMemoryGB` is navigator.deviceMemory (Chromium reports up to 8; Safari/Firefox omit it).
+ * Generation is a pure function of the SEED, so the pool size never changes the world.
+ */
+export const GENERATION_WORKER_BYTES_ESTIMATE = 120_000_000;
+export function generationWorkerCount(hardwareConcurrency?: number, deviceMemoryGB?: number) {
+  const cores = hardwareConcurrency && hardwareConcurrency > 0 ? Math.floor(hardwareConcurrency) : 4,
+    memoryBytes = (deviceMemoryGB && deviceMemoryGB > 0 ? deviceMemoryGB : 4) * 1e9,
+    byMemory = Math.max(1, Math.floor(memoryBytes * .25 / GENERATION_WORKER_BYTES_ESTIMATE));
+  return Math.max(1, Math.min(cores - 1, byMemory));
+}
+
+/** The viewport budget with enough generation slots to keep every worker of the pool busy. */
+export function streamingBudgetForPool(width: number, height: number, workers: number): StreamingBudget {
+  const budget = streamingBudgetForViewport(width, height);
+  return { ...budget, generationReady: Math.max(budget.generationReady, workers + 2) };
+}
