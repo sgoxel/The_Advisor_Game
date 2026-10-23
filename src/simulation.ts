@@ -684,6 +684,18 @@ function legalPosition(
   };
 }
 
+/** Readable site caption for the inspector only. Full SEED identities remain accessible. */
+export function readableResidentSite(code: string): string {
+  const parts = code.split("/");
+  const residence = parts.lastIndexOf("RESIDENCE");
+  if (residence >= 0) {
+    const number = parts[residence + 1] ?? "";
+    return `Residence ${number}${parts.includes("ENTRANCE") ? " entrance" : ""}`;
+  }
+  const site = parts.slice(-2);
+  return site.join(" ").replaceAll("_", " ").toLowerCase();
+}
+
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
 export function residentAt(place: Place, index: number, tick: number): Resident {
   const foundation = residentFoundationAt(place, index),
@@ -846,7 +858,7 @@ export class LazySimulation {
       <select id="resident-select" aria-label="Nearby inhabitant"></select>
       <div class="resident-identity">
         <div id="resident-avatar" aria-hidden="true"><i></i></div>
-        <div><h3 id="resident-name">Zoom closer to inspect inhabitants</h3><code id="resident-code"></code></div>
+        <div><h3 id="resident-name">Zoom closer to inspect inhabitants</h3><span id="resident-short-id" class="resident-short-id"></span></div>
       </div>
       <dl id="resident-details">
         <dt>Role</dt><dd id="resident-role">—</dd>
@@ -861,7 +873,18 @@ export class LazySimulation {
       </dl>
       <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
       <p class="hint" id="resident-house-details" aria-live="polite"></p>
-      <p class="hint" id="resident-performance" aria-live="polite"></p>`;
+      <details class="resident-technical">
+        <summary>Exact resident, site and route identifiers</summary>
+        <dl>
+          <dt>Resident</dt><dd><code id="resident-code"></code></dd>
+          <dt>Home and entrance</dt><dd><code id="resident-home-code"></code></dd>
+          <dt>Workplace</dt><dd><code id="resident-work-code"></code></dd>
+          <dt>Route</dt><dd><code id="resident-route-code"></code></dd>
+          <dt>Guard</dt><dd><code id="resident-guard-code"></code></dd>
+          <dt>House ownership</dt><dd><code id="resident-house-code"></code></dd>
+        </dl>
+        <p class="hint" id="resident-performance" aria-live="polite"></p>
+      </details>`;
     const livingWorld = document.getElementById("simulation-status")?.previousElementSibling;
     if (livingWorld) panel.insertBefore(section, livingWorld);
     else panel.append(section);
@@ -881,7 +904,9 @@ export class LazySimulation {
         home = place
           ? legalPosition(place, resident.homeOffset.eastM, resident.homeOffset.northM)
           : undefined;
-      output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · owner ${resident.homeOwner} · capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}${home ? " · world focus moved to entrance anchor" : ""}`;
+      output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. ${home ? "Map focus set to the home's canonical entrance." : "Entrance unavailable."} Full identity below.`;
+      const houseCode = document.getElementById("resident-house-code");
+      if (houseCode) houseCode.textContent = `Home: ${resident.homeBuilding} · entrance: ${resident.homeEntrance} · owner: ${resident.homeOwner} · settlement: ${resident.settlement}`;
       if (home) {
         const world = (
           window as typeof window & {
@@ -901,21 +926,27 @@ export class LazySimulation {
       if (node) node.textContent = value;
     };
     text("resident-name", resident.name);
+    text("resident-short-id", `Resident ${resident.index + 1} · ${resident.role.replaceAll("-", " ")}`);
     text("resident-code", resident.code);
+    text("resident-home-code", `${resident.homeBuilding} · ${resident.homeEntrance}`);
+    text("resident-work-code", resident.workplace);
+    text("resident-route-code", resident.route);
+    text("resident-guard-code", resident.gatePost ?? "No guard assignment");
     text("resident-role", resident.role.replaceAll("-", " "));
     text("resident-task", resident.task);
     text("resident-mood", `${resident.mood.label} (${resident.mood.value >= 0 ? "+" : ""}${resident.mood.value.toFixed(2)})`);
     const a = resident.traits.abilities;
     text("resident-traits", `${resident.traits.temperament} · STR ${a.strength} DEX ${a.dexterity} CON ${a.constitution} KNO ${a.knowledge} WIS ${a.wisdom} CHA ${a.charisma}`);
-    text("resident-home", `${familyName(resident.code, places.find((place) => place.id === resident.settlement)?.continent ?? 0)} House · ${resident.homeBuilding}`);
-    text("resident-workplace", resident.workplace);
-    text("resident-route", resident.route);
-    text(
-      "resident-guard",
-      resident.gatePost
-        ? `${resident.gatePost} · ${resident.guardShift === 0 ? "day" : "night"} shift`
-        : "Not assigned to the watch",
-    );
+    text("resident-home", `${familyName(resident.code, places.find((place) => place.id === resident.settlement)?.continent ?? 0)} home · assigned entrance`);
+    text("resident-workplace", readableResidentSite(resident.workplace));
+    text("resident-route", resident.route.startsWith("BLOCKED:")
+      ? "Blocked — no continuous legal walking route"
+      : resident.route.includes(" → ")
+        ? resident.route.split(" → ").map(readableResidentSite).join(" → ")
+        : readableResidentSite(resident.route));
+    text("resident-guard", resident.gatePost
+      ? `${readableResidentSite(resident.gatePost)} · ${resident.guardShift === 0 ? "day" : "night"} watch`
+      : "Not assigned to the watch");
     text(
       "resident-appearance",
       `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,
