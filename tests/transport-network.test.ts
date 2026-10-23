@@ -446,6 +446,9 @@ test("S005 unsafe canonical roads can be excluded without inventing a physically
   assert.equal(transportWalkingRouteThroughEdge(index, "B", selectedBridge,
     ["SITE"], new Set(["bridge"])), null,
     "a required bridge cannot be physically accepted after its own road was excluded");
+  assert.equal(transportWalkingRoute(index, "A", "SITE",
+    new Set(Array.from({ length: 13 }, (_item, i) => `unsafe-${i}`))), null,
+    "unbounded caller-supplied exclusion sets must fail closed before a graph search");
   assert.ok((alternate?.exploredNodes ?? Infinity) <= index.nodeCount,
     "an alternative remains one finite Dijkstra graph preview, not a physical PASS");
 });
