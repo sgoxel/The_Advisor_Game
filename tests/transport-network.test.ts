@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLo
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
@@ -712,8 +712,11 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   }), null, "the outgoing actual Y modifier is legal at its single shared graph station");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "difficult" }), false,
     "canonical road grade above 8% cannot be reported as a legal sampled crossing");
-  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }), true,
-    "walkable site/settlement transition with the selected road modifier remains legal");
+  assert.equal(sampledCorridorStationFailure(station, { ...dry, traversal: "open" }),
+    "local road slope not sampled",
+    "a walkable open-ground road cannot be certified without canonical local grade evidence");
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }), false,
+    "missing slope fails closed even when graph ownership and walkability agree");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }, .08), true,
     "an open junction at the exact local road grade limit is still safe");
   assert.equal(sampledCorridorStationFailure(station, { ...dry, traversal: "open" }, .081),
@@ -944,9 +947,12 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     [3, "unsafe local site-access slope"]);
   assert.ok(steep.maximumGrade !== null && steep.maximumGrade < .08,
     "the local slope rejection is independent of a low sampled span average");
-  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
-    { ...surface, traversal: "open" } : surface), junctionRoadCodes).sampledPass, true,
-    "a dry walkable site-pad transition remains legal when local slope is safe");
+  assert.deepEqual((({ firstUnsafeStation, firstUnsafeCause, sampledPass }) =>
+    [firstUnsafeStation, firstUnsafeCause, sampledPass])(
+      siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
+        { ...surface, traversal: "open" } : surface), junctionRoadCodes)),
+    [3, "local site-access slope not sampled", false],
+    "walkable open site pads without a measured canonical local grade cannot receive a false PASS");
   // An "open" pad remains Simulation-walkable up to 15%, but the
   // selected access-road physical proof must enforce the stricter 8%.
   const openPad = connectedSurfaces.map((surface, i) => i === 2 ?
@@ -963,9 +969,13 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes,
     [null, null, Infinity, null, null]).sampledPass, false,
     "nonfinite open-pad local gradient cannot certify the selected site approach");
-  assert.equal(siteAccessSampleVerdict(edge, openPad, junctionRoadCodes,
-    [null, null, null, null, null]).sampledPass, false,
+  const unmeasured = siteAccessSampleVerdict(edge, openPad, junctionRoadCodes,
+    [null, null, null, null, null]);
+  assert.equal(unmeasured.sampledPass, false,
     "a supplied but missing open-pad slope cannot be treated as zero");
+  assert.deepEqual([unmeasured.firstUnsafeStation, unmeasured.firstUnsafeCause],
+    [3, "local site-access slope not sampled"],
+    "the first missing local grade must remain distinguishable from a measured unsafe slope");
   assert.deepEqual(siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes), good);
   const incomplete = siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes);
   assert.equal(incomplete.sampledPass, false,
@@ -1684,9 +1694,14 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     "site branch must name its actual incident parent road");
   const stations = siteAccessRoadStations(access!),
     surfaces = stations.map(point => finalSurfaceAt(point.x, point.z)),
+    // Use real canonical local gradients on this SAME gate/Y/bridge/site witness,
+    // not the pre-S005 omission path that could accidentally certify open pads.
+    localSlopes = stations.map((point, i) =>
+      surfaces[i].deckHeight === null && surfaces[i].traversal === "open" && surfaces[i].walkable
+        ? finalSurfaceLocalSlopeAt(point.x, point.z) : null),
     incidentRoadCodes = new Set((index.adjacency.get(access!.to) ?? [])
       .map(step => step.edge.code)),
-    siteVerdict = siteAccessSampleVerdict(access!, surfaces, incidentRoadCodes);
+    siteVerdict = siteAccessSampleVerdict(access!, surfaces, incidentRoadCodes, localSlopes);
   assert.ok(incidentRoadCodes.has(parentCode!),
     "the access branch's named parent must be incident to its actual graph junction");
   const physicalTerminal = stations.at(-1)!,

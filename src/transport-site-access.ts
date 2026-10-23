@@ -152,8 +152,9 @@ export function siteAccessSampleVerdict(
   const gradeWithinLimit = maximumGrade !== null && maximumGrade <= .08 &&
     (localRoadSlopes === undefined || localRoadSlopes.length === stations.length) &&
     surfaces.every((surface, index) => surface.traversal !== "difficult" &&
-      (surface.traversal !== "open" || localRoadSlopes === undefined ||
-        (Number.isFinite(localRoadSlopes[index]) && localRoadSlopes[index]! <= .08)));
+      (surface.traversal !== "open" ||
+        (localRoadSlopes !== undefined && Number.isFinite(localRoadSlopes[index]) &&
+          localRoadSlopes[index]! <= .08)));
   const sampledPass = full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
     dry && walkable && topSurfaceOwned && gradeWithinLimit;
   // On-demand diagnostic only. Reuse already sampled <=49 stations; identify
@@ -179,9 +180,12 @@ export function siteAccessSampleVerdict(
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
+      else if (surface.traversal === "open" &&
+        (localRoadSlopes === undefined || localRoadSlopes[index] == null))
+        cause = "local site-access slope not sampled";
       else if (surface.traversal === "difficult" ||
-        (surface.traversal === "open" && localRoadSlopes !== undefined &&
-          (!Number.isFinite(localRoadSlopes[index]) || localRoadSlopes[index]! > .08)))
+        (surface.traversal === "open" &&
+          (!Number.isFinite(localRoadSlopes![index]) || localRoadSlopes![index]! > .08)))
         cause = "unsafe local site-access slope";
       else if (surface.deckHeight == null && surface.traversal !== "road" && surface.traversal !== "open")
         cause = "non-road site-access traversal";

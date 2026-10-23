@@ -180,9 +180,10 @@ export function sampledCorridorStationFailure(
       return "unrelated higher bridge deck";
     return null;
   }
+  if (surface.traversal === "open" && localRoadSlope === undefined)
+    return "local road slope not sampled";
   if (surface.traversal === "difficult" ||
-      (surface.traversal === "open" && localRoadSlope !== undefined &&
-        (!Number.isFinite(localRoadSlope) || localRoadSlope > .08)))
+      (surface.traversal === "open" && (!Number.isFinite(localRoadSlope) || localRoadSlope! > .08)))
     return "unsafe local road slope";
   if (surface.traversal !== "road" && surface.traversal !== "open")
     return "non-road traversal";
