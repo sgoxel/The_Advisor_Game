@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2319,6 +2319,32 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       `real station 435 carriageway slope ${(roadGrade * 100).toFixed(3)}% exceeds 8%`);
     assert.ok(intervalGrade <= .08,
       `real station 435 physical interval grade ${(intervalGrade * 100).toFixed(3)}% exceeds 8%`);
+    // One-shot root evidence at the next actual unsafe surface after 435.
+    // This debug trace stays on the PR branch, never in released routine tests.
+    const at436 = segmented.stations[435];
+    const physicalStepX = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT *
+      Math.max(.1, Math.abs(Math.cos(sourceToLonLat(at436.x, at436.z).lat))));
+    const physicalStepZ = 1 / CANONICAL_METRES_PER_SOURCE_UNIT;
+    const failingRoad = roads.find(road => road.code === at436.edgeCode);
+    const tangent = failingRoad ? roadTangentAt(at436.x, at436.z, failingRoad) : null;
+    const sampleDebug = (x: number, z: number) => {
+      const d = finalSurfaceDebugAt(x, z);
+      const own = d.modifiers.find(m => m.id === at436.edgeCode);
+      return { base: d.base.groundHeight, water: d.base.water.kind,
+        roadTarget: own?.targetGroundHeight, roadWeight: own?.weight,
+        ground: d.final.groundHeight, top: d.final.groundMaterialOwnerId,
+        traversal: d.final.traversal, localSlope: finalSurfaceLocalSlopeAt(x, z) };
+    };
+    console.log("S005_ROADBED_ROOT_436", JSON.stringify({
+      at: { x: at436.x, z: at436.z, edgeCode: at436.edgeCode },
+      tangent, prior: sampleDebug(segmented.stations[434].x, segmented.stations[434].z),
+      here: sampleDebug(at436.x, at436.z),
+      xp: sampleDebug(at436.x + physicalStepX, at436.z),
+      xm: sampleDebug(at436.x - physicalStepX, at436.z),
+      zp: sampleDebug(at436.x, at436.z + physicalStepZ),
+      zm: sampleDebug(at436.x, at436.z - physicalStepZ),
+      center: tangent ? sampleDebug(tangent.cx, tangent.cz) : null
+    }));
     assert.ok(segmented.stations.length > ROUTE_CORRIDOR_STATION_LIMIT,
       "the same real route must exercise the bounded per-road fallback");
     // Cheap routine smoke: the first 32 canonical stations must genuinely
