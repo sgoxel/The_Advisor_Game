@@ -2111,7 +2111,13 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   }));
   const detour = transportWalkingRoute(index, villageNode!.code, site!.code,
     new Set([firstUnsafeRoad]));
+  assert.ok(detour,
+    "the same real SEED endpoints must expose a graph-only alternative when their unsafe road is excluded");
   if (detour) {
+    assert.equal(detour.from, villageNode!.code);
+    assert.equal(detour.to, site!.code);
+    assert.ok(detour.distanceM > 0 && detour.fantasyWalkSeconds > 0,
+      "an alternate graph hint reports genuine SEED road costs, not physical travel");
     assert.ok(!detour.edgeCodes.includes(firstUnsafeRoad),
       "physical-unsafe-road exclusion must never return the refused edge");
     assert.ok(detour.exploredNodes <= index.nodeCount);
