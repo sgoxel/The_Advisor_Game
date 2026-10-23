@@ -360,8 +360,11 @@ export function residentFoundationAt(
     homeBuilding = `${place.code}/RESIDENCE/${index}`,
     waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
-    // Home is the resident's own frontage lot (lazy lot lookup, focused settlement only).
-    homeLot = settlementHomeFor(place, index).candidates[0],
+    // A resident starts from the same legal front-wall door that the rendered
+    // house and inspector use, not the lot's potentially rejected first candidate.
+    // An unresolved house still needs a separate BLOCKED/pending acceptance path.
+    resolvedDoor = resolvedSettlementHomeDoorFor(place, index),
+    homeLot = resolvedDoor ?? settlementHomeFor(place, index).candidates[0],
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
   return {
