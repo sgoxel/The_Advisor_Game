@@ -28,7 +28,7 @@ import { createTransportJunctionLookup } from "../src/transport-junction-index.t
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingDetourAfterUnsafeRoad, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
@@ -485,6 +485,15 @@ test("S005 bounded gate-to-site candidate retains the required bridge without un
   assert.equal(retained?.distanceM, 10);
   assert.equal(retained?.fantasyWalkSeconds, 100);
   assert.ok((retained?.exploredNodes ?? Infinity) <= 4096);
+  assert.deepEqual(transportWalkingDetourAfterUnsafeRoad(index, "G", "S", "unsafe")?.edgeCodes,
+    ["bypass"], "ordinary shortest fallback may avoid the selected bridge");
+  assert.deepEqual(transportWalkingDetourAfterUnsafeRoad(index, "G", "S", "unsafe", bridge)?.edgeCodes,
+    ["safe", "bridge", "site"],
+    "on-demand fallback for a selected bridge must preserve that exact crossing once");
+  assert.equal(transportWalkingDetourAfterUnsafeRoad(index, "G", "S", "bridge", bridge), null,
+    "a physically unsafe required bridge cannot be relabeled as a legal detour");
+  assert.equal(transportWalkingDetourAfterUnsafeRoad(index, "G", "S", "unsafe",
+    { ...bridge, code: "invented" }), null, "no invented required bridge can satisfy a fallback");
   assert.deepEqual(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
     new Set(["unsafe"])), retained, "graph candidate is stable across repeated immutable exclusions");
   assert.deepEqual([...exclusions], ["unsafe"], "search must never mutate caller exclusions");
