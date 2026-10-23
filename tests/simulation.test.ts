@@ -12,6 +12,7 @@ import {
   populationOf,
   residentAt,
   residentFoundationAt,
+  legalPosition,
   continuousWalkableOffsetSegment,
   timedWalkOnPath,
   lastReachableRoutineStop,
@@ -38,6 +39,43 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("invalid resident terrain never silently moves the requested point toward town", () => {
+  const place = villages[0], lat = place.canonicalPosition.lat;
+  let ungrounded = 0;
+  for (const radius of [0, 15_000, 40_000, 120_000, 250_000])
+    for (let n = 0; n < 16; n++) {
+      const eastM = radius * Math.cos(n * Math.PI / 8),
+        northM = radius * Math.sin(n * Math.PI / 8),
+        actual = legalPosition(place, eastM, northM),
+        expected = {
+          lon: normalizeLongitude(place.canonicalPosition.lon + eastM /
+            (CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(lat))))),
+          lat: lat + northM / CANONICAL_PLANET_RADIUS,
+        },
+        surface = finalSurfaceAt(actual.x, actual.z);
+      assert.ok(greatCircleDistance(actual.position, expected) < .05,
+        "position must not be shrunk to an unrelated, apparently legal location");
+      assert.equal(actual.grounded, surface.walkable && actual.position.elevation > .1);
+      if (!actual.grounded) ungrounded++;
+    }
+  assert.ok(ungrounded > 0, "fixture must include real non-walkable or submerged surface");
+});
+
+test("unresolved houses keep resident identity without inventing lawful travel", () => {
+  for (const place of [villages[0], cities[0]])
+    for (let index = 0; index < 16; index++) {
+      if (resolvedSettlementHomeDoorFor(place, index)) continue;
+      const resident = residentAt(place, index, tickAtLocalTime(WORKDAY, 9 * HOUR, place.canonicalPosition.lon));
+      assert.equal(resident.code, residentFoundationAt(place, index).code);
+      assert.equal(resident.grounded, false);
+      assert.equal(resident.indoors, false);
+      assert.equal(resident.activity, "rest");
+      assert.ok(resident.task.includes("no legally resolved doorway"));
+      assert.ok(resident.route.startsWith("BLOCKED:"));
+      assert.equal(resident.travelProgress, undefined);
+    }
 });
 
 test("time-bounded legal paths never jump to an unfinished endpoint", () => {
