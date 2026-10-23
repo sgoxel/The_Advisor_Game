@@ -572,8 +572,8 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
 }
 const pathCache = new Map<string, Offset[] | null>();
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
-function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
-  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}`,
+function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
+  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}|${allowGateDetour ? "g" : "d"}`,
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
   const graph = streetGraphFor(place), start = nearestNode(graph, from), goal = nearestNode(graph, to);
@@ -620,6 +620,21 @@ function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
   // settlement street. Allow that physical corridor only after checking EVERY
   // segment sample; a disconnected graph is never permission to cross obstacles.
   if (!path && legalStreetSegment(place, from, to)) path = [from, to];
+  // Outside farm/woodland/shore sites may lie beyond the enclosure. A direct
+  // dry chord through the wall is forbidden, but an actual SEED gate can join
+  // an internal street approach to a separately verified exterior corridor.
+  // Evaluate at most the settlement's two gates; never recurse into gate
+  // discovery or treat a missing/impassable side as successful arrival.
+  if (!path && allowGateDetour) {
+    for (const gate of graph.gates) {
+      const approach = streetPath(place, from, gate, false);
+      if (!approach) continue;
+      const exterior = streetPath(place, gate, to, false);
+      if (!exterior) continue;
+      const candidate = [...approach, ...exterior.slice(1)];
+      if (!path || pathLength(candidate) < pathLength(path)) path = candidate;
+    }
+  }
   pathCache.set(key, path);
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
