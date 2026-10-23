@@ -603,6 +603,10 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
       { from: "A", to: "C", edgeCodes: [a.code, b.code] },
       registry, nodes, physicalY,
     );
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "A", edgeCodes: [a.code, a.code] }, registry, nodes,
+  ).status, "invalid",
+  "walking out and back on one canonical edge is a graph walk, not a non-retracing physical route");
   assert.equal(withOwner.status, "ready");
   const joined = withOwner.stations[3];
   assert.deepEqual(joined.junctionOwnerCodes, [a.code, b.code, otherIncident.code],
@@ -1572,7 +1576,7 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
   assert.equal(afterSummary.roads, beforeSummary.roads, "static topology coverage must remain unchanged");
 });
 
-test("S005 bridge-linked Y to critical-site chain uses one canonical walking graph", () => {
+test("S005 real gate-Y-bridge-site graph walk refuses retraced physical road evidence", () => {
   const network = siteTransportNetwork, index = createTransportWalkingIndex(network),
     nodeByCode = new Map(network.nodes.map(node => [node.code, node])),
     edgeByCode = new Map(network.roadEdges.map(edge => [edge.code, edge])),
@@ -1663,18 +1667,29 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     { from: villageNode!.code, to: site!.code, edgeCodes: chain },
     edgeByCode, nodeByCode, index.adjacency,
   );
-  assert.notEqual(physicalPlan.status, "invalid",
-    "the actual settlement-gate/Y/bridge/site graph path must have complete physical road-to-node continuity");
-  if (physicalPlan.status === "ready") {
-    assert.ok(physicalPlan.stations.length > 0 &&
-      physicalPlan.stations.length <= ROUTE_CORRIDOR_STATION_LIMIT,
-    "real source-owned route probes must never exceed the fixed station budget");
-    assert.equal(physicalPlan.stations[0].edgeCode, chain[0]);
-    assert.equal(physicalPlan.stations.at(-1)?.edgeCode, chain.at(-1));
-  } else {
-    assert.equal(physicalPlan.status, "over-budget");
+  const repeatedRoads = chain.filter((code, index) => chain.indexOf(code) !== index);
+  if (repeatedRoads.length) {
+    // A connected source walk may cross the selected bridge, return along the
+    // same road, then cross again. That is NOT an un-retraced gate-to-site route.
+    // Never let a short-enough repeated walk receive a physical corridor PASS.
+    assert.equal(physicalPlan.status, "invalid",
+      "a graph-connected walk that retraces a canonical road must refuse physical route certification");
     assert.equal(physicalPlan.stations.length, 0,
-      "an oversized actual route must refuse sampling rather than silently truncate");
+      "do not sample a partial loop as if it were a valid route");
+  } else {
+    assert.notEqual(physicalPlan.status, "invalid",
+      "an un-retraced connected source path must preserve physical road-to-node continuity");
+    if (physicalPlan.status === "ready") {
+      assert.ok(physicalPlan.stations.length > 0 &&
+        physicalPlan.stations.length <= ROUTE_CORRIDOR_STATION_LIMIT,
+      "real source-owned route probes must never exceed the fixed station budget");
+      assert.equal(physicalPlan.stations[0].edgeCode, chain[0]);
+      assert.equal(physicalPlan.stations.at(-1)?.edgeCode, chain.at(-1));
+    } else {
+      assert.equal(physicalPlan.status, "over-budget");
+      assert.equal(physicalPlan.stations.length, 0,
+        "an oversized actual route must refuse sampling rather than silently truncate");
+    }
   }
   // Test both endpoint physical probes in the SAME graph chain: a legal bridge
   // alone does not certify a disconnected site, and a site alone does not
