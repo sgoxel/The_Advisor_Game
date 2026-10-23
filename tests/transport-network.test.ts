@@ -577,6 +577,32 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     "oversized physical arc must report the station limit and owning road");
   assert.equal(over.stations.length, 0,
     "oversized diagnostic must reject the route without truncating it into a false positive");
+  // A large first road must never hide invalid later SEED endpoint joins or
+  // a path aimed at the wrong site: both are cheap source-only preflight facts.
+  const longFirst = makeEdge("long-first", "A", "L", 0, ROUTE_CORRIDOR_STATION_LIMIT + 1),
+    detachedTail = makeEdge("detached-tail", "L", "Z",
+      ROUTE_CORRIDOR_STATION_LIMIT + 2, ROUTE_CORRIDOR_STATION_LIMIT + 3),
+    connectedTail = makeEdge("connected-tail", "L", "Z",
+      ROUTE_CORRIDOR_STATION_LIMIT + 1, ROUTE_CORRIDOR_STATION_LIMIT + 3),
+    longNodes = new Map([
+      ["A", { x: 0, z: 0 }],
+      ["L", { x: ROUTE_CORRIDOR_STATION_LIMIT + 1, z: 0 }],
+      ["Z", { x: ROUTE_CORRIDOR_STATION_LIMIT + 3, z: 0 }],
+    ]);
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "Z", edgeCodes: [longFirst.code, detachedTail.code] },
+    new Map([longFirst, detachedTail].map(edge => [edge.code, edge])), longNodes,
+  ).status, "invalid", "over-budget first road cannot hide a disconnected later source endpoint");
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "A", edgeCodes: [longFirst.code, connectedTail.code] },
+    new Map([longFirst, connectedTail].map(edge => [edge.code, edge])), longNodes,
+  ).status, "invalid", "over-budget first road cannot hide a route ending at another site");
+  assert.deepEqual(planTransportRouteCorridor(
+    { from: "A", to: "Z", edgeCodes: [longFirst.code, connectedTail.code] },
+    new Map([longFirst, connectedTail].map(edge => [edge.code, edge])), longNodes,
+  ), { status: "over-budget", reason: "sample-stations",
+    edgeCode: longFirst.code, stations: [] },
+  "valid source endpoints keep the unchanged fixed 4096-station physical refusal");
   // Thousands of repeated raw SEED points can collapse to two sampled
   // stations. The raw input must also have a finite cumulative planning cap.
   const rawOverflow = { ...a, centerline: [
