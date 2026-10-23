@@ -83,6 +83,11 @@ export function siteAccessSampleVerdict(
   const stations = siteAccessRoadStations(edge), full = stations.length > 0 &&
     stations.length === surfaces.length,
     dry = full && surfaces.every(surface => surface.water.kind === "none"),
+    // A recorded site road may cross a river on its own selected top deck.
+    // Distinguish water under a legal bridge from unsupported wet ground;
+    // road/deck ownership is still independently required below.
+    supportedWater = full && surfaces.every(surface => surface.water.kind === "none" ||
+      (surface.water.kind === "river" && Number.isFinite(surface.deckHeight))),
     walkable = full && surfaces.every(surface => surface.walkable),
     parentCode = siteAccessParentRoadCode(edge),
     parentRoad = parentCode && roads.find(road => road.code === parentCode),
@@ -156,7 +161,7 @@ export function siteAccessSampleVerdict(
         (localRoadSlopes !== undefined && Number.isFinite(localRoadSlopes[index]) &&
           localRoadSlopes[index]! <= .08)));
   const sampledPass = full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
-    dry && walkable && topSurfaceOwned && gradeWithinLimit;
+    supportedWater && walkable && topSurfaceOwned && gradeWithinLimit;
   // On-demand diagnostic only. Reuse already sampled <=49 stations; identify
   // the FIRST failed physical gate without another final-surface query.
   let firstUnsafeStation: number | null = null;
@@ -176,7 +181,10 @@ export function siteAccessSampleVerdict(
             surface.contributingModifierIds.includes(id));
       let cause: string | null = null;
       if (!Number.isFinite(surface.surfaceHeight)) cause = "invalid final-surface height";
-      else if (surface.water.kind !== "none") cause = "wet site-access surface";
+      else if (surface.water.kind !== "none" &&
+        !(surface.water.kind === "river" && Number.isFinite(surface.deckHeight)))
+        cause = !Number.isFinite(surface.deckHeight) ? "wet site-access surface" :
+          "unsupported water under site-access deck";
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
@@ -209,7 +217,7 @@ export function siteAccessSampleVerdict(
   return Object.freeze({
     stationCount: surfaces.length,
     expectedStations: stations.length,
-    onRecordedRoad, dry, walkable, topSurfaceOwned, terminalGeometryOnly,
+    onRecordedRoad, dry, supportedWater, walkable, topSurfaceOwned, terminalGeometryOnly,
     maximumGrade, gradeWithinLimit, firstUnsafeStation, firstUnsafeCause,
     sampledPass,
   });
