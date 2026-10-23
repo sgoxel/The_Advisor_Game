@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: ["agent1/s005-real-route-surface-witness-20261023"]
-    paths: [".github/workflows/s005-real-route-diagnostic.yml"]
+    paths: [".github/workflows/s005-real-route-diagnostic.yml", "tests/transport-network.test.ts"]
 permissions:
   contents: read
 jobs:
