@@ -17,7 +17,7 @@ import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRequiredBridgeCut, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 
@@ -135,6 +135,7 @@ let corridorProbeMaximumGrade: number | null = null;
 // A failed physical probe may offer a different SEED graph hypothesis.
 // This is never a validated walking route or a new selected map path.
 let corridorGraphDetour: ReturnType<typeof transportWalkingRoute> = null;
+let corridorSelectedBridgeConstraint: "selected-bridge-unsafe" | "graph-cut" | "not-proven" | null = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
 function compareCanonical(a: string, b: string) {
@@ -550,6 +551,13 @@ function renderCorridorProbe() {
       ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km, ${(corridorGraphDetour.fantasyWalkSeconds / 3600).toFixed(2)} estimated fantasy hours (graph only)${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
       : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
     : "";
+  const bridgeConstraint = corridorSelectedBridgeConstraint === "selected-bridge-unsafe"
+    ? " · The selected bridge road itself failed physical sampling; excluding it cannot preserve this crossing"
+    : corridorSelectedBridgeConstraint === "graph-cut"
+      ? " · Selected bridge GRAPH CUT: with the unsafe road excluded, no same-endpoint graph path can use this bridge"
+      : corridorSelectedBridgeConstraint === "not-proven"
+        ? " · Selected bridge connectivity is not ruled out by the graph cut, but no alternative crossing is certified"
+        : "";
   if (corridorProbeStatus === "not requested") {
     target.textContent = siteRoute
       ? "Selected-route physical access: PENDING — final-surface road and bridge passage not yet probed. Graph distance and Fantasy-Time are a preview, not certified traversal; use Probe walking route surface for bounded samples. Character has not moved."
@@ -560,7 +568,7 @@ function renderCorridorProbe() {
     return;
   }
   target.textContent =
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}${detour}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}${detour}${bridgeConstraint}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
@@ -577,6 +585,7 @@ function resetCorridorProbe() {
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   corridorGraphDetour = null;
+  corridorSelectedBridgeConstraint = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
 }
@@ -597,6 +606,7 @@ function probeRouteCorridor() {
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   corridorGraphDetour = null;
+  corridorSelectedBridgeConstraint = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget"
       ? plan.reason === "raw-source-waypoints"
@@ -671,9 +681,20 @@ function probeRouteCorridor() {
     if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
       // Only after a demonstrated failed physical station: a single cached,
       // graph-bounded search, never extra per-frame sampling or an implicit reroute.
-      if (corridorProbeFirstUnsafeRoad && walkingIndex)
-        corridorGraphDetour = transportWalkingRoute(
-          walkingIndex, siteRoute!.from, siteRoute!.to, new Set([corridorProbeFirstUnsafeRoad]));
+      if (corridorProbeFirstUnsafeRoad && walkingIndex) {
+        const excluded = new Set([corridorProbeFirstUnsafeRoad]);
+        corridorGraphDetour = transportWalkingRoute(walkingIndex, siteRoute!.from, siteRoute!.to, excluded);
+        const bridge = selection?.kind === "bridge" ? transportBridgeByCode(selection.code) : undefined;
+        const bridgeRoad = bridge && corridorEdges.get(bridge.roadCode);
+        if (bridgeRoad) {
+          if (excluded.has(bridgeRoad.code)) corridorSelectedBridgeConstraint = "selected-bridge-unsafe";
+          else {
+            const cut = transportWalkingRequiredBridgeCut(
+              walkingIndex, siteRoute!.from, siteRoute!.to, bridgeRoad, excluded);
+            corridorSelectedBridgeConstraint = cut.status === "invalid" ? null : cut.status;
+          }
+        }
+      }
       corridorProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
       renderCorridorProbe();
@@ -1083,6 +1104,7 @@ function telemetry() {
     corridorProbeStations,
     corridorProbePlannedStations,
     corridorProbeFirstUnsafeRoad,
+    corridorSelectedBridgeConstraint,
     corridorProbeFirstUnsafeStation,
     corridorProbeFirstUnsafeCause,
     corridorProbeFirstUnsafeIntervalGrade,
