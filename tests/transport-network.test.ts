@@ -714,6 +714,12 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     "canonical road grade above 8% cannot be reported as a legal sampled crossing");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }), true,
     "walkable site/settlement transition with the selected road modifier remains legal");
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }, .08), true,
+    "an open junction at the exact local road grade limit is still safe");
+  assert.equal(sampledCorridorStationFailure(station, { ...dry, traversal: "open" }, .081),
+    "unsafe local road slope", "open final-surface traversal cannot hide an 8–15% road grade");
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }, Infinity), false,
+    "nonfinite local road grade fails closed instead of certifying the selected passage");
   assert.equal(sampledCorridorStationPass(station, {
     ...dry, deckHeight: 7, traversal: "bridge", deckOwnerIds: ["unrelated-overpass"],
   }), false, "unrelated upper bridge deck must never certify a road below a dry overpass");
