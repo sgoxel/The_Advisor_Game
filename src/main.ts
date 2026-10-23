@@ -1,3 +1,4 @@
+import {closeLightingEnabled, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
@@ -169,6 +170,8 @@ let projectionTransition = 0,
   detailedMaxHorizontalM = 0,
   detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
+let nightGlowMaterial: pc.StandardMaterial | undefined, lampPoolMaterial: pc.StandardMaterial | undefined;
+let eveningGlow = 0;
 let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
@@ -228,6 +231,7 @@ const uploads: {
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
 let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < 50;
+let closeLightingVisible = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
@@ -553,10 +557,10 @@ function applyPresentation() {
     camera.camera!.farClip = Math.max(512, distance +
       2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
   }
-  for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial]) if (material) {
+  for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial, nightGlowMaterial, lampPoolMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
     // globe. One retained surface owns each pixel throughout the handoff.
-    material.setParameter("flatCoverage", material === worldMaterial ? 1 - projectionTransition : 1);
+    material.setParameter("flatCoverage", material === terrainMaterial || material === coarseTerrainMaterial ? 1 : 1 - projectionTransition);
   }
   const backdrop = globe.backdropColor,
     t = projectionTransition;
@@ -583,8 +587,10 @@ function updateCamera() {
   coarseTerrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
   const showDetails = scaleValueForHalfHeight(view.halfHeight) < 50;
   document.body.classList.toggle("settlement-overview", !showDetails);
-  if (showDetails !== settlementDetailVisible) {
+  const showLighting = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
+  if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible) {
     settlementDetailVisible = showDetails;
+    closeLightingVisible = showLighting;
     setLayers();
   }
   selectionDirty = true;
@@ -700,30 +706,23 @@ function uploadGeometry(
   entity.addComponent("render", {
     meshInstances: [new pc.MeshInstance(mesh, material)],
     layers: coverage ? [coverageTerrainLayer.id] : material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
-    castShadows: name !== "terrain",
+    castShadows: name !== "terrain" && !["closeDetail", "nightGlow", "lampPools"].includes(name),
     receiveShadows: true,
   });
   parent.addChild(entity);
-  entity.enabled =
-    name === "terrain" ||
-    (name === "structures"
-      ? layers.structures && settlementDetailVisible
-      : name === "nature"
-        ? layers.nature
-        : layers.structures && layers.nature && settlementDetailVisible);
+  entity.enabled = tileLayerVisible(name);
   return mesh;
+}
+function tileLayerVisible(name:string):boolean {
+  if (name === "terrain") return true;
+  if (name === "nature") return layers.nature;
+  if (["closeDetail", "nightGlow", "lampPools"].includes(name))
+    return layers.structures && settlementDetailVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > .01);
+  return layers.structures && settlementDetailVisible && (name === "structures" || layers.nature);
 }
 function setLayers() {
   for (const { entity } of tileCache.values())
-    for (const child of entity.children as pc.Entity[]) {
-      child.enabled =
-        child.name === "terrain" ||
-        (child.name === "structures"
-          ? layers.structures && settlementDetailVisible
-          : child.name === "nature"
-            ? layers.nature
-            : layers.structures && layers.nature && settlementDetailVisible);
-    }
+    for (const child of entity.children as pc.Entity[]) child.enabled = tileLayerVisible(child.name);
 }
 function request(tile: Tile, kind: TileJobKind = "detail") {
   const job = {tile,kind}, key = tileJobKey(job);
@@ -799,7 +798,7 @@ function processStreaming(material: pc.StandardMaterial) {
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
       const mesh = uploadGeometry(g, entity, name, name === "terrain" ?
-        (next.kind === "coverage" || next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : material, next.kind === "coverage");
+        (next.kind === "coverage" || next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : name === "nightGlow" ? nightGlowMaterial! : name === "lampPools" ? lampPoolMaterial! : material, next.kind === "coverage");
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
@@ -1395,6 +1394,11 @@ async function start() {
     $("local-time").textContent = `local ${clockLabel(second)} · GMT+${timeZoneOffsetHours(focusLon)} · ${light.phase}`;
     if (key === lastDaylightKey) return;
     lastDaylightKey = key;
+    const hadGlow = eveningGlow > .01;
+    eveningGlow = eveningLightWeight(light.daylight) * (1 - globeBlend);
+    if (nightGlowMaterial) { nightGlowMaterial.emissiveIntensity = eveningGlow; nightGlowMaterial.update(); }
+    if (lampPoolMaterial) { lampPoolMaterial.opacity = .45 * eveningGlow; lampPoolMaterial.update(); }
+    if (hadGlow !== (eveningGlow > .01)) setLayers();
     const sunColor = blend(light.sunColor, day.sunColor), ambient = blend(light.ambient, day.ambient), tint = blend(light.terrainTint, day.terrainTint), sky = blend(light.sky, day.sky);
     sun.light!.color = new pc.Color(sunColor[0], sunColor[1], sunColor[2]);
     sun.light!.intensity = light.sunIntensity + (day.sunIntensity - light.sunIntensity) * globeBlend;
@@ -1414,6 +1418,20 @@ async function start() {
   material.cull = pc.CULLFACE_NONE;
   installLodCoverage(material);
   material.update();
+  const makeGlowMaterial = (pool:boolean) => {
+    const glow = new pc.StandardMaterial();
+    glow.diffuse = new pc.Color(0, 0, 0);
+    glow.emissive = new pc.Color(1, 1, 1);
+    glow.emissiveVertexColor = true;
+    (glow as pc.StandardMaterial & {vertexColorGamma:boolean}).vertexColorGamma = true;
+    glow.useLighting = false; glow.useSkybox = false; glow.useFog = false; glow.useTonemap = false;
+    glow.cull = pc.CULLFACE_NONE;
+    if (pool) { glow.blendType = pc.BLEND_ADDITIVEALPHA; glow.depthWrite = false; glow.opacity = 0; }
+    else glow.emissiveIntensity = 0;
+    installLodCoverage(glow); glow.update(); return glow;
+  };
+  nightGlowMaterial = makeGlowMaterial(false);
+  lampPoolMaterial = makeGlowMaterial(true);
   terrainMaterial = createTerrainMaterial(globe.surface);
   coarseTerrainMaterial = createTerrainMaterial(globe.surface);
   // The world-wide emergency mesh is coverage behind detailed patches. Its
@@ -1829,6 +1847,7 @@ async function start() {
       seed: WORLD_SEED,
       cellAt,
       cellSeed,
+      lightingEvidenceAtSource(x:number,z:number) { return featuresFor(tileForPosition(x,z,15)).filter(f => f.kind === "street-lamp"); },
       buildingEvidenceAtSource(x: number, z: number) {
         return featuresFor(tileForPosition(x, z, 9)).filter(feature => feature.widthM !== undefined).map(feature => ({
           code: feature.code, kind: feature.kind, x: feature.x, z: feature.z,
@@ -2012,6 +2031,7 @@ async function start() {
           roadRepresentation: roadRepresentationAtScale(scaleValueForHalfHeight(view.halfHeight)),
           roadPresentation: roadVisibleAtScale(scaleValueForHalfHeight(view.halfHeight)) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
+          closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0},
           visibleResidents: actors.filter(actor => actor.enabled).length,
           residentPresentation: {
             logicalResidents: simulation.stats.logicalResidents,
@@ -2024,7 +2044,7 @@ async function start() {
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
           visibleGeometryTriangles: Object.fromEntries(
-            ["terrain", "structures", "nature", "detail"].map(name => [name,
+            ["terrain", "structures", "nature", "detail", "closeDetail", "nightGlow", "lampPools"].map(name => [name,
               [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>
                 sum + (record.entity.children as pc.Entity[]).filter(child => child.name === name && child.enabled)
                   .reduce((count,child) => count + (child.render?.meshInstances ?? []).reduce((n,instance) =>
@@ -2032,7 +2052,7 @@ async function start() {
             ]),
           ),
           visibleMeshes: Object.fromEntries(
-            ["terrain", "structures", "nature", "detail"].map((name) => [
+            ["terrain", "structures", "nature", "detail", "closeDetail", "nightGlow", "lampPools"].map((name) => [
               name,
               [...tileCache.values()].filter(
                 (r) =>

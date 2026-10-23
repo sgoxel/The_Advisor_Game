@@ -1,3 +1,4 @@
+import { facadeWindows } from "./street-lighting.ts";
 export * from "./geometry-core.ts";
 
 import {
@@ -201,12 +202,41 @@ function addServiceGeometry(structures: Builder, detail: Builder, service: strin
 export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
   if (options.terrainOnly) return buildTerrainOnly(tile);
   const result = coreBuildTile(tile), structures = new Builder(), nature = new Builder(), detail = new Builder(),
+    closeDetail = new Builder(), nightGlow = new Builder(), lampPools = new Builder(),
     originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
     const physical = feature.widthM !== undefined || feature.kind === "roadside-tree";
-    for (const builder of [structures, nature, detail]) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
+    for (const builder of [structures, nature, detail, closeDetail, nightGlow, lampPools]) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
     const x = 0, z = 0, y = 0, yaw = feature.yawRad || 0,
       width = feature.widthM ?? feature.footprintWidth ?? 8, depth = feature.depthM ?? feature.footprintDepth ?? 8, variant = feature.variant || 0;
+    if(tile.size<=8&&["residence","service","keep","guard-post"].includes(feature.kind)&&!["market","merchant"].includes(feature.service)){
+      const storeys=feature.house?.storeys??(feature.kind==='keep'?3:feature.kind==='guard-post'?1:1),
+        height=feature.house?.wallHeightM??(feature.kind==='keep'?10:feature.kind==='guard-post'?3.8:4);
+      for(const window of facadeWindows(width,depth,height,storeys)){
+        if(window.yaw===0&&["farmstead","blacksmith"].includes(feature.service))continue;
+        const p=offsetLocal(0,0,yaw,window.x,window.z),angle=yaw+window.yaw,
+          glass=offsetLocal(p.x,p.z,angle,0,.055),lit=offsetLocal(p.x,p.z,angle,0,.082);
+        closeDetail.boxYaw(p.x,window.y-.08,p.z,window.width+.16,window.height+.16,.08,angle,color(69,49,32));
+        closeDetail.boxYaw(glass.x,window.y,glass.z,window.width,window.height,.025,angle,color(51,68,75));
+        const q=(xx:number,yy:number):Point=>{const p=offsetLocal(lit.x,lit.z,angle,xx,0);return[p.x,yy,p.z];};
+        nightGlow.quad(q(-window.width/2,window.y),q(window.width/2,window.y),q(window.width/2,window.y+window.height),q(-window.width/2,window.y+window.height),color(255,186,82));
+      }
+    }
+    if(feature.kind==='street-lamp'){
+      const metal=color(55,48,39),brass=color(142,106,57);
+      closeDetail.boxYaw(0,0,0,.12,3.25,.12,yaw,metal);
+      closeDetail.boxYaw(0,3.1,0,.66,.09,.09,yaw,metal);
+      closeDetail.boxYaw(0,2.76,0,.4,.48,.4,yaw,brass);
+      closeDetail.boxYaw(0,3.22,0,.52,.08,.52,yaw,metal);
+      nightGlow.boxYaw(0,2.82,0,.416,.34,.416,yaw,color(255,198,104));
+      // A small ground-conforming additive light pool, no point-light/shadow pass.
+      const radius=3,metric=sourceUnitsPerMetreAt(feature.z),centre:Point=[0,.14,0];
+      for(let side=0;side<12;side++){
+        const point=(angle:number):Point=>{const x=Math.cos(angle)*radius,z=Math.sin(angle)*radius,
+          ground=finalSurfaceAt(feature.x+x*metric.x,feature.z+z*metric.z);return[x,ground.groundHeight-feature.y+.14,z];};
+        lampPools.triangleGradient(centre,point((side+1)*Math.PI/6),point(side*Math.PI/6),color(170,116,43),color(0,0,0),color(0,0,0));
+      }
+    }
     if (feature.kind === "residence") {
       const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3],
         urban = Boolean(feature.urban), bodyHeight = feature.house?.wallHeightM ?? 2.8,
@@ -303,5 +333,6 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
     structures: mergeGeometry(result.structures, structures.finish()),
     nature: mergeGeometry(result.nature, nature.finish()),
     detail: mergeGeometry(result.detail, detail.finish()),
+    ...(tile.size<=8?{closeDetail:closeDetail.finish(),nightGlow:nightGlow.finish(),lampPools:lampPools.finish()}:{}),
   };
 }

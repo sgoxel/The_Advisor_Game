@@ -1,3 +1,4 @@
+import { mainStreetLampAnchors } from "./street-lighting.ts";
 export * from "./world-core.ts";
 import { buildingName, familyName, gateName, streetNames, wallName, type BuildingKind } from "./names.ts";
 
@@ -17,9 +18,9 @@ import { settlementExteriorFor, settlementHomeFor, visibleSettlementStreetSegmen
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
-import { metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
+import { metresToSource, sourceUnitsPerMetreAt, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
 
-type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "border" | "gate" | "guard-post" | "garden" | "path" | "pavement" | "roadside-tree";
+type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "border" | "gate" | "guard-post" | "garden" | "path" | "pavement" | "roadside-tree" | "street-lamp";
 type MorphologyFeature = {
   kind: MorphologyKind;
   x: number;
@@ -245,6 +246,21 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
         const post = gate.guardPosts[index];
         add("guard-post", post.x, post.z, digest(`${gate.id}/${index}`), `${place.id}/guard-post/${gate.id}/${index}`, { name: `${gateLabel} guard post`, service: "guard-office", capacity: 2, residents: 1, label: "Guard post", entranceX: gate.x, entranceZ: gate.z, yawRad: gateYaw, footprintWidth: metresToSource(4.5), footprintDepth: metresToSource(4.5), widthM: 4.5, depthM: 4.5 });
       }
+    }
+    if(tile.size<=8)for(const lamp of mainStreetLampAnchors(plan)){
+      if(!lamp.candidates.some(p=>nearTile(tile,p,metresToSource(1))))continue;
+      const point=lamp.candidates.find(p=>{
+        if(overlaps(resolution.staticOccupants,p.x,p.z,metresToSource(.3)))return false;
+        const metric=sourceUnitsPerMetreAt(p.z),range=metresToSource(16);
+        for(const index of settlementHomeIndicesNear(place,p.x-range*metric.x/metric.z,p.x+range*metric.x/metric.z,p.z-range,p.z+range)){
+          const plot=resolveHome(place,plan,resolution,index),home=resolution.homes.get(plot.id);if(!home)continue;
+          const dx=wrapSourceX(p.x-home.x)/metric.x,dz=(p.z-home.z)/metric.z,c=Math.cos(plot.yawRad),s=Math.sin(plot.yawRad);
+          if(Math.abs(dx*c-dz*s)<plot.widthM!/2+.6&&Math.abs(dx*s+dz*c)<plot.depthM!/2+.6)return false;
+        }
+        const ground=finalSurfaceAt(p.x,p.z);
+        return ground.water.kind==='none'&&ground.walkable&&!plan.gates.some(g=>Math.hypot(wrapSourceX(g.x-p.x),g.z-p.z)<metresToSource(3));
+      });
+      if(point)add("street-lamp",point.x,point.z,digest(lamp.id),lamp.id,{yawRad:lamp.yaw,widthM:.6,depthM:.6,label:"Street lantern"});
     }
     const mainStreet = plan.streets[0];
     for (let index = 2; index < mainStreet.points.length - 1; index += 4) {

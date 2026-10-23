@@ -29,6 +29,9 @@ export type TileGeometry = {
   structures: Geometry;
   nature: Geometry;
   detail: Geometry;
+  closeDetail?: Geometry;
+  nightGlow?: Geometry;
+  lampPools?: Geometry;
 };
 const color = (r: number, g: number, b: number): [number, number, number] => [r, g, b];
 const blendColor = (a: RGB, b: RGB, amount: number): [number, number, number] => {
