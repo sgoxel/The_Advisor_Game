@@ -521,6 +521,32 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.equal(over.status, "over-budget");
   assert.equal(over.stations.length, 0,
     "oversized diagnostic must reject the route without truncating it into a false positive");
+  // Thousands of repeated raw SEED points can collapse to two sampled
+  // stations. The raw input must also have a finite cumulative planning cap.
+  const rawOverflow = { ...a, centerline: [
+    { x: 0, z: 0 },
+    ...Array.from({ length: ROUTE_CORRIDOR_STATION_LIMIT * 2 }, () => ({ x: 0, z: 0 })),
+    { x: 3, z: 0 },
+  ] } as TransportRoadEdge;
+  const rawOver = planTransportRouteCorridor(
+    { from: "A", to: "B", edgeCodes: [a.code] },
+    new Map([[a.code, rawOverflow]]), nodes,
+  );
+  assert.equal(rawOver.status, "over-budget",
+    "source centerline input cannot hide unbounded synchronous work behind a tiny station count");
+  assert.equal(rawOver.stations.length, 0,
+    "source-waypoint budget must fail closed without claiming partial traversal");
+  const splitOverflow = (edge: TransportRoadEdge) => ({
+    ...edge, centerline: [
+      edge.centerline[0],
+      ...Array.from({ length: ROUTE_CORRIDOR_STATION_LIMIT }, () => edge.centerline[0]),
+      edge.centerline.at(-1)!,
+    ],
+  }) as TransportRoadEdge;
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] },
+    new Map([a, b].map(edge => [edge.code, splitOverflow(edge)])), nodes,
+  ).status, "over-budget", "separate short graph legs share ONE cumulative raw waypoint budget");
   assert.deepEqual(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, b.code] }, roads, nodes), result);
   for (const centerline of [
     [null, { x: 3, z: 0 }],
