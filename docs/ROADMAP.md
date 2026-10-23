@@ -31,21 +31,21 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — SEED-legal resident door→street→work/guard travel: no teleport, stable occupancy & Fantasy-Time UX
+- WP-S006-001-001 — Legal resident journeys: door→street/gate/bridge→work, stable identity & Fantasy-Time UX
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Research PlayCanvas toon/GLB/2D art & ten-scale semantic zoom: readability, backend parity, mobile costs
+- WP-S007-001-001 — Research toon/GLB 3D, 2D residents & semantic zoom: readable mobile WebGPU/WebGL2
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport accessible atlas: computed 44px touch, legible panels, keyboard focus & safe areas
+- WP-S008-001-001 — Accessible seven-viewport atlas: 44px touch, readable UI, keyboard inspection & safe areas
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance: cold→coherent→interactive→settled, frame/input p95 & device evidence
-- WP-S009-002-001 — Bounded canonical point picking & revision-driven labels, HUD and route-overlay work
-- WP-S009-003-001 — Adaptive mobile GPU quality, real device-loss recovery & reconciled CPU+GPU memory policy
-- WP-S009-004-001 — README conformance ledger: Advisor autonomy, campaign time/save, atlas copy & unimplemented scope
-- WP-S009-005-001 — Pure-zoom readiness: coherent coverage, first canonical answer, required 3D & warm-cache reuse
+- WP-S009-001-001 — Exact-SHA performance: coherent/authoritative/settled latency, p95 & device evidence
+- WP-S009-002-001 — Bounded canonical picking & revision-driven UI: responsive inspect, zero idle churn
+- WP-S009-003-001 — Adaptive GPU & recovery: device DPR/shadows, 256MB trim & combined 1GB memory
+- WP-S009-004-001 — README conformance: truthful atlas UX, campaign clock & missing Advisor gameplay ledger
+- WP-S009-005-001 — Pure-zoom readiness: coherent terrain, first legal answer & retained 3D detail
