@@ -165,5 +165,25 @@ test("S005 selected route has a bounded first display opportunity at four canoni
       previousRoute = result.answer;
     }
   }
+  // Only explicit same-session selections at these exact scales enter the
+  // bounded telemetry. These are software-WebGL2 browser observations, not
+  // physical handset benchmarks or pixels-presented timestamps.
+  const fourScales = await page.evaluate(() =>
+    window.advisorTransport.telemetry().fourScaleSiteRouteTimings);
+  for (const denominator of ["20", "50", "100", "250"]) {
+    const sample = fourScales[`1/${denominator}`];
+    expect(sample.samples).toBe(2);
+    expect(sample.ready).toBe(2);
+    expect(sample.unavailable).toBe(0);
+    expect(sample.displayOpportunities).toBe(2);
+    expect(sample.calculationP95Ms).toBeGreaterThanOrEqual(0);
+    expect(sample.displayFrameOpportunityP95Ms).toBeGreaterThanOrEqual(sample.calculationP95Ms);
+  }
+  console.log("S005_FOUR_SCALE_BROWSER_P95_WEBGL2_SOFTWARE", JSON.stringify({
+    viewports: ["1920x1080", "1080x1920"],
+    renderBackend: "webgl2 (software emulation)",
+    timingMeaning: "explicit-route calculation and double-rAF opportunity, not actual pixel paint",
+    byScale: fourScales,
+  }));
   expect(errors).toEqual([]);
 });
