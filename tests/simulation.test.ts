@@ -19,6 +19,7 @@ import {
   lastReachableRoutineStop,
   residentOccupiesBuilding,
   readableResidentSite,
+  residentInspectorSelection,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -200,6 +201,40 @@ test("house inspection resolves the rendered legal doorway, never an unverified 
       }
     }
   assert.ok(matched > 0, "compare against at least one actually rendered residence");
+});
+
+test("resident inspector preserves the exact selected SEED identity across camera and LOD churn", () => {
+  const visible = Array.from({ length: 20 }, (_, index) => ({ code: `SEED/RESIDENT/${index}`, index }));
+  const selected = visible[18], absent = { code: "SEED/RESIDENT/77", index: 77 };
+  let resolutions = 0;
+  const resolve = (code: string) => {
+    resolutions++;
+    return code === absent.code ? absent : undefined;
+  };
+  const first = residentInspectorSelection(visible, "", resolve);
+  assert.equal(first.selectedCode, visible[0].code, "first selection is deterministic");
+  assert.equal(first.records.length, 16, "ordinary inspector work stays bounded");
+  assert.equal(resolutions, 0, "no extra SEED resolution on initial selection");
+
+  const beyondLimit = residentInspectorSelection(visible, selected.code, resolve);
+  assert.equal(beyondLimit.selectedCode, selected.code, "the 17th+ visible resident cannot be replaced by the first 16");
+  assert.equal(beyondLimit.records[0], selected);
+  assert.equal(beyondLimit.outsideView, false);
+  assert.equal(resolutions, 0, "already evaluated visible residents need no second resolution");
+
+  const panned = residentInspectorSelection([], absent.code, resolve);
+  assert.equal(panned.selectedCode, absent.code, "panning/LOD must not silently select another person");
+  assert.equal(panned.records[0], absent);
+  assert.equal(panned.outsideView, true, "resolved SEED resident stays inspectable off-screen");
+  assert.equal(resolutions, 1, "only the selected identity is lazily resolved");
+  assert.equal(panned.unavailable, false);
+
+  const missing = residentInspectorSelection(visible, "SEED/RESIDENT/MISSING", resolve);
+  assert.equal(missing.selectedCode, "SEED/RESIDENT/MISSING");
+  assert.equal(missing.unavailable, true, "unknown resident must say unavailable, not switch identity");
+  assert.equal(missing.records.length, 16);
+  assert.equal(resolutions, 2);
+  assert.equal(residentInspectorSelection([], "", resolve).selectedCode, "");
 });
 
 test("resident captions are short while authoritative site IDs stay unchanged", () => {
