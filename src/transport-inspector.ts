@@ -857,9 +857,10 @@ function chooseNearestSiteRoute() {
   resetSiteAccessProbe();
   renderSiteRoute();
   renderMetrics();
-  // Route state is independent of map navigation; repaint the local overlay now.
+  // The existing frame loop redraws the overlay once from the new SEED
+  // route. Do not synchronously reproject up to 96 SVG roads during the
+  // first-answer click; the answer DOM is authoritative immediately.
   lastFingerprint = "";
-  refreshOverlay(true);
   if (!waitingForMapFocus) {
     // Two one-shot animation frames allow the new route DOM and SVG preview
     // a display opportunity. This is NOT a measured pixel-paint timestamp,
