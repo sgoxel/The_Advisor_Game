@@ -138,9 +138,10 @@ const view: View = {
   x: villages[0].x,
   z: villages[0].z + metresToSource(6),
   halfHeight: HERO_HALF_HEIGHT,
-  aspect: innerWidth / innerHeight,
+  // A hidden or minimised page can report a 0x0 viewport; 0/0 would poison every projection.
+  aspect: innerWidth > 0 && innerHeight > 0 ? innerWidth / innerHeight : 16 / 9,
   yaw: -0.22,
-  pixels: innerHeight,
+  pixels: Math.max(1, innerHeight),
 };
 // Presentation-only inspection angle; changing it never changes the canonical view or SEED.
 let bridgeInspectionAngle = false;
@@ -1266,6 +1267,8 @@ function setupControls() {
   window.addEventListener("blur", () => pressed.clear());
   window.addEventListener("resize", () => {
     app.resizeCanvas();
+    // Keep the last real view while the page is hidden or minimised (0x0 viewport).
+    if (innerWidth < 1 || innerHeight < 1) return;
     view.aspect = innerWidth / innerHeight;
     view.pixels = Math.min(innerHeight, 1000);
     streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
