@@ -20,6 +20,7 @@ import {
   residentOccupiesBuilding,
   readableResidentSite,
   residentInspectorSelection,
+  nearestNode,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -32,6 +33,25 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("resident streets attach to the true nearest vertex across grid bucket boundaries", () => {
+  const cell = 12, nodes = [
+    { eastM: 0, northM: 0 }, // same bucket, but farther away
+    { eastM: 23.9, northM: 23.9 }, // adjacent bucket, still farther
+    { eastM: 24.01, northM: 11.9 }, // two buckets over and truly closest
+  ];
+  const grid = new Map<string, number[]>();
+  nodes.forEach((point, id) => {
+    const key = `${Math.floor(point.eastM / cell)}/${Math.floor(point.northM / cell)}`;
+    grid.set(key, [...(grid.get(key) ?? []), id]);
+  });
+  const graph = { nodes, grid, cell }, offset = { eastM: 11.9, northM: 11.9 };
+  assert.equal(nearestNode(graph, offset), 2,
+    "first occupied grid cell cannot override a closer street vertex two buckets away");
+  assert.equal(nearestNode(graph, nodes[0]), 0, "exact vertex lookup remains stable");
+  assert.equal(nearestNode({ nodes: [], grid: new Map(), cell }, offset), -1,
+    "empty streets cannot invent a connected vertex");
+});
 
 test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
   const start = { eastM: 0, northM: 0 }, goal = { eastM: 12, northM: 0 };
