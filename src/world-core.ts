@@ -359,6 +359,50 @@ const boundedEarthwork = (
   maxFill: number,
 ) => Math.max(existing - maxCut, Math.min(existing + maxFill, desired));
 
+// A canyon crossing needs a supported deck, not a steep 80 m dirt ramp.
+// The finite 4 m samples define an 8%-Lipschitz upper envelope of the actual
+// SEED roadbed. Dry sections above the 3 m fill limit remain explicit deck.
+// No camera/cache value may choose the profile; refusal retains unsafe truth.
+const BRIDGE_APPROACH_METRES = 80;
+const BRIDGE_GRADE_LIMIT = .08;
+const bridgeGradeProfiles = new Map<string, { cx:number; cz:number; ux:number; uz:number; metresPerUnit:number; radiusM:number; stations:readonly {s:number; h:number}[]; valid:boolean }>();
+function bridgeGradeProfileAt(
+  road: Road,
+  tangent: ReturnType<typeof roadTangentAt>,
+  crossing: NonNullable<ReturnType<typeof freshwaterCrossingAt>>,
+  pierM: number,
+) {
+  const cx = Math.round(wrapSourceX(tangent.cx + crossing.ux * (crossing.lo + crossing.hi) / 2) * 1000) / 1000,
+    cz = Math.round((tangent.cz + crossing.uz * (crossing.lo + crossing.hi) / 2) * 1000) / 1000,
+    key = `${road.code}/${tangent.segment}/${crossing.code}/${cx}/${cz}`;
+  let profile = bridgeGradeProfiles.get(key);
+  if (!profile) {
+    const radiusM = crossing.spanM / 2 + pierM + BRIDGE_APPROACH_METRES,
+      count = Math.max(2, Math.ceil(2 * radiusM / 4)),
+      stations: {s:number; h:number}[] = [];
+    for (let i = 0; i <= count; i++) {
+      const distanceM = radiusM * (2 * i / count - 1),
+        x = wrapSourceX(cx + crossing.ux * distanceM / crossing.metresPerUnit),
+        z = cz + crossing.uz * distanceM / crossing.metresPerUnit,
+        natural = naturalSurfaceBaseAt(x, z),
+        earthwork = boundedEarthwork(roadProfileHeightAt(x, z, road), natural.groundHeight, 4, 3);
+      stations.push({s: distanceM, h: Math.max(earthwork, crossing.waterLevel + 1)});
+    }
+    const envelope = (s:number) => stations.reduce((highest, sample) =>
+      Math.max(highest, sample.h - BRIDGE_GRADE_LIMIT * Math.abs(s - sample.s)), -Infinity);
+    // An elevated deck ending in midair would just move the discontinuity.
+    // Refuse instead of extending hidden terrain authority beyond this span.
+    const valid = envelope(-radiusM) <= stations[0].h + .01 &&
+      envelope(radiusM) <= stations[stations.length-1].h + .01;
+    profile = {cx, cz, ux:crossing.ux, uz:crossing.uz,
+      metresPerUnit:crossing.metresPerUnit, radiusM, stations, valid};
+    bridgeGradeProfiles.set(key, profile);
+    if (bridgeGradeProfiles.size > 96)
+      bridgeGradeProfiles.delete(bridgeGradeProfiles.keys().next().value!);
+  }
+  return profile;
+}
+
 function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const modifiers: SurfaceModifier[] = [],
     place = nearestPlace(x, z),
@@ -443,16 +487,17 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
       pierM = crossing ? Math.min(5,(RURAL_BRIDGE_MAX_LENGTH_M-crossing.spanM)/2) : 0;
     let roadHeight=initialRoadHeight,deckHeight:number|undefined;
     if(crossing&&distance<=5){
-      const left=crossing.lo-pierM/crossing.metresPerUnit,right=crossing.hi+pierM/crossing.metresPerUnit,
-        support=(t:number)=>{const px=tangent.cx+crossing.ux*t,pz=tangent.cz+crossing.uz*t,surface=naturalSurfaceBaseAt(px,pz);return {surface,height:Math.max(crossing.waterLevel+1,boundedEarthwork(roadProfileHeightAt(px,pz,road),surface.groundHeight,4,3))};},
-        a=support(left),b=support(right),legal=a.surface.water.kind==='none'&&b.surface.water.kind==='none'&&a.height<=a.surface.groundHeight+3&&b.height<=b.surface.groundHeight+3&&Math.abs(b.height-a.height)/((right-left)*crossing.metresPerUnit)<=.08;
-      if(legal){
-        if(left<=0&&right>=0)deckHeight=lerp(a.height,b.height,-left/(right-left));
-        else if(base.water.kind==='none'){
-          const gapM=Math.max(left,-right)*crossing.metresPerUnit;
-          // A 24 m smoothstep can exceed an 8% walkable approach grade even with a legal deck.
-          // Use a longer linear, cut/fill-bounded roadbed transition on the SAME canonical route.
-          if(gapM<80){const supportHeight=left>0?a.height:b.height;roadHeight=boundedEarthwork(lerp(supportHeight,roadHeight,clamp01(gapM/80)),base.groundHeight,4,3);}
+      const profile=bridgeGradeProfileAt(road,tangent,crossing,pierM),
+        alongM=(wrapSourceX(tangent.cx-profile.cx)*profile.ux+
+          (tangent.cz-profile.cz)*profile.uz)*profile.metresPerUnit;
+      if(profile.valid && Math.abs(alongM)<=profile.radiusM) {
+        // A maximum of 8%-grade cones has no steeper slope in either direction.
+        const top=profile.stations.reduce((height,station)=>
+          Math.max(height,station.h-BRIDGE_GRADE_LIMIT*Math.abs(alongM-station.s)), -Infinity);
+        if(top>=base.groundHeight-4) {
+          if(base.water.kind!=='none' || top>base.groundHeight+3)
+            deckHeight=top; // a supported bridge/viaduct, never >3 m of fictitious fill
+          else roadHeight=top; // ordinary legal <=4 m cut / <=3 m fill
         }
       }
     }
