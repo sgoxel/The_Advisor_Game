@@ -13,6 +13,7 @@ import {
   residentAt,
   residentFoundationAt,
   continuousWalkableOffsetSegment,
+  readableResidentSite,
 } from "../src/simulation.ts";
 
 import { localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -34,6 +35,14 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("resident captions are short while authoritative site IDs stay unchanged", () => {
+  const foundation = residentFoundationAt(villages[0], 12);
+  assert.equal(readableResidentSite(foundation.homeEntrance), "Residence 12 entrance");
+  assert.equal(foundation.homeEntrance, `${foundation.homeBuilding}/ENTRANCE`);
+  assert.ok(readableResidentSite(foundation.workplace).length < foundation.workplace.length,
+    "the visible caption is shorter than the expandable canonical workplace code");
 });
 
 test("every resident foundation owns one stable canonical house and entrance", () => {
