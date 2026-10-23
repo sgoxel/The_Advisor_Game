@@ -109,8 +109,10 @@ test("house inspection resolves the rendered legal doorway, never an unverified 
   let matched = 0;
   for (const [place, indexes] of [[villages[0], [0, 3, 12]], [cities[0], [0, 6]]] as const)
     for (const index of indexes) {
-      const resident = residentFoundationAt(place, index),
+      const foundation = residentFoundationAt(place, index),
+        resident = residentAt(place, index, tickAtLocalTime(WORKDAY, 3 * HOUR, place.canonicalPosition.lon)),
         door = resolvedSettlementHomeDoorFor(place, index);
+      assert.equal(resident.code, foundation.code, "lazy door resolution never changes SEED identity");
       assert.deepEqual(resolvedSettlementHomeDoorFor(place, index), door,
         "house focus must be deterministic without camera or presentation state");
       if (!door) continue; // A rejected house must not fabricate an entrance.
