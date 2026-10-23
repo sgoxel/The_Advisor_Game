@@ -11,7 +11,7 @@ Full rules: `docs/AGENTS.md` (short). Product vision: `docs/README.md` (long, do
 5. Subagent briefs name exact files and line ranges and what is ruled out. Do not make them re-explore.
 
 ## Commands (fast loop first)
-- `npx tsc --noEmit` · `npm test` (node --test, ~90 tests, seconds) · `npm run build`
+- `npx tsc --noEmit` · `npm test` (node --test; full suite takes 10+ minutes in this sandbox, run single files with `node --experimental-strip-types --test tests/<file>`; needs `npm ci` first if node_modules is absent) · `npm run build`
 - Browser: `npx playwright test --config playwright.fallback.config.js tests/browser/<spec>` (one spec, not the suite)
 - Screenshots: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 tools/screenshot_tool.py --scenario <name> --profile desktop|phone --renderer webgl2` (120 s timeout, run in background). Steps: click, select, visible, eval (no `;` inside an eval), settle, shot, wait.
 - If Playwright cannot find Chromium use `executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'` in a throwaway config.
@@ -21,7 +21,7 @@ Full rules: `docs/AGENTS.md` (short). Product vision: `docs/README.md` (long, do
 - Travel: `travel.ts` speeds + straight-line 60-minute proof, `routing.ts` bounded A* planner (on demand only), `village-routes.ts` cached village routes, `travel-ui.ts` panel and camera framing (`window.advisorRoutes`), `route-overlay.ts` SVG route + tag. Contract: `docs/ROUTING.md`.
 - Rendering: `main.ts` (1.6k lines: app, HUD, labels, loop), `geometry.ts` + `tile-worker.ts` terrain meshes, `streaming.ts` caches/budgets, `render-frame.ts` camera-relative ENU origin, `globe-view.ts`/`globe-surface.ts`/`globe-worker.ts` globe, `handoff.ts` zoom-driven globe<->local blend, `navigation.ts` drag, `renderer.ts`/`renderer-policy.ts` WebGPU->WebGL2, `canonical-inspector.ts` debug inspector.
 - Tests: `tests/*.test.ts` unit (listed in package.json `test`), `tests/browser/*.spec.js` Playwright, `tools/screenshot_tool.py` scenarios, `tools/verify-deployment.mjs` live check.
-- Docs by topic: `NATURAL_WORLD.md`, `PLANET_ARCHITECTURE.md`, `WORLD_ARCHITECTURE.md`, `ROAD_NETWORK_PLAN.md`, `SETTLEMENT_PLAN.md`, `LIVING_WORLD_PLAN.md`, `WEBGPU.md`, `VERIFICATION.md`. Open one only if the WP touches that topic.
+- Docs by topic: `NATURAL_WORLD.md`, `PLANET_ARCHITECTURE.md`, `WORLD_ARCHITECTURE.md`, `ROAD_NETWORK_PLAN.md`, `SETTLEMENT_PLAN.md`, `LIVING_WORLD_PLAN.md`, `WEBGPU.md`, `VERIFICATION.md`, `PRESENTATION_ARCHITECTURE.md` (toon/GLB/billboard/semantic-zoom target, kept in step by `tests/presentation-architecture.test.ts`). Open one only if the WP touches that topic.
 
 ## Hard facts
 - Everything is decided by the SEED (no other randomness). Canonical positions are lon/lat on the sphere; x/z are derived render coordinates.
