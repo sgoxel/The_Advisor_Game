@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Prove uninterrupted SEED-legal gate→Y→bridge→site route; fast truthful previews
+- WP-S005-001-001 — Certify SEED-legal gate→Y→bridge→site walking: unsafe grades, honest previews & four-scale UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident door→work/guard paths: Fantasy-Time, prompt inspection & pooled 2D actors
+- WP-S006-001-001 — SEED-legal resident door→work/guard travel, accurate building occupancy & Fantasy-Time UX
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Research toon/GLB/2D & semantic-zoom art: legibility and mobile cost contracts
+- WP-S007-001-001 — Research PlayCanvas toon/GLB/2D and semantic zoom: readable visuals, parity & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport atlas UX: 44px hit areas, readable safe-area panels & keyboard access
+- WP-S008-001-001 — Seven-viewport accessible atlas: readable UI, 44px touch areas, keyboard/popup focus & safe areas
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA first-use/final-detail latency, frame p95 & combined CPU+GPU evidence
-- WP-S009-002-001 — Bounded canonical picking & input p95: eliminate idle DOM/layout churn
-- WP-S009-003-001 — Adaptive DPR/shadows, WebGPU/WebGL2 recovery & combined CPU+GPU budget
-- WP-S009-004-001 — README conformance ledger: Advisor loop, FantasyClock, persistence & truthful atlas UX
-- WP-S009-005-001 — Pure-zoom coverage: authoritative first-use, stable 3D detail & warm-cache reuse
+- WP-S009-001-001 — Exact-SHA cold→first answer→settled latency, frame/input p95 & mobile evidence
+- WP-S009-002-001 — Bound canonical picking & idle-frame label, layout and route-overlay work
+- WP-S009-003-001 — Adaptive mobile DPR/shadows, GPU-loss recovery & complete combined CPU+GPU accounting
+- WP-S009-004-001 — README conformance: campaign time/save, Advisor autonomy & truthful atlas UX gap ledger
+- WP-S009-005-001 — Pure-zoom readiness: coherent terrain, authoritative selection, settled 3D & cache reuse
