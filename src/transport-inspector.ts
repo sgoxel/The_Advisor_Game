@@ -898,10 +898,10 @@ function chooseNearestSiteRoute() {
     // a display opportunity. This is NOT a measured pixel-paint timestamp,
     // nor a 3D mesh-settling timer. Stale/cancelled views cannot win.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (frameRevision !== siteRouteFrameRevision || panel.hidden ||
+      if (frameRevision !== siteRouteFrameRevision || panel.hidden || !requestScale ||
           world()?.state.scaleLabel !== requestScale) return;
       lastSiteRouteFrameMs = performance.now() - started;
-      siteRouteTimings.markFrame(timingSample, lastSiteRouteFrameMs, requestScale!);
+      siteRouteTimings.markFrame(timingSample, lastSiteRouteFrameMs, requestScale);
       renderMetrics();
     }));
   }
