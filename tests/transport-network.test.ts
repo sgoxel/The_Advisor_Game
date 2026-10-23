@@ -132,6 +132,32 @@ test("S005 preview starts at selected canonical Y/harbor rather than unrelated m
   "unselected preview preserves the nearest-road fallback");
 });
 
+test("S005 explicit canonical road can answer walking graph before renderer/map focus exists", () => {
+  const network = siteTransportNetwork,
+    index = createTransportWalkingIndex(network),
+    nodes = new Map(network.nodes.map(node => [node.code, node])),
+    branch = network.roadEdges.find(edge => edge.roadClass === "access" &&
+      edge.from.includes("/NODE/SITE/"))!;
+  assert.ok(branch, "a SEED-owned site access branch supplies renderer-independent graph evidence");
+  const focus = branch.centerline[Math.floor(branch.centerline.length / 2)].position;
+  // This is the selected item's canonical point, NOT a camera state.
+  const from = selectedWalkingPreviewOrigin(
+    { kind: "road", code: branch.code }, focus, network, nodes,
+  );
+  assert.ok(from && (from.code === branch.from || from.code === branch.to));
+  const destination = from!.code === branch.from ? branch.to : branch.from;
+  const route = transportWalkingRoute(index, from!.code, destination);
+  assert.deepEqual(route?.edgeCodes, [branch.code],
+    "selected SEED route distance/Fantasy-Time can resolve without WebGPU/WebGL2 or a camera");
+  assert.equal(route!.distanceM, branch.surfaceLengthM);
+  assert.equal(route!.fantasyWalkSeconds, branch.fantasyWalkSeconds);
+  assert.equal(selectedWalkingPreviewOrigin(undefined, focus, network, nodes), undefined,
+    "without a renderer map focus, an unselected route cannot invent a nearest road");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "road", code: "NONEXISTENT" }, focus, network, nodes,
+  ), undefined, "an invalid selected source does not borrow another road");
+});
+
 test("S005 route preview projects only real nearby walking edge identities", () => {
   const nearby = [{ code: "EDGE/B" }, { code: "EDGE/D" }, { code: "EDGE/A" }];
   assert.deepEqual([...visibleWalkingPreviewEdgeCodes(
