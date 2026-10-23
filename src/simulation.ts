@@ -1014,7 +1014,7 @@ export class LazySimulation {
     text("resident-home", `${familyName(resident.code, places.find((place) => place.id === resident.settlement)?.continent ?? 0)} home · assigned entrance`);
     text("resident-workplace", readableResidentSite(resident.workplace));
     text("resident-route", resident.route.startsWith("BLOCKED:")
-      ? "Blocked — no continuous legal walking route"
+      ? (resident.grounded ? "Blocked — no continuous legal walking route" : `Blocked — ${resident.route.slice("BLOCKED:".length).trim()}`)
       : resident.route.includes(" → ")
         ? resident.route.split(" → ").map(readableResidentSite).join(" → ")
         : readableResidentSite(resident.route));
