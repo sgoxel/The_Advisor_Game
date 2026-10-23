@@ -518,7 +518,9 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   const over = planTransportRouteCorridor(
     { from: "A", to: "C", edgeCodes: [huge.code] }, new Map([[huge.code, huge]]),
     new Map([["A", { x: 0, z: 0 }], ["C", { x: ROUTE_CORRIDOR_STATION_LIMIT + 1, z: 0 }]]));
-  assert.equal(over.status, "over-budget");
+  assert.deepEqual(over, { status: "over-budget", reason: "sample-stations",
+    edgeCode: huge.code, stations: [] },
+    "oversized physical arc must report the station limit and owning road");
   assert.equal(over.stations.length, 0,
     "oversized diagnostic must reject the route without truncating it into a false positive");
   // Thousands of repeated raw SEED points can collapse to two sampled
@@ -532,8 +534,9 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     { from: "A", to: "B", edgeCodes: [a.code] },
     new Map([[a.code, rawOverflow]]), nodes,
   );
-  assert.equal(rawOver.status, "over-budget",
-    "source centerline input cannot hide unbounded synchronous work behind a tiny station count");
+  assert.deepEqual(rawOver, { status: "over-budget", reason: "raw-source-waypoints",
+    edgeCode: a.code, stations: [] },
+    "source centerline input must report its REAL budget cause and selected road");
   assert.equal(rawOver.stations.length, 0,
     "source-waypoint budget must fail closed without claiming partial traversal");
   const splitOverflow = (edge: TransportRoadEdge) => ({
@@ -543,10 +546,11 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
       edge.centerline.at(-1)!,
     ],
   }) as TransportRoadEdge;
-  assert.equal(planTransportRouteCorridor(
+  assert.deepEqual(planTransportRouteCorridor(
     { from: "A", to: "C", edgeCodes: [a.code, b.code] },
     new Map([a, b].map(edge => [edge.code, splitOverflow(edge)])), nodes,
-  ).status, "over-budget", "separate short graph legs share ONE cumulative raw waypoint budget");
+  ), { status: "over-budget", reason: "raw-source-waypoints", edgeCode: b.code, stations: [] },
+  "separate short graph legs share ONE cumulative raw waypoint budget; name the first offending road");
   assert.deepEqual(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, b.code] }, roads, nodes), result);
   for (const centerline of [
     [null, { x: 3, z: 0 }],
