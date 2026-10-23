@@ -1023,6 +1023,18 @@ test("S005 selected bridge diagnostics fail closed for malformed source road way
   const invalidRoad = { ...edge, centerline: [edge.centerline[0], null, ...edge.centerline.slice(1)] } as unknown as typeof edge;
   assert.equal(transportBridgeSpanAt(bridge, invalidRoad).matchingCrossing, false,
     "malformed selected physical bridge must fail closed without sampling water or throwing");
+  // A finite 49-station output must not hide an unbounded synchronous scan
+  // of raw bridge road vertices. Poison an oversized array element to prove
+  // the two entry points reject it BEFORE accessing source coordinates.
+  const oversized = Array.from({ length: ROUTE_CORRIDOR_STATION_LIMIT * 2 + 1 },
+    () => ({ x: 8, z: 0 }));
+  Object.defineProperty(oversized, 1, {
+    get: () => { throw new Error("oversized bridge centerline must not be scanned"); },
+  });
+  assert.deepEqual(transportRoadArcStations(oversized, 8, 0, -20, 20, 4), [],
+    "arc sampler must refuse excessive raw source work before reading waypoints");
+  assert.equal(transportBridgeSpanAt(bridge, { ...edge, centerline: oversized }).matchingCrossing, false,
+    "bridge anchor must reject oversized source data before any road scan or water query");
 });
 
 test("S005 selected crossing samples the real bent road arc without inventing a tangent shortcut", () => {
