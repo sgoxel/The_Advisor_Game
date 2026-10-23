@@ -477,7 +477,7 @@ test("S005 bounded gate-to-site candidate retains the required bridge without un
     "unsafe-road exclusion must still cross the exact requested bridge once");
   assert.equal(retained?.distanceM, 10);
   assert.equal(retained?.fantasyWalkSeconds, 100);
-  assert.ok((retained?.exploredNodes ?? Infinity) <= 2 * index.nodeCount);
+  assert.ok((retained?.exploredNodes ?? Infinity) <= 4096);
   assert.deepEqual(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
     new Set(["unsafe"])), retained, "graph candidate is stable across repeated immutable exclusions");
   assert.deepEqual([...exclusions], ["unsafe"], "search must never mutate caller exclusions");
@@ -490,6 +490,45 @@ test("S005 bounded gate-to-site candidate retains the required bridge without un
   assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
     new Set(Array.from({ length: 13 }, (_, i) => `unsafe-${i}`))), null,
     "bridge-constrained attempts preserve existing finite exclusion budget");
+});
+
+test("S005 required bridge searches longer simple approaches if the shortest prefix blocks the far bank", () => {
+  const edge = (code: string, from: string, to: string, metres: number) => ({
+    code, from, to, surfaceLengthM: metres, fantasyWalkSeconds: metres * 10,
+  });
+  // The two shortest prefixes overlap the only useful far-bank continuation.
+  // A longer G→X→N prefix enables the non-retracing N→F→R→Q→P→S route.
+  const network = {
+    nodes: ["G", "P", "Q", "N", "F", "R", "S", "X"].map(code => ({ code })),
+    roadEdges: [
+      edge("a", "G", "P", 1), edge("b", "P", "Q", 1),
+      edge("c", "Q", "N", 1), edge("d", "G", "X", 5),
+      edge("e", "X", "N", 5), edge("required", "N", "F", 1),
+      edge("f", "F", "R", 1), edge("g", "R", "Q", 1),
+      edge("h", "P", "S", 1),
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network), required = network.roadEdges[5];
+  const route = transportWalkingRouteViaRequiredEdge(index, "G", "S", required);
+  assert.deepEqual(route?.edgeCodes, ["d", "e", "required", "f", "g", "b", "h"],
+    "a bounded simple-path search must find the longer canonical prefix rather than repeatedly tracing the shortest");
+  assert.equal(route?.distanceM, 15);
+  assert.equal(route?.fantasyWalkSeconds, 150);
+  assert.ok((route?.exploredNodes ?? Infinity) <= 4096);
+  assert.deepEqual(transportWalkingRouteViaRequiredEdge(index, "G", "S", required)?.edgeCodes,
+    route?.edgeCodes, "candidate remains deterministic across identical queries");
+  assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S", required,
+    new Set(["e"])), null, "known unsafe approach must never sneak into a bridge candidate");
+  // A detour exceeding the bounded on-demand 12-road physical corridor must
+  // refuse instead of claiming a complete, uninspectable graph candidate.
+  const long = {
+    nodes: Array.from({ length: 15 }, (_, i) => ({ code: `N${i}` })),
+    roadEdges: Array.from({ length: 14 }, (_, i) =>
+      edge(`R${i}`, `N${i}`, `N${i + 1}`, 1)),
+  } as unknown as TransportNetwork;
+  assert.equal(transportWalkingRouteViaRequiredEdge(createTransportWalkingIndex(long),
+    "N0", "N14", long.roadEdges[7]), null,
+  "13+ road journeys cannot bypass the bounded physical corridor's 12-road ceiling");
 });
 
 test("S005 selected border bridge previews the far-bank country's site rather than retracing the crossing", () => {
@@ -1961,7 +2000,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     assert.ok(!bridgeDetour.edgeCodes.includes(firstUnsafeRoad),
       "selected bridge candidate may not silently reuse known unsafe source road");
     assert.equal(new Set(bridgeDetour.edgeCodes).size, bridgeDetour.edgeCodes.length);
-    assert.ok(bridgeDetour.exploredNodes <= 2 * index.nodeCount);
+    assert.ok(bridgeDetour.exploredNodes <= 4096);
   }
   const bridgeDetourPlan = bridgeDetour ? planTransportRouteCorridorByLeg(
     bridgeDetour, edgeByCode, nodeByCode, index.adjacency) : null;
