@@ -547,7 +547,7 @@ function renderCorridorProbe() {
     ` · first unsafe sampled interval grade ${Number.isFinite(corridorProbeFirstUnsafeIntervalGrade) ? `${(corridorProbeFirstUnsafeIntervalGrade * 100).toFixed(1)}%` : "invalid"}`;
   const detour = corridorProbeFirstUnsafeRoad
     ? corridorGraphDetour
-      ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
+      ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km, ${(corridorGraphDetour.fantasyWalkSeconds / 3600).toFixed(2)} estimated fantasy hours (graph only)${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
       : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
     : "";
   if (corridorProbeStatus === "not requested") {
