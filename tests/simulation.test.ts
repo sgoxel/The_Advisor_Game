@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
-import { greatCircleDistance } from "../src/planet.ts";
+import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat } from "../src/planet.ts";
 import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
@@ -109,11 +109,24 @@ test("house inspection resolves the rendered legal doorway, never an unverified 
   let matched = 0;
   for (const [place, indexes] of [[villages[0], [0, 3, 12]], [cities[0], [0, 6]]] as const)
     for (const index of indexes) {
-      const resident = residentFoundationAt(place, index),
+      const foundation = residentFoundationAt(place, index),
+        resident = residentAt(place, index, tickAtLocalTime(WORKDAY, 3 * HOUR, place.canonicalPosition.lon)),
         door = resolvedSettlementHomeDoorFor(place, index);
+      assert.equal(resident.code, foundation.code, "lazy door resolution never changes SEED identity");
       assert.deepEqual(resolvedSettlementHomeDoorFor(place, index), door,
         "house focus must be deterministic without camera or presentation state");
       if (!door) continue; // A rejected house must not fabricate an entrance.
+      // The simulated home anchor must be the exact rendered doorway, not the
+      // first candidate or the house centre; verify the canonical metre mapping.
+      const target = sourceToLonLat(door.x, door.z),
+        latitude = place.canonicalPosition.lat,
+        position = {
+          lon: normalizeLongitude(place.canonicalPosition.lon + resident.homeOffset.eastM /
+            (CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(latitude))))),
+          lat: latitude + resident.homeOffset.northM / CANONICAL_PLANET_RADIUS,
+        };
+      assert.ok(greatCircleDistance(target, position) < .05,
+        `${resident.code}: simulation home does not match the rendered front-wall door`);
       assert.ok(finalSurfaceAt(door.x, door.z).walkable, "resolved doorway must lie on legal terrain");
       const feature = featuresFor(tileForPosition(door.x, door.z, 12))
         .find(entry => entry.kind === "residence" && entry.ownerId === resident.code);

@@ -360,7 +360,8 @@ export function residentFoundationAt(
     homeBuilding = `${place.code}/RESIDENCE/${index}`,
     waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
-    // Home is the resident's own frontage lot (lazy lot lookup, focused settlement only).
+    // Stable SEED lot for population indexing; resolving rendered doors is
+    // expensive and belongs to bounded per-resident evaluation, not full rosters.
     homeLot = settlementHomeFor(place, index).candidates[0],
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
@@ -773,7 +774,14 @@ export function readableResidentSite(code: string): string {
 
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
 export function residentAt(place: Place, index: number, tick: number): Resident {
-  const foundation = residentFoundationAt(place, index),
+  const seeded = residentFoundationAt(place, index),
+    door = resolvedSettlementHomeDoorFor(place, index),
+    // The character stands at the same resolved front-wall door as the house
+    // renderer/inspector. Keep this lazy: registry and spatial-index builds must
+    // never resolve every home's geometry just to query population identity.
+    homeOffset = door ? offsetForSource(place, door.x, door.z) : seeded.homeOffset,
+    foundation = door ? { ...seeded, homeOffset,
+      workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
     schedule = scheduleAt(place, foundation, tick),
     location = legalPosition(
       place,
