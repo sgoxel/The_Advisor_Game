@@ -16,7 +16,7 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
   Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
-  | { status: "invalid"; stations: readonly CorridorStation[] }
+  | { status: "invalid"; reason?: "repeated-road"; edgeCode?: string; stations: readonly CorridorStation[] }
   | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
@@ -29,12 +29,16 @@ export function planTransportRouteCorridor(
   // Already-built canonical walking adjacency; never infer joins from map overlap.
   incidentRoads?: ReadonlyMap<string, readonly { edge: Edge }[]>,
 ): Plan {
-  // A selected route must be a non-retracing walk. A connected graph can
-  // traverse the same bridge/road outward and back; that is not evidence of
-  // one continuous gate-to-site passage and must never receive a sampled PASS.
-  if (!route.from || !route.to || !route.edgeCodes.length ||
-      new Set(route.edgeCodes).size !== route.edgeCodes.length)
+  // A selected route must be a non-retracing walk. Name the first
+  // repeated SEED road before any physical sampling, never invent a PASS.
+  if (!route.from || !route.to || !route.edgeCodes.length)
     return Object.freeze({ status: "invalid", stations: EMPTY });
+  const seenRoads = new Set<string>();
+  for (const code of route.edgeCodes) {
+    if (seenRoads.has(code))
+      return Object.freeze({ status: "invalid", reason: "repeated-road", edgeCode: code, stations: EMPTY });
+    seenRoads.add(code);
+  }
   const stations: CorridorStation[] = [];
   // Only registered graph-incident roads whose source endpoints actually meet
   // the canonical node may own its winning final surface. Shared Y nodes and
