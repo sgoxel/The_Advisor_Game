@@ -236,6 +236,8 @@ test("a street that dead-ends inside the town is capped with a round joint", () 
       for (const [end, vertex, neighbour] of [[0, first, street.points[1]], [street.points.length - 1, last, street.points[street.points.length - 2]]] as const) {
         if (end !== 0 && Math.hypot(wrapSourceX(first.x - last.x), first.z - last.z) < metresToSource(3)) continue; // closed ring
         if (otherStreetDistance(place, street.id, vertex.x, vertex.z) < metresToSource(3) || plan.gates.some((gate) => Math.hypot(wrapSourceX(gate.x - vertex.x), gate.z - vertex.z) < metresToSource(12))) continue;
+        // A street end on a piece shared with a main road is drawn by the road itself: no cap.
+        if ((street as { sharedSegments?: number[] }).sharedSegments?.includes(end === 0 ? 1 : street.points.length - 1)) continue;
         const segment = end === 0 ? [vertex, neighbour] : [neighbour, vertex],
           visible = visibleSettlementStreetSegments(place, plan, segment[0], segment[1]).some(([p, q]) => [p, q].some((point) => Math.abs(wrapSourceX(point.x - vertex.x)) < 1e-9 && Math.abs(point.z - vertex.z) < 1e-9));
         if (!visible) continue;

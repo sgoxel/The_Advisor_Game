@@ -3,6 +3,8 @@ export type StreamingDeviceClass = "phone" | "tablet" | "desktop";
 export type StreamingBudget = {
   deviceClass: StreamingDeviceClass;
   generationReady: number;
+  /** Finished tiles moved to the GPU per frame at most (also bounded by UPLOAD_FRAME_BUDGET_MS). */
+  maxUploadsPerFrame: number;
   activePatches: number;
   cacheTrimStartBytes: number;
   combinedBytes: number;
@@ -17,7 +19,7 @@ export const STREAMING_MEMORY_POLICY=Object.freeze({cacheTrimStartBytes:1_000_00
 /**
  * Queue and active-render bounds vary with viewport; cache retention is byte-based.
  * Old and incoming coverage stay protected while unused cache entries are trimmed
- * only at the owner's 1 GB ceiling, or when required work needs room. SEED/content never depends on this policy.
+ * only at the device-sized ceiling (streamingMemoryBytesForDevice, never below 1 GB), or when required work needs room. SEED/content never depends on this policy.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -25,6 +27,7 @@ export const STREAMING_BUDGETS: Readonly<
   phone: Object.freeze({
     deviceClass: "phone",
     generationReady: 4,
+    maxUploadsPerFrame: 3,
     activePatches: 89,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
@@ -33,6 +36,7 @@ export const STREAMING_BUDGETS: Readonly<
   tablet: Object.freeze({
     deviceClass: "tablet",
     generationReady: 6,
+    maxUploadsPerFrame: 4,
     activePatches: 119,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
@@ -41,6 +45,7 @@ export const STREAMING_BUDGETS: Readonly<
   desktop: Object.freeze({
     deviceClass: "desktop",
     generationReady: 8,
+    maxUploadsPerFrame: 8,
     activePatches: 159,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
@@ -136,8 +141,26 @@ export function generationWorkerCount(hardwareConcurrency?: number, deviceMemory
   return Math.max(1, Math.min(cores - 1, byMemory));
 }
 
-/** The viewport budget with enough generation slots to keep every worker of the pool busy. */
-export function streamingBudgetForPool(width: number, height: number, workers: number): StreamingBudget {
-  const budget = streamingBudgetForViewport(width, height);
-  return { ...budget, generationReady: Math.max(budget.generationReady, workers + 2) };
+/** Main-thread milliseconds per frame that may go to moving finished tiles to the GPU. */
+export const UPLOAD_FRAME_BUDGET_MS = 6;
+
+/**
+ * Tile cache memory sized to the device instead of one fixed figure: half of RAM on desktops and
+ * laptops, 35% on phones and tablets (whose browsers kill tabs sooner), never below the old
+ * 1 GB floor and never above 4 GB (about what one browser tab can hold).
+ * `deviceMemoryGB` is navigator.deviceMemory (Chromium reports up to 8; others omit it → 4).
+ */
+export function streamingMemoryBytesForDevice(deviceClass: StreamingDeviceClass, deviceMemoryGB?: number) {
+  const memory = (deviceMemoryGB && deviceMemoryGB > 0 ? deviceMemoryGB : 4) * 1e9,
+    share = deviceClass === "desktop" ? .5 : .35;
+  return Math.round(Math.max(STREAMING_MEMORY_POLICY.combinedBytes, Math.min(4e9, memory * share)));
+}
+
+/**
+ * The viewport budget for this device: enough generation slots to keep every worker of the pool
+ * busy, and a tile cache sized to the device's memory.
+ */
+export function streamingBudgetForPool(width: number, height: number, workers: number, deviceMemoryGB?: number): StreamingBudget {
+  const budget = streamingBudgetForViewport(width, height), bytes = streamingMemoryBytesForDevice(budget.deviceClass, deviceMemoryGB);
+  return { ...budget, generationReady: Math.max(budget.generationReady, workers + 2), cacheTrimStartBytes: bytes, combinedBytes: bytes, cpuBytes: bytes, gpuBytes: bytes };
 }

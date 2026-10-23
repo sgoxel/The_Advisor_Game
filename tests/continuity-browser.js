@@ -35,7 +35,7 @@ export function continuityTests(backend) {
       const go=async(point,height=900)=>{await page.evaluate(({point,height})=>{window.advisorWorld.navigation.setFocus(point.lon,point.lat);window.advisorWorld.setHalfHeight(height);},{point,height});await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:120000});};
       const bounded=async()=>{
         const s=await page.evaluate(()=>({p:window.advisorWorld.state.performance,c:window.advisorWorld.continuity.telemetry()})),p=s.p;
-        expect(p.withinBudget).toBeTruthy();expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(1);
+        expect(p.withinBudget).toBeTruthy();expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(p.budget?.maxUploadsPerFrame ?? 8);
         expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
         expect(s.c.recursiveRequests).toBe(0);expect(s.c.cachedPorts).toBeLessThanOrEqual(256);
         return s;

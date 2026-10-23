@@ -109,8 +109,10 @@ import {
   streamingMemoryReservationFits,
   generationWorkerCount,
   streamingBudgetForPool,
+  UPLOAD_FRAME_BUDGET_MS,
   type StreamingBudget,
 } from "./streaming.ts";
+import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
@@ -225,8 +227,9 @@ let revision = 0,
   maxUploadsPerFrame = 0,
   poleStopCount = 0;
 /** Tile-generation worker pool size: one worker per spare core (see generationWorkerCount). */
-const generationWorkers = generationWorkerCount(navigator.hardwareConcurrency, (navigator as { deviceMemory?: number }).deviceMemory);
-let streamingBudget: StreamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers);
+const deviceMemoryGB = (navigator as { deviceMemory?: number }).deviceMemory;
+const generationWorkers = generationWorkerCount(navigator.hardwareConcurrency, deviceMemoryGB);
+let streamingBudget: StreamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers, deviceMemoryGB);
 let poleLimit: "north" | "south" | null = null,
   poleLimitUntil = 0;
 const previousWantedKeys = new Set<string>();
@@ -866,15 +869,20 @@ function refreshSelection() {
 function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
   if (selectionDirty) refreshSelection();
-  // At most one GPU mesh group per frame. Generation is isolated in a worker.
+  // Move finished tiles to the GPU until this frame's upload time (or count) budget is used.
+  // Generation itself runs in the worker pool.
   const relevant = (key: string) => key === tileAt(0,0,0).key || coverageTiles.some(tile=>coverageKey(tile)===key) || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
+  const uploadStarted = performance.now();
+  for (;;) {
+  if (uploadsThisFrame >= streamingBudget.maxUploadsPerFrame || (uploadsThisFrame > 0 && performance.now() - uploadStarted > UPLOAD_FRAME_BUDGET_MS)) break;
   let next = uploads.shift();
   while(next && next.kind === "coverage" && !relevant(next.jobKey)) {
     pending.delete(next.jobKey);
     discardedPresentationJobs++;
     next=uploads.shift();
   }
-  if (next) {
+  if (!next) break;
+  {
     const bytes = estimateGeometryBytes(next.data);
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
@@ -896,7 +904,7 @@ function processStreaming(material: pc.StandardMaterial) {
       serial: ++meshGroupUploads,
     });
     cachedGeometryBytes += bytes;
-    uploadsThisFrame = 1;
+    uploadsThisFrame++;
     maxUploadsPerFrame = Math.max(maxUploadsPerFrame, uploadsThisFrame);
     if (next.kind === "detail" && next.tile.size <= 512) {
       detailedMaxHorizontalM = Math.max(
@@ -909,6 +917,7 @@ function processStreaming(material: pc.StandardMaterial) {
       );
     }
     pending.delete(next.jobKey);
+  }
   }
   const root = tileAt(0,0,0), cachedKeys = tileCache;
   const complete = wanted.length>0 && wanted.every(tile=>cachedKeys.has(tile.key));
@@ -1296,7 +1305,7 @@ function setupControls() {
     if (innerWidth < 1 || innerHeight < 1) return;
     view.aspect = innerWidth / innerHeight;
     view.pixels = Math.min(innerHeight, 1000);
-    streamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers);
+    streamingBudget = streamingBudgetForPool(innerWidth, innerHeight, generationWorkers, deviceMemoryGB);
     if (projectionTransition > 0.001)
       globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
     updateCamera();
@@ -1433,7 +1442,8 @@ async function start() {
     $("error").hidden = true;
     app.autoRender = true;
   });
-  device.maxPixelRatio = Math.min(devicePixelRatio, 1.5);
+  // Full native resolution; the update loop steps it down only if the frame rate cannot keep up.
+  device.maxPixelRatio = devicePixelRatio || 1;
   const options = new pc.AppOptions();
   options.graphicsDevice = device;
   options.componentSystems = [
@@ -1534,12 +1544,17 @@ async function start() {
   coarseTerrainMaterial.depthTest = false;
   coarseTerrainMaterial.update();
   workerStartedAt=performance.now();
-  for (let index = 0; index < generationWorkers; index++) {
+  // The first worker starts alone so the first screen loads as fast as with a single worker; the
+  // rest of the pool starts once it is ready, instead of all competing for the CPU at start-up.
+  const startWorker = () => {
     const worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module" });
     workers.push(worker);
     worker.onmessage = (event) => {
       if(event.data.ready){
-        if(++readyWorkers===1){workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);}
+        if(++readyWorkers===1){
+          workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);
+          for (let index = 1; index < generationWorkers; index++) startWorker();
+        }
         idleWorkers.push(worker);
         return;
       }
@@ -1558,7 +1573,8 @@ async function start() {
     };
     worker.onerror = (event) =>
       fail(`World worker could not start: ${event.message}`);
-  }
+  };
+  startWorker();
   setupControls();
   updateCamera();
   simulation.setFocus(villages[0]);
@@ -1609,8 +1625,16 @@ async function start() {
   let statsElapsed = 0,
     frames = 0,
     fps = 0;
+  let resolutionFrames = 0, resolutionSeconds = 0;
   app.on("update", (dt: number) => {
     if (rendererState.phase === "lost") return;
+    // Adaptive resolution: average the frame time, decide every couple of seconds.
+    resolutionFrames++; resolutionSeconds += dt;
+    if (resolutionSeconds >= RESOLUTION_DECISION_SECONDS) {
+      const ratio = nextPixelRatio(app.graphicsDevice.maxPixelRatio, resolutionSeconds * 1000 / resolutionFrames, devicePixelRatio || 1);
+      if (ratio !== app.graphicsDevice.maxPixelRatio) { app.graphicsDevice.maxPixelRatio = ratio; app.resizeCanvas(); }
+      resolutionFrames = 0; resolutionSeconds = 0;
+    }
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
@@ -2119,7 +2143,7 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
-          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight, lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight, pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
           simulation: simulation.stats,
           settled:
             !lodTransition &&
