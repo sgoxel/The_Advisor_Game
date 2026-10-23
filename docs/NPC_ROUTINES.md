@@ -37,7 +37,7 @@ Foundation for living NPCs. Everything is a pure function of the SEED-keyed resi
 - **Elders:** morning prayers or a stroll, rest, chatting at the market.
 - **Rest day (weekday 6):** shrine or square, market, lunch, rest. Innkeepers, clergy and beggars keep working.
 
-Moving between two anchors takes real walking time at the canonical good-road pace (1 m/s, travel.ts) along the corridor between them. Activities inside a building set `indoors`, and the renderer does not draw those NPCs on the street.
+Moving between two anchors follows the settlement's street network (A* over the street polylines, joined at junctions) at the canonical good-road pace (1 m/s, travel.ts). Each resident reports `activityStart`, `activityEnd` and `activityProgress` for its routine step, and `travelProgress` and `travelDistanceM` while walking. The renderer animates walkers every frame between Fantasy Time samples. Activities inside a building set `indoors`, and the renderer does not draw those NPCs on the street.
 
 ## Fantasy clock
 

@@ -4,7 +4,7 @@ import * as pc from "playcanvas";
 import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { daylightAt } from "./daylight.ts";
-import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
+import { clockLabel, localSecondOfDay, timeZoneOffsetHours, TIME_SCALE } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -20,6 +20,8 @@ import {
   selectTiles,
   featuresFor,
   tileForPosition,
+  cameraElevationForHalfHeight,
+  viewBounds,
   tileAt,
   type Tile,
   type View,
@@ -232,6 +234,8 @@ const clock = new FantasyClock();
 const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
+/** Walking actors: positions at this and the next simulation second, animated per frame. */
+const actorMotion = new Map<pc.Entity, { fromX: number; fromZ: number; toX: number; toZ: number; startMs: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
 let navigationFingerprint = "";
@@ -533,8 +537,7 @@ function applyPresentation() {
     const distance = view.halfHeight * 2.2 + 200;
     // RPG close-up: the camera lowers from a 60° map view to 34° at character zoom, so upright
     // people and buildings keep true relative proportions and painted characters read as drawn.
-    const closeUp = Math.max(0, Math.min(1, (Math.log(4) - Math.log(Math.max(view.halfHeight, 1e-6))) / (Math.log(4) - Math.log(0.5)))),
-      elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : (60 - 26 * closeUp) * Math.PI / 180;
+    const elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : cameraElevationForHalfHeight(view.halfHeight);
     const horizontal = distance * Math.cos(elevationAngle);
     camera.setPosition(
       focusRender.x + Math.sin(view.yaw) * horizontal,
@@ -1504,7 +1507,13 @@ async function start() {
       const visible =
         settlementDetailVisible && view.halfHeight < 240
           ? simulation
-              .focusedResidents(view.x, view.z, view.halfHeight * 1.5, 96)
+              // Everyone whose position can be on screen: the whole visible ground footprint
+              // (rotated rectangle, low close-up camera included) plus a margin, so nobody
+              // vanishes before they have fully left the screen.
+              .focusedResidents(view.x, view.z, (() => {
+                const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat)));
+                return Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
+              })(), 160)
               // People asleep, eating or working inside a building are not standing on the street.
               .filter((resident) => !resident.indoors)
           : [];
@@ -1530,11 +1539,17 @@ async function start() {
         orientActor(actors[i]);
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
         actorResidents.set(actors[i], visible[i]);
+        // Walkers glide: animate from this second's position to the next second's over one real second.
+        if (visible[i].activity === "commute") {
+          const next = simulation.residentByCode(visible[i].code, simulation.tick + TIME_SCALE);
+          actorMotion.set(actors[i], { fromX: visible[i].x, fromZ: visible[i].z, toX: next?.x ?? visible[i].x, toZ: next?.z ?? visible[i].z, startMs: performance.now() });
+        } else actorMotion.delete(actors[i]);
         positionActor(actors[i], visible[i].x, visible[i].z);
       }
       for (let i = visible.length; i < actors.length; i++) {
         actors[i].enabled = false;
         actorResidents.delete(actors[i]);
+        actorMotion.delete(actors[i]);
       }
       // Keep an open character popup in step with Fantasy Time.
       const popupCode = npcPopupCode();
@@ -1544,6 +1559,16 @@ async function start() {
       }
       $("simulation-status").textContent =
         `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
+    }
+    // Per-frame walking: interpolate along the street route between Fantasy Time samples.
+    if (actorMotion.size) {
+      const nowMs = performance.now();
+      for (const [actor, motion] of actorMotion) {
+        if (!actor.enabled) continue;
+        const t = Math.min(1, (nowMs - motion.startMs) / 1000), x = motion.fromX + wrapSourceX(motion.toX - motion.fromX) * t, z = motion.fromZ + (motion.toZ - motion.fromZ) * t;
+        actorSources.set(actor, { x, z });
+        positionActor(actor, x, z);
+      }
     }
     const actorFacing = camera.getRotation();
     if (

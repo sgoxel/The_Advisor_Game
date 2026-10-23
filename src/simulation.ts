@@ -77,6 +77,13 @@ export type Resident = ResidentFoundation & {
   activity: ActivityKind;
   indoors: boolean;
   mood: Mood;
+  /** Current routine step: local start/end second and progress 0-1. */
+  activityStart: number;
+  activityEnd: number;
+  activityProgress: number;
+  /** While walking between places: share of the street route covered (0-1) and its length. */
+  travelProgress?: number;
+  travelDistanceM?: number;
 };
 
 export type CountryState = {
@@ -373,30 +380,142 @@ function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, bas
   const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
   return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
 }
+// ---------------------------------------------------------------- street paths
+
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; cell: number };
+const streetGraphs = new Map<string, StreetGraph>();
+/**
+ * Walkable street network of a settlement in local metres: every street
+ * polyline point is a node, consecutive points are linked, and points of
+ * different streets closer than 9 m are joined (junctions). Built once per
+ * focused settlement; bounded cache.
+ */
+function streetGraphFor(place: Place): StreetGraph {
+  const cached = streetGraphs.get(place.code);
+  if (cached) return cached;
+  const plan = settlementExteriorFor(place), nodes: Offset[] = [], edges: number[][] = [], weights: number[][] = [], streetOf: number[] = [], cell = 12,
+    grid = new Map<string, number[]>(), keyOf = (o: Offset) => `${Math.floor(o.eastM / cell)}/${Math.floor(o.northM / cell)}`,
+    link = (a: number, b: number) => {
+      const w = Math.hypot(nodes[a].eastM - nodes[b].eastM, nodes[a].northM - nodes[b].northM);
+      edges[a].push(b); weights[a].push(w); edges[b].push(a); weights[b].push(w);
+    };
+  plan.streets.forEach((street, streetIndex) => {
+    let previous = -1;
+    for (const point of street.points) {
+      const id = nodes.length, offset = offsetForSource(place, point.x, point.z);
+      nodes.push(offset); edges.push([]); weights.push([]);
+      const key = keyOf(offset), bucket = grid.get(key) ?? [];
+      // Junctions: join to nearby points of other streets.
+      const [cx, cz] = key.split("/").map(Number);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (const other of grid.get(`${cx + dx}/${cz + dz}`) ?? [])
+        if (streetOf[other] !== streetIndex && Math.hypot(nodes[other].eastM - offset.eastM, nodes[other].northM - offset.northM) < 9) link(id, other);
+      bucket.push(id); grid.set(key, bucket); streetOf.push(streetIndex);
+      if (previous >= 0) link(previous, id);
+      previous = id;
+    }
+  });
+  const graph = { nodes, edges, weights, grid, cell };
+  streetGraphs.set(place.code, graph);
+  while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
+  return graph;
+}
+function nearestNode(graph: StreetGraph, offset: Offset) {
+  let best = -1, bestDistance = Infinity;
+  const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
+  for (let ring = 0; ring < 40 && best < 0; ring++)
+    for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+      for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
+        const d = Math.hypot(graph.nodes[id].eastM - offset.eastM, graph.nodes[id].northM - offset.northM);
+        if (d < bestDistance) { best = id; bestDistance = d; }
+      }
+    }
+  return best;
+}
+const pathCache = new Map<string, Offset[]>();
+/** Walking route between two places: to the nearest street, along the streets (A*), then to the door. */
+function streetPath(place: Place, from: Offset, to: Offset): Offset[] {
+  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}`,
+    cached = pathCache.get(key);
+  if (cached) return cached;
+  const graph = streetGraphFor(place), start = nearestNode(graph, from), goal = nearestNode(graph, to);
+  let path: Offset[] = [from, to];
+  if (start >= 0 && goal >= 0 && start !== goal && Math.hypot(from.eastM - to.eastM, from.northM - to.northM) > 15) {
+    const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(), open = [start], h = (id: number) => Math.hypot(graph.nodes[id].eastM - graph.nodes[goal].eastM, graph.nodes[id].northM - graph.nodes[goal].northM);
+    while (open.length) {
+      let bestIndex = 0;
+      for (let i = 1; i < open.length; i++) if (cost.get(open[i])! + h(open[i]) < cost.get(open[bestIndex])! + h(open[bestIndex])) bestIndex = i;
+      const current = open.splice(bestIndex, 1)[0];
+      if (current === goal) break;
+      graph.edges[current].forEach((next, i) => {
+        const tentative = cost.get(current)! + graph.weights[current][i];
+        if (tentative < (cost.get(next) ?? Infinity)) { cost.set(next, tentative); cameFrom.set(next, current); if (!open.includes(next)) open.push(next); }
+      });
+    }
+    if (cost.has(goal)) {
+      const route: Offset[] = [];
+      for (let node: number | undefined = goal; node !== undefined; node = cameFrom.get(node)) route.unshift(graph.nodes[node]);
+      path = [from, ...route, to];
+    }
+  }
+  pathCache.set(key, path);
+  while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+  return path;
+}
+function pathLength(path: readonly Offset[]) {
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i].eastM - path[i - 1].eastM, path[i].northM - path[i - 1].northM);
+  return total;
+}
+function pointAlong(path: readonly Offset[], distanceM: number): Offset {
+  let remaining = Math.max(0, distanceM);
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i], length = Math.hypot(b.eastM - a.eastM, b.northM - a.northM);
+    if (remaining <= length) {
+      const t = length ? remaining / length : 0;
+      return { eastM: a.eastM + (b.eastM - a.eastM) * t, northM: a.northM + (b.northM - a.northM) * t };
+    }
+    remaining -= length;
+  }
+  return path[path.length - 1];
+}
+
 /**
  * The resident's state at an absolute tick: today's seeded plan (role, age,
- * weekday, traits, mood) gives the activity; moving between two places takes
- * real walking time at the canonical good-road pace along the corridor between them.
+ * weekday, traits, mood) gives the activity and how far through it they are;
+ * moving between two places follows the settlement's streets at the canonical
+ * good-road walking pace, so position and progress change smoothly over time.
  */
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
-    { activity, previous } = activityAt(plan, second),
+    { activity, previous, index } = activityAt(plan, second),
+    end = plan[index + 1]?.start ?? 24 * HOUR,
+    activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     target = standingSpot(foundation, activity.anchor, anchorOffset(place, foundation, activity.anchor), !activity.indoors),
-    mood = moodAt(foundation.code, foundation.traits, day, weekday, second);
-  if (previous && previous.anchor !== activity.anchor) {
-    const from = standingSpot(foundation, previous.anchor, anchorOffset(place, foundation, previous.anchor), !previous.indoors),
-      distanceM = Math.hypot(target.eastM - from.eastM, target.northM - from.northM),
-      travel = Math.max(60, distanceM / GOOD_ROAD_WALK_SPEED_MPS), elapsed = second - activity.start;
+    mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
+    timing = { activityStart: activity.start, activityEnd: end, activityProgress };
+  // The walk to this place began with the first step of the run of steps at this anchor; it
+  // continues until it arrives, even if a later step at the same place has already started.
+  let arrival = index;
+  while (arrival > 0 && plan[arrival - 1].anchor === activity.anchor) arrival--;
+  const departure = plan[arrival - 1];
+  if (departure && previous) {
+    const from = standingSpot(foundation, departure.anchor, anchorOffset(place, foundation, departure.anchor), !departure.indoors),
+      path = streetPath(place, from, target), lengthM = pathLength(path),
+      travel = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS), elapsed = second - plan[arrival].start;
     if (elapsed < travel)
       return {
-        task: activity.kind === "commute" ? activity.task : `Walking to ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}`,
-        route: `${anchorRoute(foundation, previous.anchor)} → ${anchorRoute(foundation, activity.anchor)}`,
-        offset: routeOffset(from, target, elapsed / travel), activity: "commute" as ActivityKind, indoors: false, mood,
+        task: plan[arrival].kind === "commute" ? plan[arrival].task : `Walking to ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}`,
+        route: `${anchorRoute(foundation, departure.anchor)} → ${anchorRoute(foundation, activity.anchor)}`,
+        offset: pointAlong(path, (elapsed / travel) * lengthM), activity: "commute" as ActivityKind, indoors: false, mood,
+        ...timing, travelProgress: elapsed / travel, travelDistanceM: lengthM,
       };
   }
-  return { task: activity.task, route: anchorRoute(foundation, activity.anchor), offset: target, activity: activity.kind, indoors: activity.indoors, mood };
+  // A walk that arrived before the next step begins becomes waiting at the destination.
+  const arrived = activity.kind === "commute";
+  return { task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` : activity.task, route: anchorRoute(foundation, activity.anchor), offset: target, activity: (arrived ? "rest" : activity.kind) as ActivityKind, indoors: activity.indoors, mood, ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined };
 }
 function legalPosition(
   place: Place,
@@ -447,6 +566,10 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
     activity: schedule.activity,
     indoors: schedule.indoors,
     mood: schedule.mood,
+    activityStart: schedule.activityStart,
+    activityEnd: schedule.activityEnd,
+    activityProgress: schedule.activityProgress,
+    ...(schedule.travelProgress === undefined ? {} : { travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM }),
   };
 }
 export function summaryAt(code: string, tick: number): CountryState {
@@ -528,10 +651,12 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index),
       points = [foundation.homeOffset, foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep].map((offset) => relativeSourceForOffset(place, offset)),
-      minX = Math.min(...points.map((point) => point.x)),
-      maxX = Math.max(...points.map((point) => point.x)),
-      minZ = Math.min(...points.map((point) => point.z)),
-      maxZ = Math.max(...points.map((point) => point.z)),
+      // Street routes can bend away from the straight line between places: pad the box.
+      pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
+      minX = Math.min(...points.map((point) => point.x)) - pad,
+      maxX = Math.max(...points.map((point) => point.x)) + pad,
+      minZ = Math.min(...points.map((point) => point.z)) - pad,
+      maxZ = Math.max(...points.map((point) => point.z)) + pad,
       bx0 = Math.floor(minX / RESIDENT_BUCKET_SOURCE),
       bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),

@@ -824,9 +824,18 @@ export type View = {
   pixels: number;
 };
 /** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
+/**
+ * Camera elevation above the horizon for a zoom level: a 60° map view that
+ * lowers to 34° at character zoom (RPG close-up). Shared by the renderer and
+ * tile coverage so the streamed ground always covers the whole screen.
+ */
+export function cameraElevationForHalfHeight(halfHeight: number) {
+  const closeUp = Math.max(0, Math.min(1, (Math.log(4) - Math.log(Math.max(halfHeight, 1e-6))) / (Math.log(4) - Math.log(0.5))));
+  return (60 - 26 * closeUp) * Math.PI / 180;
+}
 export function viewBounds(view: View) {
   const hw = view.halfHeight * view.aspect,
-    hz = view.halfHeight / Math.sin(Math.PI / 3);
+    hz = view.halfHeight / Math.sin(cameraElevationForHalfHeight(view.halfHeight));
   const c = Math.abs(Math.cos(view.yaw)),
     s = Math.abs(Math.sin(view.yaw));
   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));

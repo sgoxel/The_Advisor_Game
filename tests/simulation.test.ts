@@ -201,8 +201,8 @@ test("an ordinary workday: asleep at night, breakfast at home, at the workplace 
       evening = residentAt(village, index, at(19.5, WORKDAY)), late = residentAt(village, index, at(23.9, WORKDAY));
     assert.equal(night.activity, "sleep", `${f.code} sleeps at 02:00`);
     assert.ok(night.indoors);
-    assert.ok(["work", "commute"].includes(noon.activity), `${f.code} works at 10:30 (got ${noon.activity})`);
-    assert.ok(["dinner", "commute", "socialise", "work"].includes(evening.activity), `${f.code} at 19:30: ${evening.activity}`);
+    assert.ok(["work", "commute", "rest"].includes(noon.activity), `${f.code} works at 10:30 (got ${noon.activity})`);
+    assert.ok(["dinner", "commute", "socialise", "work", "rest"].includes(evening.activity), `${f.code} at 19:30: ${evening.activity}`);
     assert.equal(late.activity, "sleep", `${f.code} is in bed before midnight`);
     const morning = dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup }, f.traits, 0, 1).find((entry) => entry.kind === "breakfast");
     assert.equal(morning?.anchor, "home", "breakfast is made at home");

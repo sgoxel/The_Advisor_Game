@@ -115,6 +115,10 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </div>
     <div class="npc-now">
       <div><span class="npc-label">Now</span><b>${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
+      ${resident.travelProgress !== undefined
+        ? `<div><span class="npc-label">Route</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`
+        : ""}
+      <div><span class="npc-label">Step</span>${bar(resident.activityProgress, 1, "#d8b979")} <b>${Math.round(resident.activityProgress * 100)}%</b> <span class="npc-muted">${clock(resident.activityStart)}–${clock(resident.activityEnd % 86400)}</span></div>
       <div><span class="npc-label">Mood</span><b style="color:${moodHue}">${escape(resident.mood.label)}</b> ${bar(resident.mood.value + 1, 2, moodHue)}</div>
       <div><span class="npc-label">Home</span>${escape(names.home ?? "")}</div>
       <div><span class="npc-label">Work</span>${escape(names.work ?? resident.workplace)}</div>
@@ -124,7 +128,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
       <section><h3>Personality</h3>${PERSONALITY_LABELS.map(([key, label]) => `<div class="npc-row"><span>${label}</span>${bar(t.personality[key], 1, "#8fb3c9")}<b>${Math.round(t.personality[key] * 100)}</b></div>`).join("")}</section>
     </div>
     <section class="npc-routine"><h3>Today's routine · ${WEEKDAYS[weekday]}</h3>
-      <ol>${plan.map((activity, i) => `<li class="${i === index ? "current" : i < index ? "past" : ""}"><time>${clock(activity.start)}</time><span>${escape(activity.task)}</span><em>${escape(where(activity))}</em></li>`).join("")}</ol>
+      <ol>${plan.map((activity, i) => `<li class="${i === index ? "current" : i < index ? "past" : ""}"><time>${clock(activity.start)}</time><span>${escape(activity.task)}${i === index ? ` · ${Math.round(resident.activityProgress * 100)}%` : i < index ? " · done" : ""}</span><em>${escape(where(activity))}</em></li>`).join("")}</ol>
     </section>
     <code class="npc-code">${escape(resident.code)}</code>`;
   root.hidden = false;
