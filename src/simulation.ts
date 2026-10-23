@@ -458,7 +458,7 @@ function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, bas
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; cell: number };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; cell: number };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -490,7 +490,7 @@ function streetGraphFor(place: Place): StreetGraph {
       previous = id;
     }
   });
-  const graph = { nodes, edges, weights, grid, cell };
+  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(), cell };
   streetGraphs.set(place.code, graph);
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
   return graph;
@@ -508,30 +508,72 @@ function nearestNode(graph: StreetGraph, offset: Offset) {
     }
   return best;
 }
-const pathCache = new Map<string, Offset[]>();
-/** Walking route between two places: to the nearest street, along the streets (A*), then to the door. */
-function streetPath(place: Place, from: Offset, to: Offset): Offset[] {
+/** Sample the authoritative final surface every 2 physical metres, including endpoints.
+ * Presentation streets alone are not walking authority. */
+export function continuousWalkableOffsetSegment(
+  from: Offset, to: Offset, walkable: (point: Offset) => boolean,
+): boolean {
+  const length = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
+  const steps = Math.max(1, Math.ceil(length / 2));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (!walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
+      northM: from.northM + (to.northM - from.northM) * t })) return false;
+  }
+  return true;
+}
+function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
+  return continuousWalkableOffsetSegment(from, to, point => {
+    const p = canonicalOffset(place, point.eastM, point.northM),
+      source = lonLatToSource(p.lon, p.lat),
+      surface = finalSurfaceAt(source.x, source.z);
+    return surface.walkable && heightAt(source.x, source.z) > 0.1;
+  });
+}
+const pathCache = new Map<string, Offset[] | null>();
+/** A missing graph route or illegal connecting segment must never become straight-line travel. */
+function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
   const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}`,
     cached = pathCache.get(key);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
   const graph = streetGraphFor(place), start = nearestNode(graph, from), goal = nearestNode(graph, to);
-  let path: Offset[] = [from, to];
-  if (start >= 0 && goal >= 0 && start !== goal && Math.hypot(from.eastM - to.eastM, from.northM - to.northM) > 15) {
-    const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(), open = [start], h = (id: number) => Math.hypot(graph.nodes[id].eastM - graph.nodes[goal].eastM, graph.nodes[id].northM - graph.nodes[goal].northM);
-    while (open.length) {
-      let bestIndex = 0;
-      for (let i = 1; i < open.length; i++) if (cost.get(open[i])! + h(open[i]) < cost.get(open[bestIndex])! + h(open[bestIndex])) bestIndex = i;
-      const current = open.splice(bestIndex, 1)[0];
-      if (current === goal) break;
-      graph.edges[current].forEach((next, i) => {
-        const tentative = cost.get(current)! + graph.weights[current][i];
-        if (tentative < (cost.get(next) ?? Infinity)) { cost.set(next, tentative); cameFrom.set(next, current); if (!open.includes(next)) open.push(next); }
-      });
-    }
-    if (cost.has(goal)) {
-      const route: Offset[] = [];
-      for (let node: number | undefined = goal; node !== undefined; node = cameFrom.get(node)) route.unshift(graph.nodes[node]);
-      path = [from, ...route, to];
+  let path: Offset[] | null = null;
+  if (start >= 0 && goal >= 0 &&
+      legalStreetSegment(place, from, graph.nodes[start]) &&
+      legalStreetSegment(place, graph.nodes[goal], to)) {
+    if (start === goal) {
+      path = [from, graph.nodes[start], to];
+    } else {
+      const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
+        open = [start],
+        h = (id: number) => Math.hypot(graph.nodes[id].eastM - graph.nodes[goal].eastM, graph.nodes[id].northM - graph.nodes[goal].northM);
+      while (open.length) {
+        let bestIndex = 0;
+        for (let i = 1; i < open.length; i++)
+          if (cost.get(open[i])! + h(open[i]) < cost.get(open[bestIndex])! + h(open[bestIndex])) bestIndex = i;
+        const current = open.splice(bestIndex, 1)[0];
+        if (current === goal) break;
+        graph.edges[current].forEach((next, i) => {
+          const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
+          let legal = graph.legalEdges.get(edgeKey);
+          if (legal === undefined) {
+            legal = legalStreetSegment(place, graph.nodes[current], graph.nodes[next]);
+            graph.legalEdges.set(edgeKey, legal);
+          }
+          if (!legal) return;
+          const tentative = cost.get(current)! + graph.weights[current][i];
+          if (tentative < (cost.get(next) ?? Infinity)) {
+            cost.set(next, tentative); cameFrom.set(next, current);
+            if (!open.includes(next)) open.push(next);
+          }
+        });
+      }
+      if (cost.has(goal)) {
+        const route: Offset[] = [];
+        for (let node: number | undefined = goal; node !== undefined; node = cameFrom.get(node))
+          route.unshift(graph.nodes[node]);
+        path = [from, ...route, to];
+      }
     }
   }
   pathCache.set(key, path);
@@ -584,7 +626,15 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
   const departure = plan[arrival - 1];
   if (departure && previous) {
     const from = standingSpot(foundation, departure.anchor, anchorOffset(place, foundation, departure.anchor), !departure.indoors),
-      path = streetPath(place, from, target), lengthM = pathLength(path),
+      path = streetPath(place, from, target);
+    if (!path)
+      return {
+        task: `Blocked: no legal walking route to ${activity.anchor}`,
+        route: `BLOCKED: ${anchorRoute(place, foundation, departure.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
+        offset: from, activity: "rest" as ActivityKind, indoors: departure.indoors, mood,
+        ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+      };
+    const lengthM = pathLength(path),
       travel = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS), elapsed = second - plan[arrival].start;
     if (elapsed < travel)
       return {
