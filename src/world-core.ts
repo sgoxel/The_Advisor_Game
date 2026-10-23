@@ -523,9 +523,16 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.candidateCount);
 
   const slope = finalSurfaceLocalSlopeAt(x, z),
+    // A selected SEED road cannot be Simulation-walkable above the same 8%
+    // physical grade refused by S005's route probe. A site/pad may own the
+    // visible material while the road still contributes underneath it.
+    roadCorridor = point.modifiers.some(modifier =>
+      modifier.priority === WORLD_BUILDING_PRIORITIES.road &&
+      (modifier.weight ?? 1) >= .5),
     walkable =
       point.final.water.kind === "none"
-        ? point.final.walkable && (point.final.deckHeight!==null || slope < .68)
+        ? point.final.walkable && (point.final.deckHeight !== null ||
+          (roadCorridor ? slope <= .08 : slope < .68))
         : point.final.deckHeight !== null && point.final.walkable;
   const result: FinalSurface = {
     ...point.final,
