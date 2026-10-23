@@ -1,0 +1,19 @@
+name: S005 bridge component evidence
+on:
+  push:
+    branches: [agent1/s005-bridge-route-cut-diagnostic-20261023]
+permissions:
+  contents: read
+jobs:
+  cut:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Inspect real selected bridge endpoint components
+        run: timeout 4m node --experimental-strip-types --test --test-name-pattern="S005 real gate-Y-bridge-site graph walk" tests/transport-network.test.ts
