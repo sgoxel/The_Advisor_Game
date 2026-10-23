@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { planTransportRouteCorridor, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridor, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -577,7 +577,11 @@ function probeRouteCorridor() {
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
-    corridorProbeStatus = plan.status === "over-budget" ? "route exceeds bounded 4096-station probe; not certified" : "invalid source-owned physical path; not certified";
+    corridorProbeStatus = plan.status === "over-budget"
+      ? plan.reason === "raw-source-waypoints"
+        ? `raw source waypoint limit (${ROUTE_CORRIDOR_STATION_LIMIT * 2}) reached at ${plan.edgeCode}; not certified`
+        : `sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
+      : "invalid source-owned physical path; not certified";
     corridorProbeMs = performance.now() - started;
     renderCorridorProbe();
     renderMetrics();
