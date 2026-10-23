@@ -52,7 +52,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf } from "./simulation.ts";
+import { LazySimulation, populationOf, residentOccupiesBuilding } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -1031,7 +1031,10 @@ function openGameInfoAt(x: number, z: number) {
   if (best) {
     const owner = best.ownerId ? simulation.residentByCode(best.ownerId) : undefined,
       halfSize = metresToSource(Math.max(best.widthM ?? 6, best.depthM ?? 6) * .5 + 1),
-      inside = simulation.focusedResidents(best.x, best.z, halfSize, 40).filter((resident) => resident.indoors);
+      nearby = simulation.focusedResidents(best.x, best.z, halfSize, 40),
+      inside = [owner, ...nearby].filter((resident): resident is Resident =>
+        !!resident && residentOccupiesBuilding(resident, best))
+        .filter((resident, index, records) => records.findIndex((record) => record.code === resident.code) === index);
     centreOn(best.x, best.z);
     showBuildingPopup(best, settlement, owner, inside);
     return true;
