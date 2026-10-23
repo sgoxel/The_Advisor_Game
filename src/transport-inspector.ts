@@ -137,6 +137,7 @@ let corridorProbeMaximumGrade: number | null = null;
 // A failed physical probe may offer a different SEED graph hypothesis.
 // This is never a validated walking route or a new selected map path.
 let corridorGraphDetour: ReturnType<typeof transportWalkingRoute> = null;
+let corridorGraphDetourPending = false;
 let corridorSelectedBridgeConstraint: "selected-bridge-unsafe" | "graph-cut" | "not-proven" | null = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
@@ -549,7 +550,8 @@ function renderCorridorProbe() {
   const intervalGrade = corridorProbeFirstUnsafeIntervalGrade === null ? "" :
     ` · first unsafe sampled interval grade ${Number.isFinite(corridorProbeFirstUnsafeIntervalGrade) ? `${(corridorProbeFirstUnsafeIntervalGrade * 100).toFixed(1)}%` : "invalid"}`;
   const detour = corridorProbeFirstUnsafeRoad
-    ? corridorGraphDetour
+    ? corridorGraphDetourPending ? " · Checking an alternative SEED graph path; physical passage not certified"
+    : corridorGraphDetour
       ? ` · Alternative SEED graph preview excluding that road: ${corridorGraphDetour.edgeCodes.length} roads, ${(corridorGraphDetour.distanceM / 1000).toFixed(2)} km, ${(corridorGraphDetour.fantasyWalkSeconds / 3600).toFixed(2)} estimated fantasy hours (graph only)${selection?.kind === "bridge" ? corridorGraphDetour.edgeCodes.includes(transportBridgeByCode(selection.code)?.roadCode ?? "") ? " · selected bridge retained" : " · selected bridge bypassed" : ""}; grades and physical passage NOT certified`
       : " · No same-endpoint walking graph detour exists with that road excluded; physical passage NOT certified"
     : "";
@@ -587,6 +589,7 @@ function resetCorridorProbe() {
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   corridorGraphDetour = null;
+  corridorGraphDetourPending = false;
   corridorSelectedBridgeConstraint = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
@@ -608,6 +611,7 @@ function probeRouteCorridor() {
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   corridorGraphDetour = null;
+  corridorGraphDetourPending = false;
   corridorSelectedBridgeConstraint = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget"
@@ -685,26 +689,40 @@ function probeRouteCorridor() {
       if (transportProbeFrameBudgetReached(i + 1, performance.now() - frameStarted)) break;
     }
     if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
-      // Only after a demonstrated failed physical station: a single cached,
-      // graph-bounded search, never extra per-frame sampling or an implicit reroute.
-      if (corridorProbeFirstUnsafeRoad && walkingIndex) {
-        const excluded = new Set([corridorProbeFirstUnsafeRoad]);
-        corridorGraphDetour = transportWalkingRoute(walkingIndex, siteRoute!.from, siteRoute!.to, excluded);
-        const bridge = selection?.kind === "bridge" ? transportBridgeByCode(selection.code) : undefined;
-        const bridgeRoad = bridge && corridorEdges.get(bridge.roadCode);
-        if (bridgeRoad) {
+      // The physical first failure is immediately visible. Never spend that
+      // already-costly sampling frame on a graph search or a bridge-component
+      // flood. These remain bounded, read-only, on-demand follow-up hypotheses.
+      corridorProbeMs = performance.now() - started;
+      panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
+      const route = siteRoute, unsafeRoad = corridorProbeFirstUnsafeRoad,
+        bridgeCode = selection?.kind === "bridge" ? selection.code : null,
+        index = walkingIndex;
+      corridorGraphDetourPending = !!unsafeRoad && !!route && !!index;
+      renderCorridorProbe();
+      renderMetrics();
+      if (unsafeRoad && route && index) requestAnimationFrame(() => {
+        if (revision !== corridorProbeRevision) return;
+        const excluded = new Set([unsafeRoad]);
+        corridorGraphDetour = transportWalkingRoute(index, route.from, route.to, excluded);
+        corridorGraphDetourPending = false;
+        renderCorridorProbe();
+        if (!bridgeCode) return;
+        // A second animation frame prevents the selected-bridge component flood
+        // from stacking with the alternate path search in a single phone frame.
+        requestAnimationFrame(() => {
+          if (revision !== corridorProbeRevision) return;
+          const bridge = transportBridgeByCode(bridgeCode),
+            bridgeRoad = bridge && corridorEdges.get(bridge.roadCode);
+          if (!bridgeRoad) return;
           if (excluded.has(bridgeRoad.code)) corridorSelectedBridgeConstraint = "selected-bridge-unsafe";
           else {
             const cut = transportWalkingRequiredBridgeCut(
-              walkingIndex, siteRoute!.from, siteRoute!.to, bridgeRoad, excluded);
+              index, route.from, route.to, bridgeRoad, excluded);
             corridorSelectedBridgeConstraint = cut.status === "invalid" ? null : cut.status;
           }
-        }
-      }
-      corridorProbeMs = performance.now() - started;
-      panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
-      renderCorridorProbe();
-      renderMetrics();
+          renderCorridorProbe();
+        });
+      });
     } else if (corridorProbeStations < plan.stations.length) {
       // Variable-size batches may jump across station 64 without landing on it.
       // Update at most once per frame when a 64-station milestone is crossed.
