@@ -22,7 +22,11 @@ export function roadNetworkFingerprint(seed: string, places: readonly Fingerprin
     }
   };
   feed(`${seed}|${MACRO_ROAD_VERSION}|${places.length}|${links.length}`);
-  for (const place of places) feed(`${place.id}:${place.canonicalPosition.lon}:${place.canonicalPosition.lat};`);
+  // Coordinates are deliberately NOT fingerprinted: JavaScript engines differ by ~1e-9 rad
+  // (sub-millimetre) in derived settlement positions, so an exact or rounded coordinate check made
+  // browsers reject a Node-built cache. Identity (SEED, generator version, settlement ids, links)
+  // pins the world; tests/world-cache.test.ts regenerates the network in CI to catch code changes.
+  for (const place of places) feed(`${place.id};`);
   for (const [from, to] of links) feed(`${from.id}>${to.id};`);
   return `${(a >>> 0).toString(16).padStart(8, "0")}${(b >>> 0).toString(16).padStart(8, "0")}`;
 }
