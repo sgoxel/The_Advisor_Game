@@ -1,0 +1,21 @@
+name: S005 selected-route first-answer evidence
+on:
+  push:
+    branches: [agent1/s005-route-first-answer-evidence-20261023]
+permissions:
+  contents: read
+jobs:
+  first-answer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Measure unchanged-game S005 first-route answers at four scales
+        run: timeout 8m xvfb-run -a npx playwright test tests/browser/routes.spec.js --config playwright.fallback.config.js --grep "S005 selected route has a bounded first display opportunity" --workers=1 --retries=0 --reporter=line
