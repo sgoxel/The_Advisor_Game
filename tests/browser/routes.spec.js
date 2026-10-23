@@ -145,6 +145,12 @@ test("S005 selected route has a bounded first display opportunity at four canoni
         focus: window.advisorWorld.state.navigation.focus,
         answer: document.getElementById("transport-site-answer").innerText,
       }));
+      console.log("S005_ROUTE_FIRST_ANSWER " + JSON.stringify({
+        viewport: viewport.width + "x" + viewport.height, scale,
+        graphMs: result.firstSiteRouteMs, displayFrameOpportunityMs: result.firstSiteRouteFrameMs,
+        status: result.firstSiteRouteStatus, edges: result.siteRouteEdges,
+        context: result.firstSiteRouteContext,
+      }));
       expect(result.firstSiteRouteStatus).toBe("canonical walking graph preview ready");
       expect(result.firstSiteRouteContext).toMatchObject({
         scaleLabel: `1/${scale}`,
