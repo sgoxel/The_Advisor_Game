@@ -16,6 +16,7 @@ import {
   continuousWalkableOffsetSegment,
   legalEnclosureSegment,
   timedWalkOnPath,
+  walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
   readableResidentSite,
@@ -161,6 +162,30 @@ test("time-bounded legal paths never jump to an unfinished endpoint", () => {
   assert.deepEqual(arrived.offset, path[2]);
   assert.equal(midway.progress, .5);
   assert.deepEqual(midway, replay);
+});
+
+test("walk windows keep the corners of the legal street path", () => {
+  const path = [{ eastM: 0, northM: 0 }, { eastM: 100, northM: 0 }, { eastM: 100, northM: 100 }];
+  const near = (a: { eastM: number; northM: number }, b: { eastM: number; northM: number }) => {
+    assert.ok(Math.abs(a.eastM - b.eastM) < 1e-9 && Math.abs(a.northM - b.northM) < 1e-9, `${JSON.stringify(a)} != ${JSON.stringify(b)}`);
+  };
+  // d0 = 90 m and d1 = 110 m: the window straddles the corner at (100, 0).
+  const straddle = walkWindowOnPath(path, 90, 20);
+  assert.ok(straddle.includes(path[1]));
+  for (const p of straddle)
+    assert.ok((p.northM === 0 && p.eastM >= 0 && p.eastM <= 100) || (p.eastM === 100 && p.northM >= 0 && p.northM <= 100), JSON.stringify(p));
+  near(straddle[0], timedWalkOnPath(path, 90).offset);
+  near(straddle[straddle.length - 1], timedWalkOnPath(path, 110).offset);
+  // Arrived: both ends are the final vertex.
+  const arrived = walkWindowOnPath(path, 300, 24);
+  assert.equal(arrived.length, 2);
+  near(arrived[0], path[2]);
+  near(arrived[1], path[2]);
+  // Entirely inside the first segment: just the two endpoints.
+  const inside = walkWindowOnPath(path, 10, 20);
+  assert.equal(inside.length, 2);
+  near(inside[0], { eastM: 10, northM: 0 });
+  near(inside[1], { eastM: 30, northM: 0 });
 });
 
 test("sampled daily schedule transitions do not teleport between sites", () => {
