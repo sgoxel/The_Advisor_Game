@@ -558,6 +558,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--device-scale-factor", type=float, default=1, help="emulated display DPR, not device GPU/RAM emulation")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
     parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
+    parser.add_argument("--fixed-time-ms", type=int, help="optional fixed UTC epoch milliseconds for reproducible Fantasy Time; browser timers and animation continue")
     parser.add_argument("--initial-ready-only", action="store_true", help="initial load waits only for coherent world readiness; explicit settle steps still wait for full detail")
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
     parser.add_argument("--chromium", default=os.environ.get("ADVISOR_CHROMIUM"),
@@ -596,7 +597,10 @@ def main(argv: list[str] | None = None) -> int:
                 if args.renderer == "webgl2":
                     context.add_init_script("Object.defineProperty(navigator, 'gpu', {value: undefined, configurable: true})")
                 for name, steps in args.jobs:
-                    session = Session(context.new_page(), args, name, profile, viewport, records)
+                    page = context.new_page()
+                    if args.fixed_time_ms is not None:
+                        page.clock.set_fixed_time(datetime.fromtimestamp(args.fixed_time_ms / 1000, timezone.utc))
+                    session = Session(page, args, name, profile, viewport, records)
                     try:
                         session.run(steps)
                     except (CaptureError, PlaywrightError) as error:

@@ -59,10 +59,13 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
+          # Freeze the same legitimate, seeded Fantasy tick for every viewport and renderer.
+          # This does not freeze browser timers/animation or change game code/SEED.
+          FIXED_TIME_MS=1792874335750 # Fantasy tick 36274242 (same proven daylight evidence tick)
           RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;shot:resident-first-view;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());shot:resident-pre-click;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:window.__s006Focus=JSON.stringify(window.advisorWorld.state.focus);tap:resident;visible:#npc-popup:not([hidden]);eval:window.__s006Focus===JSON.stringify(window.advisorWorld.state.focus)||(()=>{throw Error("S006 resident inspection changed geographic focus")})();eval:(()=>{const r=window.__s006Resident\;const get=id=>document.getElementById(id)?.textContent\;for(const [id,expected] of [["npc-seed-code",r.code],["npc-home-entrance",r.homeEntrance],["npc-workplace-code",r.workplace],["npc-current-task",r.task],["npc-route-code",r.route]])if(get(id)!==expected)throw new Error("S006 actual browser click mismatch: "+id+" expected "+expected+" found "+get(id))\;return true})();visible:#selected-resident-marker:not([hidden]);eval:document.getElementById("selected-resident-marker").dataset.residentCode===window.__s006Resident.code||(()=>{throw Error("S006 on-scene selected marker identity mismatch")})();shot:resident-selected;eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details'
           status=0
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
           exit "$status"
       - uses: actions/upload-artifact@v4
         if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
