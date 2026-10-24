@@ -43,14 +43,19 @@ test("resident facts dispatch after initial ready without waiting for later zoom
     "an occupied worker is never double-dispatched");
 });
 
-test("first resident query uses only idle worker shards without pending-worker deadlock", () => {
+test("cold S006 resident query reuses one stable worker without duplicate index builds", () => {
   assert.deepEqual(residentWorkerShardPlan([3, 1]), [
-    { workerId: 1, shardIndex: 0, count: 2 },
-    { workerId: 3, shardIndex: 1, count: 2 },
-  ], "noncontiguous idle workers receive complete dense population shards");
+    { workerId: 1, shardIndex: 0, count: 1 },
+  ], "first use builds one canonical settlement index, leaving other idle workers for terrain");
+  assert.deepEqual(residentWorkerShardPlan([1, 3], new Set([3])), [
+    { workerId: 3, shardIndex: 0, count: 1 },
+  ], "prefer an idle worker with an already reconstructed resident index");
   assert.deepEqual(residentWorkerShardPlan([2]), [
     { workerId: 2, shardIndex: 0, count: 1 },
-  ], "one idle worker can answer the entire resident query while terrain workers continue");
+  ], "one available worker answers the whole bounded query");
+  assert.deepEqual(residentWorkerShardPlan([1, 2], new Set([9])), [
+    { workerId: 1, shardIndex: 0, count: 1 },
+  ], "a warmed but occupied worker never blocks the next legitimate query");
   assert.deepEqual(residentWorkerShardPlan([3, 3, -1]), [
     { workerId: 3, shardIndex: 0, count: 1 },
   ], "duplicate or invalid worker indices never create unanswered shards");
