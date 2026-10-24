@@ -722,6 +722,38 @@ function computeLots(layout: Layout, place: Place, wanted: number) {
   }
   return lots;
 }
+/**
+ * The displayed enclosure is aligned/clipped to canonical roads after the
+ * underlying street layout is generated. Re-seat household frontage on that
+ * FINAL polygon before any resident is assigned a house. A clipped-away lot
+ * must not remain in the SEED ownership permutation.
+ *
+ * Rebuild once per final exterior plan, never from camera/tile/resident order.
+ * Reject an undersized candidate rather than aliasing two households to one
+ * physical lot (callers can still report an unresolved home truthfully).
+ */
+export function reconcileSettlementLotsToFinalBorder(
+  place: Place, finalBorder: readonly SettlementPoint[],
+): boolean {
+  settlementExteriorFor(place);
+  const layout = layouts.get(place.code)!;
+  const frame = layout.frame;
+  const clipped = finalBorder.map(point => {
+    const x = wrapSourceX(point.x - place.x) / (U * frame.kx);
+    const z = (point.z - place.z) / U;
+    return { a: x * frame.axis.x + z * frame.axis.z,
+      l: -x * frame.axis.z + z * frame.axis.x };
+  });
+  const candidate = computeLots({ ...layout, border: clipped }, place,
+    Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03));
+  if (candidate.length < SETTLEMENT_POPULATION[place.kind]) return false;
+  layout.border = clipped;
+  layout.lots = candidate;
+  layout.lotGrid = undefined;
+  layout.lotOrder = undefined;
+  return true;
+}
+
 function lotsFor(place: Place): readonly SettlementLot[] {
   settlementExteriorFor(place);
   return layouts.get(place.code)!.lots!;
