@@ -447,6 +447,29 @@ test("actual guard home lots follow the final road-trimmed village enclosure", (
     "the formerly road-displaced watchman must own a real legal front door");
 });
 
+test("physical watchmen remain spatially inspectable at resolved homes after frontage relocation", () => {
+  const village = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(village, "retain the real village whose original watchman frontage was clipped");
+  const simulation = new LazySimulation();
+  simulation.setFocus(village);
+  for (const [index, hour] of [[6, 2], [7, 11]] as const) {
+    const tick = tickAtLocalTime(WORKDAY, hour * HOUR, village.canonicalPosition.lon),
+      door = resolvedSettlementHomeDoorFor(village, index),
+      person = residentAt(village, index, tick);
+    assert.ok(door, `guard ${index} must keep one legally resolved owned doorway`);
+    assert.ok(person.grounded && person.indoors && !person.route.startsWith("BLOCKED:"),
+      `${person.code}: night/day off-duty rest must occur at the lawful owned home`);
+    assert.ok(Math.hypot(wrapSourceX(person.x - door.x), person.z - door.z) < .001,
+      "off-duty logical position agrees with the actual resolved house entrance");
+    simulation.advance(tick);
+    assert.ok(simulation.focusedResidents(person.x, person.z, .08, 160)
+      .some(found => found.code === person.code),
+      "bounded resident spatial query must include the physical home, not just its old SEED frontage");
+    assert.ok(simulation.telemetry().residentEvaluationsSinceAdvance <= populationOf(village),
+      "a home lookup never materializes the entire settlement beyond its population bound");
+  }
+});
+
 test("resident schedule state is analytical from absolute fantasy time", () => {
   const village = villages[0], tick = at(14, WORKDAY) + 1234,
     direct = residentAt(village, 3, tick), simulation = new LazySimulation();
