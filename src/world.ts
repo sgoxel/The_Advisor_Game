@@ -183,6 +183,29 @@ function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: Res
   resolution.homes.set(plot.id, chosen);
   return plot;
 }
+/** On-demand, bounded evidence for an unresolved assigned home. Never
+ * run this for routine population or rendering queries. */
+export function settlementHomePlacementEvidence(place: Place, index: number) {
+  const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan),
+    plot = settlementHomeFor(place, index, plan);
+  return plot.candidates.map((candidate, attempt) => {
+    const surface = finalSurfaceAt(candidate.x, candidate.z),
+      street = settlementStreetAt(plan, candidate.x, candidate.z),
+      radius = plot.clearanceRadius;
+    return {
+      attempt, water: surface.water.kind, walkable: surface.walkable,
+      groundHeight: Math.round(surface.groundHeight * 100) / 100,
+      staticOverlap: overlaps(resolution.staticOccupants, candidate.x, candidate.z, radius),
+      roadClear: externalRoadClear(candidate.x, candidate.z, radius + metresToSource(2)),
+      streetClear: !street || street.distance >= street.width * .5 + radius * .78,
+      borderClearance: Math.round(borderClearance(place, plan, candidate.x, candidate.z) * 100) / 100,
+      nearestGateM: Math.round(Math.min(Infinity, ...plan.gates.map(gate =>
+        Math.hypot(wrapSourceX(candidate.x - gate.x), candidate.z - gate.z))) /
+        metresToSource(1)),
+      legal: candidateLegal(place, plan, plot, candidate),
+    };
+  });
+}
 /** Resolve one canonical home against the same legal lot and street frontage as
  * the rendered building. Unlike candidate[0], this may be absent or shifted. */
 export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x: number; z: number } | undefined {
