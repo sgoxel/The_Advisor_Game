@@ -1633,6 +1633,10 @@ async function start() {
     selectedResidentName = $("selected-resident-name"),
     selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3();
   let markedResidentCode = "", markedResidentTransform = "";
+  // A logical resident without an installed visible 3D mesh is not an on-screen click target.
+  // Keep normal pointer picking and the S006 real-click evidence under the same predicate.
+  const hasResidentMesh = (actor: pc.Entity) => (actor.findComponents("render") as pc.RenderComponent[])
+    .some(render => render.enabled && render.entity.enabled && render.meshInstances.length > 0);
   pickResidentAt = (clientX: number, clientY: number) => {
     // Project each visible sprite's feet and head to the screen and test the click against
     // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
@@ -1641,7 +1645,7 @@ async function start() {
     let best: Resident | undefined, bestDistance = Infinity;
     for (const actor of actors) {
       const resident = actorResidents.get(actor);
-      if (!actor.enabled || !resident) continue;
+      if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
       const scale = actor.getLocalScale(), up = actor.getRotation().transformVector(new pc.Vec3(0, scale.y * DEFAULT_CHARACTER_HEIGHT_M, 0)), base = actor.getPosition(),
         bottom = base.clone(), top = base.clone().add(up);
       lens.worldToScreen(bottom, feet);
@@ -2092,11 +2096,9 @@ async function start() {
         const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
-          if (!actor.enabled || !resident) continue;
-          // An enabled root alone is not proof a 3D character mesh is installed.
+          if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
           const meshCount = (actor.findComponents("render") as pc.RenderComponent[])
             .reduce((count, render) => count + (render.enabled && render.entity.enabled ? render.meshInstances.length : 0), 0);
-          if (!meshCount) continue;
           camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
           const clientX = rect.left + point.x, clientY = rect.top + point.y;
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
