@@ -280,7 +280,7 @@ STATE_JS = """() => {
   const transport = window.advisorTransport ? window.advisorTransport.telemetry() : null;
   const box = document.getElementById('error'), detail = document.getElementById('detail-name');
   return {
-    ready: state.ready ?? false, settled: state.settled ?? false, simulation: state.simulation ?? null,
+    ready: state.ready ?? false, settled: state.settled ?? false, fps: state.fps ?? null, simulation: state.simulation ?? null,
     display: {devicePixelRatio,cssWidth:innerWidth,cssHeight:innerHeight,canvasWidth:document.getElementById('world')?.width,canvasHeight:document.getElementById('world')?.height},
     backend: renderer.backend || '', phase: renderer.phase || '',
     fallbackReason: renderer.fallbackReason || '', presentation: state.presentation ?? null,
@@ -382,7 +382,7 @@ class Session:
                 break
             except PlaywrightTimeoutError:
                 try:
-                    state = self.page.wait_for_function("""() => {const s=window.advisorWorld?.state; return s ? {ready:s.ready,settled:s.settled,pending:s.pending,active:s.active,cached:s.cached,coverage:s.coverage?.complete,workers:s.coverage?.readyWorkers,busy:s.coverage?.busyWorkers,error:s.error} : {loading:true};}""", timeout=3000).json_value()
+                    state = self.page.wait_for_function("""() => {const s=window.advisorWorld?.state; return s ? {ready:s.ready,settled:s.settled,pending:s.pending,active:s.active,cached:s.cached,coverage:s.coverage?.complete,workers:s.coverage?.readyWorkers,busy:s.coverage?.busyWorkers,fps:s.fps,residents:s.simulation,error:s.error} : {loading:true};}""", timeout=3000).json_value()
                     print("SETTLE " + json.dumps(state), flush=True)
                 except PlaywrightTimeoutError:
                     print("SETTLE main thread not responding", flush=True)

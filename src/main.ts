@@ -2096,7 +2096,7 @@ async function start() {
       get state() {
         const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready, settlementDetailVisible, smallDetailsVisible),
           residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined,
-          residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key);
+          residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key, residentRequest.tick);
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
           activePreparationWaitMs = handoffWaitingForDestination
@@ -2214,7 +2214,7 @@ async function start() {
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
           coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight + (residentBatch ? residentBatch.count - residentBatch.completed.size - residentBatch.unsent.size : 0), pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
-          simulation: { ...simulation.stats, residentWorkerBusy: residentQueries.busy, residentSnapshotReady: residentViewReady },
+          simulation: { ...simulation.stats, residentWorkerBusy: residentQueries.busy, residentSnapshotReady: residentViewReady, residentSnapshotTick: residentQueries.current?.tick ?? null },
           settled:
             residentViewReady &&
             !lodTransition &&

@@ -16,10 +16,12 @@ export class ResidentQueryQueue {
   offer(query: ResidentQuery) { this.desired = query; }
   clear() { this.desired = undefined; this.snapshot = undefined; }
   get busy() { return !!this.flight; }
-  readyFor(key: string | undefined) { return !!key && this.snapshot?.key === key; }
+  readyFor(key: string | undefined, tick = this.desired?.tick) {
+    return !!key && this.snapshot?.key === key && tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
+  }
   get ready() { return this.readyFor(this.desired?.key); }
   get current() {
-    return this.ready && Math.abs(this.desired!.tick - this.snapshot!.tick) <= this.maxAgeTicks ? this.snapshot : undefined;
+    return this.ready ? this.snapshot : undefined;
   }
   take(): ResidentQueryJob | undefined {
     if (this.flight || !this.desired || (this.current?.tick === this.desired.tick)) return;

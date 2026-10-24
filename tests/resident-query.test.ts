@@ -63,3 +63,17 @@ test("parallel population shards reproduce the single-worker query in stable ord
   assert.equal(new Set(merged.residents.map(resident => resident.code)).size, merged.residents.length);
   assert.deepEqual(mergeResidentQueries(shards, 7, rank).residents, expected.slice(0, 7));
 });
+
+
+test("snapshot readiness expires with the realm clock even when the camera stays still", () => {
+  const queue = new ResidentQueryQueue(48);
+  queue.offer(request()); const job = queue.take()!;
+  queue.complete(job.id, result);
+  assert.equal(queue.readyFor("town-a", 148), true);
+  assert.equal(queue.readyFor("town-a", 149), false);
+  assert.equal(queue.readyFor("another-town", 100), false);
+  queue.offer(request("town-a", 149));
+  assert.equal(queue.ready, false);
+  assert.equal(queue.current, undefined);
+  assert.equal(queue.take()?.tick, 149, "expired snapshot schedules a current reconstruction");
+});
