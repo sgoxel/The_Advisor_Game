@@ -251,6 +251,8 @@ const uploads: {
 /** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
 const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2, TIME_SCALE);
 const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(place)]));
+// Resident index construction is cold and expensive: reuse its owning worker.
+const warmedResidentWorkers = new Set<number>();
 let residentResultReady = () => {};
 function residentRequestForView(tick: number, limit: number): ResidentQuery | undefined {
   const place = nearestPlace(view.x, view.z);
@@ -270,7 +272,7 @@ function dispatchResidentQuery() {
   if (!residentBatch) {
     const job = residentQueries.take();
     if (!job) return;
-    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)));
+    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
     const count = shards.length;
     residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
       assignments: new Map(shards.map(shard => [shard.workerId, shard.shardIndex])),
@@ -1596,6 +1598,7 @@ async function start() {
       if (event.data.kind === "residents") {
         idleWorkers.push(worker);
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
+        warmedResidentWorkers.add(workers.indexOf(worker));
         if (residentBatch && residentBatch.job.id === event.data.id && !residentBatch.completed.has(event.data.shard)) {
           residentBatch.completed.add(event.data.shard);
           residentBatch.results.push(event.data);
