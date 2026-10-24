@@ -26,6 +26,7 @@ import {
   nearestNode,
   nearestLegalStreetNode,
   legalOpenGroundDetour,
+  residentStreetPathKey,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -38,6 +39,17 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("resident walking path cache preserves exact doorway offsets, direction and gate policy", () => {
+  const home = { eastM: 12.011, northM: -2.02 }, otherDoor = { eastM: 12.049, northM: -2.02 },
+    workplace = { eastM: 180.004, northM: 25.002 }, placeCode = villages[0].code;
+  const first = residentStreetPathKey(placeCode, home, workplace, true);
+  assert.equal(first, residentStreetPathKey(placeCode, home, workplace, true), "same SEED trip has one stable key");
+  assert.notEqual(first, residentStreetPathKey(placeCode, otherDoor, workplace, true),
+    "separate doors less than a tenth of a metre apart must not inherit another door's path");
+  assert.notEqual(first, residentStreetPathKey(placeCode, workplace, home, true), "reversed routes retain independent endpoints");
+  assert.notEqual(first, residentStreetPathKey(placeCode, home, workplace, false), "a gate detour cannot satisfy a no-detour lookup");
+});
 
 test("resident streets attach to the true nearest vertex across grid bucket boundaries", () => {
   const cell = 12, nodes = [
