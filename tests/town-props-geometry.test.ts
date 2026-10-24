@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPropForTest, squareProgramFor} from '../src/geometry.ts';
-import {assetMesh} from '../src/asset-meshes.ts';
+import {assetVariants} from '../src/asset-meshes.ts';
 import {metresToSource} from '../src/physical-scale.ts';
 
 type Geo = ReturnType<typeof buildPropForTest>['closeDetail'];
@@ -403,7 +403,7 @@ test('yard objects stay inside their footprint, within budget, close-up only and
   for (const [label, [w, d]] of Object.entries(SIZES)) for (const variant of [1, 7, 42, 999]) for (const yawRad of [0, .7, -2.1]) {
     const g = buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad});
     // Procedural kits stay under 120 triangles; a loaded Blender model (src/models) is drawn exactly.
-    const model = assetMesh(label);
+    const model = assetVariants(label).reduce((top, m) => top && top.triangles > m.triangles ? top : m, undefined as undefined | {triangles: number});
     assert.ok(tris(g.closeDetail) > 0 && tris(g.closeDetail) <= (model ? model.triangles : 120), `${label}: ${tris(g.closeDetail)} triangles`);
     assertInside(g.closeDetail, yawRad, w, d, `${label} v${variant}`, 0, .15, 2.2);
     finite(g.closeDetail);

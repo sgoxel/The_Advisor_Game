@@ -19,11 +19,31 @@ export type AssetMesh = {
 /** Asset name → source file (resolved by the bundler, so it also works under the Pages base path). */
 export const ASSET_URLS: Record<string, string> = {
   cart: new URL("./models/cart.glb", import.meta.url).href,
+  woodpile: new URL("./models/woodpile.glb", import.meta.url).href,
+  barrels: new URL("./models/barrels.glb", import.meta.url).href,
+  barrels_v2: new URL("./models/barrels_v2.glb", import.meta.url).href,
 };
 
 const registry = new Map<string, AssetMesh>();
+const variantCache = new Map<string, AssetMesh[]>();
 export const assetMesh = (name: string) => registry.get(name);
-export const registerAssetMesh = (name: string, mesh: AssetMesh) => void registry.set(name, mesh);
+export const registerAssetMesh = (name: string, mesh: AssetMesh) => { registry.set(name, mesh); variantCache.clear(); };
+/** Base name of an asset: "barrels_v2" → "barrels". */
+export const assetBaseName = (name: string) => name.replace(/_v\d+$/, "");
+/** Every loaded model of one kind ("barrels", "barrels_v2", …) in a fixed (name) order. */
+export function assetVariants(kind: string): AssetMesh[] {
+  let list = variantCache.get(kind);
+  if (!list) {
+    list = [...registry.keys()].filter((name) => assetBaseName(name) === kind).sort().map((name) => registry.get(name)!);
+    variantCache.set(kind, list);
+  }
+  return list;
+}
+/** The model a SEED variant picks for this kind, or undefined when none is loaded. */
+export function assetFor(kind: string, variant: number): AssetMesh | undefined {
+  const list = assetVariants(kind);
+  return list.length ? list[(variant >>> 0) % list.length] : undefined;
+}
 
 const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
 

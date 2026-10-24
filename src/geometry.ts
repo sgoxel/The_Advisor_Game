@@ -12,7 +12,7 @@ import { elevationToRenderY } from "./render-frame.ts";
 import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
-import { assetMesh, type AssetMesh } from "./asset-meshes.ts";
+import { assetFor, type AssetMesh } from "./asset-meshes.ts";
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
@@ -1229,7 +1229,7 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     if (close) addPlanter(frameOf(closeDetail, yaw), 0, 0, 0, variant, feature.widthM ?? 1.4, feature.depthM ?? .7);
   } else if (feature.kind === "yard-prop") {
     // A Blender model when one is loaded for this kind (src/models), otherwise the procedural kit.
-    const asset = close ? assetMesh(feature.label) : undefined;
+    const asset = close ? assetFor(feature.label, variant) : undefined;
     if (asset) addAssetMesh(frameOf(closeDetail, yaw), asset);
     else if (close) addYardProp(frameOf(closeDetail, yaw), feature.label, variant);
   } else if (feature.kind === "park") {

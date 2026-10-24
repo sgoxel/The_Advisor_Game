@@ -105,6 +105,42 @@ def wheel(name, radius, width, x, y, z, rim_mat, hub_mat, spokes=8):
     return parts
 
 
+def stick(name, a, b, thickness, mat):
+    """Square beam from point a to point b (Blender coordinates)."""
+    a, b = Vector(a), Vector(b)
+    span = b - a
+    obj = box(name, (thickness, span.length, thickness), (a + b) / 2, mat)
+    obj.rotation_euler = span.to_track_quat("Y", "Z").to_euler()
+    return obj
+
+
+def log(name, radius, length, location, bark, grain, rotation=(0, 0, 0), segments=6):
+    """Round log: bark on the sides, light end grain on both cut faces (two materials, one mesh)."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=radius, radius2=radius, depth=length)
+    bm.normal_update()
+    for face in bm.faces:
+        face.material_index = 1 if abs(face.normal.z) > 0.9 else 0
+    obj = add_mesh(name, bm, bark)
+    obj.data.materials.append(grain)
+    obj.location = location
+    obj.rotation_euler = rotation
+    return obj
+
+
+def frustum(name, r0, r1, z0, z1, location, mat, segments=10, cap_top=False):
+    """Open tapered band from height z0 (radius r0) to z1 (radius r1); optional top cap."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=cap_top, cap_tris=False, segments=segments, radius1=r0, radius2=r1, depth=z1 - z0)
+    bm.normal_update()
+    if cap_top:
+        bottom = [f for f in bm.faces if f.normal.z < -0.9]
+        bmesh.ops.delete(bm, geom=bottom, context="FACES_ONLY")
+    obj = add_mesh(name, bm, mat)
+    obj.location = (location[0], location[1], location[2] + (z0 + z1) / 2)
+    return obj
+
+
 def join(name, objects):
     bpy.ops.object.select_all(action="DESELECT")
     for obj in objects:
@@ -182,7 +218,84 @@ def build_cart():
     return join("cart", parts)
 
 
-ASSETS = {"cart": build_cart}
+BARK = (0.42, 0.294, 0.18, 1)
+END_GRAIN = (0.784, 0.639, 0.427, 1)
+BARREL_WOOD = (0.494, 0.345, 0.212, 1)
+APPLES = (0.75, 0.24, 0.17, 1)
+GRAIN = (0.84, 0.69, 0.3, 1)
+
+
+def build_woodpile():
+    """Stacked split logs under a lean-to roof, a chopping block with an axe; footprint 1.9 m x 1.1 m.
+
+    Game local (x, up, z-front) = Blender (x, z, -y): the stack sits at the back (Blender +y), the block in front-right.
+    """
+    wood, dark, iron = material("wood", WOOD), material("dark_wood", DARK_WOOD), material("iron", IRON)
+    bark, grain = material("bark", BARK), material("end_grain", END_GRAIN)
+    parts = []
+    # Four rows of logs lying front-to-back, each row one log shorter (a stable pyramid), ends facing the street.
+    radius, length = 0.095, 0.55
+    for row, count in enumerate((6, 5, 4, 3)):
+        for i in range(count):
+            x = -0.75 + row * 0.1 + i * 0.2
+            parts.append(log(f"log{row}_{i}", radius, length, (x, 0.2, radius + row * 0.165), bark, grain, rotation=(math.pi / 2, 0, 0)))
+    # Lean-to: two tall posts at the back, two short at the front, a plank roof sloping to the front.
+    for x in (-0.88, 0.32):
+        parts.append(box(f"post_back{x}", (0.07, 0.07, 1.16), (x, 0.48, 0.58), dark))
+        parts.append(box(f"post_front{x}", (0.07, 0.07, 0.94), (x, -0.12, 0.47), dark))
+    parts.append(box("roof", (1.3, 0.74, 0.04), (-0.28, 0.17, 1.07), dark, rotation=(0.32, 0, 0), bevel=0.008))
+    for k in range(4):
+        parts.append(box(f"roof_plank{k}", (0.012, 0.74, 0.012), (-0.85 + k * 0.38, 0.17, 1.095), wood, rotation=(0.32, 0, 0)))
+    # Chopping block (end grain on top) with an axe stuck in it, two split pieces on the ground.
+    parts.append(log("block", 0.19, 0.42, (0.62, -0.22, 0.21), bark, grain, segments=8))
+    parts.append(box("axe_head", (0.035, 0.17, 0.11), (0.62, -0.25, 0.45), iron))
+    parts.append(stick("axe_handle", (0.62, -0.22, 0.44), (0.76, -0.42, 0.8), 0.035, wood))
+    parts.append(box("split1", (0.08, 0.3, 0.07), (0.38, -0.42, 0.035), grain, rotation=(0, 0, 0.5)))
+    parts.append(box("split2", (0.08, 0.28, 0.07), (0.86, -0.05, 0.035), grain, rotation=(0, 0, -0.3)))
+    return join("woodpile", parts)
+
+
+def barrel(name, x, y, wood, iron, lid):
+    """Bulging barrel, 0.8 m tall, max radius 0.26 m, three iron hoops."""
+    bands = [(0.22, 0.24, 0.0, 0.05, iron), (0.24, 0.26, 0.05, 0.38, wood), (0.26, 0.26, 0.38, 0.42, iron),
+             (0.26, 0.24, 0.42, 0.75, wood), (0.24, 0.22, 0.75, 0.8, iron)]
+    parts = [frustum(f"{name}_b{k}", r0, r1, z0, z1, (x, y, 0), mat) for k, (r0, r1, z0, z1, mat) in enumerate(bands)]
+    parts.append(cylinder(f"{name}_lid", 0.205, 0.02, (x, y, 0.79), lid, segments=10))
+    return parts
+
+
+def crate(name, x, y, z, wood, produce):
+    """Open crate (0.5 x 0.4 x 0.28 m) heaped with produce."""
+    return [box(f"{name}_box", (0.5, 0.4, 0.28), (x, y, z + 0.14), wood, bevel=0.01),
+            box(f"{name}_heap", (0.44, 0.34, 0.06), (x, y, z + 0.29), produce, bevel=0.02)]
+
+
+def build_barrels(variant):
+    """Barrels by the house wall; footprint 1.3 m x 0.9 m. Variant 1: three barrels and an apple crate;
+    variant 2: two barrels, a grain crate and a bucket in front."""
+    wood, dark, iron = material("barrel_wood", BARREL_WOOD), material("dark_wood", DARK_WOOD), material("iron", IRON)
+    crate_wood = material("wood", WOOD)
+    parts = []
+    if variant == 1:
+        for k, x in enumerate((-0.38, 0.0, 0.38)):
+            parts += barrel(f"barrel{k}", x, 0.1 if k % 2 == 0 else -0.08, wood, iron, dark)
+        parts += crate("crate", 0.38, 0.1, 0.8, crate_wood, material("apples", APPLES))
+    else:
+        for k, x in enumerate((-0.3, 0.3)):
+            parts += barrel(f"barrel{k}", x, 0.12, wood, iron, dark)
+        parts += crate("crate", -0.3, 0.12, 0.8, crate_wood, material("grain", GRAIN))
+        parts.append(frustum("bucket", 0.11, 0.14, 0.0, 0.26, (0.02, -0.3, 0), wood, segments=8, cap_top=False))
+        parts.append(cylinder("bucket_floor", 0.11, 0.02, (0.02, -0.3, 0.02), dark, segments=8))
+        parts.append(frustum("bucket_hoop", 0.135, 0.142, 0.18, 0.21, (0.02, -0.3, 0), iron, segments=8))
+    return join("barrels", parts)
+
+
+ASSETS = {
+    "cart": build_cart,
+    "woodpile": build_woodpile,
+    "barrels": lambda: build_barrels(1),
+    "barrels_v2": lambda: build_barrels(2),
+}
 
 for asset_name, builder in ASSETS.items():
     reset()
