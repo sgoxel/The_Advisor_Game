@@ -390,11 +390,35 @@ test("every village has required service staff and continuous seeded gate covera
       assert.equal(coverage.length, gateCountFor(village));
       for (const gate of coverage) {
         assert.equal(gate.required, guardsPerGateFor(village, gate.gateIndex));
-        assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}`);
-        assert.equal(new Set(gate.residentCodes).size, gate.onDuty);
+        assert.equal(gate.scheduled, gate.required, `${village.code}: the SEED watch roster is complete`);
+        assert.ok(gate.onDuty >= 0 && gate.onDuty <= gate.scheduled, "physical coverage never exceeds scheduled watchmen");
+        assert.equal(gate.missing, gate.required - gate.onDuty, "actual missing post capacity must stay visible");
+        assert.equal(gate.residentCodes.length, gate.onDuty);
+        assert.equal(gate.unresolvedCodes.length, gate.missing);
+        assert.equal(new Set([...gate.residentCodes, ...gate.unresolvedCodes]).size, gate.scheduled,
+          "every assigned watchman is present or explicitly unresolved, never silently counted twice");
       }
     }
   }
+});
+
+test("legal guard arrivals fill posts while unresolved homes remain explicit gate vacancies", () => {
+  const village = villages[0], lon = village.canonicalPosition.lon;
+  for (const [index, hour] of [[6, 9], [7, 21]] as const) {
+    const tick = tickAtLocalTime(WORKDAY, hour * HOUR, lon),
+      resident = residentAt(village, index, tick),
+      gate = guardCoverageAt(village, tick)[0];
+    assert.equal(resident.role, "guard");
+    assert.ok(resident.grounded && resident.activity === "guard",
+      `${resident.code}: a legal SEED watchman must actually arrive at the post`);
+    assert.ok(gate.residentCodes.includes(resident.code),
+      "a grounded watchman at the physical post must count in gate coverage");
+  }
+  const midnight = guardCoverageAt(village, 0);
+  const unresolved = residentAt(village, 8, 0);
+  if (!unresolved.grounded || unresolved.route.startsWith("BLOCKED:"))
+    assert.ok(midnight.every(gate => !gate.residentCodes.includes(unresolved.code)),
+      "an unresolved house must never become a fictitious physically staffed gate");
 });
 
 test("resident schedule state is analytical from absolute fantasy time", () => {
