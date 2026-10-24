@@ -35,13 +35,13 @@ jobs:
       - name: Validate resident authority and performance contracts
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-visual-evidence-close-actors-20261024')
       - run: npx playwright install --with-deps chromium
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-visual-evidence-close-actors-20261024')
       - run: python -m pip install playwright==1.63.0
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-visual-evidence-close-actors-20261024')
       - name: Capture resident inspector evidence
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-visual-evidence-close-actors-20261024')
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
@@ -50,11 +50,11 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(48);wait:1500;settle;shot:resident-scene;eval:document.getElementById("travel-panel").hidden=false;visible:#travel-panel;visible:#resident-inspector;visible:#resident-select;eval:document.getElementById("travel-panel").scrollTop=document.getElementById("resident-inspector").offsetTop-18;wait:150;shot:resident-primary;eval:(s=>{s.selectedIndex=Math.min(6,s.options.length-1),s.dispatchEvent(new Event("change"))})(document.getElementById("resident-select"));wait:100;shot:resident-guard;click:#resident-home-inspect;wait:100;shot:resident-house'
+          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(4);wait:1500;settle;eval:window.advisorWorld.state.residentPresentation.visibleActors>0||Promise.reject(new Error("Resident scene contains no active street actors"));shot:resident-scene;eval:document.getElementById("travel-panel").hidden=false;visible:#travel-panel;visible:#resident-inspector;visible:#resident-select;settle;eval:(s=>s?.value&&document.getElementById("resident-home-code")?.textContent?.includes("ENTRANCE")&&document.getElementById("resident-route-code")?.textContent?.length>0&&document.getElementById("resident-task")?.textContent!=="—"||Promise.reject(new Error("Resident identity/home/task/route unavailable after settled inspector request")))(document.getElementById("resident-select"));eval:document.getElementById("travel-panel").scrollTop=document.getElementById("resident-inspector").offsetTop-18;wait:150;shot:resident-primary;eval:(s=>{s.selectedIndex=Math.min(6,s.options.length-1),s.dispatchEvent(new Event("change"))})(document.getElementById("resident-select"));wait:100;shot:resident-guard;click:#resident-home-inspect;wait:100;shot:resident-house'
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --timeout 240 --steps "$RESIDENT_STEPS"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --timeout 240 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-visual-evidence-close-actors-20261024'))
         with:
           name: s006-resident-evidence
           path: test-results/
