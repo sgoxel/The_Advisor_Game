@@ -424,8 +424,18 @@ export function guardCoverageAt(place: Place, tick: number) {
       for (let shift = 0; shift < 2; shift++, index++) {
         const foundation = residentFoundationAt(place, index);
         if (isGuardOnDuty(foundation, tick, place)) {
-          coverage[gateIndex].onDuty++;
-          coverage[gateIndex].residentCodes.push(foundation.code);
+          const resident = residentAt(place, index, tick),
+            target = canonicalOffset(place, foundation.workOffset.eastM, foundation.workOffset.northM),
+            // Physical coverage must come from Simulation's actual legal
+            // arrival. Merely assigning a shift never stations a guard.
+            east = normalizeLongitude(resident.position.lon - target.lon) *
+              CANONICAL_PLANET_RADIUS * Math.cos(target.lat),
+            north = (resident.position.lat - target.lat) * CANONICAL_PLANET_RADIUS;
+          if (resident.grounded && resident.activity === "guard" &&
+              !resident.route.startsWith("BLOCKED:") && Math.hypot(east, north) <= 2) {
+            coverage[gateIndex].onDuty++;
+            coverage[gateIndex].residentCodes.push(foundation.code);
+          }
         }
       }
   return coverage;
@@ -445,7 +455,9 @@ function anchorRoute(place: Place, foundation: ResidentFoundation, anchor: Routi
 }
 /** Small seeded standing spot around an outdoor anchor, so a crowd at the market does not stack. */
 function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
-  if (!outdoors || anchor === "home") return base;
+  // A posted guard is stationed at the assigned SEED post, not a 2–9 metre
+  // roaming offset that can put them beyond the actual gate or enclosure.
+  if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
   const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = (anchor === "garden" || (base as ActivitySite).id) ? .3 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 7) / 10 : 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
   return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
 }
