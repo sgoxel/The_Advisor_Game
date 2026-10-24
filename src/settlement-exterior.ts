@@ -108,7 +108,13 @@ function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
 function gardenFor(place: Place, index: number): SettlementPlotPlan {
   const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index),
     widthM = 3 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 1.2, depthM = 3 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 1.2,
-    behind = (home.depthM || 8) * .5 + depthM * .5 + .4;
+    // Static gardens resolve before lazy homes. Their clearance disks must
+    // leave room for the owner house; mere footprint-depth separation can
+    // reject the required house (e.g. guard residence 8) as "unresolved".
+    behind = Math.max(
+      (home.depthM || 8) * .5 + depthM * .5 + .4,
+      Math.max(home.widthM, home.depthM) * .5 + .35 + Math.hypot(widthM, depthM) * .5 + .1 + .4,
+    );
   return {
     id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0,
     width: metresToSource(widthM), depth: metresToSource(depthM), widthM, depthM, yawRad: home.yawRad,
