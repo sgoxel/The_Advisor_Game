@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeStreetWithRoads, sharedStreetSegments } from '../src/street-road-merge.ts';
+import { mergeStreetJunctions, mergeStreetWithRoads, sharedStreetSegments } from '../src/street-road-merge.ts';
 import { roads, villages, roadDistanceAt, type Road } from '../src/geography.ts';
 import { sourceUnitsPerMetreAt, metresToSource } from '../src/physical-scale.ts';
 import { forestBodiesVisibleAtScale } from '../src/surface-presentation.ts';
@@ -17,6 +17,25 @@ test('nearby parallel streets share the route; perpendicular and separate street
  assert.deepEqual(mergeStreetWithRoads(far,5.4,[road]),far);
  assert.deepEqual(mergeStreetWithRoads(cross,5.4,[road]),cross);
  assert.deepEqual(road.centerline,[p(0,0),p(100,0)],'transport route must remain fixed');
+});
+
+test('street ends that run alongside another street are trimmed into one shared junction',()=>{
+ const m=sourceUnitsPerMetreAt(0),p=(x:number,z:number)=>({x:x*m.x,z:z*m.z}),
+  main=[p(0,0),p(100,0)],
+  // Side lane comes down from the north, then hugs the main street for ~28 m (a doubled road + wedge).
+  side=[p(50,60),p(50,20),p(52,3),p(60,2.5),p(80,2.5)],
+  // A real neighbouring lane parallel for 80 m must stay untouched.
+  lane=[p(10,6),p(90,6),p(95,40)],
+  [joinedMain,joinedSide,joinedLane]=mergeStreetJunctions([{points:main,widthM:6},{points:side,widthM:4},{points:lane,widthM:4}]);
+ const end=joinedSide[joinedSide.length-1];
+ assert.ok(Math.abs(end.z)<1e-9,'side lane must end on the main street centreline');
+ assert.ok(joinedSide.length<side.length,'parallel tail must be cut');
+ for(const q of joinedSide.slice(0,-1))assert.ok(Math.abs(q.z/m.z)>=6.5,'no remaining point may run alongside the main street');
+ assert.ok(joinedMain.some(q=>Math.abs(q.x-end.x)<1e-9&&Math.abs(q.z-end.z)<1e-9),'junction vertex must be shared by both streets');
+ assert.deepEqual(joinedLane,lane);
+ // Ends at a town gate are never moved.
+ const [,gated]=mergeStreetJunctions([{points:main,widthM:6},{points:side,widthM:4}],[p(80,2.5)]);
+ assert.deepEqual(gated,side);
 });
 
 test('forest bodies give way to flat coverage at 1/1 and farther out',()=>{

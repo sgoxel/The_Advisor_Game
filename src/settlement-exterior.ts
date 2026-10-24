@@ -1,5 +1,5 @@
 import { compareText } from "./compare-text.ts";
-import { mergeStreetWithRoads, sharedStreetSegments } from "./street-road-merge.ts";
+import { mergeStreetJunctions, mergeStreetWithRoads, sharedStreetSegments } from "./street-road-merge.ts";
 import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import { houseDimensionsFor, metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
@@ -498,8 +498,11 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   for (let index = 0; index < residentHomeCount; index += gardenStride)
     plots.push(gardenFor(place, index, aligned));
   const nearRoads=roads.filter(road=>roadDistanceAt(place.x,place.z,road)<aligned.radius+metresToSource(30));
-  return remember({ ...aligned, streets: aligned.streets.map(street => {
-    const points=mergeStreetWithRoads(street.points,street.width,nearRoads);
+  // Streets snap onto parallel main roads first, then street ends that run alongside another street
+  // are joined to it (one shared junction vertex) instead of overlapping it.
+  const joined = mergeStreetJunctions(aligned.streets.map(street => ({ points: mergeStreetWithRoads(street.points, street.width, nearRoads), widthM: street.width })), aligned.gates);
+  return remember({ ...aligned, streets: aligned.streets.map((street, index) => {
+    const points = joined[index];
     return {...street,points,sharedSegments:sharedStreetSegments(points,street.width,nearRoads),width:metresToSource(street.width)};
   }) });
 }

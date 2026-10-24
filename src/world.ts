@@ -235,16 +235,6 @@ function nearOtherStreet(plan: SettlementExteriorPlan, ownId: string, x: number,
     }
   return false;
 }
-/** True when a point is within `reach` source units of the centre line of any street of the plan other than `ownId`. */
-function nearOtherPolyline(plan: SettlementExteriorPlan, ownId: string, x: number, z: number, reach: number) {
-  const grid = streetSegmentGrid(plan), rx = wrapSourceX(x - plan.centre.x), rz = z - plan.centre.z,
-    cx = Math.floor(rx / STREET_CELL), cz = Math.floor(rz / STREET_CELL), cells = Math.max(1, Math.ceil(reach / STREET_CELL));
-  for (let dx = -cells; dx <= cells; dx++) for (let dz = -cells; dz <= cells; dz++)
-    for (const entry of grid.get(streetCellKey(cx + dx, cz + dz)) || []) {
-      if (entry.id !== ownId && closestPointOnSegment(rx, rz, entry.ax, entry.az, entry.bx, entry.bz).distance < reach) return true;
-    }
-  return false;
-}
 /** Metre containment in a rectangle yawed by `yawRad` (depth along the yaw, width across it), as the lamp and house tests use. */
 function insideYawedRect(x: number, z: number, cx: number, cz: number, yawRad: number, widthM: number, depthM: number, marginM: number) {
   const metric = sourceUnitsPerMetreAt(cz), dx = wrapSourceX(x - cx) / metric.x, dz = (z - cz) / metric.z, c = Math.cos(yawRad), s = Math.sin(yawRad);
@@ -519,11 +509,13 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
             }
           }
         }
-        // A street that ends inside the town (no other street within 3 m, no gate within 12 m) is capped with a round end.
+        // A street that ends inside the town (a dead end or a junction; no gate within 12 m) gets a round end.
         for (const end of (index === 1 ? [0] : []).concat(index === street.points.length - 1 ? [street.points.length - 1] : [])) {
           const vertex = street.points[end], neighbour = street.points[end === 0 ? 1 : end - 1];
           if (end === street.points.length - 1 && street.points.length > 1 && Math.hypot(wrapSourceX(street.points[0].x - vertex.x), street.points[0].z - vertex.z) < metresToSource(3)) continue;
-          if (nearOtherPolyline(plan, street.id, vertex.x, vertex.z, metresToSource(3)) || nearGate(vertex.x, vertex.z, metresToSource(12))) continue;
+          // Ends at a gate run into the gateway. Ends that join another street keep a round joint too, so the
+          // junction corner is closed (mergeStreetJunctions ends them on the other street's centreline).
+          if (nearGate(vertex.x, vertex.z, metresToSource(12))) continue;
           const onVisible = segments.some(([p, q]) => (Math.abs(wrapSourceX(p.x - vertex.x)) < 1e-9 && Math.abs(p.z - vertex.z) < 1e-9) || (Math.abs(wrapSourceX(q.x - vertex.x)) < 1e-9 && Math.abs(q.z - vertex.z) < 1e-9));
           if (onVisible) add("street-joint", vertex.x, vertex.z, Math.round(street.width * 10), `${place.id}/street-joint/${streetIndex}/${end}/${street.id}`, { name: streetNameList[streetIndex], yawRad: Math.atan2(wrapSourceX(end === 0 ? neighbour.x - vertex.x : vertex.x - neighbour.x), end === 0 ? neighbour.z - vertex.z : vertex.z - neighbour.z), footprintWidth: street.width, label: "Street", pavementWidth });
         }

@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveGoTarget } from "../src/npc-popup.ts";
 import { places, villages } from "../src/geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
 import { metresToSource } from "../src/physical-scale.ts";
+
+// npc-popup pulls in browser-only modules that read document.baseURI at load time.
+(globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
+const { resolveGoTarget } = await import("../src/npc-popup.ts");
 
 test("settlement card place links resolve to their positions only when clicked", () => {
   const home = villages[0], other = places.find((place) => place.id !== home.id)!;
