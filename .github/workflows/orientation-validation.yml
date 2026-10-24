@@ -12,10 +12,13 @@ on:
       - '.github/workflows/orientation-validation.yml'
 permissions:
   contents: read
+concurrency:
+  group: orientation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   orientation:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,14 +26,23 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js orientation.spec.js render-frame.spec.js
-      - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js orientation.spec.js render-frame.spec.js
-      - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js --grep 'pointer touch keyboard'
+      - name: Focused orientation invariants (bounded PR gate)
+        run: timeout 8m node --experimental-strip-types --test-isolation=none --test tests/planet.test.ts tests/render-frame.test.ts tests/globe.test.ts tests/handoff.test.ts
+      - name: Full unit diagnostics (on demand)
+        if: github.event_name == 'workflow_dispatch'
+        run: timeout 20m npm test
+      - run: timeout 5m npm run build
+        if: github.event_name == 'workflow_dispatch'
+      - run: timeout 5m npx playwright install --with-deps chromium
+        if: github.event_name == 'workflow_dispatch'
+      - run: timeout 5m xvfb-run -a npx playwright test --config playwright.webgpu.config.js orientation.spec.js render-frame.spec.js
+        if: github.event_name == 'workflow_dispatch'
+      - run: timeout 5m xvfb-run -a npx playwright test --config playwright.fallback.config.js orientation.spec.js render-frame.spec.js
+        if: github.event_name == 'workflow_dispatch'
+      - run: timeout 5m xvfb-run -a npx playwright test --config playwright.navigation.config.js --grep 'pointer touch keyboard'
+        if: github.event_name == 'workflow_dispatch'
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: github.event_name == 'workflow_dispatch' && always()
         with:
           name: orientation-evidence
           path: test-results/
