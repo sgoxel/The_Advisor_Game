@@ -50,3 +50,5 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+# WP-S003-001-001 renderer-evidence trigger branch only.
