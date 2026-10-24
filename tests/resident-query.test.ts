@@ -1,8 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("visible S006 residents retain a 44px CSS touch target without selecting distant actors", () => {
+  const feet = { x: 100, y: 100 }, head = { x: 100, y: 94 };
+  assert.equal(residentActorPickDistance(100, 97, feet, head), 0,
+    "tapping the physically projected actor centre chooses its real SEED sprite");
+  assert.notEqual(residentActorPickDistance(121, 97, feet, head), null,
+    "tiny residents remain touch-selectable at the edge of the 44px target");
+  assert.notEqual(residentActorPickDistance(100, 75, feet, head), null,
+    "the vertical touch target also covers 44px");
+  assert.equal(residentActorPickDistance(123, 97, feet, head), null,
+    "unrelated scenery beyond the finite hit target must not select a resident");
+  assert.equal(residentActorPickDistance(100, 74, feet, head), null);
+  assert.equal(residentActorPickDistance(Number.NaN, 97, feet, head), null,
+    "unprojectable actors never acquire an infinite picking surface");
+
+  const other = { x: 118, y: 100 }, otherHead = { x: 118, y: 94 };
+  assert.ok(residentActorPickDistance(115, 97, other, otherHead)! <
+    residentActorPickDistance(115, 97, feet, head)!,
+  "when sparse actor hit targets overlap, nearest canonical actor wins");
+  const tallHead = { x: 100, y: -20 };
+  assert.notEqual(residentActorPickDistance(100, -18, feet, tallHead), null,
+    "full-height nearby 3D characters remain selectable near their visible heads");
+});
 
 test("resident facts dispatch after coherent coverage without waiting for optional detail", () => {
   const allowed = residentDispatchAllowed;

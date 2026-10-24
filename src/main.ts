@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1638,11 +1638,8 @@ async function start() {
         bottom = base.clone(), top = base.clone().add(up);
       lens.worldToScreen(bottom, feet);
       lens.worldToScreen(top, head);
-      const height = Math.abs(feet.y - head.y), halfWidth = Math.max(10, height * .26 + 4),
-        minY = Math.min(feet.y, head.y) - 4, maxY = Math.max(feet.y, head.y) + 4, cx = (feet.x + head.x) * .5;
-      if (x < cx - halfWidth || x > cx + halfWidth || y < Math.min(minY, feet.y - 18) || y > maxY) continue;
-      const distance = Math.hypot(x - cx, y - (feet.y + head.y) * .5);
-      if (distance < bestDistance) { best = resident; bestDistance = distance; }
+      const distance = residentActorPickDistance(x, y, feet, head);
+      if (distance !== null && distance < bestDistance) { best = resident; bestDistance = distance; }
     }
     return best;
   };
