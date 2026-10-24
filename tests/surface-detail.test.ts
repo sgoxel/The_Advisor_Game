@@ -63,6 +63,12 @@ test("both shader languages carry the same detail pipeline, and only materials t
       assert.ok(main.includes("sdGloss = mix(") && main.includes("sdSpec = mix("), "per-pixel shine");
     }
   }
+  // WGSL reserves many words that are legal names in TypeScript/GLSL ("patch" once broke the WebGPU terrain).
+  const reserved = /\b(?:let|var|const)\s+(patch|sample|filter|module|meta|handle|target|layout|input|output|active|demote|discard|enum|null|self|super|this|unless|where|yield|fallthrough|precision|resource|common|inline|interface|subroutine|smooth|flat|centroid)\b/;
+  for (const mode of ["terrain", "lit"] as const) {
+    const sd = surfaceDetailChunks(mode);
+    for (const code of [sd.wgslDeclaration, sd.wgslMainStart]) assert.doesNotMatch(code, reserved, "no WGSL reserved word used as a name");
+  }
   assert.ok(LIT_DIFFUSE_GLSL.includes("dAlbedo *= sdMul") && LIT_DIFFUSE_WGSL.includes("dAlbedo * sdMul"));
   assert.ok(LIT_NORMAL_GLSL.includes("dVertexNormalW - sdGrad") && LIT_NORMAL_WGSL.includes("dVertexNormalW - sdGrad"));
   assert.ok(LIT_GLOSS_GLSL.includes("sdGloss") && LIT_GLOSS_WGSL.includes("sdGloss"));

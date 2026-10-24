@@ -9,7 +9,7 @@ import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
  */
 import { continents, countries, places, roadConnections, type Place } from "./geography.ts";
 import { greatCircleDistance } from "./planet.ts";
-import { nearbyCriticalSites } from "./sites.ts";
+import { criticalSites, nearbyCriticalSites } from "./sites.ts";
 import { finalSurfaceAt } from "./world.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { metresToSource } from "./physical-scale.ts";
@@ -69,6 +69,26 @@ function anchorNames(resident: Resident) {
   } as Record<string, string>;
 }
 
+/** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
+let goTo: ((x: number, z: number) => void) | undefined;
+export function setPopupNavigator(navigator: (x: number, z: number) => void) { goTo = navigator; }
+/**
+ * A list row that takes the camera to a place when clicked. The row only carries a reference
+ * ("plot:<settlement>:<plot>", "site:<settlement>:<code>", "place:<id>"); the position is worked out
+ * on click (resolveGoTarget), so opening a card computes no coordinates.
+ */
+const goRow = (html: string, ref: string, name: string) =>
+  `<button type="button" class="info-go" data-go="${escape(ref)}" title="Go to ${escape(name)}">${html}</button>`;
+export function resolveGoTarget(ref: string): { x: number; z: number } | undefined {
+  const [kind, id, sub] = ref.split(":"), place = (key: string) => places.find((entry) => String(entry.id) === key);
+  if (kind === "place") return place(id);
+  const settlement = place(id);
+  if (!settlement) return;
+  if (kind === "plot") return settlementExteriorFor(settlement).plots.find((plot) => plot.id === sub)?.candidates[0];
+  if (kind === "site") return criticalSites.find((site) => site.code === sub)
+    ?? nearbyWilderness(settlement.x, settlement.z, metresToSource(8000), 8).find((site) => site.code === sub);
+}
+
 function install() {
   if (root || typeof document === "undefined") return;
   root = document.createElement("div");
@@ -78,6 +98,8 @@ function install() {
   root.hidden = true;
   root.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
+    const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
+    if (target) goTo!(target.x, target.z);
     const minimize=(event.target as HTMLElement).closest<HTMLButtonElement>("[data-minimize]"),content=root?.querySelector<HTMLElement>("[data-wilderness-content]");
     if(minimize&&content){content.hidden=!content.hidden;minimize.textContent=content.hidden?"+":"−";minimize.setAttribute("aria-expanded",String(!content.hidden));minimize.setAttribute("aria-label",content.hidden?"Restore window":"Minimize window");}
   });
@@ -261,12 +283,12 @@ export function showSettlementPopup(place: Place, population: number) {
     water = politicalSettlementSiteById.get(place.id)?.waterContext,
     named = (plot: (typeof plan.plots)[number]) => buildingName((plot.kind === "service" ? plot.service : plot.kind) as BuildingKind, plot.id, place.name, place.continent, plot.ownerId ? familyName(plot.ownerId, place.continent) : undefined, city),
     notable = plan.plots.filter((plot) => plot.kind === "service" || plot.kind === "keep" || plot.kind === "well")
-      .map((plot) => `${named(plot)} <span class="npc-muted">· ${plot.kind === "service" ? (SERVICE_TITLE[plot.service ?? ""] ?? "workshop").toLowerCase() : plot.kind}</span>`),
+      .map((plot) => goRow(`${named(plot)} <span class="npc-muted">· ${plot.kind === "service" ? (SERVICE_TITLE[plot.service ?? ""] ?? "workshop").toLowerCase() : plot.kind}</span>`, `plot:${place.id}:${plot.id}`, named(plot))),
     fields = plan.plots.filter((plot) => plot.kind === "field"),
     farmland = fields.length ? `${fields.length} fields (${[...new Set(fields.map((field) => field.fieldForm))].join(", ")}) around the walls` : "",
     sites = [...nearbyCriticalSites(place.x, place.z, metresToSource(40_000), 6), ...nearbyWilderness(place.x,place.z,metresToSource(8000),8).map(site=>({...site,archetype:site.kind}))].map((site) => ({
       text: `${site.name} <span class="npc-muted">· ${site.kind === "ruin" ? "ruins" : site.archetype.replace("-", " ")}</span>`,
-      distance: greatCircleDistance(place.canonicalPosition, site.canonicalPosition), dir: direction(place.x, place.z, site.x, site.z),
+      distance: greatCircleDistance(place.canonicalPosition, site.canonicalPosition), dir: direction(place.x, place.z, site.x, site.z), ref: `site:${place.id}:${site.code}`, name: site.name,
     })),
     neighbours = places.filter((other) => other.id !== place.id)
       .map((other) => ({ other, distance: greatCircleDistance(place.canonicalPosition, other.canonicalPosition) }))
@@ -290,8 +312,8 @@ export function showSettlementPopup(place: Place, population: number) {
     </div>
     <section><h3>Notable places</h3>${list(notable)}</section>
     <section><h3>Surroundings</h3>${list(surroundings(place).map(escape))}</section>
-    <section><h3>Points of interest nearby</h3>${list(sites.map((site) => `${site.text} <span class="npc-muted">· ${km(site.distance)} ${site.dir}</span>`))}</section>
-    <section><h3>Neighbouring settlements</h3>${list(neighbours.map(({ other, distance }) => `${escape(other.name)} <span class="npc-muted">· ${other.kind} · ${km(distance)} ${direction(place.x, place.z, other.x, other.z)}${linked.has(other.id) ? " · road" : ""}</span>`))}</section>`;
+    <section><h3>Points of interest nearby</h3>${list(sites.map((site) => goRow(`${site.text} <span class="npc-muted">· ${km(site.distance)} ${site.dir}</span>`, site.ref, site.name)))}</section>
+    <section><h3>Neighbouring settlements</h3>${list(neighbours.map(({ other, distance }) => goRow(`${escape(other.name)} <span class="npc-muted">· ${other.kind} · ${km(distance)} ${direction(place.x, place.z, other.x, other.z)}${linked.has(other.id) ? " · road" : ""}</span>`, `place:${other.id}`, other.name)))}</section>`;
   root.hidden = false;
 }
 

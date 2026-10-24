@@ -1370,5 +1370,11 @@ body.globe-mode .travel-button {
 .info-list { list-style: none; margin: 0; padding: 0; }
 .info-list li { padding: 3px 0; border-bottom: 1px solid rgba(216, 185, 121, 0.1); }
 .info-list li:last-child { border-bottom: 0; }
+/* Place rows that take the camera to the place (Hero zoom). */
+.info-go { all: unset; display: block; box-sizing: border-box; width: calc(100% + 8px); margin: -2px -4px; padding: 2px 4px; border-radius: 4px; cursor: pointer; color: inherit; }
+.info-go:hover, .info-go:focus-visible { background: rgba(216, 185, 121, 0.14); color: #f3e6c6; }
+.info-go:focus-visible { outline: 1px solid rgba(216, 185, 121, 0.6); }
+.info-go::after { content: "→"; float: right; opacity: 0; color: #d8b979; transition: opacity .12s; }
+.info-go:hover::after, .info-go:focus-visible::after { opacity: 1; }
 #npc-popup section > p { margin: 2px 0; }
 .world-clock .local-time { display: block; font-size: 10.5px; color: #cdbf9f; margin-top: 2px; letter-spacing: .02em; white-space: nowrap; }

@@ -173,8 +173,8 @@ vec4 sdPattern(float kind, vec2 uv, float fp) {
     return vec4(vec3(1.0 + dune * 0.08 + ripple * 0.04), dune * 0.3 + ripple * 0.008);
   } else if (kind < 16.5) {
     vec2 c = sdCells(uv * 0.8); float edge = c.x / 0.8;
-    float crack = sdGroove(edge, 0.03, fp) * sdVis(1.2, fp) * smoothstep(0.52, 0.7, sdNoise(uv * 0.12));
-    float tone = (c.y - 0.5) * 0.16 * sdVis(0.6, fp) + (sdNoise(uv * 4.0) - 0.5) * 0.1;
+    float crackArea = smoothstep(0.52, 0.7, sdNoise(uv * 0.12)); float crack = sdGroove(edge, 0.03, fp) * sdVis(1.2, fp) * crackArea;
+    float tone = (c.y - 0.5) * 0.16 * sdVis(0.6, fp) * crackArea + (sdNoise(uv * 4.0) - 0.5) * 0.1;
     return vec4(vec3((1.0 + tone) * (1.0 - 0.3 * crack)), smoothstep(0.0, 0.12, edge) * 0.012 * crack - crack * 0.012);
   } else if (kind < 17.5) {
     float blotch = sdNoise(uv * 0.5); float lumps = sdNoise(uv * 3.0);
@@ -393,8 +393,8 @@ fn sdPattern(kind: f32, uv: vec2f, fp: f32) -> vec4f {
     return vec4f(vec3f(1.0 + dune * 0.08 + ripple * 0.04), dune * 0.3 + ripple * 0.008);
   } else if (kind < 16.5) {
     let c = sdCells(uv * 0.8); let edge = c.x / 0.8;
-    let crack = sdGroove(edge, 0.03, fp) * sdVis(1.2, fp) * smoothstep(0.52, 0.7, sdNoise(uv * 0.12));
-    let tone = (c.y - 0.5) * 0.16 * sdVis(0.6, fp) + (sdNoise(uv * 4.0) - 0.5) * 0.1;
+    let crackArea = smoothstep(0.52, 0.7, sdNoise(uv * 0.12)); let crack = sdGroove(edge, 0.03, fp) * sdVis(1.2, fp) * crackArea;
+    let tone = (c.y - 0.5) * 0.16 * sdVis(0.6, fp) * crackArea + (sdNoise(uv * 4.0) - 0.5) * 0.1;
     return vec4f(vec3f((1.0 + tone) * (1.0 - 0.3 * crack)), smoothstep(0.0, 0.12, edge) * 0.012 * crack - crack * 0.012);
   } else if (kind < 17.5) {
     let blotch = sdNoise(uv * 0.5); let lumps = sdNoise(uv * 3.0);
