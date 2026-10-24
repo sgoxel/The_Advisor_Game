@@ -604,7 +604,7 @@ export function legalOpenGroundDetour(
     length = Math.hypot(dx, dz);
   if (length < 12 || length > 4000) return null;
   const sideX = -dz / length, sideZ = dx / length;
-  for (const radius of [24, 64, 160]) {
+  for (const radius of [24, 64, 160, 320]) {
     for (const progress of [.5, .25, .75]) {
       for (const side of [-1, 1]) {
         const pivot = { eastM: from.eastM + dx * progress + sideX * side * radius,
