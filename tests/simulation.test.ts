@@ -504,6 +504,30 @@ test("legal guard arrivals fill posts while unresolved homes remain explicit gat
       "an unresolved house must never become a fictitious physically staffed gate");
 });
 
+test("civilian and day-watch positions remain continuous across local midnight", () => {
+  // Outbound, failed return, and late-night rest all derive from one SEED
+  // foundation; a calendar reset must not teleport an unarrived resident home.
+  const fixtures = [villages[0], villages.find(p => p.code.includes("/CITY/6/VILLAGE/1"))!, cities[0]];
+  for (const place of fixtures) {
+    const lon = place.canonicalPosition.lon,
+      beforeTick = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+      midnight = tickAtLocalTime(WORKDAY + 1, 0, lon);
+    for (const index of [0, 3, 6, 7, 9, 12, 18, 30, 45, 70]) {
+      if (index >= populationOf(place)) continue;
+      const before = residentAt(place, index, beforeTick),
+        after = residentAt(place, index, midnight),
+        separation = greatCircleDistance(before.position, after.position);
+      assert.equal(after.code, before.code, "local midnight cannot replace a SEED resident");
+      assert.ok(separation < 3, `${before.code}: midnight displaced ${separation.toFixed(2)}m`);
+      assert.deepEqual(residentAt(place, index, midnight), after,
+        "absolute-time catch-up must reconstruct the same midnight state");
+      if (!before.grounded || before.route.startsWith("BLOCKED:"))
+        assert.ok(after.route.startsWith("BLOCKED:") || after.grounded,
+          "a blocked resident cannot be counted as legally arrived without a real route");
+    }
+  }
+});
+
 test("night guards carry their lawful evening position through midnight and the morning shift", () => {
   const affected = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
   assert.ok(affected, "retain the prior road-trimmed village case");
