@@ -439,7 +439,17 @@ class Session:
             page.mouse.move(*parse_point(end, self.viewport), steps=12)
             page.mouse.up()
         elif name == "tap":
-            x, y = self.canvas_point(arg)
+            if arg == "resident":
+                point = page.evaluate("""() => {
+                  const r = window.__s006Resident;
+                  return r && Number.isFinite(r.clientX) && Number.isFinite(r.clientY)
+                    ? [r.clientX, r.clientY] : null;
+                }""")
+                if point is None:
+                    raise CaptureError("no selected resident pixel available for actual browser tap")
+                x, y = point
+            else:
+                x, y = self.canvas_point(arg)
             if page.evaluate("([x, y]) => document.elementFromPoint(x, y)?.id", [x, y]) != "world":
                 raise CaptureError(f"tap at {x:g},{y:g} is outside the canvas or covered by a panel")
             page.mouse.click(x, y)
