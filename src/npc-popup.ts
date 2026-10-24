@@ -99,10 +99,12 @@ export function showNpcPopup(resident: Resident, tick: number) {
   if (!root) return;
   const sameResident = currentKind === "npc" && currentCode === resident.code;
   const technicalOpen = sameResident && !!root.querySelector<HTMLDetailsElement>(".npc-technical")?.open;
+  const secondaryOpen = sameResident && !!root.querySelector<HTMLDetailsElement>(".npc-secondary")?.open;
   const previousScroll = sameResident ? root.scrollTop : 0;
   // Fantasy-time refresh rebuilds the markup: keep the reader's focused control.
   const active = sameResident && root.contains(document.activeElement) ? document.activeElement : null;
   const focusSelector = active?.matches(".npc-technical summary") ? ".npc-technical summary"
+    : active?.matches(".npc-secondary summary") ? ".npc-secondary summary"
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
@@ -134,6 +136,15 @@ export function showNpcPopup(resident: Resident, tick: number) {
       <div><span class="npc-label">Home</span>${escape(names.home ?? "")}</div>
       <div><span class="npc-label">Work</span>${escape(names.work ?? resident.workplace)}</div>
     </div>
+    <details class="npc-technical"${technicalOpen ? " open" : ""}>
+      <summary>Canonical SEED journey details</summary>
+      <div><span class="npc-label">Resident</span><code id="npc-seed-code" class="npc-code">${escape(resident.code)}</code></div>
+      <div><span class="npc-label">Home entrance</span><code id="npc-home-entrance" class="npc-code">${escape(resident.homeEntrance)}</code></div>
+      <div><span class="npc-label">Workplace</span><code id="npc-workplace-code" class="npc-code">${escape(resident.workplace)}</code></div>
+      <div><span class="npc-label">Actual route</span><code id="npc-route-code" class="npc-code">${escape(resident.route)}</code></div>
+    </details>
+    <details class="npc-secondary"${secondaryOpen ? " open" : ""}>
+      <summary>Abilities, personality & today's routine</summary>
     <div class="npc-columns">
       <section><h3>Abilities</h3>${ABILITY_LABELS.map(([key, label]) => `<div class="npc-row"><span>${label}</span>${bar(t.abilities[key], 18, "#d8b979")}<b>${t.abilities[key]}</b></div>`).join("")}</section>
       <section><h3>Personality</h3>${PERSONALITY_LABELS.map(([key, label]) => `<div class="npc-row"><span>${label}</span>${bar(t.personality[key], 1, "#8fb3c9")}<b>${Math.round(t.personality[key] * 100)}</b></div>`).join("")}</section>
@@ -141,12 +152,6 @@ export function showNpcPopup(resident: Resident, tick: number) {
     <section class="npc-routine"><h3>Today's routine · ${WEEKDAYS[weekday]}</h3>
       <ol>${plan.map((activity, i) => `<li class="${i === index ? "current" : i < index ? "past" : ""}"><time>${clock(activity.start)}</time><span>${escape(activity.task)}${i === index ? ` · ${Math.round(resident.activityProgress * 100)}%` : i < index ? " · done" : ""}</span><em>${escape(where(activity))}</em></li>`).join("")}</ol>
     </section>
-    <details class="npc-technical"${technicalOpen ? " open" : ""}>
-      <summary>Canonical SEED journey details</summary>
-      <div><span class="npc-label">Resident</span><code id="npc-seed-code" class="npc-code">${escape(resident.code)}</code></div>
-      <div><span class="npc-label">Home entrance</span><code id="npc-home-entrance" class="npc-code">${escape(resident.homeEntrance)}</code></div>
-      <div><span class="npc-label">Workplace</span><code id="npc-workplace-code" class="npc-code">${escape(resident.workplace)}</code></div>
-      <div><span class="npc-label">Actual route</span><code id="npc-route-code" class="npc-code">${escape(resident.route)}</code></div>
     </details>`;
   root.hidden = false;
   root.scrollTop = previousScroll;
