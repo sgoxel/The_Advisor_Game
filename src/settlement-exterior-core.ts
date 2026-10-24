@@ -744,6 +744,18 @@ export function reconcileSettlementLotsToFinalBorder(
     return { a: x * frame.axis.x + z * frame.axis.z,
       l: -x * frame.axis.z + z * frame.axis.x };
   });
+  const localLot = (lot: SettlementLot) => {
+    const x = wrapSourceX(lot.x - place.x) / (U * frame.kx), z = (lot.z - place.z) / U;
+    return { a: x * frame.axis.x + z * frame.axis.z,
+      l: -x * frame.axis.z + z * frame.axis.x };
+  };
+  const originalLots = layout.lots!;
+  const order = lotOrder(place, layout, originalLots.length);
+  // Most settlements need no change. Preserve their existing house identities
+  // and avoid a second lot-generation pass when no assigned lot was clipped.
+  if (Array.from({ length: SETTLEMENT_POPULATION[place.kind] }, (_, index) =>
+      localLot(originalLots[(order.offset + index * order.step) % originalLots.length]))
+    .every(lot => insideBorder(clipped, lot.a, lot.l, 10))) return true;
   const candidate = computeLots({ ...layout, border: clipped }, place,
     Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03));
   if (candidate.length < SETTLEMENT_POPULATION[place.kind]) return false;
