@@ -27,14 +27,14 @@ test("visible S006 residents retain a 44px CSS touch target without selecting di
     "full-height nearby 3D characters remain selectable near their visible heads");
 });
 
-test("resident facts dispatch after coherent coverage without waiting for optional detail", () => {
+test("resident facts dispatch after initial ready without waiting for later zoom refinement", () => {
   const allowed = residentDispatchAllowed;
   assert.equal(allowed(false, true, 1, false), true,
-    "a spare worker may answer logical residents while fine terrain continues");
+    "a spare worker may answer logical residents while a newly selected zoom is still refining");
   assert.equal(allowed(false, true, 1, false), true,
     "one-worker devices must not wait for optional detail before first inspection");
   assert.equal(allowed(false, false, 1, false), false,
-    "initial coherent terrain must complete before first resident query");
+    "initial coherent terrain must be ready before first resident query");
   assert.equal(allowed(true, true, 1, false), false,
     "camera changes must not launch a stale request");
   assert.equal(allowed(true, false, 1, true), true,
