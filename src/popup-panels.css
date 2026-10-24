@@ -48,10 +48,13 @@ body .panel .popup-heading button {
   flex: 0 0 44px;
   min-width: 44px;
   min-height: 44px;
-  padding: 2px;
+  padding: 0;
   margin: 0;
-  font-size: 20px;
+  font-size: 26px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 /* Close/minimize/clear controls keep 44 px even before popup-panels.ts adds
    .popup-heading, and in the character/building popup. */
