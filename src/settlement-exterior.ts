@@ -7,6 +7,7 @@ import {
   SETTLEMENT_POPULATION,
   settlementExteriorFor as coreSettlementExteriorFor,
   settlementLotFor,
+  settlementLotCount,
   type SettlementArchetype,
   type SettlementExteriorPlan as CoreExteriorPlan,
   type SettlementFieldForm,
@@ -103,6 +104,27 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
       // Move farther BACK within this owned frontage rather than reducing
       // road clearance or relocating the resident to an unrelated lot.
       at(0, 2), at(0, 4), at(0, 6), at(-.6, 4), at(.6, 4)],
+  };
+}
+
+/** A seed-owned *vacant* frontage lot can house a watchman whose first
+ * legal assigned lot is genuinely road-blocked. Occupied lots are never
+ * borrowed and the resident's house identity and dimensions do not change. */
+export function settlementSpareHomeFor(place: Place, index: number, ordinal: number,
+  suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan | undefined {
+  const population = canonicalSettlementPopulation(place);
+  if (!Number.isInteger(ordinal) || ordinal < 0 || population + ordinal >= settlementLotCount(place)) return undefined;
+  const house = settlementHomeFor(place, index, suppliedPlan),
+    lot = settlementLotFor(place, population + ordinal),
+    shift = ((house.depthM ?? 8) - lot.nominalDepthM) * .5,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
+    });
+  return { ...house,
+    yawRad: lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) *
+      (place.kind === "city" ? .06 : .1),
+    candidates: [at(0), at(-.6), at(.6), at(0, .8), at(0, 2)],
   };
 }
 
