@@ -264,6 +264,31 @@ export function settlementHomePlacementEvidence(place: Place, index: number) {
     };
   });
 }
+/** On-demand evidence for spare-house rejection, including active reservations.
+ * This uses the same legality and SEED inventory as actual guard resolution. */
+export function guardSparePlacementEvidence(place: Place, index: number) {
+  const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan);
+  resolveGuardHomes(place, plan, resolution);
+  const vacant = Math.max(0, settlementLotCount(place) - SETTLEMENT_POPULATION[place.kind]);
+  const reserved = [...(resolution.homePlots?.entries() ?? [])].filter(([i]) => i !== index)
+    .flatMap(([i, plot]) => {
+      const point = resolution.homes.get(plot.id);
+      return point ? [{ x: point.x, z: point.z, radius: plot.clearanceRadius, index: i }] : [];
+    });
+  return {
+    vacant,
+    candidates: Array.from({ length: vacant }, (_, ordinal) => {
+      const plot = settlementSpareHomeFor(place, index, ordinal, plan)!;
+      const reasons = plot.candidates.map(point => ({
+        legal: candidateLegal(place, plan, plot, point),
+        static: overlaps(resolution.staticOccupants, point.x, point.z, plot.clearanceRadius),
+        owned: conflictsWithAssignedHome(place, plan, index, point, plot.clearanceRadius),
+        reserved: overlaps(reserved, point.x, point.z, plot.clearanceRadius),
+      }));
+      return { ordinal, eligible: reasons.some(r => r.legal && !r.static && !r.owned && !r.reserved), reasons };
+    }),
+  };
+}
 /** Resolve one canonical home against the same legal lot and street frontage as
  * the rendered building. Unlike candidate[0], this may be absent or shifted. */
 export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x: number; z: number } | undefined {
