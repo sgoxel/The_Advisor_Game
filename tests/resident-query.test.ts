@@ -1,25 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
-test("resident facts can dispatch after coherent coverage before optional fine meshes", () => {
+test("resident facts dispatch after coherent coverage without waiting for optional detail", () => {
   const allowed = residentDispatchAllowed;
-  assert.equal(allowed(false, true, false, 1, 4, false), true,
-    "a spare worker may answer logical resident facts while fine terrain continues");
-  assert.equal(allowed(false, false, true, 4, 4, false), false,
-    "initial coherent terrain must still complete before starting inspection");
-  assert.equal(allowed(true, true, true, 4, 4, false), false,
-    "a pending camera selection cannot start a stale query");
-  assert.equal(allowed(false, true, false, 1, 1, false), false,
-    "a single worker keeps preparing mandatory terrain until it is ready");
-  assert.equal(allowed(false, true, true, 1, 1, false), true,
-    "a single worker may inspect after mandatory tiles are cached");
-  assert.equal(allowed(true, false, false, 1, 4, true), true,
-    "remaining shards of an already started job must retire after navigation");
-  assert.equal(allowed(false, true, true, 0, 4, true), false,
+  assert.equal(allowed(false, true, 1, false), true,
+    "a spare worker may answer logical residents while fine terrain continues");
+  assert.equal(allowed(false, true, 1, false), true,
+    "one-worker devices must not wait for optional detail before first inspection");
+  assert.equal(allowed(false, false, 1, false), false,
+    "initial coherent terrain must complete before first resident query");
+  assert.equal(allowed(true, true, 1, false), false,
+    "camera changes must not launch a stale request");
+  assert.equal(allowed(true, false, 1, true), true,
+    "remaining shards of a started batch must retire after navigation");
+  assert.equal(allowed(false, true, 0, true), false,
     "an occupied worker is never double-dispatched");
+});
+
+test("first resident query uses only idle worker shards without pending-worker deadlock", () => {
+  assert.deepEqual(residentWorkerShardPlan([3, 1]), [
+    { workerId: 1, shardIndex: 0, count: 2 },
+    { workerId: 3, shardIndex: 1, count: 2 },
+  ], "noncontiguous idle workers receive complete dense population shards");
+  assert.deepEqual(residentWorkerShardPlan([2]), [
+    { workerId: 2, shardIndex: 0, count: 1 },
+  ], "one idle worker can answer the entire resident query while terrain workers continue");
+  assert.deepEqual(residentWorkerShardPlan([3, 3, -1]), [
+    { workerId: 3, shardIndex: 0, count: 1 },
+  ], "duplicate or invalid worker indices never create unanswered shards");
+  assert.deepEqual(residentWorkerShardPlan([]), [], "no available worker starts a batch");
 });
 
 test("camera navigation rejects the old town and dispatches only the latest view", () => {
