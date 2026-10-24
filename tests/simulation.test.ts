@@ -690,6 +690,55 @@ test("ordinary civilian identity and real ground persist across local midnight",
   }
 });
 
+test("ordinary civilian with an actually blocked earlier leg retains physical midnight continuity", () => {
+  // A successful final return is not evidence that every earlier scheduled
+  // anchor was reached. Demand an actual SEED civilian blocked by a real
+  // street/final-surface path, not a synthetic route policy or a guard.
+  const trimmed = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(trimmed, "retain the road-trimmed village fixture");
+  let fixture: { place: (typeof villages)[number]; index: number; earlierHour: number } | undefined;
+  search: for (const place of [trimmed, villages[0], cities[0]]) {
+    for (let index = 16; index < Math.min(populationOf(place), 110); index++) {
+      for (const earlierHour of [9, 13, 17, 21]) {
+        const tick = tickAtLocalTime(WORKDAY, earlierHour * HOUR, place.canonicalPosition.lon),
+          failed = residentAt(place, index, tick);
+        if (failed.role === "guard" || !failed.grounded ||
+            !failed.task.startsWith("Blocked: no legal walking route")) continue;
+        assert.equal(failed.code, residentFoundationAt(place, index).code);
+        assert.ok(resolvedSettlementHomeDoorFor(place, index),
+          "a missing house is not an earlier failed street leg");
+        assert.equal(failed.activity, "rest");
+        assert.equal(failed.travelProgress, undefined, "an impassable leg has no invented progress");
+        assert.match(failed.route, /^BLOCKED: /, "the actual route must expose the obstruction");
+        fixture = { place, index, earlierHour };
+        break search;
+      }
+    }
+  }
+  assert.ok(fixture, "find one real seeded non-guard civilian whose earlier-day walking leg is blocked");
+  const { place, index, earlierHour } = fixture, lon = place.canonicalPosition.lon,
+    failedTick = tickAtLocalTime(WORKDAY, earlierHour * HOUR, lon),
+    beforeTick = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+    midnightTick = tickAtLocalTime(WORKDAY + 1, 0, lon),
+    failed = residentAt(place, index, failedTick),
+    before = residentAt(place, index, beforeTick),
+    midnight = residentAt(place, index, midnightTick),
+    after = residentAt(place, index, midnightTick + 1);
+  for (const current of [failed, before, midnight, after]) {
+    assert.equal(current.code, failed.code, "SEED identity persists across a failed journey and date change");
+    assert.equal(current.homeEntrance, failed.homeEntrance, "the owned entrance is immutable");
+    assert.equal(current.workplace, failed.workplace, "the work assignment is immutable");
+  }
+  assert.ok(greatCircleDistance(before.position, midnight.position) <= 3,
+    `${failed.code}: an earlier blocked leg cannot cause a teleport at 00:00:00`);
+  assert.ok(greatCircleDistance(midnight.position, after.position) <= 3,
+    `${failed.code}: the next local second must continue from the last physical location`);
+  assert.deepEqual(residentAt(place, index, midnightTick), midnight,
+    "rebuilding the absolute tick after other day samples cannot alter midnight physical truth");
+  assert.deepEqual(residentAt(place, index, failedTick), failed,
+    "rebuilding the earlier blocked sample must not depend on cache or query order");
+});
+
 test("fixed primary service workers keep real owned-door positions through local midnight", () => {
   const trimmed = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
   assert.ok(trimmed, "retain the real road-trimmed village");
