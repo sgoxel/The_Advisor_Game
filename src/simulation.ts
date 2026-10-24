@@ -455,7 +455,8 @@ function anchorRoute(place: Place, foundation: ResidentFoundation, anchor: Routi
 }
 /** Small seeded standing spot around an outdoor anchor, so a crowd at the market does not stack. */
 function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
-  if (!outdoors || anchor === "home") return base;
+  // A posted guard stands at their SEED post, not an arbitrary crowd offset.
+  if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
   const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = (anchor === "garden" || (base as ActivitySite).id) ? .3 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 7) / 10 : 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
   return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
 }
