@@ -2131,6 +2131,7 @@ async function start() {
           camera.camera!.worldToScreen(actor.getPosition(), point);
           const clientX = rect.left + point.x, clientY = rect.top + point.y;
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
+          if (document.elementFromPoint(clientX, clientY) !== canvas) continue;
           if (pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
           return { code: resident.code, homeEntrance: resident.homeEntrance, route: resident.route,
             clientX, clientY, tick: simulation.tick };
