@@ -21,6 +21,7 @@ import {
   readableResidentSite,
   residentInspectorSelection,
   nearestNode,
+  nearestLegalStreetNode,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -51,6 +52,30 @@ test("resident streets attach to the true nearest vertex across grid bucket boun
   assert.equal(nearestNode(graph, nodes[0]), 0, "exact vertex lookup remains stable");
   assert.equal(nearestNode({ nodes: [], grid: new Map(), cell }, offset), -1,
     "empty streets cannot invent a connected vertex");
+});
+
+test("resident street connectors choose a nearby legal vertex, never an unverified chord", () => {
+  const cell = 12, nodes = [
+    { eastM: 2, northM: 0 }, // physically nearest, but blocked by a wall
+    { eastM: 8, northM: 0 }, // accessible alternative on a neighboring street
+    { eastM: 50, northM: 0 }, // outside bounded local fallback
+  ], grid = new Map<string, number[]>();
+  nodes.forEach((node, id) => {
+    const key = `${Math.floor(node.eastM / cell)}/${Math.floor(node.northM / cell)}`;
+    grid.set(key, [...(grid.get(key) ?? []), id]);
+  });
+  const graph = { nodes, grid, cell }, from = { eastM: 0, northM: 0 };
+  assert.equal(nearestNode(graph, from), 0, "the closest street can be disconnected");
+  assert.equal(nearestLegalStreetNode(graph, from, (_, node) => node === nodes[1]), 1,
+    "use the nearby surface-checked legal connector instead");
+  assert.equal(nearestLegalStreetNode(graph, from, (_, node) => node === nodes[0]), 0,
+    "retain the nearest street when it is already legal");
+  assert.equal(nearestLegalStreetNode(graph, from, () => false), -1,
+    "no legal connector means blocked, not a straight-line shortcut");
+  assert.equal(nearestLegalStreetNode(graph, from, (_, node) => node === nodes[2]), -1,
+    "do not expand an unbounded search to a remote street");
+  assert.equal(nearestLegalStreetNode({ nodes: [], grid: new Map(), cell }, from, () => true), -1,
+    "no street network cannot create a connection");
 });
 
 test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
