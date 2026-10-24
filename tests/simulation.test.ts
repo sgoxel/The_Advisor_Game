@@ -23,6 +23,7 @@ import {
   walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
+  residentInsideRenderedService,
   readableResidentSite,
   readableResidentRoute,
   residentInspectorSelection,
@@ -400,6 +401,23 @@ test("building occupancy requires the exact canonical site, not nearby indoor st
   assert.equal(residentOccupiesBuilding({ ...resident, route: `${villages[0].code}/MARKET` }, service), false);
   assert.equal(residentOccupiesBuilding({ ...resident, route: `${cities[0].code}/INN` }, service), false,
     "residents from another settlement do not occupy this inn");
+
+  // A shared service name and a nearby-query hit never certify THIS plot.
+  const centre = { x: 400, z: 200 }, metric = sourceUnitsPerMetreAt(centre.z),
+    renderedInn = { ...centre, widthM: 8, depthM: 12, yawRad: Math.PI / 2 };
+  assert.equal(residentInsideRenderedService(centre, renderedInn), true,
+    "the actual rendered service building centre can report its occupant");
+  assert.equal(residentInsideRenderedService(
+    { x: centre.x + 3 * metric.x, z: centre.z }, renderedInn), true,
+    "footprint follows the rendered yaw, not an axis-aligned search radius");
+  assert.equal(residentInsideRenderedService(
+    { x: centre.x + 8 * metric.x, z: centre.z }, renderedInn), false,
+    "a nearby resident outside the exact rotated plot must not be reported inside");
+  assert.equal(residentInsideRenderedService(
+    { x: centre.x, z: centre.z + 6 * metric.z }, renderedInn), false,
+    "a neighbouring same-service plot is not the clicked building");
+  assert.equal(residentInsideRenderedService(centre, { ...centre }), false,
+    "missing geometry never certifies an indoor occupant");
 });
 
 test("house inspection resolves the rendered legal doorway, never an unverified first candidate", () => {

@@ -1192,6 +1192,23 @@ export function residentOccupiesBuilding(
     (resident.route === resident.workplace && resident.workplace === `${settlementCode}/SERVICE/${site}`);
 }
 
+/** An indoor service worker must occupy THIS rendered plot, not merely share
+ * the service name or fall within the spatial query's larger search radius.
+ * Use the canonical metric and the same yaw convention as world footprints. */
+export function residentInsideRenderedService(
+  resident: Pick<Resident, "x" | "z">,
+  building: { x: number; z: number; widthM?: number; depthM?: number; yawRad?: number },
+): boolean {
+  if (!building.widthM || !building.depthM || building.widthM <= 0 || building.depthM <= 0)
+    return false;
+  const metric = sourceUnitsPerMetreAt(building.z),
+    dx = wrapSourceX(resident.x - building.x) / metric.x,
+    dz = (resident.z - building.z) / metric.z,
+    yaw = building.yawRad ?? 0, c = Math.cos(yaw), s = Math.sin(yaw);
+  return Math.abs(dx * c - dz * s) <= building.widthM / 2 &&
+    Math.abs(dx * s + dz * c) <= building.depthM / 2;
+}
+
 /** Readable site caption for the inspector only. Full SEED identities remain accessible. */
 export function readableResidentSite(code: string): string {
   const parts = code.split("/");
