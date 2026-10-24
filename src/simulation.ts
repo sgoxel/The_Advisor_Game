@@ -940,9 +940,9 @@ export function readableResidentSite(code: string): string {
     return `Residence ${number}${parts.includes("ENTRANCE") ? " entrance" : ""}`;
   }
   const gate = parts.lastIndexOf("GATE");
-  if (gate >= 0 && /^\\d+$/.test(parts[gate + 1] ?? "")) {
+  if (gate >= 0 && /^[0-9]+$/.test(parts[gate + 1] ?? "")) {
     const number = Number(parts[gate + 1]) + 1;
-    const post = parts[gate + 2] === "POST" && /^\\d+$/.test(parts[gate + 3] ?? "")
+    const post = parts[gate + 2] === "POST" && /^[0-9]+$/.test(parts[gate + 3] ?? "")
       ? ` post ${Number(parts[gate + 3]) + 1}` : "";
     return `Gate ${number}${post}`;
   }
