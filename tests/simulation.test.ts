@@ -401,6 +401,8 @@ test("every village has required service staff and continuous seeded gate covera
 });
 
 test("guard shifts physically occupy their SEED posts and return home rather than counting assignments", () => {
+  assert.ok(resolvedSettlementHomeDoorFor(villages[0], 8),
+    "the guard's canonical residence must not be displaced by its own neighborhood garden");
   for (const place of [villages[0], villages[Math.min(7, villages.length - 1)]]) {
     const lon = place.canonicalPosition.lon;
     for (const [index, hour] of [[6, 9], [7, 21]] as const) {
