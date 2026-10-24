@@ -32,6 +32,14 @@ export function residentWorkerShardPlan(
   return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
 }
 
+/** A first close-up answer must not evaluate 160 full legal journeys before
+ * any real character becomes clickable. The same deterministic first-N spatial
+ * order is used; widening the search can follow only after it proves useful.
+ * Inspection without street actors keeps its already bounded fact budget. */
+export function residentQueryLimitForView(actors: boolean): number {
+  return actors ? 32 : 24;
+}
+
 /** A small visible resident must still be individually tappable. Screen-space
  * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
  * Return null outside a minimum 44px target; nearest projected actor wins. */
