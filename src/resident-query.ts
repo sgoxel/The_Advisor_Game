@@ -26,6 +26,22 @@ export function residentWorkerShardPlan(idleWorkerIds: readonly number[]) {
   return selected.map((workerId, shardIndex) => ({ workerId, shardIndex, count: selected.length }));
 }
 
+/** A small visible resident must still be individually tappable. Screen-space
+ * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
+ * Return null outside a minimum 44px target; nearest projected actor wins. */
+export function residentActorPickDistance(
+  x: number, y: number,
+  feet: { x: number; y: number }, head: { x: number; y: number },
+): number | null {
+  const cx = (feet.x + head.x) * .5, cy = (feet.y + head.y) * .5,
+    height = Math.abs(feet.y - head.y),
+    halfWidth = Math.max(22, height * .26 + 4),
+    halfHeight = Math.max(22, height * .5 + 4);
+  if (![x, y, cx, cy, halfWidth, halfHeight].every(Number.isFinite) ||
+      Math.abs(x - cx) > halfWidth || Math.abs(y - cy) > halfHeight) return null;
+  return Math.hypot(x - cx, y - cy);
+}
+
 /** One in-flight job, latest camera request wins. Stale clock/view results never
  * become a visible snapshot; the next request reuses the worker's warm caches. */
 export class ResidentQueryQueue {
