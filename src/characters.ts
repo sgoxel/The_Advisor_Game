@@ -8,7 +8,7 @@
 import type { ResidentRole } from "./simulation.ts";
 
 export type CharacterSex = "female" | "male";
-export type CharacterAge = "child" | "adult" | "elder";
+export type CharacterAge = "adult" | "elder";
 export type CharacterType = {
   key: string;
   sex: CharacterSex;
@@ -30,8 +30,6 @@ export const CHARACTER_TYPES: Readonly<Record<string, CharacterType>> = Object.f
   T("blacksmith_male", "male", "adult", .4714),
   T("butcher_male", "male", "adult", .6901),
   T("carpenter_male", "male", "adult", .5443),
-  T("child_female", "female", "child", .3568),
-  T("child_male", "male", "child", .4766),
   T("cleric_female", "female", "adult", .3516),
   T("elder_female", "female", "elder", .5573),
   T("elder_male", "male", "elder", .4609),
@@ -80,7 +78,6 @@ export const ROLE_CHARACTERS: Readonly<Partial<Record<ResidentRole, readonly str
   clergy: ["priest_male", "monk_male", "nun_female", "cleric_female"],
   noble: ["nobleman_male", "noblewoman_female"],
   beggar: ["beggar_male", "beggar_female"],
-  child: ["child_male", "child_female"],
   elder: ["elder_male", "elder_female"],
 };
 
@@ -93,8 +90,7 @@ export function characterForRole(role: ResidentRole, seed: number, nearWater: bo
 /** Real body height in metres (medieval adult ranges), varied by the resident's silhouette seed 0-4. */
 export function characterHeightM(type: CharacterType, silhouette: number) {
   const t = (silhouette % 5) / 4,
-    [low, high] = type.age === "child" ? [1.15, 1.35]
-      : type.age === "elder" ? (type.sex === "male" ? [1.6, 1.72] : [1.5, 1.62])
+    [low, high] = type.age === "elder" ? (type.sex === "male" ? [1.6, 1.72] : [1.5, 1.62])
         : type.sex === "male" ? [1.66, 1.82] : [1.54, 1.68];
   return low + (high - low) * t;
 }

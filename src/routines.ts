@@ -25,7 +25,7 @@ export type Personality = { diligence: number; sociability: number; piety: numbe
 export type ResidentTraits = { abilities: Abilities; personality: Personality; temperament: string };
 
 const ABILITY_KEYS = ["strength", "dexterity", "constitution", "knowledge", "wisdom", "charisma"] as const;
-/** Trade and age shift the 3-18 ability scores: a smith is strong, a scribe learned, a child small. */
+/** Trade and age shift the 3-18 ability scores: a smith is strong, a scribe learned. */
 const ROLE_BONUS: Readonly<Partial<Record<ResidentRole, Partial<Abilities>>>> = {
   blacksmith: { strength: 4, constitution: 2 },
   butcher: { strength: 3, constitution: 1 },
@@ -42,7 +42,6 @@ const ROLE_BONUS: Readonly<Partial<Record<ResidentRole, Partial<Abilities>>>> = 
   beggar: { constitution: -2, wisdom: 2, charisma: -1 },
 };
 const AGE_BONUS: Readonly<Record<CharacterAge, Partial<Abilities>>> = {
-  child: { strength: -6, constitution: -3, knowledge: -5, wisdom: -5, dexterity: 1 },
   adult: {},
   elder: { strength: -3, dexterity: -3, constitution: -2, knowledge: 3, wisdom: 4 },
 };
@@ -61,7 +60,7 @@ export function traitsFor(code: string, role: ResidentRole, age: CharacterAge): 
       sociability: p("SOCIABILITY"),
       piety: clamp(p("PIETY") + (role === "clergy" ? .45 : 0), 0, 1),
       temper: p("TEMPER"),
-      curiosity: clamp(p("CURIOSITY") + (age === "child" ? .3 : 0), 0, 1),
+      curiosity: p("CURIOSITY"),
     };
   const ranked = (Object.entries(personality) as [keyof Personality, number][]).sort((a, b) => b[1] - a[1]),
     temperament = ({ diligence: "industrious", sociability: "gregarious", piety: "devout", temper: "hot-headed", curiosity: "inquisitive" } as const)[ranked[0][0]];
@@ -147,8 +146,8 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
     return plan.sort((a, b) => a.start - b.start);
   }
 
-  // Waking: farmers at first light, the diligent earlier, children and elders later; rest day lie-in.
-  const wakeBase = role === "farmer" ? 4.6 : role === "innkeeper" ? 7 : role === "noble" ? 7.5 : ageGroup === "child" ? 6.5 : ageGroup === "elder" ? 6.7 : 5.6,
+  // Waking: farmers at first light, the diligent earlier, elders later; rest day lie-in.
+  const wakeBase = role === "farmer" ? 4.6 : role === "innkeeper" ? 7 : role === "noble" ? 7.5 : ageGroup === "elder" ? 6.7 : 5.6,
     wake = (wakeBase + (1 - p.diligence) * .8 + (restDay ? 1 : 0) - (morningMood > .3 ? .2 : 0)) * HOUR + d("WAKE", 25),
     breakfast = wake + 15 * MINUTE + d("DRESS", 15),
     leave = breakfast + 25 * MINUTE + d("BREAKFAST", 20);
@@ -158,12 +157,7 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
 
   // Daytime by kind of person.
   let dayEnd: number;
-  if (ageGroup === "child") {
-    add("play", p.sociability > .65 ? "plaza" : "garden", leave, p.sociability > .65 ? "Playing in the square" : "Playing in a neighbourhood garden", false);
-    add("lunch", "home", 12 * HOUR + d("LUNCH", 30), "Lunch at home", true);
-    add("play", p.curiosity > .75 ? "market" : "garden", 13.5 * HOUR, "Playing with other children", false);
-    dayEnd = 17.5 * HOUR + d("PLAYEND", 40);
-  } else if (ageGroup === "elder" || role === "elder") {
+  if (ageGroup === "elder" || role === "elder") {
     add("stroll", p.piety > .6 ? "plaza" : "garden", leave + 30 * MINUTE, p.piety > .6 ? "Morning prayers" : "Morning garden stroll", false);
     add("rest", "home", 11 * HOUR + d("ELDREST", 40), "Resting at home", true);
     add("errand", p.sociability > .5 ? "market" : "garden", 15 * HOUR + d("ELDERRAND", 50), p.sociability > .5 ? "Chatting at the market" : "Visiting a neighbourhood garden", false);
@@ -193,7 +187,7 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
 
   // Evening: dinner at the inn when sociable and in good spirits, otherwise at home; sleep at home.
   if (role !== "innkeeper") {
-    const inn = (p.sociability * .6 + eveningMood * .5 + (restDay ? .2 : 0) + unit(`${code}/INN/${day}`) * .3) > .62 && ageGroup !== "child",
+    const inn = (p.sociability * .6 + eveningMood * .5 + (restDay ? .2 : 0) + unit(`${code}/INN/${day}`) * .3) > .62,
       dinner = Math.max(dayEnd + 15 * MINUTE, 18 * HOUR + d("DINNER", 40));
     add("commute", inn ? "inn" : "home", dayEnd, inn ? "Walking to the inn" : "Walking home", false);
     add("dinner", inn ? "inn" : "home", dinner, inn ? "Dinner at the inn" : "Cooking dinner at home", true);
@@ -204,7 +198,7 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
   } else {
     add("commute", "home", 22.5 * HOUR, "Closing the inn and walking home", false);
   }
-  const bedtime = ageGroup === "child" ? 20.5 : ageGroup === "elder" ? 21 : role === "innkeeper" ? 23.2 : 21.8 + p.sociability * 1.1 - p.diligence * .4;
+  const bedtime = ageGroup === "elder" ? 21 : role === "innkeeper" ? 23.2 : 21.8 + p.sociability * 1.1 - p.diligence * .4;
   add("sleep", "home", Math.max(bedtime * HOUR + d("SLEEP", 30), (plan[plan.length - 1]?.start ?? 0) + 25 * MINUTE), "Sleeping", true);
   return plan.sort((a, b) => a.start - b.start);
 }

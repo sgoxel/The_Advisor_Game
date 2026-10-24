@@ -37,7 +37,6 @@ export type ResidentRole =
   | "clergy"
   | "noble"
   | "beggar"
-  | "child"
   | "elder";
 
 export type ResidentFoundation = {
@@ -130,8 +129,9 @@ const SERVICE_ROLES: readonly ResidentRole[] = [
   "guard-officer",
 ];
 /** Weighted townsfolk mix (per 100): farmers and craft/labour dominate; clergy, nobles and beggars are few. */
+// Keep the seeded role slots stable: former child slots now select adult labourers.
 const CITIZEN_ROLES: readonly ResidentRole[] = ([
-  ["farmer", 24], ["artisan", 22], ["laborer", 21], ["trader", 8], ["child", 9], ["elder", 7],
+  ["farmer", 24], ["artisan", 22], ["laborer", 21], ["trader", 8], ["laborer", 9], ["elder", 7],
   ["clergy", 3], ["beggar", 3], ["noble", 2],
 ] as const).flatMap(([role, weight]) => Array.from({ length: weight }, () => role));
 const ROLE_WORKPLACE: Readonly<Record<ResidentRole, string>> = {
@@ -148,7 +148,6 @@ const ROLE_WORKPLACE: Readonly<Record<ResidentRole, string>> = {
   clergy: "CHAPEL",
   noble: "KEEP",
   beggar: "MARKET",
-  child: "HOME",
   elder: "HOME",
 };
 const DAY_SECONDS = 86_400;
@@ -398,7 +397,7 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
       return shrine;
     }
     case "noble": return anchors.keep;
-    default: return home; // artisans keep their workshop at home; children and elders have no workplace
+    default: return home; // artisans keep their workshop at home; elders have no workplace
   }
 }
 
@@ -435,9 +434,9 @@ export function residentFoundationAt(
     guardShift: assignment?.shift,
     index,
     variant,
-    // Age in days, inside the range the picture shows (child 6-12 y, adult 16-59 y, elder 60-80 y).
-    birthDay: (character.age === "child" ? 6 * 365 : character.age === "elder" ? 60 * 365 : 16 * 365) +
-      digest(`${code}/BIRTH_DAY`) % ((character.age === "child" ? 7 : character.age === "elder" ? 21 : 44) * 365),
+    // Age in days, inside the range the picture shows (adult 16-59 y, elder 60-80 y).
+    birthDay: (character.age === "elder" ? 60 * 365 : 16 * 365) +
+      digest(`${code}/BIRTH_DAY`) % ((character.age === "elder" ? 21 : 44) * 365),
     appearance: {
       silhouette: digest(`${code}/SILHOUETTE`) % 5,
       hair: digest(`${code}/HAIR`) % 8,

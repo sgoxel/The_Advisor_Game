@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
+import { CHARACTER_TYPES } from "../src/characters.ts";
 import { cities, countries, villages } from "../src/geography.ts";
 import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { settlementExteriorFor, settlementHomeFor } from "../src/settlement-exterior.ts";
@@ -47,6 +49,24 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("the roster and seeded population exclude child characters and deleted sprites", () => {
+  for (const type of Object.values(CHARACTER_TYPES)) {
+    assert.ok(type.age === "adult" || type.age === "elder");
+    assert.ok(!type.key.startsWith("child_"));
+  }
+  for (const place of [...villages.slice(0, 3), ...cities.slice(0, 2)]) {
+    for (let index = 0; index < Math.min(populationOf(place), 160); index++) {
+      const resident = residentFoundationAt(place, index);
+      assert.ok(resident.ageGroup === "adult" || resident.ageGroup === "elder");
+      assert.ok(!resident.character.startsWith("child_"));
+      assert.notEqual(String(resident.role), "child");
+    }
+  }
+  for (const key of ["child_female", "child_male"]) {
+    assert.ok(!existsSync(new URL(`../public/characters/${key}.webp`, import.meta.url)));
+  }
+});
 
 test("resident inspector off-screen status is stable and carries the same SEED identity", () => {
   const sample = { index: 6, role: "guard-officer" } as const;
@@ -1056,12 +1076,12 @@ test("outdoor trades use many real plots instead of one farmstead", () => {
   }
 });
 
-test("children and elders share several nearby gardens while retaining town-square visits", () => {
+test("elders share several nearby gardens while retaining town-square visits", () => {
   const place = cities[0], tick = tickAtLocalTime(WORKDAY, 10.5 * HOUR, place.canonicalPosition.lon), gardens = new Set<string>();
   let square = 0;
   for (let i = 0; i < populationOf(place); i++) {
     const f = residentFoundationAt(place, i);
-    if (f.ageGroup !== "child" && f.ageGroup !== "elder") continue;
+    if (f.ageGroup !== "elder") continue;
     const r = residentAt(place, i, tick);
     if (r.route.includes("/GARDEN/")) gardens.add(r.route);
     if (r.task.includes("square") || r.task.includes("prayers")) square++;
@@ -1242,7 +1262,7 @@ test("townspeople who stand outdoors at local midday never share a spot or stand
   }
 });
 
-test("a city does not pile its clergy and children onto one spot at the well", () => {
+test("a city does not pile its clergy and elders onto one spot at the well", () => {
   const place = cities[2], tick = workdayTick(place, 12), well = settlementExteriorFor(place).plots.find((plot) => plot.kind === "well")!.candidates[0], metre = sourceUnitsPerMetreAt(place.z);
   let nearWell = 0, within1m = 0;
   for (let index = 0; index < populationOf(place); index++) {

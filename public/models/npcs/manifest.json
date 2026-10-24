@@ -42,12 +42,6 @@
       "heightM": 1.782,
       "triangles": 15914,
       "rigged": true
-    },
-    "child_female": {
-      "url": "models/npcs/child_female.glb",
-      "heightM": 1.782,
-      "triangles": 15918,
-      "rigged": true
     }
   }
 }
