@@ -390,7 +390,10 @@ test("every village has required service staff and continuous seeded gate covera
       assert.equal(coverage.length, gateCountFor(village));
       for (const gate of coverage) {
         assert.equal(gate.required, guardsPerGateFor(village, gate.gateIndex));
-        assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}`);
+        assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}: ${gate.gateIndex === 0 ? Array.from({length: 2 * guardsPerGateFor(village, 0)}, (_, s) => {
+          const r = residentAt(village, 6 + s, tick);
+          return `${r.index}:${r.guardShift}:${r.activity}:${r.grounded}:${r.task}:${r.route}`;
+        }).join(" | ") : gate.residentCodes.join(",")}`);
         assert.equal(new Set(gate.residentCodes).size, gate.onDuty);
       }
     }
