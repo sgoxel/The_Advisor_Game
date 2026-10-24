@@ -265,7 +265,8 @@ function dispatchResidentQuery() {
   // Inspect once coherent terrain exists; optional fine meshes may still stream.
   // A started batch must finish its remaining shards after a camera change so
   // the stale job retires and the newest canonical query can take its place.
-  if (!residentDispatchAllowed(selectionDirty, coverageComplete, idleWorkers.length, !!residentBatch)) return;
+  // Initial coherent terrain remains usable while optional detail for a new zoom refines.
+  if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, !!residentBatch)) return;
   if (!residentBatch) {
     const job = residentQueries.take();
     if (!job) return;

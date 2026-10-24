@@ -5,16 +5,17 @@ import type { Resident, QueryStats } from "./simulation.ts";
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number } };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
-/** Coherent current-view terrain, not optional detail, authorizes a bounded
- * first resident query on every device. Only idle existing workers participate;
- * an in-flight batch may finish its shards after navigation. */
+/** The initially coherent world may supply resident facts during later zoom
+ * refinement; optional current-view detail must not indefinitely starve a
+ * bounded query. Only idle existing workers participate. In-flight shards
+ * may finish after navigation so the next request can take their place. */
 export function residentDispatchAllowed(
-  selectionDirty: boolean, coverageComplete: boolean,
+  selectionDirty: boolean, worldReady: boolean,
   idleWorkerCount: number, batchStarted: boolean,
 ): boolean {
   if (idleWorkerCount === 0) return false;
   if (batchStarted) return true;
-  return !selectionDirty && coverageComplete;
+  return !selectionDirty && worldReady;
 }
 
 /** Freeze the available worker subset per query. Shard indices must be dense
