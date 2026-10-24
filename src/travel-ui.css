@@ -139,3 +139,28 @@
 .route-detail:empty {
   display: none;
 }
+
+/* Short landscape phones: the clock card (top-centre) reaches ~y=71, so the
+   open travel panel starts below it and stops above the bottom bar. The
+   engineering telemetry badge would peek out from under it, so it hides. */
+@media (max-height: 500px) {
+  /* #travel-panel outranks the resident inspector's :has(#resident-inspector) rules. */
+  body.travel-panel-open #travel-panel {
+    top: calc(80px + env(safe-area-inset-top));
+  }
+  body.travel-panel-open #travel-panel:not(.house-focused) {
+    max-height: calc(100dvh - 160px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+@media (max-height: 500px) and (max-width: 700px) {
+  /* Narrow house focus stays a short bottom sheet. */
+  body.travel-panel-open #travel-panel.house-focused {
+    top: auto;
+  }
+}
+/* Narrow or short screens: telemetry sits where the panel's bottom edge lands. */
+@media (max-width: 700px), (max-height: 500px), (orientation: portrait) {
+  body.travel-panel-open .telemetry {
+    visibility: hidden;
+  }
+}

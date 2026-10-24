@@ -10,6 +10,19 @@
   /* Keep focused/scrolled-to controls clear of the sticky 44px heading. */
   scroll-padding-top: 56px;
 }
+/* Scroll cue (CSS only, no JS): a soft gold glow pinned to the bottom edge of
+   the visible panel (scroll-attached) that a panel-coloured cover (local-
+   attached, riding at the end of the content) hides once the end is reached. */
+body .panel:not(:where(#region-panel)),
+body #region-panel:not(.minimized) {
+  background-image:
+    linear-gradient(to bottom, #16252100, #162521),
+    linear-gradient(to top, #e6cf8f66, #e6cf8f00);
+  background-size: 100% 36px, 100% 36px;
+  background-position: bottom, bottom;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: local, scroll;
+}
 .panel > .popup-heading {
   position: sticky;
   top: 0;
@@ -20,6 +33,11 @@
   min-height: 44px;
   margin-top: 0;
   background: #162521;
+  /* Span the panel's full inner width whatever the breakpoint's padding is:
+     the shadow spreads outward (clipped by the panel's padding box) and the
+     clip-path stops it at the heading's bottom edge. */
+  box-shadow: 0 0 0 100px #162521;
+  clip-path: inset(-100px -100px 0 -100px);
 }
 .popup-caption { flex: 1; min-width: 0; }
 /* WCAG 2.5.5: every popup heading control is a 44 x 44 CSS px touch target at
@@ -67,5 +85,6 @@ body .panel .popup-heading button {
   overflow: hidden !important;
   scrollbar-gutter: auto;
 }
+body .panel.popup-minimized { background-image: none; }
 .panel.popup-minimized > :not(.popup-heading) { display: none !important; }
 .panel.popup-minimized .popup-caption h2 { display: none; }
