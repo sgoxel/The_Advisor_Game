@@ -209,17 +209,26 @@ test("outdoor journeys can legally detour around small barriers without crossing
 
 test("unconnected town doors cannot shortcut through dry open ground", () => {
   const p = (eastM: number, northM: number) => ({ eastM, northM }),
-    border = [p(-20, -20), p(20, -20), p(20, 20), p(-20, 20)];
-  assert.equal(exteriorGroundCorridor(p(-10, 0), p(10, 0), border), false,
-    "both inside town must use a connected validated street route, not a fallback chord");
-  assert.equal(exteriorGroundCorridor(p(10, 0), p(-10, 0), border), false,
+    border = [p(-20, -20), p(20, -20), p(20, 20), p(-20, 20)],
+    gate = p(20, 0), gates = [gate];
+  assert.equal(exteriorGroundCorridor(p(-10, 0), p(10, 0), border, gates), false,
+    "both inside town must use connected validated streets, not a fallback chord");
+  assert.equal(exteriorGroundCorridor(p(10, 0), p(-10, 0), border, gates), false,
     "direction cannot legalize an interior shortcut");
-  assert.equal(exteriorGroundCorridor(p(10, 0), p(40, 0), border), true,
-    "a lawful exterior destination remains eligible for physical ground checks");
-  assert.equal(exteriorGroundCorridor(p(40, 0), p(10, 0), border), true,
-    "returning from an exterior service/field retains corridor search");
-  assert.equal(exteriorGroundCorridor(p(-30, 0), p(30, 0), border), true,
-    "exterior routing still needs the independent gate and surface predicate");
+  assert.equal(exteriorGroundCorridor(p(10, 0), p(40, 0), border, gates), false,
+    "a dry straight line through a valid gate is not proof of a connected street approach");
+  assert.equal(exteriorGroundCorridor(p(40, 0), p(10, 0), border, gates), false,
+    "return journeys must also connect the gate to the interior street network");
+  assert.equal(exteriorGroundCorridor(p(10, 0), gate, border, gates), false,
+    "the interior approach to the gate cannot bypass missing streets");
+  assert.equal(exteriorGroundCorridor(gate, p(40, 0), border, gates), true,
+    "a reached canonical gate permits an independently lawful exterior corridor");
+  assert.equal(exteriorGroundCorridor(p(40, 0), gate, border, gates), true,
+    "the gate-to-exterior link is reversible");
+  assert.equal(exteriorGroundCorridor(p(-20, 0), p(-40, 0), border, [p(-20, 0)]), true,
+    "a gate on the polygon's opposite boundary remains eligible in both directions");
+  assert.equal(exteriorGroundCorridor(p(-30, 0), p(30, 0), border, gates), true,
+    "an exterior chord still needs the independent wall/gate and surface predicates");
 });
 
 test("settlement walls admit resident crossings only through SEED gate apertures", () => {
