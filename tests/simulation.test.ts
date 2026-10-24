@@ -57,7 +57,7 @@ test("resident inspector off-screen status is stable and carries the same SEED i
   assert.equal(residentShortLabel(sample, false), "Resident 7 · guard officer", "return to view clears the status");
 });
 
-test("resident inspector and close-up actors do not wait for optional scenery", () => {
+test("resident inspector can resolve facts and close-up actors independently of optional scenery", () => {
   assert.deepEqual(residentViewQuery(48, true, false), { actors: false, inspect: true },
     "village-scale inspection must not wait for terrain or meshes");
   assert.deepEqual(residentViewQuery(48, false, false), { actors: false, inspect: false },
