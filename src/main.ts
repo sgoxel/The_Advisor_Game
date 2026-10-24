@@ -1101,13 +1101,15 @@ function openGameInfoAt(x: number, z: number) {
   }
   const settlement = places.find((place) => Math.hypot(wrapSourceX(place.x - x), place.z - z) < (place.kind === "city" ? metresToSource(760) : metresToSource(300)));
   if (best) {
-    const owner = best.ownerId ? simulation.residentByCode(best.ownerId) : undefined,
-      halfSize = metresToSource(Math.max(best.widthM ?? 6, best.depthM ?? 6) * .5 + 1),
-      nearby = simulation.focusedResidents(best.x, best.z, halfSize, 40),
-      inside = [owner, ...nearby].filter((resident): resident is Resident =>
-        !!resident && residentOccupiesBuilding(resident, best) &&
-        (best.kind !== "service" || residentInsideRenderedService(resident, best)))
-        .filter((resident, index, records) => records.findIndex((record) => record.code === resident.code) === index);
+    // Use the residents the workers already computed for this view (current snapshot) instead of
+    // re-simulating the neighbourhood on the UI thread: rebuilding every nearby resident's routed
+    // schedule here froze the page for many seconds per click. The owner's name and role come from
+    // the seeded identity alone (no route work) when the owner is not in the snapshot.
+    const known = residentQueries.current?.residents ?? [],
+      liveOwner = best.ownerId ? known.find((resident) => resident.code === best.ownerId) : undefined,
+      owner = liveOwner ?? (best.ownerId ? simulation.residentIdentityByCode(best.ownerId) : undefined),
+      inside = known.filter((resident) => residentOccupiesBuilding(resident, best) &&
+        (best.kind !== "service" || residentInsideRenderedService(resident, best)));
     centreOn(best.x, best.z);
     showBuildingPopup(best, settlement, owner, inside);
     return true;
@@ -1733,7 +1735,8 @@ async function start() {
         // Keep an open character popup in step with Fantasy Time.
         const popupCode = npcPopupCode();
         if (popupCode) {
-          const resident = simulation.residentByCode(popupCode);
+          // Prefer the worker snapshot; only a resident outside it is re-evaluated on this thread.
+          const resident = residents.find((entry) => entry.code === popupCode) ?? simulation.residentByCode(popupCode);
           if (resident) showNpcPopup(resident, simulation.tick);
         }
         $("simulation-status").textContent =

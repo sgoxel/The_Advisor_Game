@@ -1750,6 +1750,18 @@ export class LazySimulation {
     this.updateInspector(residents, query);
   }
 
+  /**
+   * Seeded identity only (name, role, home, traits): no schedule, route or legality work, so it is
+   * cheap enough for UI clicks. Use residentByCode for where the resident is now.
+   */
+  residentIdentityByCode(code: string) {
+    const match = /^(.*)\/RESIDENT\/(\d+)$/.exec(code);
+    if (!match) return undefined;
+    const place = places.find((entry) => entry.code === match[1]), index = Number(match[2]);
+    if (!place || !Number.isInteger(index) || index < 0 || index >= populationOf(place)) return undefined;
+    return residentFoundationAt(place, index);
+  }
+
   residentByCode(code: string, tick = this.tick) {
     const match = /^(.*)\/RESIDENT\/(\d+)$/.exec(code);
     if (!match) return undefined;

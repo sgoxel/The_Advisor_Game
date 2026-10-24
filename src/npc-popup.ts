@@ -207,7 +207,7 @@ function buildingTitle(info: BuildingInfo) {
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /** Building card: name, type, owner, size, floors, settlement and who is inside right now. */
-export function showBuildingPopup(info: BuildingInfo, settlement: Place | undefined, owner: Resident | undefined, inside: readonly Resident[]) {
+export function showBuildingPopup(info: BuildingInfo, settlement: Place | undefined, owner: Pick<Resident, "name" | "role"> | undefined, inside: readonly Resident[]) {
   install();
   if (!root) return;
   currentCode = info.code;
