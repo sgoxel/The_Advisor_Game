@@ -32,7 +32,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Validate resident authority and performance contracts
+      - name: Validate resident release invariants (bounded PR gate)
+        if: github.event_name != 'workflow_dispatch'
+        run: npm run test:s006:focused
+      - name: Full resident authority diagnostics (on demand)
+        if: github.event_name == 'workflow_dispatch'
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
         if: github.event_name == 'workflow_dispatch'
