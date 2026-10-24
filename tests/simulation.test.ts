@@ -55,6 +55,18 @@ test("resident inspector can resolve facts independently of optional actor detai
     "remote city and realm views do not issue expensive resident searches");
 });
 
+test("zero resident query budget yields no residents, evaluations or index work", () => {
+  const place = villages[0], simulation = new LazySimulation();
+  simulation.setFocus(place);
+  simulation.advance(at(9, WORKDAY));
+  assert.deepEqual(simulation.focusedResidents(place.x, place.z, 2, 0), []);
+  assert.equal(simulation.stats.query.returnedResidents, 0);
+  assert.equal(simulation.stats.query.candidateResidents, 0);
+  assert.equal(simulation.stats.query.evaluatedResidents, 0);
+  assert.equal(simulation.stats.residentIndexBuilds, 0,
+    "a zero budget must not construct or evaluate an entire resident index");
+});
+
 test("resident walking path cache preserves exact doorway offsets, direction and gate policy", () => {
   const home = { eastM: 12.011, northM: -2.02 }, otherDoor = { eastM: 12.049, northM: -2.02 },
     workplace = { eastM: 180.004, northM: 25.002 }, placeCode = villages[0].code;
