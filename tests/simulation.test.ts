@@ -13,6 +13,7 @@ import {
   populationOf,
   residentAt,
   residentFoundationAt,
+  residentGuardPresence,
   legalPosition,
   continuousWalkableOffsetSegment,
   residentWalkableSurface,
@@ -503,6 +504,50 @@ test("legal guard arrivals fill posts while unresolved homes remain explicit gat
   if (!unresolved.grounded || unresolved.route.startsWith("BLOCKED:"))
     assert.ok(midnight.every(gate => !gate.residentCodes.includes(unresolved.code)),
       "an unresolved house must never become a fictitious physically staffed gate");
+});
+
+test("selected guard status distinguishes physical attendance from off-shift assignment", () => {
+  const place = villages[0], lon = place.canonicalPosition.lon,
+    daytime = tickAtLocalTime(WORKDAY, 9 * HOUR, lon),
+    nighttime = tickAtLocalTime(WORKDAY, 21 * HOUR, lon),
+    dayGuard = residentAt(place, 6, daytime),
+    nightGuard = residentAt(place, 7, nighttime),
+    dayRoster = guardCoverageAt(place, daytime)[0].residentCodes,
+    nightRoster = guardCoverageAt(place, nighttime)[0].residentCodes;
+  assert.ok(dayRoster.includes(dayGuard.code) && nightRoster.includes(nightGuard.code),
+    "real assigned guards arrive at the gate before the inspector reports them present");
+  assert.equal(residentGuardPresence(dayGuard, daytime, place, dayRoster), "at-post");
+  assert.equal(residentGuardPresence(nightGuard, nighttime, place, nightRoster), "at-post");
+  assert.equal(residentGuardPresence(dayGuard, nighttime, place, nightRoster), "off-duty",
+    "an off-shift guard must not be presented as a missing watchman");
+  assert.equal(residentGuardPresence(nightGuard, daytime, place, dayRoster), "off-duty");
+  assert.equal(residentGuardPresence(dayGuard, daytime, place, []), "absent",
+    "scheduled duty alone is never a claim of physical presence");
+});
+
+test("both guard shifts preserve real gate/home positions at local midnight", () => {
+  const fixtures = [villages[0], villages.find(p => p.code.includes("/CITY/6/VILLAGE/1"))!, cities[0]];
+  for (const place of fixtures) {
+    const lon = place.canonicalPosition.lon,
+      beforeTick = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+      midnight = tickAtLocalTime(WORKDAY + 1, 0, lon);
+    let index = 6;
+    for (let gate = 0; gate < gateCountFor(place); gate++)
+      for (let slot = 0; slot < guardsPerGateFor(place, gate); slot++)
+        for (let shift = 0; shift < 2; shift++, index++) {
+          const before = residentAt(place, index, beforeTick),
+            after = residentAt(place, index, midnight),
+            separation = greatCircleDistance(before.position, after.position);
+          assert.equal(before.role, "guard");
+          assert.equal(after.code, before.code, "midnight cannot replace a SEED watchman");
+          assert.ok(separation < 3, `${before.code}: midnight displaced ${separation.toFixed(2)}m`);
+          assert.deepEqual(residentAt(place, index, midnight), after,
+            "absolute-time watch state must reproduce under direct catch-up");
+          if (!before.grounded)
+            assert.ok(after.route.startsWith("BLOCKED:"),
+              "an unresolved watchman's home cannot become a legal midnight arrival");
+        }
+  }
 });
 
 test("night guards carry their lawful evening position through midnight and the morning shift", () => {

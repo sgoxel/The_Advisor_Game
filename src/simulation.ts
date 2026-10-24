@@ -457,10 +457,19 @@ export function residentFoundationAt(
 function daySecond(tick: number, place: Place) {
   return localSecondOfDay(tick, place.canonicalPosition.lon);
 }
-function isGuardOnDuty(foundation: ResidentFoundation, tick: number, place: Place) {
+function isGuardOnDuty(foundation: Pick<ResidentFoundation, "role" | "guardShift">, tick: number, place: Place) {
   if (foundation.role !== "guard") return false;
   const second = daySecond(tick, place), daytime = second >= 6 * HOUR && second < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
+}
+/** Give the inspector an individual guard verdict from the same physically
+ * verified roster that drives group staffing. Off-shift is not a vacancy. */
+export function residentGuardPresence(
+  resident: Pick<ResidentFoundation, "code" | "role" | "guardShift">,
+  tick: number, place: Place, physicallyPresent: readonly string[],
+): "off-duty" | "at-post" | "absent" {
+  if (!isGuardOnDuty(resident, tick, place)) return "off-duty";
+  return physicallyPresent.includes(resident.code) ? "at-post" : "absent";
 }
 /** Scheduled assignment and physical gate coverage are different facts.
  * A guard with an unresolved house or illegal commute cannot fill a post. */
@@ -945,6 +954,9 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
+// Guard post/home positions at yesterday's end are fixed within the next local day.
+// Cache only immutable SEED/time facts, never camera/actor state; bound residency.
+const overnightPositions = new Map<string, ScheduledResidentState>();
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
@@ -954,33 +966,39 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // The one-day history check must start at the guard's owned home, not
-  // at the scheduled 00:00 post. Otherwise a disconnected gate can stay
-  // fictitiously staffed after the evening commute fails in both directions.
-  const historicalNightStart = !replayOvernight && foundation.role === "guard" && foundation.guardShift === 1,
-    previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
-      ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
-    initialAnchor: RoutineAnchor = historicalNightStart ? "home" : plan[0].anchor,
-    post = foundation.workOffset,
-    atPost = !!previousWatch && previousWatch.activity === "guard" &&
-      Math.hypot(previousWatch.offset.eastM - post.eastM, previousWatch.offset.northM - post.northM) <= 2;
-  // Replay only changed anchors from absolute Fantasy Time. A later routine
-  // never starts from an endpoint that an earlier walk did not actually reach.
-  let offset = previousWatch?.offset ??
-      standingSpot(place, foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
-        historicalNightStart ? false : !plan[0].indoors),
-    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : initialAnchor,
-    actuallyIndoors = previousWatch ? false : historicalNightStart || plan[0].indoors;
+  // Seed the bounded history replay at an owned home, never at a scheduled
+  // post/worksite. Both guard shifts must carry their actual prior-day end
+  // position through midnight, including blocked returns.
+  const initialAnchor: RoutineAnchor = !replayOvernight ? "home" : plan[0].anchor,
+    morning = standingSpot(place, foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
+      !replayOvernight ? false : !plan[0].indoors),
+    previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
+  let previousDay: ScheduledResidentState | undefined;
+  if (replayOvernight && foundation.role === "guard") {
+    previousDay = overnightPositions.get(previousKey);
+    if (!previousDay) {
+      previousDay = scheduleAt(place, foundation, tick - second - 1, false);
+      overnightPositions.set(previousKey, previousDay);
+      while (overnightPositions.size > 1024) overnightPositions.delete(overnightPositions.keys().next().value!);
+    }
+  }
+  const atMorning = !!previousDay &&
+    Math.hypot(previousDay.offset.eastM - morning.eastM, previousDay.offset.northM - morning.northM) <= 2 &&
+    (initialAnchor !== "work" || previousDay.activity === "guard");
+  // Replay only changed anchors from absolute Fantasy Time. A failed return
+  // cannot reset an unarrived day watchman to home at midnight.
+  let offset = previousDay?.offset ?? morning,
+    actualAnchor: RoutineAnchor | "en route" = previousDay ? (atMorning ? initialAnchor : "en route") : initialAnchor,
+    actuallyIndoors = previousDay ? (atMorning && previousDay.indoors) : !replayOvernight || plan[0].indoors;
   type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
   let leg: Leg | undefined;
   let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
-  if (previousWatch && !atPost) {
-    // If yesterday's legal commute is still in progress, continue from its
-    // exact location; an unresolved crossing stays blocked, never teleports.
-    const continuation = previousWatch.activity === "commute"
-      ? streetPath(place, offset, post) : null;
-    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: "work" };
-    else blocked = { origin: "en route", destination: "work" };
+  if (previousDay && !atMorning) {
+    // Complete a real unfinished journey, or remain blocked at the previous
+    // position. Never adopt a schedule's new-day origin as an executed move.
+    const continuation = streetPath(place, offset, morning);
+    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: initialAnchor };
+    else blocked = { origin: "en route", destination: initialAnchor };
   }
   const advance = (atSecond: number) => {
     if (!leg) return;
@@ -1421,14 +1439,17 @@ export class LazySimulation {
       assignedGate = resident.gatePost ? /\/GATE\/(\d+)\/POST\//.exec(resident.gatePost) : null,
       assignedIndex = assignedGate ? Number(assignedGate[1]) : -1,
       currentCoverage = guardPlace && assignedIndex >= 0 ? guardCoverageAt(guardPlace, this.tick)[assignedIndex] : undefined;
+    const watchPresence = guardPlace && currentCoverage
+      ? residentGuardPresence(resident, this.tick, guardPlace, currentCoverage.residentCodes) : undefined;
     text("resident-gate-staffing", currentCoverage
       ? `Gate ${assignedIndex + 1}: ${currentCoverage.onDuty}/${currentCoverage.required} physically present${currentCoverage.missing
         ? ` · ${currentCoverage.missing} uncovered post${currentCoverage.missing === 1 ? "" : "s"} (legal housing/route unresolved)`
-        : " · fully staffed"}`
+        : " · fully staffed"} · Selected resident: ${watchPresence === "at-post" ? "at assigned post" :
+          watchPresence === "off-duty" ? "off duty" : "scheduled, not physically at post"}`
       : "No gate post assigned");
     text(
       "resident-appearance",
-      `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,
+      `${resident.character.replaceAll("_", " ")} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`, 
     );
     const avatar = document.getElementById("resident-avatar");
     if (avatar) {
