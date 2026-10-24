@@ -1,8 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("resident facts can dispatch after coherent coverage before optional fine meshes", () => {
+  const allowed = residentDispatchAllowed;
+  assert.equal(allowed(false, true, false, 1, 4, false), true,
+    "a spare worker may answer logical resident facts while fine terrain continues");
+  assert.equal(allowed(false, false, true, 4, 4, false), false,
+    "initial coherent terrain must still complete before starting inspection");
+  assert.equal(allowed(true, true, true, 4, 4, false), false,
+    "a pending camera selection cannot start a stale query");
+  assert.equal(allowed(false, true, false, 1, 1, false), false,
+    "a single worker keeps preparing mandatory terrain until it is ready");
+  assert.equal(allowed(false, true, true, 1, 1, false), true,
+    "a single worker may inspect after mandatory tiles are cached");
+  assert.equal(allowed(true, false, false, 1, 4, true), true,
+    "remaining shards of an already started job must retire after navigation");
+  assert.equal(allowed(false, true, true, 0, 4, true), false,
+    "an occupied worker is never double-dispatched");
+});
 
 test("camera navigation rejects the old town and dispatches only the latest view", () => {
   const queue = new ResidentQueryQueue(48);

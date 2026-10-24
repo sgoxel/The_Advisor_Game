@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -257,9 +257,12 @@ function residentRequestForView(tick: number, limit: number): ResidentQuery | un
 }
 let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
 function dispatchResidentQuery() {
-  if (selectionDirty || !coverageComplete || !wanted.every(tile => tileCache.has(tile.key))) return;
+  // Inspect once coherent terrain exists; optional fine meshes may still stream.
+  // A started batch must finish its remaining shards after a camera change so
+  // the stale job retires and the newest canonical query can take its place.
+  if (!residentDispatchAllowed(selectionDirty, coverageComplete,
+    wanted.every(tile => tileCache.has(tile.key)), idleWorkers.length, workers.length, !!residentBatch)) return;
   if (!residentBatch) {
-    if (!idleWorkers.length || (workers.length === 1 && !wanted.every(tile => tileCache.has(tile.key)))) return;
     const job = residentQueries.take();
     if (!job) return;
     const count = workers.length;
