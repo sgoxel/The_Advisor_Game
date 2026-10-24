@@ -910,6 +910,10 @@ test("townspeople who stand outdoors at local midday never share a spot or stand
     for (let index = 0; index < populationOf(place); index++) {
       const r = residentAt(place, index, tick);
       assert.deepEqual(residentAt(place, index, tick).x, r.x, "standing slots are a pure function of place, resident and tick");
+      if (!r.grounded) {
+        assert.match(r.route, /^BLOCKED:/, "unresolved residents remain explicit facts and are not drawn as street actors");
+        continue;
+      }
       if (r.indoors || r.travelProgress !== undefined) continue;
       standing.push({ code: r.code, task: r.task, e: r.x / metre.x, n: r.z / metre.z, x: r.x, z: r.z });
     }
@@ -944,7 +948,7 @@ test("a city does not pile its clergy and children onto one spot at the well", (
   let nearWell = 0, within1m = 0;
   for (let index = 0; index < populationOf(place); index++) {
     const r = residentAt(place, index, tick);
-    if (r.indoors || r.travelProgress !== undefined) continue;
+    if (!r.grounded || r.indoors || r.travelProgress !== undefined) continue;
     const d = Math.hypot(wrapSourceX(r.x - well.x) / metre.x, (r.z - well.z) / metre.z);
     if (d < 15) nearWell++;
     if (d < 1) within1m++;

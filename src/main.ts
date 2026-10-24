@@ -1,3 +1,5 @@
+import { ResidentQueryQueue, mergeResidentQueries, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
 import { compareText } from "./compare-text.ts";
@@ -52,7 +54,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, residentOccupiesBuilding, residentViewQuery } from "./simulation.ts";
+import { LazySimulation, populationOf, residentOccupiesBuilding, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -242,6 +244,36 @@ const uploads: {
   precision: PatchConversionStats;
 }[] = [];
 /** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
+const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2);
+const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(place)]));
+let residentResultReady = () => {};
+function residentRequestForView(tick: number, limit: number): ResidentQuery | undefined {
+  const place = nearestPlace(view.x, view.z);
+  if (!place) return;
+  const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
+    radius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
+    key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}`;
+  return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick };
+}
+let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
+function dispatchResidentQuery() {
+  if (selectionDirty || !coverageComplete || !wanted.every(tile => tileCache.has(tile.key))) return;
+  if (!residentBatch) {
+    if (!idleWorkers.length || (workers.length === 1 && !wanted.every(tile => tileCache.has(tile.key)))) return;
+    const job = residentQueries.take();
+    if (!job) return;
+    const count = workers.length;
+    residentBatch = { job, count, unsent: new Set(Array.from({ length: count }, (_, index) => index)), results: [], completed: new Set() };
+  }
+  // Stable population shards reuse each existing worker's caches. Terrain still
+  // owns the UI thread's submission/upload budget; no extra workers are created.
+  for (let index = idleWorkers.length - 1; index >= 0; index--) {
+    const worker = idleWorkers[index], shard = workers.indexOf(worker);
+    if (!residentBatch.unsent.delete(shard)) continue;
+    idleWorkers.splice(index, 1);
+    worker.postMessage({ ...residentBatch.job, shard: { index: shard, count: residentBatch.count } });
+  }
+}
 const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
 let readyWorkers = 0;
 /** Jobs in flight plus generated meshes waiting for upload; enough to keep every worker busy. */
@@ -868,6 +900,7 @@ function refreshSelection() {
 }
 function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
+  dispatchResidentQuery();
   if (selectionDirty) refreshSelection();
   // Move finished tiles to the GPU until this frame's upload time (or count) budget is used.
   // Generation itself runs in the worker pool.
@@ -1561,6 +1594,20 @@ async function start() {
         idleWorkers.push(worker);
         return;
       }
+      if (event.data.kind === "residents") {
+        idleWorkers.push(worker);
+        if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
+        if (residentBatch && residentBatch.job.id === event.data.id && !residentBatch.completed.has(event.data.shard)) {
+          residentBatch.completed.add(event.data.shard);
+          residentBatch.results.push(event.data);
+          if (residentBatch.completed.size === residentBatch.count) {
+            const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
+            residentBatch = undefined;
+            if (residentQueries.complete(event.data.id, merged)) residentResultReady();
+          }
+        }
+        return;
+      }
       inFlight--;
       idleWorkers.push(worker);
       lastGenerationTiming=event.data.timing||{};
@@ -1617,7 +1664,8 @@ async function start() {
     const source = actorSources.get(actor);
     if (source) positionActor(actor, source.x, source.z);
   };
-  let lastSimulationRealSecond = -1;
+  let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
+  residentResultReady = () => { lastSimulationRealSecond = -1; };
   let lastResidentDetailVisible = smallDetailsVisible;
   let lastResidentInspectorOpen = !$("travel-panel").hidden;
   const labelNodes = new Map<string, HTMLElement>();
@@ -1659,64 +1707,66 @@ async function start() {
       // finish. Actor allocation keeps the original strict close-detail budget.
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen,
         ready, settlementDetailVisible, smallDetailsVisible);
-      const residents = residentMode.inspect
-        ? simulation.focusedResidents(view.x, view.z, (() => {
-            const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat)));
-            return Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
-          })(), residentMode.actors ? 160 : 24)
-        : [];
-      // People sleeping or working indoors are inspectable but not street actors.
-      const visible = residentMode.actors
-        ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
-      for (let i = 0; i < visible.length; i++) {
-        if (!actors[i]) {
-          const actor = new pc.Entity("Resident billboard");
-          actor.addComponent("render", {
-            type: "plane",
-            castShadows: false,
-            receiveShadows: false,
-            material: characterMaterialFor(visible[i].character),
-          });
-          flatRoot.addChild(actor);
-          actors.push(actor);
-        }
-        const residentMaterial = characterMaterialFor(visible[i].character);
-        // True metre size: the person's real height for their sex and age, the picture's own width.
-        const dimensions = characterSpriteM(CHARACTER_TYPES[visible[i].character] || CHARACTER_TYPES.default, visible[i].appearance.silhouette);
-        actors[i].setLocalScale(elevationToRenderY(dimensions.widthM), 1, elevationToRenderY(dimensions.heightM));
-        for (const meshInstance of actors[i].render?.meshInstances ?? [])
-          if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
-        actors[i].enabled = true;
-        orientActor(actors[i]);
-        actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
-        actorResidents.set(actors[i], visible[i]);
-        // Walkers glide along the legal street path over the next real second (the simulation's walk window).
-        const walk = visible[i].walkAhead;
-        if (visible[i].activity === "commute" && walk && walk.length >= 2) {
-          // Unwrapped across the date line: x follows the shortest wrapped step from the previous point.
-          const points = [{ x: walk[0].x, z: walk[0].z }], lengths = [0];
-          for (let k = 1; k < walk.length; k++) {
-            const dx = wrapSourceX(walk[k].x - walk[k - 1].x), dz = walk[k].z - walk[k - 1].z;
-            points.push({ x: points[k - 1].x + dx, z: walk[k].z });
-            lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
+      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined;
+      if (query) residentQueries.offer(query);
+      else residentQueries.clear();
+      const snapshot = residentQueries.current;
+      if (!residentMode.inspect || !residentMode.actors || (snapshot && snapshot.id !== lastResidentSnapshot)) {
+        const residents = snapshot?.residents ?? [];
+        if (snapshot) { lastResidentSnapshot = snapshot.id; simulation.acceptResidentQuery(residents, snapshot.query); }
+        // People sleeping or working indoors are inspectable but not street actors.
+        const visible = residentMode.actors
+          ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
+        for (let i = 0; i < visible.length; i++) {
+          if (!actors[i]) {
+            const actor = new pc.Entity("Resident billboard");
+            actor.addComponent("render", {
+              type: "plane",
+              castShadows: false,
+              receiveShadows: false,
+              material: characterMaterialFor(visible[i].character),
+            });
+            flatRoot.addChild(actor);
+            actors.push(actor);
           }
-          actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startMs: performance.now() });
-        } else actorMotion.delete(actors[i]);
-        positionActor(actors[i], visible[i].x, visible[i].z);
+          const residentMaterial = characterMaterialFor(visible[i].character);
+          // True metre size: the person's real height for their sex and age, the picture's own width.
+          const dimensions = characterSpriteM(CHARACTER_TYPES[visible[i].character] || CHARACTER_TYPES.default, visible[i].appearance.silhouette);
+          actors[i].setLocalScale(elevationToRenderY(dimensions.widthM), 1, elevationToRenderY(dimensions.heightM));
+          for (const meshInstance of actors[i].render?.meshInstances ?? [])
+            if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
+          actors[i].enabled = true;
+          orientActor(actors[i]);
+          actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
+          actorResidents.set(actors[i], visible[i]);
+          // Walkers glide along the legal street path over the next real second (the simulation's walk window).
+          const walk = visible[i].walkAhead;
+          if (visible[i].activity === "commute" && walk && walk.length >= 2) {
+            // Unwrapped across the date line: x follows the shortest wrapped step from the previous point.
+            const points = [{ x: walk[0].x, z: walk[0].z }], lengths = [0];
+            for (let k = 1; k < walk.length; k++) {
+              const dx = wrapSourceX(walk[k].x - walk[k - 1].x), dz = walk[k].z - walk[k - 1].z;
+              points.push({ x: points[k - 1].x + dx, z: walk[k].z });
+              lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
+            }
+            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startMs: performance.now() });
+          } else actorMotion.delete(actors[i]);
+          positionActor(actors[i], visible[i].x, visible[i].z);
+        }
+        for (let i = visible.length; i < actors.length; i++) {
+          actors[i].enabled = false;
+          actorResidents.delete(actors[i]);
+          actorMotion.delete(actors[i]);
+        }
+        // Keep an open character popup in step with Fantasy Time.
+        const popupCode = npcPopupCode();
+        if (popupCode) {
+          const resident = simulation.residentByCode(popupCode);
+          if (resident) showNpcPopup(resident, simulation.tick);
+        }
+        $("simulation-status").textContent =
+          `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
       }
-      for (let i = visible.length; i < actors.length; i++) {
-        actors[i].enabled = false;
-        actorResidents.delete(actors[i]);
-        actorMotion.delete(actors[i]);
-      }
-      // Keep an open character popup in step with Fantasy Time.
-      const popupCode = npcPopupCode();
-      if (popupCode) {
-        const resident = simulation.residentByCode(popupCode);
-        if (resident) showNpcPopup(resident, simulation.tick);
-      }
-      $("simulation-status").textContent =
-        `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
     }
     // Per-frame walking: interpolate along the street route between Fantasy Time samples.
     if (actorMotion.size) {
@@ -2044,6 +2094,9 @@ async function start() {
       },
       renderer: rendererState,
       get state() {
+        const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready, settlementDetailVisible, smallDetailsVisible),
+          residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined,
+          residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key);
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
           activePreparationWaitMs = handoffWaitingForDestination
@@ -2160,9 +2213,10 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
-          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight, pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
-          simulation: simulation.stats,
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight + (residentBatch ? residentBatch.count - residentBatch.completed.size - residentBatch.unsent.size : 0), pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
+          simulation: { ...simulation.stats, residentWorkerBusy: residentQueries.busy, residentSnapshotReady: residentViewReady },
           settled:
+            residentViewReady &&
             !lodTransition &&
             Math.abs(surfaceDetail - (globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1)) < 0.002 &&
             Math.abs(projectionTransition - desiredProjectionTransition) <=

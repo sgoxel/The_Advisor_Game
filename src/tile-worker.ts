@@ -7,7 +7,23 @@ import { rebuildNaturalSurface } from "./natural-surface-mesh.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import { tileJobKey, type TileJob } from "./streaming-coverage.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
-self.onmessage = (event: MessageEvent<TileJob>) => {
+import type { ResidentQueryJob } from "./resident-query.ts";
+let residentSimulation: Promise<import("./simulation.ts").LazySimulation> | undefined;
+self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
+  if (event.data.kind === "residents") {
+    const job = event.data;
+    try {
+      residentSimulation ??= import("./simulation.ts").then(({ LazySimulation }) => new LazySimulation());
+      const simulation = await residentSimulation, { places } = await import("./geography.ts"),
+        place = places.find(place => place.code === job.placeCode);
+      if (!place) throw new Error("Unknown resident settlement");
+      simulation.setFocus(place);
+      simulation.advance(job.tick);
+      const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard);
+      self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query });
+    } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
+    return;
+  }
   const job = event.data, tile = job.tile, jobKey = tileJobKey(job), started = performance.now();
   try {
     const base = buildTile(tile, {terrainOnly:job.kind==='coverage'}), baseDone = performance.now();

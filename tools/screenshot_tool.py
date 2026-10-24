@@ -280,6 +280,7 @@ STATE_JS = """() => {
   const transport = window.advisorTransport ? window.advisorTransport.telemetry() : null;
   const box = document.getElementById('error'), detail = document.getElementById('detail-name');
   return {
+    ready: state.ready ?? false, settled: state.settled ?? false, simulation: state.simulation ?? null,
     display: {devicePixelRatio,cssWidth:innerWidth,cssHeight:innerHeight,canvasWidth:document.getElementById('world')?.width,canvasHeight:document.getElementById('world')?.height},
     backend: renderer.backend || '', phase: renderer.phase || '',
     fallbackReason: renderer.fallbackReason || '', presentation: state.presentation ?? null,

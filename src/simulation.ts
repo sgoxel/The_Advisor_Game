@@ -109,7 +109,7 @@ type GuardAssignment = {
   shift: 0 | 1;
 };
 
-type QueryStats = {
+export type QueryStats = {
   settlements: number;
   candidateResidents: number;
   evaluatedResidents: number;
@@ -1213,6 +1213,11 @@ for (const place of places) {
   if (bucket) bucket.push(place);
   else placeBuckets.set(key, [place]);
 }
+/** Shared stable population sampling order for serial and parallel view queries. */
+export function residentOrderFor(place: Place) {
+  const population = populationOf(place), start = digest(`${place.code}/VISIBLE_START`) % population;
+  return (index: number) => (index - start + population) % population;
+}
 function nearbyPlaces(x: number, z: number, radius: number) {
   const countX = Math.ceil(SOURCE_PRESENTATION_WIDTH / PLACE_BUCKET_SOURCE),
     reach = radius + MAX_RESIDENT_ROAM_SOURCE / Math.max(.05, Math.cos(sourceToLonLat(x,z).lat)),
@@ -1460,12 +1465,8 @@ export class LazySimulation {
       for (let bx = bx0; bx <= bx1; bx++)
         for (const resident of index.buckets.get(`${bx}/${bz}`) ?? [])
           found.add(resident);
-    const start = digest(`${place.code}/VISIBLE_START`) % index.population;
-    return [...found].sort(
-      (a, b) =>
-        ((a - start + index.population) % index.population) -
-        ((b - start + index.population) % index.population),
-    );
+    const rank = residentOrderFor(place);
+    return [...found].sort((a, b) => rank(a) - rank(b));
   }
 
   private updateInspector(visible: Resident[], query: QueryStats) {
@@ -1553,6 +1554,7 @@ export class LazySimulation {
     z: number,
     radius: number,
     limit = DEFAULT_VISIBLE_LIMIT,
+    shard?: { index: number; count: number },
   ) {
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
     // A zero actor budget must be a zero-work, zero-actor query (never one
@@ -1572,7 +1574,7 @@ export class LazySimulation {
     });
     const candidateSets = settlements.map((place) => ({
       place,
-      residents: this.residentCandidates(place, x, z, radius),
+      residents: this.residentCandidates(place, x, z, radius).filter(index => !shard || index % shard.count === shard.index),
     }));
     const query: QueryStats = {
       settlements: settlements.length,
@@ -1599,6 +1601,12 @@ export class LazySimulation {
     this.lastQuery = query;
     this.updateInspector(visible, query);
     return visible;
+  }
+
+  /** Worker results feed the same inspector without reconstructing a population on the UI thread. */
+  acceptResidentQuery(residents: Resident[], query: QueryStats) {
+    this.lastQuery = query;
+    this.updateInspector(residents, query);
   }
 
   residentByCode(code: string, tick = this.tick) {
