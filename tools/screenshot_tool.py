@@ -41,11 +41,12 @@ import os
 import re
 import signal
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Browser, Error as PlaywrightError, Locator, Page, Playwright, sync_playwright
+from playwright.sync_api import Browser, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, Locator, Page, Playwright, sync_playwright
 
 PROFILES: dict[str, tuple[int, int]] = {
     "desktop": (1440, 900), "laptop": (1280, 720), "tablet": (1024, 768),
@@ -331,7 +332,7 @@ def launch(playwright: Playwright, renderer: str, chromium: str | None, channel:
     if channel:
         # Installed Chromium channels can use their native adapter on Windows;
         # Linux SwiftShader/Vulkan flags are reserved for the bundled CI browser.
-        options.update(channel=channel, args=["--ignore-gpu-blocklist"] +
+        options.update(channel=channel, args=["--enable-gpu", "--ignore-gpu-blocklist"] +
                        (["--enable-unsafe-webgpu"] if renderer == "webgpu" else []))
     try:
         return playwright.chromium.launch(executable_path=chromium, **options)
@@ -371,8 +372,21 @@ class Session:
         page.on("pageerror", lambda error: self.page_errors.append(str(error)))
 
     def settle(self) -> None:
-        if self.page.wait_for_function(SETTLED_JS, polling=250).json_value() == "error":
-            raise CaptureError(f"page reports an error: {self.page.evaluate(STATE_JS)['error']}")
+        deadline = time.monotonic() + self.args.timeout
+        while time.monotonic() < deadline:
+            try:
+                result = self.page.wait_for_function(SETTLED_JS, polling=250, timeout=min(5000, max(1, (deadline-time.monotonic())*1000))).json_value()
+                if result == "error":
+                    raise CaptureError("page reports an error")
+                break
+            except PlaywrightTimeoutError:
+                try:
+                    state = self.page.wait_for_function("""() => {const s=window.advisorWorld?.state; return s ? {ready:s.ready,settled:s.settled,pending:s.pending,active:s.active,cached:s.cached,coverage:s.coverage?.complete,workers:s.coverage?.readyWorkers,busy:s.coverage?.busyWorkers,error:s.error} : {loading:true};}""", timeout=3000).json_value()
+                    print("SETTLE " + json.dumps(state), flush=True)
+                except PlaywrightTimeoutError:
+                    print("SETTLE main thread not responding", flush=True)
+        else:
+            raise CaptureError("world did not settle within the capture timeout")
         # A stalled renderer must fail the evidence capture rather than hold CI forever.
         self.page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
 
@@ -445,7 +459,7 @@ class Session:
         elif name == "wait":
             page.wait_for_timeout(float(arg))
         elif name == "eval":
-            page.evaluate(arg)
+            page.wait_for_function("async source => { await (0, eval)(source); return true; }", arg=arg, timeout=self.args.timeout * 1000)
         elif name == "shot":
             self.shot(arg)
         else:
@@ -486,9 +500,13 @@ class Session:
             raise CaptureError(f"page reports an error: {state['error']}")
 
     def run(self, steps: list[str]) -> None:
-        self.page.goto(self.args.url, wait_until="load")
+        print(f"OPEN {self.name}-{self.profile}", flush=True)
+        self.page.goto(self.args.url, wait_until="domcontentloaded")
+        print("DOM READY; waiting for settled world", flush=True)
         self.settle()
+        print("INITIAL WORLD SETTLED", flush=True)
         for step in steps:
+            print(f"STEP {step[:100]}", flush=True)
             try:
                 self.step(*(part.strip() for part in step.partition(":")[::2]))
             except ValueError as error:
@@ -567,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
                         failures += 1
                         reason = str(error).strip().splitlines()[0]
                         try:
-                            failure_state = session.page.evaluate(STATE_JS)
+                            failure_state = session.page.wait_for_function(STATE_JS, timeout=5000).json_value()
                         except PlaywrightError:
                             failure_state = {}
                         (Path(args.out) / f"{name}-{profile}-failure.json").write_text(

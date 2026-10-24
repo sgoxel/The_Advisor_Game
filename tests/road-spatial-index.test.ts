@@ -53,3 +53,30 @@ test('canonical road buckets follow the shortest seam crossing rather than a fal
   }
  }
 });
+
+
+test("prepared road distances preserve exact seam-wrapped geometry and bounded searches", async () => {
+  const { roadDistanceAt, roads } = await import("../src/geography.ts");
+  const { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } = await import("../src/planet.ts");
+  for (const road of roads.filter((_, i) => i % 17 === 0)) {
+    const points = road.centerline && road.centerline.length > 1 ? road.centerline
+      : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
+    for (const shift of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+      for (const delta of [0, 3, 120]) {
+        const x = points[Math.floor(points.length / 2)].x + shift + delta,
+          z = points[Math.floor(points.length / 2)].z + delta;
+        let expected = Infinity;
+        for (let i = 1; i < points.length; i++) {
+          const a = points[i - 1], b = points[i], scale = Math.cos(sourceToLonLat(a.x, a.z).lat),
+            dx = wrapSourceX(b.x - a.x) * scale, dz = b.z - a.z,
+            qx = wrapSourceX(x - a.x) * scale, qz = z - a.z, length = dx * dx + dz * dz,
+            t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0;
+          expected = Math.min(expected, Math.hypot(qx - dx * t, qz - dz * t));
+        }
+        assert.equal(roadDistanceAt(x, z, road), expected);
+        for (const bound of [1, 12, 1000])
+          assert.equal(roadDistanceAt(x, z, road, bound), expected <= bound ? expected : Infinity);
+      }
+    }
+  }
+});

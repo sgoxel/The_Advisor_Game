@@ -259,7 +259,8 @@ function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
 // Road cross-sections are physical dimensions. Source units are presentation
 // coordinates (~15.27 canonical metres each) and must never be treated as metres.
 const ROAD_SUPPORT_RADIUS = MAX_ROAD_SUPPORT_M / CANONICAL_METRES_PER_SOURCE_UNIT;
-const ROAD_BUCKET_SIZE = 2048;
+// Keep local walking samples from scanning roads across an entire province.
+const ROAD_BUCKET_SIZE = 128;
 const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
 let surfaceRoadReferences=0;
@@ -297,7 +298,7 @@ function surfaceRoadAt(x: number, z: number, clearance = ROAD_SUPPORT_RADIUS) {
   let road: Road | undefined,
     distance = clearance;
   for (const candidate of bucket) {
-    const candidateDistance = roadDistanceAt(wrappedX, z, candidate);
+    const candidateDistance = roadDistanceAt(wrappedX, z, candidate, clearance + 1e-8);
     const endpointAtQuery = (r: Road) => Math.min(
       Math.hypot(wrapSourceX(wrappedX-r.fromX),z-r.fromZ),
       Math.hypot(wrapSourceX(wrappedX-r.toX),z-r.toZ)) < 1e-8,

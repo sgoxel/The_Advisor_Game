@@ -35,8 +35,6 @@ import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZon
 import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
 import { sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
-import { settlementExteriorFor } from "../src/settlement-exterior.ts";
-import { wrapSourceX } from "../src/planet.ts";
 
 const HOUR = 3600;
 /** Tick at which villages[0]'s local clock shows this time on calendar day `day` (routines follow local time). */
