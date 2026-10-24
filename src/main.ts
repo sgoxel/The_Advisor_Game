@@ -2122,6 +2122,21 @@ async function start() {
         },
       },
       renderer: rendererState,
+      /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
+      residentEvidencePick() {
+        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
+        for (const actor of actors) {
+          const resident = actorResidents.get(actor);
+          if (!actor.enabled || !resident) continue;
+          camera.camera!.worldToScreen(actor.getPosition(), point);
+          const clientX = rect.left + point.x, clientY = rect.top + point.y;
+          if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
+          if (pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
+          return { code: resident.code, homeEntrance: resident.homeEntrance, route: resident.route,
+            clientX, clientY, tick: simulation.tick };
+        }
+        return null;
+      },
       get state() {
         const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready, settlementDetailVisible, smallDetailsVisible),
           residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined,
