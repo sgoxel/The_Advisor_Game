@@ -7,6 +7,7 @@ import {
   SETTLEMENT_POPULATION,
   settlementExteriorFor as coreSettlementExteriorFor,
   settlementLotFor,
+  settlementLotCount,
   reconcileSettlementLotsToFinalBorder,
   type SettlementArchetype,
   type SettlementExteriorPlan as CoreExteriorPlan,
@@ -80,9 +81,9 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
     shift = (house.depthM - lot.nominalDepthM) * .5,
     yawRad = lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * (city ? .06 : .1),
-    at = (along: number): SettlementPoint => ({
-      x: wrapSourceX(lot.x + lot.out.x * shift + lot.along.x * along),
-      z: lot.z + lot.out.z * shift + lot.along.z * along,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
     });
   return {
     id: `${place.code}/RESIDENCE/${index}`,
@@ -97,7 +98,32 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     house,
     yawRad,
     clearanceRadius: homeClearanceRadius(house.widthM, house.depthM),
-    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2)],
+    // Try nearby positions within the assigned frontage before declaring
+    // the house impossible. All candidates still pass final-surface, border,
+    // public plot, road and building collision checks at resolution.
+    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2),
+      at(0, -.8), at(0, .8), at(-.6, -.8), at(.6, -.8), at(-.6, .8), at(.6, .8),
+      at(0, 2), at(0, 4), at(0, 6), at(-.6, 4), at(.6, 4)],
+  };
+}
+
+/** Vacant frontage is SEED-canonical. A guard may use it only if their own
+ * lot has no valid door; no occupied lot is silently reassigned. */
+export function settlementSpareHomeFor(place: Place, index: number, ordinal: number,
+  suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan | undefined {
+  const population = canonicalSettlementPopulation(place);
+  if (!Number.isInteger(ordinal) || ordinal < 0 || population + ordinal >= settlementLotCount(place)) return undefined;
+  const house = settlementHomeFor(place, index, suppliedPlan),
+    lot = settlementLotFor(place, population + ordinal),
+    shift = ((house.depthM ?? 8) - lot.nominalDepthM) * .5,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
+    });
+  return { ...house,
+    yawRad: lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) *
+      (place.kind === "city" ? .06 : .1),
+    candidates: [at(0), at(-.6), at(.6), at(0, .8), at(0, 2)],
   };
 }
 
@@ -111,7 +137,9 @@ function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
 function gardenFor(place: Place, index: number, plan: SettlementExteriorPlan): SettlementPlotPlan {
   const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index, plan),
     widthM = 3 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 1.2, depthM = 3 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 1.2,
-    behind = (home.depthM || 8) * .5 + depthM * .5 + .4;
+    behind = Math.max((home.depthM || 8) * .5 + depthM * .5 + .4,
+      Math.max(home.widthM ?? 8, home.depthM ?? 8) * .5 + .35 +
+      Math.hypot(widthM, depthM) * .5 + .5);
   return {
     id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0,
     width: metresToSource(widthM), depth: metresToSource(depthM), widthM, depthM, yawRad: home.yawRad,
