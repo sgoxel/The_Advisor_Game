@@ -2059,13 +2059,18 @@ async function start() {
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
           if (!actor.enabled || !resident) continue;
+          // An enabled root alone is not proof a 3D character mesh is installed.
+          const meshCount = (actor.findComponents("render") as pc.RenderComponent[])
+            .reduce((count, render) => count + (render.enabled && render.entity.enabled ? render.meshInstances.length : 0), 0);
+          if (!meshCount) continue;
           camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
           const clientX = rect.left + point.x, clientY = rect.top + point.y;
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
           if (document.elementFromPoint(clientX, clientY) !== canvas) continue;
           if (pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
-          return { code: resident.code, homeEntrance: resident.homeEntrance, route: resident.route,
-            clientX, clientY, tick: simulation.tick };
+          return { code: resident.code, homeEntrance: resident.homeEntrance,
+            workplace: resident.workplace, task: resident.task, route: resident.route,
+            clientX, clientY, tick: simulation.tick, meshCount };
         }
         return null;
       },
