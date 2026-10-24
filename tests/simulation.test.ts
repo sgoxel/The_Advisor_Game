@@ -659,7 +659,7 @@ test("fishing destinations are dry banks beside actual water, with inland fallba
     const a=i*Math.PI/8, p=lonLatToSource(bank.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(bank.lat)),bank.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
     return finalSurfaceAt(p.x,p.z).water.kind !== "none";
   }).some(Boolean), "water must be within 15 m of the actual assigned bank");
-  assert.ok(!r.route.startsWith("BLOCKED:"), "Falconham fisherman must be able to reach his real dry bank via a legal gate and corridor");
+  assert.ok(!r.route.startsWith("BLOCKED:"), `Falconham fisherman must reach the dry bank: ${r.task} / ${r.route}`);
   assert.ok(r.grounded, "a working fisherman stands on legal ground");
   assert.equal(r.task, "Fishing from the bank");
   assert.equal(r.activity, "work");
