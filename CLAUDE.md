@@ -1,7 +1,12 @@
 # CLAUDE.md — agent quick start (read this INSTEAD of re-reading the repo)
 
-The Advisor Game: PlayCanvas + TypeScript + Vite, deterministic seeded round world. Work is done one WP per run from GitHub Issues.
+The Advisor Game: PlayCanvas + TypeScript + Vite, deterministic seeded round world. Own **one incomplete ACTIVE WP at a time**, continuing that same Issue across runs and independently safe releases until acceptance, exact-main deployment and closure.
 Full rules: `docs/AGENTS.md` (short). Product vision: `docs/README.md` (long, do NOT read it whole: `grep -n '^#' docs/README.md`, then read only the section the WP names, with offset/limit).
+
+## Persistent issues become actionable work
+- Each run: re-check the ACTIVE WP's unresolved acceptance against **current main and actual evidence**. Mark each finding reproduced, pending proof, superseded or verified; specify the smallest next source-level correction and focused test/visual proof.
+- Continue evidence-driven increments as needed. **No arbitrary ceiling on correction attempts, screenshots, iterations or runs.** Each individual job remains finite; do not duplicate proven checks, recursively retry or hold a safe release for optional diagnostics.
+- **DEPLOYED is not COMPLETED.** Deploy independently safe, minimally verified slices; keep the same Issue open until its real acceptance gates and exact deployed-main SHA are verified. Do not switch WPs because of age, slow CI or a previous failed attempt.
 
 ## Token-lean start of a run
 1. `tools/next_wp.sh` prints the next claimable WP, its claim state and the Issue URL. Do not list or read every Issue.
