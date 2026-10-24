@@ -21,7 +21,7 @@ import { wrapSourceX } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 import { metresToSource, sourceUnitsPerMetreAt, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
 
-type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "street-joint" | "border" | "gate" | "guard-post" | "garden" | "path" | "roadside-tree" | "street-lamp" | "bench" | "planter" | "park";
+type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "street-joint" | "border" | "gate" | "guard-post" | "garden" | "path" | "roadside-tree" | "street-lamp" | "bench" | "planter" | "park" | "yard-prop";
 type MorphologyFeature = {
   kind: MorphologyKind;
   x: number;
@@ -70,6 +70,19 @@ const JOINT_TURN = Math.PI / 90;
 const FURNITURE_SPACING_M = 28;
 /** Pavement on each side of city streets and village main streets, drawn as part of the street. */
 const PAVEMENT_WIDTH_M = 1.8;
+/** Household yard objects (metres, width across × depth along the object's own +z). Drawn by geometry.ts addYardProp. */
+const YARD_PROP_SIZES = {
+  woodpile: [1.9, 1.1], barrels: [1.3, .9], cart: [1.5, 2.4], washline: [3.2, .5], coop: [2.6, 2.2], "door-bench": [2.6, .6],
+} as const;
+type YardPropKind = keyof typeof YARD_PROP_SIZES;
+const YARD_PROP_NAMES: Record<YardPropKind, string> = {
+  woodpile: "Woodpile and chopping block", barrels: "Barrels", cart: "Hand cart", washline: "Washing line", coop: "Chicken coop", "door-bench": "Bench by the door",
+};
+/** Seeded yard choices per slot: [probability that the slot is used, weighted kinds]. Villages are busier than cities. */
+const YARD_SLOTS: Record<"city" | "village", Record<"front" | "side" | "back", [number, [YardPropKind, number][]]>> = {
+  village: { front: [.35, [["door-bench", 1]]], side: [.75, [["woodpile", .45], ["barrels", .3], ["cart", .25]]], back: [.7, [["washline", .45], ["coop", .35], ["cart", .2]]] },
+  city: { front: [.2, [["door-bench", 1]]], side: [.5, [["barrels", .5], ["woodpile", .3], ["cart", .2]]], back: [.5, [["washline", .7], ["cart", .2], ["coop", .1]]] },
+};
 const externalRoadBuckets = new Map<string, (typeof roads)[number][]>();
 const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
 for (const road of roads) {
@@ -428,6 +441,41 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
         return (hit !== undefined && hit.distance < hit.width * .5 + metresToSource(PAVEMENT_WIDTH_M + 1.5)) || inPark(x, z, margin) || onStaticPlot(x, z, margin) || homeFootprintHit(place, plan, resolution, x, z, margin);
       },
       nearGate = (x: number, z: number, reach: number) => plan.gates.some((gate) => Math.hypot(wrapSourceX(gate.x - x), gate.z - z) < reach),
+      /**
+       * Household yard life (close-up tiles only): up to three seeded objects per home — a bench by the
+       * door, something on the house's right-hand side (the same side for every house, so neighbours never
+       * share a gap) and something behind it. Every footprint corner must stay off streets and pavements,
+       * parks, fixed plots and every house; the choice depends only on the home's ID, so it is the same
+       * from any tile.
+       */
+      emitYard = (yardPlace: Place, yardPlan: SettlementExteriorPlan, plot: SettlementPlotPlan, home: { x: number; z: number }, shop: boolean) => {
+        if (plot.widthM === undefined || plot.depthM === undefined) return;
+        const w = plot.widthM, d = plot.depthM, metric = sourceUnitsPerMetreAt(home.z), c = Math.cos(plot.yawRad), s = Math.sin(plot.yawRad),
+          toSource = (lx: number, lz: number) => ({ x: wrapSourceX(home.x + (lx * c + lz * s) * metric.x), z: home.z + (-lx * s + lz * c) * metric.z }),
+          slots = YARD_SLOTS[yardPlace.kind === "city" ? "city" : "village"];
+        const tryPlace = (slot: "front" | "side" | "back") => {
+          const [chance, kinds] = slots[slot], roll = (digest(`${plot.id}/YARD/${slot}`) % 10_000) / 10_000;
+          if (roll >= chance || (slot === "front" && shop)) return;
+          let pickRoll = (digest(`${plot.id}/YARD/${slot}/KIND`) % 10_000) / 10_000, kind = kinds[kinds.length - 1][0];
+          for (const [candidate, weight] of kinds) { if (pickRoll < weight) { kind = candidate; break; } pickRoll -= weight; }
+          const [pw, pd] = YARD_PROP_SIZES[kind], gap = .45;
+          // Local placement in the house frame (+z = towards the street) and the object's own turn.
+          const along = (digest(`${plot.id}/YARD/${slot}/ALONG`) % 1000) / 1000 - .5,
+            [lx, lz, turn] = slot === "front" ? [(along < 0 ? -1 : 1) * (w / 2 - pw / 2 - .3), d / 2 + pd / 2 + .35, 0]
+              : slot === "side" ? [w / 2 + pd / 2 + gap, along * Math.max(0, d - pw), Math.PI / 2]
+                : [along * Math.max(0, w - pw), -(d / 2 + pd / 2 + gap + .4), 0],
+            cos = Math.cos(turn), sin = Math.sin(turn),
+            corners = [[0, 0], [-pw / 2, -pd / 2], [pw / 2, -pd / 2], [pw / 2, pd / 2], [-pw / 2, pd / 2]].map(([a, b]) => toSource(lx + a * cos + b * sin, lz - a * sin + b * cos));
+          for (const p of corners) {
+            const street = settlementStreetAt(yardPlan, p.x, p.z);
+            if (street && street.distance < street.width * .5 + metresToSource(PAVEMENT_WIDTH_M + .3)) return;
+            if (inPark(p.x, p.z, .3) || onStaticPlot(p.x, p.z, .3) || homeFootprintHit(yardPlace, yardPlan, resolution, p.x, p.z, .25) || nearGate(p.x, p.z, metresToSource(8))) return;
+          }
+          const centre = corners[0], id = `${yardPlace.id}/yard/${plot.id}/${slot}`;
+          add("yard-prop", centre.x, centre.z, digest(id), id, { label: kind, name: YARD_PROP_NAMES[kind], ownerId: plot.ownerId, yawRad: plot.yawRad + turn, widthM: pw, depthM: pd });
+        };
+        tryPlace("front"); tryPlace("side"); tryPlace("back");
+      },
       within = (x: number, z: number) => x >= tile.minX && x < tile.minX + tile.size && z >= tile.minZ && z < tile.minZ + tile.size;
     // Natural trees and rocks of the core vegetation never stand on a street or its pavement, in a park or plaza, or on a fixed plot or house.
     const reachSource = metresToSource(plan.radiusM + 30);
@@ -510,7 +558,10 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     for (const index of nearbyHomes) {
       if (index % stride !== 0) continue;
       const plot = resolveHome(place, plan, resolution, index), point = resolution.homes.get(plot.id);
-      if (point && nearTile(tile, point, 12)) emitPlot(place, plan, plot, point, index);
+      if (point && nearTile(tile, point, 12)) {
+        emitPlot(place, plan, plot, point, index);
+        if (small) emitYard(place, plan, plot, point, settlementShopFor(place, index) !== undefined);
+      }
     }
     for (const gate of plan.gates) {
       const gateYaw = Math.PI / 2 - gate.bearingRad;

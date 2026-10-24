@@ -358,6 +358,61 @@ function addTree(f: Frame, lx: number, lz: number, s: number, leaf = LEAF) {
   coneAt(f, lx, .6 * s, lz, .6 * s, 1.5 * s, 7, leaf);
   coneAt(f, lx, 1.4 * s, lz, .38 * s, 1 * s, 6, LEAF_LIGHT);
 }
+/** One seeded yard object of a home, facing local +z, inside its YARD_PROP_SIZES footprint (world.ts); ≤ 90 triangles. */
+function addYardProp(f: Frame, kind: string, variant: number) {
+  const r = seeded(variant ^ 0x7a2d);
+  if (kind === "woodpile") {
+    // Split logs stacked under a lean-to roof, a chopping block with an axe beside it.
+    for (let row = 0; row < 3; row++) cuboid(f, -.25, row * .26, -.2, 1.2, .24, .55, row % 2 ? color(150, 108, 66) : color(132, 94, 58));
+    cuboid(f, -.25, .95, -.2, 1.35, .05, .75, DARK_WOOD);
+    prism(f, .6, 0, .25, .2, .45, 6, color(120, 86, 54), true, color(176, 140, 96));
+    beam(f.b, pt(f, .6, .45, .25), pt(f, .72, .7, .32), .04, .04, DARK_WOOD);
+    cuboid(f, .74, .66, .33, .03, .1, .14, IRON);
+  } else if (kind === "barrels") {
+    const xs = r() < .5 ? [-.24, .24] : [-.38, 0, .38];
+    xs.forEach((x, i) => addBarrel(f, x, 0, i % 2 ? .1 : -.1));
+    if (r() < .6) addCrate(f, xs[xs.length - 1], .8, -.1, .2, pick(r, [color(196, 70, 50), color(214, 170, 60), color(110, 150, 70)]));
+  } else if (kind === "cart") {
+    // Two-wheeled hand cart: plank bed with side boards, wheels, shafts resting on the ground.
+    cuboid(f, 0, .45, -.25, 1.1, .08, 1.3, WOOD);
+    for (const side of [-1, 1]) cuboid(f, side * .53, .53, -.25, .04, .25, 1.3, DARK_WOOD);
+    // Upright wheels (low-poly: a rim board, a cross of spokes and a hub on each side).
+    for (const side of [-1, 1]) {
+      const x = side * .64;
+      cuboid(f, x, .04, -.25, .07, .82, .3, DARK_WOOD, false);
+      cuboid(f, x, .3, -.25, .07, .3, .82, DARK_WOOD, false);
+      cuboid(f, x + side * .03, .38, -.25, .08, .14, .14, IRON);
+    }
+    for (const side of [-1, 1]) beam(f.b, pt(f, side * .4, .5, .4), pt(f, side * .45, .05, 1.15), .05, .05, DARK_WOOD);
+    if (r() < .7) addSack(f, -.2, .53, -.4);
+  } else if (kind === "washline") {
+    // Two posts, a line and a few cloths in seeded colours.
+    for (const side of [-1, 1]) cuboid(f, side * 1.5, 0, 0, .08, 1.9, .08, DARK_WOOD);
+    beam(f.b, pt(f, -1.5, 1.82, 0), pt(f, 1.5, 1.82, 0), .015, .015, color(210, 205, 190));
+    const cloths = 3 + Math.floor(r() * 2);
+    for (let i = 0; i < cloths; i++) {
+      const x = -1.15 + (i + .5) * 2.3 / cloths, h = .45 + r() * .3, w = .35 + r() * .25;
+      cuboid(f, x, 1.8 - h, 0, w, h, .02, pick(r, [WHITE, CREAM, color(170, 70, 60), color(80, 110, 160), color(120, 150, 90), color(200, 180, 120)]));
+    }
+  } else if (kind === "coop") {
+    // Small timber hen house with a pitched roof, a low fenced run and a few hens.
+    cuboid(f, -.7, 0, -.5, 1.0, .95, .9, color(150, 112, 70));
+    cuboid(f, -.7, .95, -.5, 1.15, .08, 1.05, color(120, 72, 52));
+    const run = [[-1.2, -1.0], [1.2, -1.0], [1.2, 1.0], [-1.2, 1.0]];
+    for (let k = 0; k < run.length; k++) {
+      const a = run[k], b = run[(k + 1) % run.length];
+      beam(f.b, pt(f, a[0], .45, a[1]), pt(f, b[0], .45, b[1]), .03, .03, WOOD);
+      cuboid(f, a[0], 0, a[1], .05, .5, .05, DARK_WOOD, false);
+    }
+    const hens = 2 + Math.floor(r() * 2);
+    for (let i = 0; i < hens; i++)
+      cuboid(f, .15 + r() * .85, .05, -.6 + r() * 1.3, .17, .2, .26, pick(r, [WHITE, color(170, 110, 60), color(60, 50, 44)]));
+  } else if (kind === "door-bench") {
+    // 2.6 m footprint: the bench on the left, room for a small flower pot on the right.
+    addBench(f, -.4, 0, 0);
+    if (r() < .5) addPlanter(f, .95, 0, 0, variant, .5, .5, .45);
+  }
+}
 /** Market stall facing local +z: 4 posts, counter, produce, sloping striped awning; 64 triangles. */
 function addStall(f: Frame, lx: number, lz: number, dyaw: number, w: number, r: Rand) {
   const c = sub(f, lx, lz, dyaw), [cloth, stripe] = pick(r, CLOTHS), bands = 4, backY = 2.45, frontY = 2.05, backZ = -.8, frontZ = 1.1;
@@ -1165,6 +1220,8 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     if (close) addBench(frameOf(closeDetail, yaw), 0, 0, 0);
   } else if (feature.kind === "planter") {
     if (close) addPlanter(frameOf(closeDetail, yaw), 0, 0, 0, variant, feature.widthM ?? 1.4, feature.depthM ?? .7);
+  } else if (feature.kind === "yard-prop") {
+    if (close) addYardProp(frameOf(closeDetail, yaw), feature.label, variant);
   } else if (feature.kind === "park") {
     const ground = frameOf(structures, yaw), props = frameOf(closeDetail, yaw), shape = parkShapeOf(feature.parkShape);
     if (feature.label === "playground") addPlayground(ground, props, width, depth, variant, close, shape);

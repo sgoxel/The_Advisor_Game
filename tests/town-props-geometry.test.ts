@@ -396,3 +396,15 @@ test('playgrounds: the shade tree stands >= 1.2 m inside the fence', () => {
     for (const [x, z] of tops) assert.ok(toFence(shape, w, d, x, z) >= 1.2, `playground ${shape} ${w}x${d} v${variant}: tree ${toFence(shape, w, d, x, z).toFixed(2)} m from the fence`);
   }
 });
+
+test('yard objects stay inside their footprint, within budget, close-up only and deterministic', () => {
+  const SIZES: Record<string, [number, number]> = { woodpile: [1.9, 1.1], barrels: [1.3, .9], cart: [1.5, 2.4], washline: [3.2, .5], coop: [2.6, 2.2], 'door-bench': [2.6, .6] };
+  for (const [label, [w, d]] of Object.entries(SIZES)) for (const variant of [1, 7, 42, 999]) for (const yawRad of [0, .7, -2.1]) {
+    const g = buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad});
+    assert.ok(tris(g.closeDetail) > 0 && tris(g.closeDetail) <= 120, `${label}: ${tris(g.closeDetail)} triangles`);
+    assertInside(g.closeDetail, yawRad, w, d, `${label} v${variant}`, 0, .15, 2.2);
+    finite(g.closeDetail);
+    assert.equal(tris(buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad}, 16).closeDetail), 0, `${label} is close-up only`);
+    assert.deepEqual(g.closeDetail.positions, buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad}).closeDetail.positions);
+  }
+});

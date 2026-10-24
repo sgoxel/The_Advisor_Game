@@ -250,3 +250,28 @@ test("a street that dead-ends inside the town is capped with a round joint", () 
   }
   assert.ok(deadEnds > 0, "the test settlements have dead-end streets");
 });
+
+test("homes get seeded yard life that stays off streets, pavements, houses and parks", () => {
+  const kinds = new Set<string>();
+  for (const place of [city, village]) {
+    const features = townAround(place), yard = features.filter((feature) => feature.kind === "yard-prop") as unknown as (Footprint & { code: string; label: string })[],
+      residences = features.filter((feature) => feature.kind === "residence") as unknown as (Footprint & { code: string })[],
+      parks = features.filter((feature) => feature.kind === "park") as unknown as Footprint[];
+    assert.ok(yard.length >= (place.kind === "city" ? 20 : 8), `${place.name}: ${yard.length} yard objects`);
+    for (const prop of yard) {
+      kinds.add(prop.label);
+      const metric = sourceUnitsPerMetreAt(prop.z), c = Math.cos(prop.yawRad), s = Math.sin(prop.yawRad);
+      for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const lx = a * prop.widthM / 2, lz = b * prop.depthM / 2,
+          x = wrapSourceX(prop.x + (lx * c + lz * s) * metric.x), z = prop.z + (-lx * s + lz * c) * metric.z, street = streetBand(place, x, z);
+        assert.ok(street.distance >= street.width / 2 + metresToSource(1.8) - 1e-9, `${prop.code} reaches a street or pavement`);
+        for (const home of residences) assert.ok(!insideFootprint(home, x, z), `${prop.code} stands in ${home.code}`);
+        for (const park of parks) assert.ok(!insideFootprint(park, x, z), `${prop.code} stands in a park`);
+      }
+    }
+  }
+  assert.ok(kinds.size >= 5, `yard variety: ${[...kinds].join(", ")}`);
+  const tile = tilesAround(village, 15, 0)[0];
+  assert.equal(JSON.stringify(featuresFor(tile).filter((f) => f.kind === "yard-prop")), JSON.stringify(featuresFor(tile).filter((f) => f.kind === "yard-prop")), "deterministic");
+  assert.ok(!tilesAround(village, 14, 1).some((large) => featuresFor(large).some((f) => f.kind === "yard-prop")), "yard objects are close-up only");
+});
