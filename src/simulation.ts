@@ -1040,7 +1040,15 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index),
-      points = [foundation.homeOffset, foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep, gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")].map((offset) => relativeSourceForOffset(place, offset)),
+      // A guard whose assigned frontage was physically blocked may own a
+      // different legal SEED spare lot. Only the small fixed watch roster is
+      // resolved here; never materialize all household doors for indexing.
+      guardDoor = foundation.role === "guard" ? resolvedSettlementHomeDoorFor(place, index) : undefined,
+      resolvedGuardHome = guardDoor ? offsetForSource(place, guardDoor.x, guardDoor.z) : undefined,
+      points = [foundation.homeOffset, ...(resolvedGuardHome ? [resolvedGuardHome] : []),
+        foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep,
+        gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")]
+        .map((offset) => relativeSourceForOffset(place, offset)),
       // Street routes can bend away from the straight line between places: pad the box.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
       minX = Math.min(...points.map((point) => point.x)) - pad,
