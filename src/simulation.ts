@@ -575,17 +575,45 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
     return surface.walkable && heightAt(source.x, source.z) > 0.1;
   });
 }
+/** A resident's nearest street vertex may lie across an impassable cut.
+ * Consider at most eight other local vertices (within 24 m of that nearest
+ * connection) and validate every replacement against the same final surface
+ * and enclosure. Never treat proximity alone as an accessible connector. */
+export function nearestLegalStreetNode(
+  graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
+  offset: Offset, legal: (from: Offset, to: Offset) => boolean,
+): number {
+  const nearest = nearestNode(graph, offset);
+  if (nearest < 0) return -1;
+  if (legal(offset, graph.nodes[nearest])) return nearest;
+  const distance = (node: Offset) => Math.hypot(node.eastM - offset.eastM, node.northM - offset.northM),
+    maxDistance = distance(graph.nodes[nearest]) + 24,
+    cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell),
+    rings = Math.min(40, Math.ceil(maxDistance / graph.cell) + 1),
+    candidates: { id: number; distance: number }[] = [];
+  for (let dx = -rings; dx <= rings; dx++) for (let dz = -rings; dz <= rings; dz++)
+    for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
+      if (id === nearest) continue;
+      const d = distance(graph.nodes[id]);
+      if (d <= maxDistance) candidates.push({ id, distance: d });
+    }
+  candidates.sort((a, b) => a.distance - b.distance || a.id - b.id);
+  for (const candidate of candidates.slice(0, 8))
+    if (legal(offset, graph.nodes[candidate.id])) return candidate.id;
+  return -1;
+}
 const pathCache = new Map<string, Offset[] | null>();
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
   const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}|${allowGateDetour ? "g" : "d"}`,
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
-  const graph = streetGraphFor(place), start = nearestNode(graph, from), goal = nearestNode(graph, to);
+  const graph = streetGraphFor(place),
+    legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
+    start = nearestLegalStreetNode(graph, from, legalConnector),
+    goal = nearestLegalStreetNode(graph, to, legalConnector);
   let path: Offset[] | null = null;
-  if (start >= 0 && goal >= 0 &&
-      legalStreetSegment(place, from, graph.nodes[start]) &&
-      legalStreetSegment(place, graph.nodes[goal], to)) {
+  if (start >= 0 && goal >= 0) {
     if (start === goal) {
       path = [from, graph.nodes[start], to];
     } else {
