@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
 import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat } from "../src/planet.ts";
-import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
+import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, settlementHomePlacementEvidence, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
   RESIDENTIAL_CAPACITY,
@@ -392,7 +392,7 @@ test("every village has required service staff and continuous seeded gate covera
         assert.equal(gate.required, guardsPerGateFor(village, gate.gateIndex));
         assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}: ${gate.gateIndex === 0 ? Array.from({length: 2 * guardsPerGateFor(village, 0)}, (_, s) => {
           const r = residentAt(village, 6 + s, tick);
-          return `${r.index}:${r.guardShift}:${r.activity}:${r.grounded}:${r.task}:${r.route}`;
+          return `${r.index}:${r.guardShift}:${r.activity}:${r.grounded}:${r.task}:${r.route}${r.grounded ? "" : `/placement=${JSON.stringify(settlementHomePlacementEvidence(village, r.index))}`}`;
         }).join(" | ") : gate.residentCodes.join(",")}`);
         assert.equal(new Set(gate.residentCodes).size, gate.onDuty);
       }
