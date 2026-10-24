@@ -1244,14 +1244,13 @@ export function readableResidentRoute(route: string): string {
   return blocked ? `Blocked — ${readable}` : readable;
 }
 
-/** Player-facing resident facts are not optional scenery. Keep the existing
- * sub-pixel actor budget while permitting a bounded inspector query at village
- * scale whenever the information panel is actually open. */
+/** Player-facing resident facts and close-up actors are not optional scenery.
+ * Once coherent terrain is available, allow bounded resident sprites before
+ * roads, buildings and decorative meshes finish streaming. */
 export function residentViewQuery(
-  halfHeight: number, panelOpen: boolean, rendererReady: boolean,
-  settlementDetailReady: boolean, smallDetailReady: boolean,
+  halfHeight: number, panelOpen: boolean, terrainReady: boolean,
 ) {
-  const actors = rendererReady && settlementDetailReady && smallDetailReady && halfHeight < 20;
+  const actors = terrainReady && halfHeight < 20;
   return { actors, inspect: actors || (panelOpen && halfHeight < 80) };
 }
 

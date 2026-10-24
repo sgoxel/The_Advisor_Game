@@ -1734,8 +1734,7 @@ async function start() {
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
       // Logical inspection remains available before optional meshes and billboards
       // finish. Actor allocation keeps the original strict close-detail budget.
-      const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen,
-        ready, settlementDetailVisible, smallDetailsVisible);
+      const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
       const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined;
       const previousSnapshot = residentQueries.current;
       if (query) residentQueries.offer(query);
@@ -2140,7 +2139,7 @@ async function start() {
         return null;
       },
       get state() {
-        const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready, settlementDetailVisible, smallDetailsVisible),
+        const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready),
           residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined,
           residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key, residentRequest.tick);
         const flatReady = flatCoverageReady(),

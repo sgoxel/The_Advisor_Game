@@ -57,16 +57,18 @@ test("resident inspector off-screen status is stable and carries the same SEED i
   assert.equal(residentShortLabel(sample, false), "Resident 7 · guard officer", "return to view clears the status");
 });
 
-test("resident inspector can resolve facts independently of optional actor detail", () => {
-  assert.deepEqual(residentViewQuery(48, true, false, false, false), { actors: false, inspect: true },
-    "open village-scale information must not wait for mesh refinement");
-  assert.deepEqual(residentViewQuery(48, false, false, false, false), { actors: false, inspect: false },
+test("resident inspector can resolve facts and close-up actors independently of optional scenery", () => {
+  assert.deepEqual(residentViewQuery(48, true, false), { actors: false, inspect: true },
+    "village-scale inspection must not wait for terrain or meshes");
+  assert.deepEqual(residentViewQuery(48, false, false), { actors: false, inspect: false },
     "hidden inspector performs no extra resident search");
-  assert.deepEqual(residentViewQuery(12, false, true, true, true), { actors: true, inspect: true },
-    "close-up street actors retain their usual bounded query");
-  assert.deepEqual(residentViewQuery(12, true, true, true, false), { actors: false, inspect: true },
-    "not-yet-ready optional billboards must not hide authoritative resident facts");
-  assert.deepEqual(residentViewQuery(100, true, true, true, true), { actors: false, inspect: false },
+  assert.deepEqual(residentViewQuery(12, false, false), { actors: false, inspect: false },
+    "street sprites must not appear before coherent terrain is ready");
+  assert.deepEqual(residentViewQuery(12, false, true), { actors: true, inspect: true },
+    "street actors and inspection become available at coherent terrain without optional models");
+  assert.deepEqual(residentViewQuery(12, true, true), { actors: true, inspect: true },
+    "opening the inspector cannot delay valid close-up actors");
+  assert.deepEqual(residentViewQuery(100, true, true), { actors: false, inspect: false },
     "remote city and realm views do not issue expensive resident searches");
 });
 
