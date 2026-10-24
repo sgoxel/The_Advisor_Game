@@ -265,13 +265,9 @@ function natureSites(place: Place) {
   const reachable = (point: Offset) => {
     const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
     if (!start) return false;
-    // Preserve the cheap 20 m rejection probe before any expensive canonical queries.
     const steps = Math.ceil(Math.hypot(start.eastM-point.eastM,start.northM-point.northM) / 20);
     for (let i = 1; i <= steps; i++) if (!outdoorSiteLegal(place, { eastM: start.eastM + (point.eastM-start.eastM)*i/steps, northM: start.northM + (point.northM-start.northM)*i/steps })) return false;
-    // A plausible site must also have a continuous dry/deck-supported approach
-    // through a lawful wall aperture. Actual home-to-site travel is validated
-    // separately by streetPath; proximity alone never authorizes arrival.
-    return legalStreetSegment(place, start, point);
+    return true;
   };
   for (let i = 0; i < 48; i++) {
     const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
@@ -651,9 +647,14 @@ export function legalOpenGroundDetour(
   return null;
 }
 const pathCache = new Map<string, Offset[] | null>();
+/** Distinct canonical entrances must never reuse a route with different endpoints.
+ * Exact finite SEED offsets are stable; rounding them could reuse an illegal connector. */
+export function residentStreetPathKey(placeCode: string, from: Offset, to: Offset, allowGateDetour: boolean) {
+  return `${placeCode}|${from.eastM},${from.northM}|${to.eastM},${to.northM}|${allowGateDetour ? "g" : "d"}`;
+}
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
-  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}|${allowGateDetour ? "g" : "d"}`,
+  const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
   const graph = streetGraphFor(place),
