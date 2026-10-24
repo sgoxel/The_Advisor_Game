@@ -100,6 +100,10 @@ export function showNpcPopup(resident: Resident, tick: number) {
   const sameResident = currentKind === "npc" && currentCode === resident.code;
   const technicalOpen = sameResident && !!root.querySelector<HTMLDetailsElement>(".npc-technical")?.open;
   const previousScroll = sameResident ? root.scrollTop : 0;
+  // Fantasy-time refresh rebuilds the markup: keep the reader's focused control.
+  const active = sameResident && root.contains(document.activeElement) ? document.activeElement : null;
+  const focusSelector = active?.matches(".npc-technical summary") ? ".npc-technical summary"
+    : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
   const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
@@ -146,6 +150,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </details>`;
   root.hidden = false;
   root.scrollTop = previousScroll;
+  if (focusSelector) root.querySelector<HTMLElement>(focusSelector)?.focus({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------- buildings
