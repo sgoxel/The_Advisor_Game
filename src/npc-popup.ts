@@ -16,7 +16,7 @@ import { buildingName, familyName, type BuildingKind } from "./names.ts";
 import { activityAt, dailyPlan, type Activity } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { settlementExteriorFor } from "./settlement-exterior.ts";
-import type { Resident } from "./simulation.ts";
+import { readableResidentRoute, type Resident } from "./simulation.ts";
 
 const ABILITY_LABELS: [keyof Resident["traits"]["abilities"], string][] = [
   ["strength", "Strength"], ["dexterity", "Dexterity"], ["constitution", "Constitution"],
@@ -97,6 +97,9 @@ export function hideNpcPopup() {
 export function showNpcPopup(resident: Resident, tick: number) {
   install();
   if (!root) return;
+  const sameResident = currentKind === "npc" && currentCode === resident.code;
+  const technicalOpen = sameResident && !!root.querySelector<HTMLDetailsElement>(".npc-technical")?.open;
+  const previousScroll = sameResident ? root.scrollTop : 0;
   currentCode = resident.code;
   currentKind = "npc";
   const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
@@ -118,8 +121,9 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </div>
     <div class="npc-now">
       <div><span class="npc-label">Now</span><b>${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
+      <div><span class="npc-label">Route</span><span id="npc-route">${escape(readableResidentRoute(resident.route))}</span></div>
       ${resident.travelProgress !== undefined
-        ? `<div><span class="npc-label">Route</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`
+        ? `<div><span class="npc-label">Progress</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`
         : ""}
       <div><span class="npc-label">Step</span>${bar(resident.activityProgress, 1, "#d8b979")} <b>${Math.round(resident.activityProgress * 100)}%</b> <span class="npc-muted">${clock(resident.activityStart)}–${clock(resident.activityEnd % 86400)}</span></div>
       <div><span class="npc-label">Mood</span><b style="color:${moodHue}">${escape(resident.mood.label)}</b> ${bar(resident.mood.value + 1, 2, moodHue)}</div>
@@ -133,8 +137,15 @@ export function showNpcPopup(resident: Resident, tick: number) {
     <section class="npc-routine"><h3>Today's routine · ${WEEKDAYS[weekday]}</h3>
       <ol>${plan.map((activity, i) => `<li class="${i === index ? "current" : i < index ? "past" : ""}"><time>${clock(activity.start)}</time><span>${escape(activity.task)}${i === index ? ` · ${Math.round(resident.activityProgress * 100)}%` : i < index ? " · done" : ""}</span><em>${escape(where(activity))}</em></li>`).join("")}</ol>
     </section>
-    <code class="npc-code">${escape(resident.code)}</code>`;
+    <details class="npc-technical"${technicalOpen ? " open" : ""}>
+      <summary>Canonical SEED journey details</summary>
+      <div><span class="npc-label">Resident</span><code id="npc-seed-code" class="npc-code">${escape(resident.code)}</code></div>
+      <div><span class="npc-label">Home entrance</span><code id="npc-home-entrance" class="npc-code">${escape(resident.homeEntrance)}</code></div>
+      <div><span class="npc-label">Workplace</span><code id="npc-workplace-code" class="npc-code">${escape(resident.workplace)}</code></div>
+      <div><span class="npc-label">Actual route</span><code id="npc-route-code" class="npc-code">${escape(resident.route)}</code></div>
+    </details>`;
   root.hidden = false;
+  root.scrollTop = previousScroll;
 }
 
 // ---------------------------------------------------------------- buildings
