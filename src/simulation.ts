@@ -1159,6 +1159,11 @@ export function residentInspectorSelection<T extends { code: string; index: numb
   };
 }
 
+/** Stable first-answer caption; camera visibility is presentation-only. */
+export function residentShortLabel(resident: Pick<Resident, "index" | "role">, outsideView = false) {
+  return `Resident ${resident.index + 1} · ${resident.role.replaceAll("-", " ")}${outsideView ? " · off-screen" : ""}`;
+}
+
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
 export function residentAt(place: Place, index: number, tick: number): Resident {
   const seeded = residentFoundationAt(place, index),
@@ -1412,13 +1417,13 @@ export class LazySimulation {
     });
   }
 
-  private renderInspectorResident(resident: Resident) {
+  private renderInspectorResident(resident: Resident, outsideView = false) {
     const text = (id: string, value: string) => {
       const node = document.getElementById(id);
       if (node && node.textContent !== value) node.textContent = value;
     };
     text("resident-name", resident.name);
-    text("resident-short-id", `Resident ${resident.index + 1} · ${resident.role.replaceAll("-", " ")}`);
+    text("resident-short-id", residentShortLabel(resident, outsideView));
     text("resident-code", resident.code);
     text("resident-home-code", `${resident.homeBuilding} · ${resident.homeEntrance}`);
     text("resident-work-code", resident.workplace);
@@ -1453,11 +1458,13 @@ export class LazySimulation {
     );
     const avatar = document.getElementById("resident-avatar");
     if (avatar) {
-      avatar.dataset.silhouette = String(resident.appearance.silhouette);
-      avatar.dataset.hair = String(resident.appearance.hair);
-      avatar.dataset.clothing = String(resident.appearance.clothing);
-      avatar.dataset.character = resident.character;
-      avatar.style.backgroundImage = `url("${new URL(`characters/${resident.character}.webp`, document.baseURI).href}")`;
+      if (avatar.dataset.silhouette !== String(resident.appearance.silhouette)) avatar.dataset.silhouette = String(resident.appearance.silhouette);
+      if (avatar.dataset.hair !== String(resident.appearance.hair)) avatar.dataset.hair = String(resident.appearance.hair);
+      if (avatar.dataset.clothing !== String(resident.appearance.clothing)) avatar.dataset.clothing = String(resident.appearance.clothing);
+      if (avatar.dataset.character !== resident.character) {
+        avatar.dataset.character = resident.character;
+        avatar.style.backgroundImage = `url("${new URL(`characters/${resident.character}.webp`, document.baseURI).href}")`;
+      }
     }
     const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
     if (button) button.disabled = false;
@@ -1518,11 +1525,7 @@ export class LazySimulation {
     if (select.value !== retained) select.value = retained;
     const resident = selection.records.find(entry => entry.code === retained);
     if (resident) {
-      this.renderInspectorResident(resident);
-      if (selection.outsideView) {
-        const shortId = document.getElementById("resident-short-id");
-        if (shortId) shortId.textContent += " · off-screen";
-      }
+      this.renderInspectorResident(resident, selection.outsideView);
     } else {
       const name = document.getElementById("resident-name");
       if (name) name.textContent = retained
