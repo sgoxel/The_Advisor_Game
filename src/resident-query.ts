@@ -4,6 +4,19 @@ import type { Resident, QueryStats } from "./simulation.ts";
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number } };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
+/** A completed coarse viewport is sufficient for first resident facts on a multi-worker
+ * device. Keep the sole worker for terrain until detail is prepared. Once a batch
+ * has started, finish dispatching its shards even if the camera moves so the
+ * bounded query can retire and the newest request can replace stale results. */
+export function residentDispatchAllowed(
+  selectionDirty: boolean, coverageComplete: boolean, detailReady: boolean,
+  idleWorkerCount: number, workerCount: number, batchStarted: boolean,
+): boolean {
+  if (idleWorkerCount === 0) return false;
+  if (batchStarted) return true;
+  return !selectionDirty && coverageComplete && (detailReady || workerCount > 1);
+}
+
 /** One in-flight job, latest camera request wins. Stale clock/view results never
  * become a visible snapshot; the next request reuses the worker's warm caches. */
 export class ResidentQueryQueue {
