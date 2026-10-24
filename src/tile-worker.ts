@@ -7,6 +7,7 @@ import { rebuildNaturalSurface } from "./natural-surface-mesh.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import { tileJobKey, type TileJob } from "./streaming-coverage.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
+import { loadAssetMeshes } from "./asset-meshes.ts";
 import type { ResidentQueryJob } from "./resident-query.ts";
 let residentSimulation: Promise<import("./simulation.ts").LazySimulation> | undefined;
 self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
@@ -47,4 +48,7 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       natural:{replaced:natural.replaced,leaves:natural.leaves,samples:natural.samples,cpuScratchBytesEstimated:natural.cpuScratchBytesEstimated}}, {transfer});
   } catch(error){self.postMessage({tile,kind:job.kind,jobKey,error:String(error)});}
 };
-self.postMessage({ready:true});
+// Blender-made assets (src/models) are loaded once before the worker accepts jobs; a failure only
+// logs a warning and leaves the procedural kits in place.
+// (A promise chain, not top-level await: the worker bundle is iife.)
+void loadAssetMeshes().catch(() => undefined).then(() => self.postMessage({ready:true}));

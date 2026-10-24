@@ -1,7 +1,9 @@
 """Build low-poly yard assets for The Advisor Game with Blender (headless).
 
 Usage (Blender 5.2+):
-  blender --background --factory-startup --python tools/blender/build_yard_assets.py -- <out_dir> [preview_dir]
+  blender --background --factory-startup --python tools/blender/build_yard_assets.py -- [out_dir=src/models] [preview_dir]
+
+The game reads the .glb files from src/models (see src/asset-meshes.ts).
 
 Every asset is modelled in real metres (Blender units = metres), +Y up after glTF export, facing +Z
 (the game's local "front"), centred on its footprint, flat colours only (no textures), and exported
@@ -16,7 +18,7 @@ import bmesh
 from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-OUT = os.path.abspath(argv[0] if argv else "public/models/yard")
+OUT = os.path.abspath(argv[0] if argv else "src/models")
 PREVIEW = os.path.abspath(argv[1]) if len(argv) > 1 else None
 os.makedirs(OUT, exist_ok=True)
 if PREVIEW:
@@ -111,7 +113,10 @@ def join(name, objects):
     bpy.ops.object.join()
     joined = bpy.context.view_layer.objects.active
     joined.name = name
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    # Bake every transform into the vertices: the exported node is the identity, so the game can read
+    # vertex positions as asset-local metres (origin = footprint centre on the ground).
+    bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     return joined
 
 

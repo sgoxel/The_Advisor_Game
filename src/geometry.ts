@@ -12,6 +12,7 @@ import { elevationToRenderY } from "./render-frame.ts";
 import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
+import { assetMesh, type AssetMesh } from "./asset-meshes.ts";
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
@@ -357,6 +358,12 @@ function addTree(f: Frame, lx: number, lz: number, s: number, leaf = LEAF) {
   cuboid(f, lx, 0, lz, .16 * s, .9 * s, .16 * s, color(88, 64, 44));
   coneAt(f, lx, .6 * s, lz, .6 * s, 1.5 * s, 7, leaf);
   coneAt(f, lx, 1.4 * s, lz, .38 * s, 1 * s, 6, LEAF_LIGHT);
+}
+/** Copy a Blender asset (asset-local metres, +Y up, front +Z) into a frame, one flat colour per triangle. */
+function addAssetMesh(f: Frame, mesh: AssetMesh) {
+  const p = mesh.positions, at = (i: number) => pt(f, p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
+  for (let t = 0; t < mesh.triangles; t++)
+    f.b.triangle(at(mesh.indices[t * 3]), at(mesh.indices[t * 3 + 1]), at(mesh.indices[t * 3 + 2]), [mesh.colors[t * 3], mesh.colors[t * 3 + 1], mesh.colors[t * 3 + 2]]);
 }
 /** One seeded yard object of a home, facing local +z, inside its YARD_PROP_SIZES footprint (world.ts); ≤ 90 triangles. */
 function addYardProp(f: Frame, kind: string, variant: number) {
@@ -1221,7 +1228,10 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
   } else if (feature.kind === "planter") {
     if (close) addPlanter(frameOf(closeDetail, yaw), 0, 0, 0, variant, feature.widthM ?? 1.4, feature.depthM ?? .7);
   } else if (feature.kind === "yard-prop") {
-    if (close) addYardProp(frameOf(closeDetail, yaw), feature.label, variant);
+    // A Blender model when one is loaded for this kind (src/models), otherwise the procedural kit.
+    const asset = close ? assetMesh(feature.label) : undefined;
+    if (asset) addAssetMesh(frameOf(closeDetail, yaw), asset);
+    else if (close) addYardProp(frameOf(closeDetail, yaw), feature.label, variant);
   } else if (feature.kind === "park") {
     const ground = frameOf(structures, yaw), props = frameOf(closeDetail, yaw), shape = parkShapeOf(feature.parkShape);
     if (feature.label === "playground") addPlayground(ground, props, width, depth, variant, close, shape);
