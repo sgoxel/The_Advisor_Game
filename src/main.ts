@@ -52,7 +52,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, residentOccupiesBuilding } from "./simulation.ts";
+import { LazySimulation, populationOf, residentOccupiesBuilding, residentViewQuery } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -1586,6 +1586,7 @@ async function start() {
   };
   let lastSimulationRealSecond = -1;
   let lastResidentDetailVisible = smallDetailsVisible;
+  let lastResidentInspectorOpen = !$("travel-panel").hidden;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
   let labelFingerprint = "";
@@ -1601,8 +1602,11 @@ async function start() {
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
     if(ready)updateWilderness(view.x,view.z,view.halfHeight,scaleValueForHalfHeight(view.halfHeight),projectionTransition,projectTransportGround);
-    if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible) {
+    const residentInspectorOpen = !$("travel-panel").hidden;
+    if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible ||
+        residentInspectorOpen !== lastResidentInspectorOpen) {
       lastResidentDetailVisible = smallDetailsVisible;
+      lastResidentInspectorOpen = residentInspectorOpen;
       if (view.halfHeight < 900)
         simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
@@ -1610,21 +1614,19 @@ async function start() {
       $("fantasy-time").textContent = clock.labelAt(now);
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
-      const visible =
-        // Villagers are only simulated for drawing once loading is done and a person is at least a few
-        // pixels tall (half-height < 20 units ≈ 300 m); further out they would be sub-pixel specks.
-        ready && settlementDetailVisible && smallDetailsVisible && view.halfHeight < 20
-          ? simulation
-              // Everyone whose position can be on screen: the whole visible ground footprint
-              // (rotated rectangle, low close-up camera included) plus a margin, so nobody
-              // vanishes before they have fully left the screen.
-              .focusedResidents(view.x, view.z, (() => {
-                const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat)));
-                return Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
-              })(), 160)
-              // People asleep, eating or working inside a building are not standing on the street.
-              .filter((resident) => resident.grounded && !resident.indoors)
-          : [];
+      // Logical inspection remains available before optional meshes and billboards
+      // finish. Actor allocation keeps the original strict close-detail budget.
+      const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen,
+        ready, settlementDetailVisible, smallDetailsVisible);
+      const residents = residentMode.inspect
+        ? simulation.focusedResidents(view.x, view.z, (() => {
+            const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat)));
+            return Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
+          })(), residentMode.actors ? 160 : 24)
+        : [];
+      // People sleeping or working indoors are inspectable but not street actors.
+      const visible = residentMode.actors
+        ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
       for (let i = 0; i < visible.length; i++) {
         if (!actors[i]) {
           const actor = new pc.Entity("Resident billboard");
