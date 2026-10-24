@@ -121,6 +121,20 @@ test("stale result validation uses actual realm time even between scheduled requ
 });
 
 
+test("distant same-settlement pans never reuse unrelated resident actors or nearby facts", () => {
+  const previous = { ...request("capital-neighbourhood", 100), placeCode: "capital", x: 12, z: -8, radius: 6 };
+  const near = { x: 12.5, z: -8, radius: 6 }, far = { x: 28, z: -8, radius: 6 };
+  assert.equal(currentResidentSnapshot(undefined, previous, "capital", 101, 48, near), previous,
+    "a tiny pan keeps a valid recent same-area snapshot while the worker catches up");
+  assert.equal(currentResidentSnapshot(undefined, previous, "capital", 101, 48, far), undefined,
+    "a different part of the same city cannot inherit old nearby residents");
+  assert.equal(currentResidentSnapshot(undefined, previous, "capital", 101, 48, { x: 12, z: -8, radius: 0.1 }), previous,
+    "zooming at the exact same centre keeps the canonical physical actor position");
+  const staleCurrent = { ...previous, placeCode: "other-town" };
+  assert.equal(currentResidentSnapshot(staleCurrent, previous, "capital", 101, 48, near), previous,
+    "a mismatched current result cannot conceal a relevant previous result");
+});
+
 test("panning retains fresh world positions while a newer view query is submitted", () => {
   const previous = { placeCode: "town-a", tick: 100, x: 12.5, z: -8 };
   assert.equal(currentResidentSnapshot(undefined, previous, "town-a", 101, 48), previous,
