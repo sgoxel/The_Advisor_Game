@@ -407,10 +407,19 @@ export function residentFoundationAt(
 function daySecond(tick: number, place: Place) {
   return localSecondOfDay(tick, place.canonicalPosition.lon);
 }
-function isGuardOnDuty(foundation: ResidentFoundation, tick: number, place: Place) {
+function isGuardOnDuty(foundation: Pick<ResidentFoundation, "role" | "guardShift">, tick: number, place: Place) {
   if (foundation.role !== "guard") return false;
   const second = daySecond(tick, place), daytime = second >= 6 * HOUR && second < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
+}
+/** Give the inspector an individual guard verdict from the same physically
+ * verified roster that drives group staffing. Off-shift is not a vacancy. */
+export function residentGuardPresence(
+  resident: Pick<ResidentFoundation, "code" | "role" | "guardShift">,
+  tick: number, place: Place, physicallyPresent: readonly string[],
+): "off-duty" | "at-post" | "absent" {
+  if (!isGuardOnDuty(resident, tick, place)) return "off-duty";
+  return physicallyPresent.includes(resident.code) ? "at-post" : "absent";
 }
 /** Scheduled assignment and physical gate coverage are different facts.
  * A guard with an unresolved house or illegal commute cannot fill a post. */
@@ -1274,14 +1283,17 @@ export class LazySimulation {
       assignedGate = resident.gatePost ? /\/GATE\/(\d+)\/POST\//.exec(resident.gatePost) : null,
       assignedIndex = assignedGate ? Number(assignedGate[1]) : -1,
       currentCoverage = guardPlace && assignedIndex >= 0 ? guardCoverageAt(guardPlace, this.tick)[assignedIndex] : undefined;
+    const watchPresence = guardPlace && currentCoverage
+      ? residentGuardPresence(resident, this.tick, guardPlace, currentCoverage.residentCodes) : undefined;
     text("resident-gate-staffing", currentCoverage
       ? `Gate ${assignedIndex + 1}: ${currentCoverage.onDuty}/${currentCoverage.required} physically present${currentCoverage.missing
         ? ` · ${currentCoverage.missing} uncovered post${currentCoverage.missing === 1 ? "" : "s"} (legal housing/route unresolved)`
-        : " · fully staffed"}`
+        : " · fully staffed"} · Selected resident: ${watchPresence === "at-post" ? "at assigned post" :
+          watchPresence === "off-duty" ? "off duty" : "scheduled, not physically at post"}`
       : "No gate post assigned");
     text(
       "resident-appearance",
-      `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,
+      `${resident.character.replaceAll("_", " ")} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`, 
     );
     const avatar = document.getElementById("resident-avatar");
     if (avatar) {
