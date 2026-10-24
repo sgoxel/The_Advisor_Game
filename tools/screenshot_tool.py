@@ -506,7 +506,7 @@ class Session:
         finally:
             session.detach()
         pixels = base64.b64decode(encoded, validate=True)
-        dimensions = struct.unpack(">II", pixels[16:24]) if len(pixels) >= 24 and pixels[:8] == b"\\x89PNG\\r\\n\\x1a\\n" else None
+        dimensions = struct.unpack(">II", pixels[16:24]) if len(pixels) >= 24 and pixels[:8] == b"\x89PNG\r\n\x1a\n" else None
         if dimensions != self.viewport:
             raise CaptureError(f"direct Chromium screenshot is not the actual {self.viewport} viewport: {dimensions}")
         path.write_bytes(pixels)
