@@ -985,20 +985,40 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   const plan = dailyPlan({ code: foundation.code, role: foundation.role,
     ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, foundation.traits,
     priorDay, localWeekday(priorTick, lon));
-  let finalHome = -1;
-  for (let i = 1; i < plan.length; i++)
-    if (plan[i].anchor === "home" && plan[i - 1].anchor !== "home") finalHome = i;
-  let risk = false;
-  if (finalHome >= 0) {
-    const prior = plan[finalHome - 1], homeward = plan[finalHome],
-      origin = standingSpot(place, foundation, prior.anchor,
-        anchorOffset(place, foundation, prior.anchor), !prior.indoors),
-      destination = standingSpot(place, foundation, "home", foundation.homeOffset, false),
-      returnPath = routinePath(place, origin, destination, fieldEntry(place, foundation, prior.anchor));
-    risk = unfinishedOrBlockedOvernightReturn(returnPath, DAY_SECONDS - homeward.start - 1);
+  // A lawful final homeward route is NOT proof the resident reached its
+  // scheduled origin: an earlier failed leg may have left them elsewhere.
+  // Prove each distinct anchor reached its physical stop before the following
+  // departure. Only an uncertain chain needs the expensive prior-day replay.
+  let fromAnchor = plan[0].anchor,
+    from = standingSpot(place, foundation, fromAnchor,
+      anchorOffset(place, foundation, fromAnchor), !plan[0].indoors),
+    risk = false;
+  for (let i = 1; i < plan.length; i++) {
+    const next = plan[i];
+    if (next.anchor === plan[i - 1].anchor) continue;
+    const to = standingSpot(place, foundation, next.anchor,
+      anchorOffset(place, foundation, next.anchor), !next.indoors),
+      route = routinePath(place, from, to,
+        fieldEntry(place, foundation, fromAnchor),
+        fieldEntry(place, foundation, next.anchor));
+    let nextDeparture = DAY_SECONDS;
+    for (let j = i + 1; j < plan.length; j++)
+      if (plan[j].anchor !== plan[j - 1].anchor) {
+        nextDeparture = plan[j].start;
+        break;
+      }
+    if (unfinishedOrBlockedOvernightReturn(route, nextDeparture - next.start - 1)) {
+      risk = true;
+      break;
+    }
+    from = to;
+    fromAnchor = next.anchor;
   }
   civilianOvernightRisk.set(key, risk);
-  while (civilianOvernightRisk.size > 1024) civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
+  // Three city rosters and their frequent direct-time queries fit without
+  // evicting and recomputing every unique door route during bounded queries.
+  while (civilianOvernightRisk.size > 16384)
+    civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
   return risk;
 }
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
