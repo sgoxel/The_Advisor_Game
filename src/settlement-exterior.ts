@@ -7,6 +7,7 @@ import {
   SETTLEMENT_POPULATION,
   settlementExteriorFor as coreSettlementExteriorFor,
   settlementLotFor,
+  reconcileSettlementLotsToFinalBorder,
   type SettlementArchetype,
   type SettlementExteriorPlan as CoreExteriorPlan,
   type SettlementFieldForm,
@@ -72,7 +73,9 @@ export function homeClearanceRadius(widthM: number, depthM: number) {
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
   if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
-  void suppliedPlan;
+  // Residents queried before scenery generation still use the same final
+  // border allocation as world geometry and the reverse spatial lot index.
+  if (!suppliedPlan) settlementExteriorFor(place);
   const city = place.kind === "city", lot = settlementLotFor(place, index),
     house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
     shift = (house.depthM - lot.nominalDepthM) * .5,
@@ -105,8 +108,8 @@ function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
   return { ...plot, ownerId: ownerIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${ownerIndex}`, residents: staff, capacity: Math.max(plot.capacity, staff) };
 }
 /** A small rear garden behind the house, inside its own frontage lot. */
-function gardenFor(place: Place, index: number): SettlementPlotPlan {
-  const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index),
+function gardenFor(place: Place, index: number, plan: SettlementExteriorPlan): SettlementPlotPlan {
+  const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index, plan),
     widthM = 3 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 1.2, depthM = 3 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 1.2,
     behind = (home.depthM || 8) * .5 + depthM * .5 + .4;
   return {
@@ -443,8 +446,14 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
     });
   }
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
-  for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, index));
+  // Road-aware enclosure trimming precedes home allocation. The core street
+  // grid alone cannot certify a residence behind the final village wall.
   const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
+  if (place.kind === "village" && (aligned.border.length !== core.border.length ||
+      aligned.border.some((point, index) => point.x !== core.border[index].x || point.z !== core.border[index].z)))
+    reconcileSettlementLotsToFinalBorder(place, aligned.border);
+  for (let index = 0; index < residentHomeCount; index += gardenStride)
+    plots.push(gardenFor(place, index, aligned));
   const nearRoads=roads.filter(road=>roadDistanceAt(place.x,place.z,road)<aligned.radius+metresToSource(30));
   return remember({ ...aligned, streets: aligned.streets.map(street => {
     const points=mergeStreetWithRoads(street.points,street.width,nearRoads);
