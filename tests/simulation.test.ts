@@ -16,6 +16,8 @@ import {
   continuousWalkableOffsetSegment,
   legalEnclosureSegment,
   timedWalkOnPath,
+  timedWalkPolyline,
+  residentWalkSourcePolyline,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
   readableResidentSite,
@@ -161,6 +163,48 @@ test("time-bounded legal paths never jump to an unfinished endpoint", () => {
   assert.deepEqual(arrived.offset, path[2]);
   assert.equal(midway.progress, .5);
   assert.deepEqual(midway, replay);
+});
+
+test("visible residents follow actual legal street corners rather than a straight sample chord", () => {
+  const p = (eastM: number, northM: number) => ({ eastM, northM }),
+    route = [p(0, 0), p(0, 12), p(12, 12)],
+    polyline = timedWalkPolyline(route, 0, 60);
+  assert.deepEqual(polyline.map(point => point.offset), route,
+    "a 90-degree turn must survive even when both endpoint samples span the corner");
+  assert.deepEqual(polyline.map(point => point.fraction), [0, .5, 1]);
+  assert.notDeepEqual(p(6, 6), polyline[1].offset,
+    "straight interpolation between authorized endpoints cuts the street corner");
+  assert.deepEqual(timedWalkPolyline(route, 15, 45).map(point => point.offset),
+    [p(0, 6), p(0, 12), p(6, 12)],
+    "a one-second display interval must retain an interior route vertex");
+  assert.deepEqual(timedWalkPolyline(route, 50, 90).at(-1)?.offset, route[2],
+    "arrival must stop at the last legal destination, never overshoot");
+  assert.deepEqual(timedWalkPolyline([], 0, 24), []);
+});
+
+test("simulation supplies actual canonical walking frames for a real resident when commuting", () => {
+  const place = villages[0], lon = place.canonicalPosition.lon;
+  let checked = 0;
+  for (const index of [0, 3, 6, 7, 8, 11, 12, 17]) {
+    for (const hour of [6.01, 7.01, 17.01, 18.01]) {
+      const tick = tickAtLocalTime(WORKDAY, hour * HOUR, lon),
+        resident = residentAt(place, index, tick);
+      if (!resident.grounded || resident.activity !== "commute") continue;
+      const points = residentWalkSourcePolyline(place, index, tick, 24);
+      assert.ok(points.length >= 2, "a legal active commute must expose its traversed polyline");
+      assert.ok(Math.hypot(points[0].x - resident.x, points[0].z - resident.z) < 1e-4,
+        "the visible walk begins at the same authoritative Simulation point");
+      assert.ok(points.every(point => finalSurfaceAt(point.x, point.z).walkable),
+        "walk vertices cannot pass through blocked physical ground");
+      for (let i = 1; i < points.length; i++)
+        assert.ok(points[i].fraction >= points[i-1].fraction,
+          "display time never moves backwards on the valid route");
+      checked++;
+      if (checked >= 2) break;
+    }
+    if (checked >= 2) break;
+  }
+  assert.ok(checked >= 1, "a real current-SEED resident must provide a walking frame");
 });
 
 test("sampled daily schedule transitions do not teleport between sites", () => {
