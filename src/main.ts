@@ -250,8 +250,8 @@ const clock = new FantasyClock();
 const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
-/** Walking actors: positions at this and the next simulation second, animated per frame. */
-const actorMotion = new Map<pc.Entity, { fromX: number; fromZ: number; toX: number; toZ: number; startMs: number }>();
+/** Route-vertex motion over one real second; never interpolate through a bend. */
+const actorMotion = new Map<pc.Entity, { points: { x: number; z: number; fraction: number }[]; startMs: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
 let navigationFingerprint = "";
@@ -1647,10 +1647,12 @@ async function start() {
         orientActor(actors[i]);
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
         actorResidents.set(actors[i], visible[i]);
-        // Walkers glide: animate from this second's position to the next second's over one real second.
+        // Follow Simulation's validated street corners, not the straight chord
+        // between two samples 24 Fantasy seconds apart.
         if (visible[i].activity === "commute") {
-          const next = simulation.residentByCode(visible[i].code, simulation.tick + TIME_SCALE);
-          actorMotion.set(actors[i], { fromX: visible[i].x, fromZ: visible[i].z, toX: next?.x ?? visible[i].x, toZ: next?.z ?? visible[i].z, startMs: performance.now() });
+          const points = simulation.residentMotionByCode(visible[i].code, simulation.tick, TIME_SCALE);
+          if (points.length > 1) actorMotion.set(actors[i], { points, startMs: performance.now() });
+          else actorMotion.delete(actors[i]);
         } else actorMotion.delete(actors[i]);
         positionActor(actors[i], visible[i].x, visible[i].z);
       }
@@ -1668,12 +1670,18 @@ async function start() {
       $("simulation-status").textContent =
         `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
     }
-    // Per-frame walking: interpolate along the street route between Fantasy Time samples.
+    // Each on-screen segment stays on the authorized route, including turns.
     if (actorMotion.size) {
       const nowMs = performance.now();
       for (const [actor, motion] of actorMotion) {
         if (!actor.enabled) continue;
-        const t = Math.min(1, (nowMs - motion.startMs) / 1000), x = motion.fromX + wrapSourceX(motion.toX - motion.fromX) * t, z = motion.fromZ + (motion.toZ - motion.fromZ) * t;
+        const t = Math.min(1, (nowMs - motion.startMs) / 1000), points = motion.points;
+        let i = 1;
+        while (i < points.length - 1 && points[i].fraction < t) i++;
+        const a = points[i - 1], b = points[i],
+          fraction = b.fraction > a.fraction ? Math.min(1, Math.max(0, (t - a.fraction) / (b.fraction - a.fraction))) : 0,
+          x = a.x + wrapSourceX(b.x - a.x) * fraction,
+          z = a.z + (b.z - a.z) * fraction;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
       }
