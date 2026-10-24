@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { PLANET_RADIUS } from "./planet.ts";
 import { LON_SEGMENTS, LAT_SEGMENTS } from "./globe-view.ts";
-import { LIT_DIFFUSE_GLSL, LIT_DIFFUSE_WGSL, LIT_NORMAL_GLSL, LIT_NORMAL_WGSL, surfaceDetailChunks, type SurfaceDetailMode } from "./surface-detail.ts";
+import { LIT_DIFFUSE_GLSL, LIT_DIFFUSE_WGSL, LIT_GLOSS_GLSL, LIT_GLOSS_WGSL, LIT_NORMAL_GLSL, LIT_NORMAL_WGSL, LIT_SPECULAR_GLSL, LIT_SPECULAR_WGSL, TERRAIN_APPLY_SHADOW_GLSL, TERRAIN_APPLY_SHADOW_WGSL, TERRAIN_SAVE_COLOR_GLSL, TERRAIN_SAVE_COLOR_WGSL, surfaceDetailChunks, type SurfaceDetailMode } from "./surface-detail.ts";
 
 /** Lit world material (buildings, props): detail tints the albedo and bends the normal. */
 export function installLitSurfaceDetail(material: pc.StandardMaterial) {
@@ -10,6 +10,10 @@ export function installLitSurfaceDetail(material: pc.StandardMaterial) {
   material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("diffusePS", LIT_DIFFUSE_WGSL);
   material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("normalMapPS", LIT_NORMAL_GLSL);
   material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("normalMapPS", LIT_NORMAL_WGSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("glossPS", LIT_GLOSS_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("glossPS", LIT_GLOSS_WGSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("specularPS", LIT_SPECULAR_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("specularPS", LIT_SPECULAR_WGSL);
 }
 
 /** Presentation only; never used to choose canonical terrain or feature identity. */
@@ -66,7 +70,18 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   material.emissiveVertexColor = true;
   material.emissiveMap = surface;
   (material as pc.StandardMaterial & { vertexColorGamma: boolean }).vertexColorGamma = true;
-  material.useLighting = false;
+  // Colour stays emissive (black diffuse and specular, so lights add nothing); lighting is enabled only
+  // so the sun's shadow map is evaluated: as a shadow catcher the terrain darkens where objects cast
+  // shadows (surface-detail.ts TERRAIN_APPLY_SHADOW_*).
+  material.useLighting = true;
+  material.shadowCatcher = true;
+  material.specular.set(0, 0, 0);
+  material.ambient.set(0, 0, 0);
+  material.setParameter("sdShadowStrength", 0.45);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("debugOutputPS", TERRAIN_SAVE_COLOR_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("debugOutputPS", TERRAIN_SAVE_COLOR_WGSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("outlineOutputPS", TERRAIN_APPLY_SHADOW_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("outlineOutputPS", TERRAIN_APPLY_SHADOW_WGSL);
   material.useSkybox = false;
   material.useFog = false;
   material.useTonemap = false;
@@ -168,7 +183,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, surfaceDetailWeight);
       #endif
-      dEmission *= sdMul * sdShade;
+      dEmission = dEmission * sdMul * sdShade + sdGlint;
       dEmission *= pow(surfaceDaylightTint, vec3(2.2));
     }
   `);
@@ -183,7 +198,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, uniform.surfaceDetailWeight);
       #endif
-      dEmission = dEmission * sdMul * sdShade;
+      dEmission = dEmission * sdMul * sdShade + sdGlint;
       dEmission *= pow(uniform.surfaceDaylightTint, vec3f(2.2));
     }
   `);

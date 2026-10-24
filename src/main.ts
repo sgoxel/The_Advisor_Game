@@ -189,6 +189,8 @@ let displayedDaylight:Daylight|undefined, targetDaylight:Daylight|undefined;
 const daylightTintUniform = new Float32Array([1,1,1]);
 /** Direction towards the sun (world space) for the terrain's procedural relief shading. */
 const sunDirUniform = new Float32Array([0.4,0.8,0.45]);
+/** The sun's light (set at start-up) so the camera can fit its shadow range to the view. */
+let sunLight: pc.LightComponent | undefined;
 let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
@@ -588,6 +590,7 @@ function applyPresentation() {
     globe.setVisible(true);
     globe.setBlend(projectionTransition);
     globe.placeCamera(camera, view.halfHeight, view.yaw);
+    camera.camera!.nearClip = 0.1;
     $("cell-panel").hidden = true;
   } else {
     flatRoot.setLocalPosition(0, 0, 0);
@@ -612,6 +615,13 @@ function applyPresentation() {
     // camera distance and generous terrain/model clearance; globe owns its lens.
     camera.camera!.farClip = Math.max(512, distance +
       2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
+    // The sun's shadow map covers the camera frustum from the near plane to shadowDistance. The
+    // orthographic camera stands ~200 units back, so with the default range one shadow texel was ~6 m.
+    // Fit both tightly around the visible ground (plus room for buildings and trees) so close-up
+    // shadows are sharp (~10 cm per texel at Hero zoom).
+    const above = 4 + view.halfHeight * 6, below = 2 + view.halfHeight * 4;
+    camera.camera!.nearClip = Math.max(0.1, distance - above);
+    if (sunLight) sunLight.shadowDistance = Math.min(420, distance + below);
   }
   for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial, nightGlowMaterial, lampPoolMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
@@ -766,7 +776,9 @@ function uploadGeometry(
   entity.addComponent("render", {
     meshInstances: [new pc.MeshInstance(mesh, material)],
     layers: coverage ? [coverageTerrainLayer.id] : material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
-    castShadows: name !== "terrain" && !["canopy", "closeDetail", "nightGlow", "lampPools"].includes(name),
+    // Close-up props (yard objects, Blender models, furniture) cast shadows too: they only exist at
+    // Hero/Close zoom, where the shadow range is fitted tightly around the view (updateCamera).
+    castShadows: name !== "terrain" && !["canopy", "nightGlow", "lampPools"].includes(name),
     receiveShadows: true,
   });
   parent.addChild(entity);
@@ -1528,6 +1540,7 @@ async function start() {
   });
   sun.setEulerAngles(48, -28, 0);
   app.root.addChild(sun);
+  sunLight = sun.light!;
   /**
    * Local-time lighting: the light, ambient, terrain tint and backdrop follow the local clock of the
    * place at the map focus. Adjacent local zones and frame transitions blend; globe and flat terrain share the same displayed tint.
@@ -1550,7 +1563,14 @@ async function start() {
     sun.setEulerAngles(light.sunPitch,light.sunYaw,0);
     // A directional light shines along its -Y axis, so its +Y axis points at the sun.
     const towardsSun=sun.up;sunDirUniform[0]=towardsSun.x;sunDirUniform[1]=towardsSun.y;sunDirUniform[2]=towardsSun.z;
-    for(const material of [terrainMaterial,coarseTerrainMaterial]) material?.setParameter("sdSunDir",sunDirUniform);
+    for(const material of [terrainMaterial,coarseTerrainMaterial]) {
+      material?.setParameter("sdSunDir",sunDirUniform);
+      // Ground shadows fade out as the sun sets (no moon shadows).
+      material?.setParameter("sdShadowStrength",0.45*Math.min(1,Math.max(0,(towardsSun.y-0.02)/0.25))*Math.min(1,light.sunIntensity/0.6));
+    }
+    // Moving water ripples (presentation time, wrapped to keep shader precision).
+    const rippleTime=(performance.now()/1000)%600;
+    for(const material of [worldMaterial,terrainMaterial,coarseTerrainMaterial]) material?.setParameter("sdTime",rippleTime);
     app.scene.ambientLight.set(...light.ambient);
     flatBackdrop.set(...light.sky,1);
     daylightTintUniform.set(light.terrainTint);

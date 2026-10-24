@@ -74,15 +74,15 @@ test('presentation doc is still research-only and its terrain gap matches the so
 
   const gapTable = sectionLines('## 1. ').join('\n');
   assert.ok(
-    gapTable.includes('useLighting/useFog/useTonemap = false'),
-    'section 1 must describe terrain as useLighting/useFog/useTonemap = false',
+    gapTable.includes('`useFog/useTonemap = false`') && gapTable.includes('**shadow catcher**'),
+    'section 1 must describe terrain as emissive with lighting used only as a shadow catcher (useFog/useTonemap = false)',
   );
 
   const terrainSource = readFileSync(new URL('../src/surface-presentation.ts', import.meta.url), 'utf8');
   assert.ok(
-    terrainSource.includes('material.useLighting = false'),
-    'src/surface-presentation.ts no longer contains "material.useLighting = false": terrain is now lit. ' +
-      'Update docs/PRESENTATION_ARCHITECTURE.md section 1 (Terrain row: useLighting/useFog/useTonemap, gap column) and the "research only" status line, then this assertion.',
+    terrainSource.includes('material.shadowCatcher = true') && terrainSource.includes('material.diffuse.set(0, 0, 0)'),
+    'src/surface-presentation.ts terrain is no longer an emissive shadow catcher (fully lit terrain?). ' +
+      'Update docs/PRESENTATION_ARCHITECTURE.md section 1 (Terrain row, gap column) and the "research only" status line, then this assertion.',
   );
 });
 
