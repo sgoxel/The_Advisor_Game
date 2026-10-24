@@ -1165,7 +1165,7 @@ test("real guard and fisherman outbound walking and owned-home returns use legal
   assert.ok(verifiedWalkingWindows >= 2, "real guard/fisherman departures must expose legal moving windows");
 });
 
-test("seeded Falconham fisherman's complete real walking legs require actual gate and dry ground", () => {
+test("real guard and fisherman outbound: Falconham full gated workday reaches the owned door", () => {
   const place = villages.find(place => place.name === "Falconham");
   assert.ok(place, "retain the seeded outdoor fishing settlement");
   const index = 70, seed = residentFoundationAt(place, index), lon = place.canonicalPosition.lon,
