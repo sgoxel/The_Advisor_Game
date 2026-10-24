@@ -1165,6 +1165,83 @@ test("real guard and fisherman outbound walking and owned-home returns use legal
   assert.ok(verifiedWalkingWindows >= 2, "real guard/fisherman departures must expose legal moving windows");
 });
 
+test("seeded Falconham fisherman's complete real walking legs require actual gate and dry ground", () => {
+  const place = villages.find(place => place.name === "Falconham");
+  assert.ok(place, "retain the seeded outdoor fishing settlement");
+  const index = 70, seed = residentFoundationAt(place, index), lon = place.canonicalPosition.lon,
+    door = resolvedSettlementHomeDoorFor(place, index);
+  assert.ok(door && seed.character.startsWith("fisherman"), "the subject has a rendered owned door and fishing trade");
+  const weekday = localWeekday(tickAtLocalTime(WORKDAY, 12 * HOUR, lon), lon),
+    plan = dailyPlan({ code: seed.code, role: seed.role, ageGroup: seed.ageGroup,
+      guardShift: seed.guardShift }, seed.traits, WORKDAY, weekday),
+    transitions = plan.filter((step, i) => i > 0 && step.anchor !== plan[i - 1].anchor);
+  assert.equal(transitions[0]?.anchor, "work", "the observed journey starts from the owned home");
+  assert.equal(transitions[transitions.length - 1]?.anchor, "home", "the last journey returns to the same owned door");
+  const exterior = settlementExteriorFor(place),
+    offset = (point: { x: number; z: number }) => {
+      const ll = sourceToLonLat(point.x, point.z);
+      return {
+        eastM: normalizeLongitude(ll.lon - lon) * CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat))),
+        northM: (ll.lat - place.canonicalPosition.lat) * CANONICAL_PLANET_RADIUS,
+      };
+    },
+    border = exterior.border.map(offset), gates = exterior.gates.map(offset);
+  let walkedLegs = 0, gateCrossings = 0;
+  for (const departure of transitions) {
+    const first = residentAt(place, index, tickAtLocalTime(WORKDAY, departure.start, lon));
+    assert.equal(first.code, seed.code, "one SEED character must make every leg");
+    assert.equal(first.activity, "commute", `${seed.code}: physical leg to ${departure.anchor} must begin as a real walk`);
+    assert.ok(first.travelDistanceM !== undefined && first.walkAhead,
+      "an executable leg reports its full physical length and next walk path");
+    // One Fantasy second walks one metre on a good road. Sample every 24
+    // Fantasy seconds, exactly matching each exposed next-window distance.
+    const duration = Math.max(60, first.travelDistanceM),
+      budget = Math.min(300, Math.ceil(duration / 24) + 2);
+    let arrived = false;
+    for (let sample = 0; sample < budget; sample++) {
+      const tick = tickAtLocalTime(WORKDAY, departure.start + sample * 24, lon),
+        resident = residentAt(place, index, tick);
+      if (resident.activity !== "commute") {
+        assert.ok(resident.grounded && !resident.route.startsWith("BLOCKED:"),
+          `${seed.code}: arrival at ${departure.anchor} cannot bypass ground or route authority`);
+        arrived = true;
+        break;
+      }
+      assert.ok(resident.grounded, `${seed.code}: an active walking actor must have legal ground`);
+      const path = resident.walkAhead;
+      assert.ok(path && path.length >= 2);
+      assert.ok(greatCircleDistance(resident.position, sourceToLonLat(path[0].x, path[0].z)) < .1,
+        "each physical segment begins at the current Simulation position");
+      for (let i = 1; i < path.length; i++) {
+        const from = path[i - 1], to = path[i],
+          a = offset(from), b = offset(to);
+        assert.ok(legalEnclosureSegment(a, b, border, gates),
+          `${seed.code}: a path cannot cross the rendered wall outside a SEED gate`);
+        if (!legalEnclosureSegment(a, b, border, [])) gateCrossings++;
+        const distance = greatCircleDistance(sourceToLonLat(from.x, from.z), sourceToLonLat(to.x, to.z)),
+          probes = Math.max(1, Math.ceil(distance));
+        for (let k = 0; k <= probes; k++) {
+          const t = k / probes;
+          assert.ok(residentWalkableSurface(finalSurfaceAt(
+            from.x + wrapSourceX(to.x - from.x) * t, from.z + (to.z - from.z) * t)),
+          `${seed.code}: real route crosses water without a bridge deck or impassable ground`);
+        }
+      }
+    }
+    assert.ok(arrived, `${seed.code}: the full ${departure.anchor} leg must physically reach its stop`);
+    walkedLegs++;
+  }
+  const work = residentAt(place, index, tickAtLocalTime(WORKDAY, 15 * HOUR, lon)),
+    home = residentAt(place, index, tickAtLocalTime(WORKDAY, 23.9 * HOUR, lon));
+  assert.ok(work.grounded && work.activity === "work", "the sampled trip must reach the actual fishing worksite");
+  assert.ok(home.grounded && home.indoors && home.route === seed.homeEntrance,
+    "the final trip must arrive at the same owned door, not a scheduled teleport");
+  assert.ok(greatCircleDistance(home.position, sourceToLonLat(door.x, door.z)) < .05);
+  assert.ok(walkedLegs >= 2, "the canonical working day contains an outward and a returning physical journey");
+  assert.ok(gateCrossings >= 2,
+    "the real outlying fisherman's trip must cross the SEED gate both ways; a route without gates cannot substitute");
+});
+
 test("outlying woodland workers use real habitat and remain queryable away from town", async () => {
   const { climateSampleAt } = await import("../src/climate.ts"), place = villages[0], simulation = new LazySimulation(), tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon);
   simulation.setFocus(place); simulation.advance(tick);
