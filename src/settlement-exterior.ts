@@ -98,7 +98,11 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     // searching within the SAME assigned SEED lot. No radial town relocation
     // and no change of resident identity or housing ownership.
     candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2),
-      at(0, -.8), at(0, .8), at(-.6, -.8), at(.6, -.8), at(-.6, .8), at(.6, .8)],
+      at(0, -.8), at(0, .8), at(-.6, -.8), at(.6, -.8), at(-.6, .8), at(.6, .8),
+      // A nearby external road may occupy the default house clearance.
+      // Move farther BACK within this owned frontage rather than reducing
+      // road clearance or relocating the resident to an unrelated lot.
+      at(0, 2), at(0, 4), at(0, 6), at(-.6, 4), at(.6, 4)],
   };
 }
 
