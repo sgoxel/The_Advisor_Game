@@ -23,6 +23,7 @@ import {
   residentInspectorSelection,
   nearestNode,
   nearestLegalStreetNode,
+  legalOpenGroundDetour,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -87,6 +88,28 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("outdoor journeys can legally detour around small barriers without crossing water or walls", () => {
+  const from = { eastM: 0, northM: 0 }, to = { eastM: 100, northM: 0 },
+    dry = (point: { eastM: number; northM: number }) =>
+      point.eastM < 40 || point.eastM > 60 || Math.abs(point.northM) > 20,
+    legal = (a: typeof from, b: typeof from) =>
+      continuousWalkableOffsetSegment(a, b, dry);
+  assert.equal(legal(from, to), false, "the direct route is genuinely blocked");
+  const path = legalOpenGroundDetour(from, to, legal);
+  assert.ok(path && path.length === 3, "a real dry two-leg route around the obstacle exists");
+  assert.ok(path.slice(1).every((point, i) => legal(path[i], point)),
+    "every detour segment is independently lawful, not just its endpoints");
+  const returnPath = legalOpenGroundDetour(to, from, legal);
+  assert.ok(returnPath && returnPath.slice(1).every((point, i) => legal(returnPath[i], point)),
+    "the same physical obstruction admits an independently legal return path");
+  const river = (point: typeof from) => point.eastM < 40 || point.eastM > 60;
+  assert.equal(legalOpenGroundDetour(from, to,
+    (a, b) => continuousWalkableOffsetSegment(a, b, river)), null,
+    "a continuous impassable river remains blocked even if endpoints are dry");
+  assert.equal(legalOpenGroundDetour(from, to, () => false), null,
+    "a missing gate or blocked wall cannot be bypassed by doglegs");
 });
 
 test("settlement walls admit resident crossings only through SEED gate apertures", () => {
@@ -636,14 +659,9 @@ test("fishing destinations are dry banks beside actual water, with inland fallba
     const a=i*Math.PI/8, p=lonLatToSource(bank.lon+Math.cos(a)*15/(CANONICAL_PLANET_RADIUS*Math.cos(bank.lat)),bank.lat+Math.sin(a)*15/CANONICAL_PLANET_RADIUS);
     return finalSurfaceAt(p.x,p.z).water.kind !== "none";
   }).some(Boolean), "water must be within 15 m of the actual assigned bank");
-  if (r.route.startsWith("BLOCKED:")) {
-    assert.equal(r.activity, "rest", "a blocked resident cannot pretend to fish");
-    assert.equal(r.travelProgress, undefined, "an unreachable bank cannot have successful travel progress");
-    assert.notEqual(r.task, "Fishing from the bank", "assignment is not arrival");
-  } else {
-    assert.ok(r.grounded, "a working fisherman stands on legal ground");
-    assert.equal(r.task, "Fishing from the bank");
-    assert.equal(r.activity, "work");
-    assert.ok(greatCircleDistance(r.position, bank) < 2, "fishing work must occur at its assigned bank");
-  }
+  assert.ok(!r.route.startsWith("BLOCKED:"), "Falconham fisherman must be able to reach his real dry bank via a legal gate and corridor");
+  assert.ok(r.grounded, "a working fisherman stands on legal ground");
+  assert.equal(r.task, "Fishing from the bank");
+  assert.equal(r.activity, "work");
+  assert.ok(greatCircleDistance(r.position, bank) < 2, "fishing work must occur at its assigned bank");
 });
