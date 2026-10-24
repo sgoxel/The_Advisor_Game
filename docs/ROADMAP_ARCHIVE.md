@@ -27,4 +27,4 @@ Moved here from docs/ROADMAP.md to keep agent start-up reading small. Do not rea
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Research toon/GLB 3D, 2D residents & semantic zoom: readable mobile WebGPU/WebGL2 — COMPLETED 2026-10-23 (research only, VISUAL: N/A): `docs/PRESENTATION_ARCHITECTURE.md` + `tests/presentation-architecture.test.ts`, implementation commit 833f2de, deployed with 9cf72ef; evidence jobs: not run on main (release gate only)
+- WP-S007-001-001 — Research toon/GLB 3D, 2D residents & semantic zoom: readable mobile WebGPU/WebGL2 — COMPLETED and REVIEWED at 2026-10-24 (research only; VISUAL: N/A; `docs/PRESENTATION_ARCHITECTURE.md` and `tests/presentation-architecture.test.ts`; final bookkeeping commit da4b487 deployed by successful release/build/Pages run 40037586030; production art and physical GPU budgets not claimed)
