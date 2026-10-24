@@ -397,6 +397,31 @@ test("every village has required service staff and continuous seeded gate covera
   }
 });
 
+test("guard shifts physically occupy their SEED posts and return home rather than counting assignments", () => {
+  for (const place of [villages[0], villages[Math.min(7, villages.length - 1)]]) {
+    const lon = place.canonicalPosition.lon;
+    for (const [index, hour] of [[6, 9], [7, 21]] as const) {
+      const tick = tickAtLocalTime(WORKDAY, hour * HOUR, lon),
+        r = residentAt(place, index, tick),
+        duty = guardCoverageAt(place, tick);
+      assert.equal(r.role, "guard");
+      assert.ok(r.grounded, `${r.code}: post guard cannot stand on invalid ground`);
+      assert.equal(r.activity, "guard", `${r.code}: assigned watch must be physically reached, got ${r.task}`);
+      assert.ok(duty.some(gate => gate.residentCodes.includes(r.code)), `${r.code}: only physical arrivals count as coverage`);
+      const work = r.workOffset, target = {
+        lon: normalizeLongitude(place.canonicalPosition.lon + work.eastM /
+          (CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat))))),
+        lat: place.canonicalPosition.lat + work.northM / CANONICAL_PLANET_RADIUS,
+      };
+      assert.ok(greatCircleDistance(r.position, target) <= 2,
+        `${r.code}: guard must stand at assigned SEED post, not a random crowd offset`);
+    }
+    const dayGuard = residentAt(place, 6, tickAtLocalTime(WORKDAY, 23.5 * HOUR, lon));
+    assert.equal(dayGuard.activity, "sleep", "day guard returns home after watch");
+    assert.ok(dayGuard.indoors && dayGuard.grounded, "guard may only sleep at the real legal home");
+  }
+});
+
 test("resident schedule state is analytical from absolute fantasy time", () => {
   const village = villages[0], tick = at(14, WORKDAY) + 1234,
     direct = residentAt(village, 3, tick), simulation = new LazySimulation();
