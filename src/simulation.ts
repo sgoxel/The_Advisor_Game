@@ -401,14 +401,21 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
   }
 }
 
+/** Expensive immutable SEED identities are shared by the spatial index, standing-slot
+ * roster and route evaluation. Cache data, never a mutable Simulation position.
+ * The bounded cache only changes reconstruction cost, not identity or output. */
+const residentFoundationCache = new Map<string, ResidentFoundation>();
+const RESIDENT_FOUNDATION_CACHE_LIMIT = 3200;
 export function residentFoundationAt(
   place: Place,
   index: number,
 ): ResidentFoundation {
   if (!Number.isInteger(index) || index < 0 || index >= populationOf(place))
     throw new RangeError(`Resident index ${index} is outside ${place.code}`);
-  const code = `${place.code}/RESIDENT/${index}`,
-    variant = digest(code),
+  const code = `${place.code}/RESIDENT/${index}`;
+  const cached = residentFoundationCache.get(code);
+  if (cached) return cached;
+  const variant = digest(code),
     role = residentRoleFor(place, index),
     assignment = guardAssignmentFor(place, index),
     homeBuilding = `${place.code}/RESIDENCE/${index}`,
@@ -419,7 +426,7 @@ export function residentFoundationAt(
     homeLot = settlementHomeFor(place, index).candidates[0],
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
-  return {
+  const foundation: ResidentFoundation = {
     code,
     name: personName(code, character.sex, place.continent),
     home: homeBuilding,
@@ -449,6 +456,10 @@ export function residentFoundationAt(
     homeOffset,
     workOffset,
   };
+  residentFoundationCache.set(code, foundation);
+  while (residentFoundationCache.size > RESIDENT_FOUNDATION_CACHE_LIMIT)
+    residentFoundationCache.delete(residentFoundationCache.keys().next().value!);
+  return foundation;
 }
 
 /** Second of the fantasy day as shown by the HUD clock (tick 0 is not midnight). */
