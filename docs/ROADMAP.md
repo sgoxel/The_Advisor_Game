@@ -31,19 +31,19 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident journeys: door→street/gate/bridge→work, stable identity & Fantasy-Time UX
+- WP-S006-001-001 — Resident journeys & inspector: legal door–gate–bridge round trips, stable SEED identity
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible seven-viewport atlas: 44px touch, readable UI, keyboard inspection & safe areas
+- WP-S008-001-001 — Accessible atlas across 7 viewports: touch, safe areas, keyboard inspect & focus
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance: coherent/authoritative/settled latency, p95 & device evidence
-- WP-S009-002-001 — Bounded canonical picking & revision-driven UI: responsive inspect, zero idle churn
-- WP-S009-003-001 — Adaptive GPU & recovery: device DPR/shadows, 256MB trim & combined 1GB memory
-- WP-S009-004-001 — README conformance: truthful atlas UX, campaign clock & missing Advisor gameplay ledger
-- WP-S009-005-001 — Pure-zoom readiness: coherent terrain, first legal answer & retained 3D detail
+- WP-S009-001-001 — Exact-SHA release performance: first usable interaction, settled 3D & p95 evidence
+- WP-S009-002-001 — Canonical picking & idle UI: bounded click latency, revision-only layout
+- WP-S009-003-001 — Mobile renderer & recovery: adaptive DPR/shadows, 256MB trim / 1GB ceiling
+- WP-S009-004-001 — README product conformance: honest Advisor actions, campaign clock & release claims
+- WP-S009-005-001 — Seamless pure zoom: no blank tiles, valid early inspect & complete 3D detail
