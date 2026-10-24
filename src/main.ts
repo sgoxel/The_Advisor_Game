@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -259,26 +259,29 @@ function residentRequestForView(tick: number, limit: number): ResidentQuery | un
     key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}`;
   return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick };
 }
-let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
+let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; assignments: Map<number, number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
 function dispatchResidentQuery() {
   // Inspect once coherent terrain exists; optional fine meshes may still stream.
   // A started batch must finish its remaining shards after a camera change so
   // the stale job retires and the newest canonical query can take its place.
-  if (!residentDispatchAllowed(selectionDirty, coverageComplete,
-    wanted.every(tile => tileCache.has(tile.key)), idleWorkers.length, workers.length, !!residentBatch)) return;
+  if (!residentDispatchAllowed(selectionDirty, coverageComplete, idleWorkers.length, !!residentBatch)) return;
   if (!residentBatch) {
     const job = residentQueries.take();
     if (!job) return;
-    const count = workers.length;
-    residentBatch = { job, count, unsent: new Set(Array.from({ length: count }, (_, index) => index)), results: [], completed: new Set() };
+    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)));
+    const count = shards.length;
+    residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
+      assignments: new Map(shards.map(shard => [shard.workerId, shard.shardIndex])),
+      results: [], completed: new Set() };
   }
   // Stable population shards reuse each existing worker's caches. Terrain still
   // owns the UI thread's submission/upload budget; no extra workers are created.
   for (let index = idleWorkers.length - 1; index >= 0; index--) {
-    const worker = idleWorkers[index], shard = workers.indexOf(worker);
-    if (!residentBatch.unsent.delete(shard)) continue;
+    const worker = idleWorkers[index], workerId = workers.indexOf(worker);
+    if (!residentBatch.unsent.delete(workerId)) continue;
+    const shardIndex = residentBatch.assignments.get(workerId)!;
     idleWorkers.splice(index, 1);
-    worker.postMessage({ ...residentBatch.job, shard: { index: shard, count: residentBatch.count } });
+    worker.postMessage({ ...residentBatch.job, shard: { index: shardIndex, count: residentBatch.count } });
   }
 }
 const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
