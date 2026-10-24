@@ -1277,7 +1277,9 @@ function setupControls() {
     if (!moved && pointers.size === 1 && projectionTransition <= 0.001) {
       // A click on a villager opens its character popup; anywhere else inspects the ground.
       const resident = pickResidentAt?.(event.clientX, event.clientY);
-      if (resident) { centreOn(resident.x, resident.z); showNpcPopup(resident, simulation.tick); }
+      // Inspect the already-visible resident without moving the map and invalidating terrain coverage.
+      // Camera focus is a separate explicit action; selection must keep its world context.
+      if (resident) showNpcPopup(resident, simulation.tick);
       else { hideNpcPopup(); inspectCell(event.clientX, event.clientY); }
     }
     pointers.delete(event.pointerId);
