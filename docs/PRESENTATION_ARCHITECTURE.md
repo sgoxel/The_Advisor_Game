@@ -36,6 +36,18 @@ Grounded medieval-fantasy, low-poly, flat-shaded faces with two- or three-band c
 9. **Fonts.** Self-host the two fonts as WOFF2 subsets in `public/fonts/` with `font-display: optional` and metric-matched fallback (`size-adjust`/`ascent-override`), or system stacks only; label placement waits for `document.fonts.ready` once and treats a font change as an explicit invalidation input.
 10. **Labels.** Keep DOM labels (accessible text, crisp at any DPR) but measure each label text once per (text, font, size) and cache the box; placement re-runs only when the label fingerprint, viewport or font generation changes (already fingerprinted in `main.ts`). Never call `getBoundingClientRect` for unchanged labels on stable frames.
 
+### 2a. Procedural surface detail (implemented)
+
+`src/surface-detail.ts` adds texture-free surface detail to the terrain material and the lit world
+material (buildings, props, Blender models), in GLSL and WGSL. Each pixel picks a pattern from its own
+vertex colour and orientation (grass, dirt/road, rock, sand, snow on terrain; brick, plaster, timber,
+stone blocks on walls; roof tiles; paving; foliage), laid out in world metres. The pattern tints the
+albedo and carries a small height field turned into a bent normal from screen derivatives
+(surface-gradient bump mapping): lit materials light it with the real sun and lamps, the unlit terrain
+shades it against the sun direction. Features fade out below a few pixels and nothing is evaluated
+above 0.45 m per pixel, so far zoom levels cost nothing extra. Hooked in through
+`installLodCoverage(material, mode)` / `installLitSurfaceDetail` in `src/surface-presentation.ts`.
+
 ## 3. Semantic-zoom matrix
 
 Scale anchors are the `SCALE_LADDER` in `src/handoff.ts`: README ladder 1/10…1/10000 plus the owner-approved close-up anchors Hero (0.2), Close (0.5), 1/1, 1/2, 1/5. Denominator `d` is the displayed scale. Tiers (SEMANTIC_ZOOM_REQUIREMENTS §Representation tiers):

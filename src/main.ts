@@ -53,7 +53,7 @@ import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
-import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
+import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation, populationOf, residentOccupiesBuilding, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -187,6 +187,8 @@ const GLOW_VISIBILITY_EPSILON = 1e-4;
 let eveningGlow = 0;
 let displayedDaylight:Daylight|undefined, targetDaylight:Daylight|undefined;
 const daylightTintUniform = new Float32Array([1,1,1]);
+/** Direction towards the sun (world space) for the terrain's procedural relief shading. */
+const sunDirUniform = new Float32Array([0.4,0.8,0.45]);
 let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
@@ -1546,6 +1548,9 @@ async function start() {
     sun.light!.color.set(...light.sunColor);
     sun.light!.intensity=light.sunIntensity;
     sun.setEulerAngles(light.sunPitch,light.sunYaw,0);
+    // A directional light shines along its -Y axis, so its +Y axis points at the sun.
+    const towardsSun=sun.up;sunDirUniform[0]=towardsSun.x;sunDirUniform[1]=towardsSun.y;sunDirUniform[2]=towardsSun.z;
+    for(const material of [terrainMaterial,coarseTerrainMaterial]) material?.setParameter("sdSunDir",sunDirUniform);
     app.scene.ambientLight.set(...light.ambient);
     flatBackdrop.set(...light.sky,1);
     daylightTintUniform.set(light.terrainTint);
@@ -1559,7 +1564,7 @@ async function start() {
   material.specular = new pc.Color(0.04, 0.04, 0.04);
   material.shininess = 4;
   material.cull = pc.CULLFACE_NONE;
-  installLodCoverage(material);
+  installLitSurfaceDetail(material);
   material.update();
   const makeGlowMaterial = (pool:boolean) => {
     const glow = new pc.StandardMaterial();

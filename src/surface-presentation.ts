@@ -1,6 +1,16 @@
 import * as pc from "playcanvas";
 import { PLANET_RADIUS } from "./planet.ts";
 import { LON_SEGMENTS, LAT_SEGMENTS } from "./globe-view.ts";
+import { LIT_DIFFUSE_GLSL, LIT_DIFFUSE_WGSL, LIT_NORMAL_GLSL, LIT_NORMAL_WGSL, surfaceDetailChunks, type SurfaceDetailMode } from "./surface-detail.ts";
+
+/** Lit world material (buildings, props): detail tints the albedo and bends the normal. */
+export function installLitSurfaceDetail(material: pc.StandardMaterial) {
+  installLodCoverage(material, "lit");
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("diffusePS", LIT_DIFFUSE_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("diffusePS", LIT_DIFFUSE_WGSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("normalMapPS", LIT_NORMAL_GLSL);
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("normalMapPS", LIT_NORMAL_WGSL);
+}
 
 /** Presentation only; never used to choose canonical terrain or feature identity. */
 export const LOD_BLEND_SECONDS = 0.24;
@@ -19,19 +29,27 @@ export function localDetailWeight(halfHeight: number): number {
   return 1 - t * t * (3 - 2 * t);
 }
 
-/** Complementary pixel coverage avoids translucent overlapping skirts/duplicate props. */
-export function installLodCoverage(material: pc.StandardMaterial) {
+/**
+ * Complementary pixel coverage avoids translucent overlapping skirts/duplicate props.
+ * With `detail`, the procedural surface detail (surface-detail.ts) is evaluated first in the same hook.
+ */
+export function installLodCoverage(material: pc.StandardMaterial, detail?: SurfaceDetailMode) {
+  const sd = detail ? surfaceDetailChunks(detail) : undefined;
   material.setParameter("lodCoverage", 1);
   material.setParameter("flatCoverage", 1);
-  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserDeclarationPS", "uniform float lodCoverage; uniform float flatCoverage;");
-  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserMainStartPS", `
+  if (sd) {
+    material.setParameter("sdSunDir", [0.4, 0.8, 0.45]);
+    material.setParameter("sdStrength", 1);
+  }
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserDeclarationPS", "uniform float lodCoverage; uniform float flatCoverage;" + (sd?.glslDeclaration ?? ""));
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserMainStartPS", (sd?.glslMainStart ?? "") + `
     float pixelNoise = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))));
     if (pixelNoise >= flatCoverage) discard;
     if ((lodCoverage >= 0.0 && pixelNoise >= lodCoverage) ||
         (lodCoverage < 0.0 && pixelNoise < -lodCoverage)) discard;
   `);
-  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserDeclarationPS", "uniform lodCoverage: f32; uniform flatCoverage: f32;");
-  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserMainStartPS", `
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserDeclarationPS", "uniform lodCoverage: f32; uniform flatCoverage: f32;" + (sd?.wgslDeclaration ?? ""));
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserMainStartPS", (sd?.wgslMainStart ?? "") + `
     let pixelNoise = fract(52.9829189 * fract(dot(floor(input.position.xy), vec2f(0.06711056, 0.00583715))));
     if (pixelNoise >= uniform.flatCoverage) { discard; }
     if ((uniform.lodCoverage >= 0.0 && pixelNoise >= uniform.lodCoverage) ||
@@ -150,6 +168,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, surfaceDetailWeight);
       #endif
+      dEmission *= sdMul * sdShade;
       dEmission *= pow(surfaceDaylightTint, vec3(2.2));
     }
   `);
@@ -164,10 +183,11 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, uniform.surfaceDetailWeight);
       #endif
+      dEmission = dEmission * sdMul * sdShade;
       dEmission *= pow(uniform.surfaceDaylightTint, vec3f(2.2));
     }
   `);
-  installLodCoverage(material);
+  installLodCoverage(material, "terrain");
   material.update();
   return material;
 }
