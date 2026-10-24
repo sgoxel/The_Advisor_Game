@@ -167,6 +167,21 @@ function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
   }
   return rememberResolution(place.code, { staticAnchors, staticOccupants, homes: new Map() });
 }
+/** Additional deeper frontage alternatives may approach another owned lot.
+ * Check nearby SEED-assigned original house footprints, never dependent on
+ * which residents happened to be inspected or rendered first. */
+function conflictsWithAssignedHome(place: Place, plan: SettlementExteriorPlan,
+  index: number, candidate: { x: number; z: number }, radius: number) {
+  const reach = radius + metresToSource(12);
+  return settlementHomeIndicesNear(place, candidate.x - reach, candidate.x + reach,
+    candidate.z - reach, candidate.z + reach).some(otherIndex => {
+    if (otherIndex === index) return false;
+    const other = settlementHomeFor(place, otherIndex, plan),
+      point = other.candidates[0];
+    return Math.hypot(wrapSourceX(candidate.x - point.x), candidate.z - point.z) <
+      radius + other.clearanceRadius;
+  });
+}
 /** Resolve ONE home on demand. Lots never overlap each other, so only static plots and terrain decide. */
 function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: ResolvedSettlement, index: number) {
   const plots = resolution.homePlots || (resolution.homePlots = new Map<number, SettlementPlotPlan>());
@@ -174,8 +189,10 @@ function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: Res
   if (plot) return plot;
   plot = settlementHomeFor(place, index, plan);
   let chosen: Resolved = null;
-  for (const candidate of plot.candidates) {
-    if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) || !candidateLegal(place, plan, plot, candidate)) continue;
+  for (const [attempt, candidate] of plot.candidates.entries()) {
+    if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) ||
+        !candidateLegal(place, plan, plot, candidate) ||
+        (attempt >= 11 && conflictsWithAssignedHome(place, plan, index, candidate, plot.clearanceRadius))) continue;
     chosen = candidate;
     break;
   }
