@@ -31,34 +31,34 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Resident journeys: legal door→street→gate→work→home, midnight continuity & visible inspection
+- WP-S006-001-001 — Legal resident journeys & real-click identity: door→work→home, midnight continuity, visible 3D
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: keyboard/screen-reader selection, ≥44px touch, safe areas & focus return
+- WP-S008-001-001 — Accessible map UX: canonical keyboard/screen-reader selection, legible ≥44px touch & safe-area focus
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Streaming budgets: ≤1 upload/frame, 4/6/8 queues & exact-SHA latency evidence
-- WP-S009-002-001 — Canonical pick latency & idle UI: bounded surface hits, zero unchanged-frame layout reads
-- WP-S009-003-001 — Mobile renderer recovery & memory: WebGPU→WebGL2, 256MB trim/1GB cap, DPR/shadows
-- WP-S009-004-001 — README conformance & build truth: Advisor autonomy, campaign clock/age, saves & feature claims
-- WP-S009-005-001 — Pure-zoom continuity & truthful readiness: focus lock, no stale terrain, full 3D settling
+- WP-S009-001-001 — Bounded streaming: ≤1 upload/frame, ≤4/6/8 jobs & honest exact-SHA p95
+- WP-S009-002-001 — Responsive canonical picking & idle UI: no synchronous rerouting or unchanged-frame layout reads
+- WP-S009-003-001 — Mobile GPU recovery & shared CPU+GPU cap: 256MB trim, 1GB ceiling, adaptive DPR/shadows
+- WP-S009-004-001 — README conformance ledger: Advisor autonomy, campaign clock/age/save & truthful gameplay claims
+- WP-S009-005-001 — Truthful 3D readiness & pure zoom: focus lock, coherent terrain, fully settled required detail
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Tools & Same-World Interiors
 
-- WP-S010-001-001 — Reference analysis: close-up life-sim UI, bounded rendering & Advisor autonomy
-- WP-S010-002-001 — Hero-zoom object contract: canonical IDs, legal placement & bounded instancing
-- WP-S010-003-001 — Advisor-safe Hero-zoom UI: touch/keyboard inspection & contextual proposals
+- WP-S010-001-001 — Hero/Close UX research: Advisor autonomy, usable interiors, shared GLB/mobile budgets
+- WP-S010-002-001 — Canonical Hero/Close object kits: stable IDs, legal placement, reusable GLBs & bounded instancing
+- WP-S010-003-001 — Responsive Advisor-safe Hero/Close UX: real keyboard/touch picking, visible identity & honest proposals
 - WP-S010-003-002 — Advisor observation tools: inspect, camera-follow & legal distance/time estimates
 - WP-S010-004-001 — Canonical workplace equipment & Simulation-truth resident work poses
-- WP-S010-004-002 — Deterministic household yards: legal props, visual variety & mobile budgets
+- WP-S010-004-002 — Seeded reusable household yards: Blender props, legal clearances, diverse Hero/Close visuals & mobile budgets
 - WP-S010-004-003 — Resident inventory: seeded ownership, validated changes & truthful carried items
-- WP-S010-005-001 — Same-world home entry: legal door portal, separate camera control & first-view UX
+- WP-S010-005-001 — Legal same-world home entry: canonical door, camera-only navigation & honest first-usable interior
 - WP-S010-005-002 — Same-world service interiors: legal rooms, portals & bounded reusable kits
 - WP-S010-005-003 — Indoor resident continuity: real schedules, portals & inspectable anchors
 - WP-S010-005-004 — Authoritative interior persistence & responsive entry/exit with recovery
-- WP-S010-006-001 — Hero/Close performance: exact-SHA p95, draw calls, aggregate memory & renderer parity
+- WP-S010-006-001 — Hero/Close performance proof: exact-SHA p95, shared 256MB/1GB resources, draw calls & GPU parity
