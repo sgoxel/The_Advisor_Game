@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
-import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat } from "../src/planet.ts";
+import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { settlementExteriorFor, settlementHomeFor } from "../src/settlement-exterior.ts";
 import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
@@ -419,6 +420,31 @@ test("legal guard arrivals fill posts while unresolved homes remain explicit gat
   if (!unresolved.grounded || unresolved.route.startsWith("BLOCKED:"))
     assert.ok(midnight.every(gate => !gate.residentCodes.includes(unresolved.code)),
       "an unresolved house must never become a fictitious physically staffed gate");
+});
+
+test("actual guard home lots follow the final road-trimmed village enclosure", () => {
+  const village = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(village, "retain the real village with a formerly blocked watchman's house");
+  const plan = settlementExteriorFor(village);
+  const inside = (x: number, z: number) => {
+    const px = wrapSourceX(x - village.x), pz = z - village.z;
+    let result = false;
+    for (let i = 0, j = plan.border.length - 1; i < plan.border.length; j = i++) {
+      const a = plan.border[i], b = plan.border[j],
+        ax = wrapSourceX(a.x - village.x), az = a.z - village.z,
+        bx = wrapSourceX(b.x - village.x), bz = b.z - village.z;
+      if ((az > pz) !== (bz > pz) && px < ax + (bx - ax) * (pz - az) / (bz - az)) result = !result;
+    }
+    return result;
+  };
+  const lots = Array.from({ length: populationOf(village) }, (_, index) =>
+    settlementHomeFor(village, index, plan).candidates[0]);
+  assert.ok(lots.every(lot => inside(lot.x, lot.z)),
+    "all owned homes must be drawn from within the final trimmed enclosure");
+  assert.equal(new Set(lots.map(lot => `${lot.x.toFixed(7)}/${lot.z.toFixed(7)}`)).size, lots.length,
+    "reconciliation must never allocate the same physical lot twice");
+  assert.ok(resolvedSettlementHomeDoorFor(village, 7),
+    "the formerly road-displaced watchman must own a real legal front door");
 });
 
 test("resident schedule state is analytical from absolute fantasy time", () => {
