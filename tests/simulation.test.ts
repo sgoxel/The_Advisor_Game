@@ -104,6 +104,15 @@ test("outdoor journeys can legally detour around small barriers without crossing
   const returnPath = legalOpenGroundDetour(to, from, legal);
   assert.ok(returnPath && returnPath.slice(1).every((point, i) => legal(returnPath[i], point)),
     "the same physical obstruction admits an independently legal return path");
+  const longBank = (point: typeof from) =>
+    point.eastM < 20 || point.eastM > 80 || Math.abs(point.northM) > 200,
+    longLegal = (a: typeof from, b: typeof from) =>
+      continuousWalkableOffsetSegment(a, b, longBank),
+    aroundBank = legalOpenGroundDetour(from, to, longLegal);
+  assert.equal(aroundBank?.length, 4,
+    "a longer real obstacle needs an approach, parallel dry corridor and return approach");
+  assert.ok(aroundBank?.slice(1).every((point, i) => longLegal(aroundBank[i], point)),
+    "every segment of the longer diversion stays entirely off the impassable bank");
   const river = (point: typeof from) => point.eastM < 40 || point.eastM > 60;
   assert.equal(legalOpenGroundDetour(from, to,
     (a, b) => continuousWalkableOffsetSegment(a, b, river)), null,
