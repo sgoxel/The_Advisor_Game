@@ -1,6 +1,10 @@
 name: Validate S006 living residents
 on:
   workflow_dispatch:
+  push:
+    branches: [agent1/s006-current-main-visual-proof-20261024]
+    paths:
+      - '.github/workflows/agent1-s006-resident-evidence.yml'
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, closed]
@@ -39,13 +43,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-canonical-actor-evidence-20261024-r2')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/agent1/s006-current-main-visual-proof-20261024')
       - run: npx playwright install --with-deps chromium
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-canonical-actor-evidence-20261024-r2')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/agent1/s006-current-main-visual-proof-20261024')
       - run: python -m pip install playwright==1.63.0
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-canonical-actor-evidence-20261024-r2')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/agent1/s006-current-main-visual-proof-20261024')
       - name: Capture resident inspector evidence
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-canonical-actor-evidence-20261024-r2')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/agent1/s006-current-main-visual-proof-20261024')
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
@@ -58,7 +62,7 @@ jobs:
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --timeout 240 --steps "$RESIDENT_STEPS"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --timeout 240 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
-        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-canonical-actor-evidence-20261024-r2'))
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/agent1/s006-current-main-visual-proof-20261024'))
         with:
           name: s006-resident-evidence
           path: test-results/
