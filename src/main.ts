@@ -1740,8 +1740,8 @@ async function start() {
       const previousSnapshot = residentQueries.current;
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
-      const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2);
-      if (!residentMode.inspect || !residentMode.actors || (snapshot && snapshot.id !== lastResidentSnapshot)) {
+      const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
+      if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
         const residents = snapshot?.residents ?? [];
         if (snapshot) { lastResidentSnapshot = snapshot.id; simulation.acceptResidentQuery(residents, snapshot.query); }
         // People sleeping or working indoors are inspectable but not street actors.
