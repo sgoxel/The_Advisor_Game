@@ -3,10 +3,11 @@ import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
-import { digest, finalSurfaceAt, heightAt } from "./world.ts";
+import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
+import type { FinalSurface } from "./final-surface.ts";
 import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
-import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
+import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
@@ -71,6 +72,8 @@ export type ResidentFoundation = {
 };
 
 export type Resident = ResidentFoundation & {
+  /** False when no legal house door or scheduled surface exists; never render or claim travel. */
+  grounded: boolean;
   position: CanonicalPosition;
   x: number;
   z: number;
@@ -87,6 +90,8 @@ export type Resident = ResidentFoundation & {
   /** While walking between places: share of the street route covered (0-1) and its length. */
   travelProgress?: number;
   travelDistanceM?: number;
+  /** While walking: source x/z points along the legal street path for the next TIME_SCALE fantasy seconds (the next real second), so the drawn actor follows corners instead of a chord. */
+  walkAhead?: { x: number; z: number }[];
 };
 
 export type CountryState = {
@@ -409,7 +414,8 @@ export function residentFoundationAt(
     homeBuilding = `${place.code}/RESIDENCE/${index}`,
     waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
-    // Home is the resident's own frontage lot (lazy lot lookup, focused settlement only).
+    // Stable SEED lot for population indexing; resolving rendered doors is
+    // expensive and belongs to bounded per-resident evaluation, not full rosters.
     homeLot = settlementHomeFor(place, index).candidates[0],
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
@@ -455,38 +461,36 @@ function isGuardOnDuty(foundation: ResidentFoundation, tick: number, place: Plac
   const second = daySecond(tick, place), daytime = second >= 6 * HOUR && second < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
 }
+/** Scheduled assignment and physical gate coverage are different facts.
+ * A guard with an unresolved house or illegal commute cannot fill a post. */
 export function guardCoverageAt(place: Place, tick: number) {
   const coverage = Array.from({ length: gateCountFor(place) }, (_, gateIndex) => ({
-    gateIndex,
-    required: guardsPerGateFor(place, gateIndex),
-    onDuty: 0,
-    residentCodes: [] as string[],
+    gateIndex, required: guardsPerGateFor(place, gateIndex),
+    scheduled: 0, onDuty: 0, missing: 0,
+    residentCodes: [] as string[], unresolvedCodes: [] as string[],
   }));
   let index = SERVICE_ROLES.length;
   for (let gateIndex = 0; gateIndex < coverage.length; gateIndex++)
     for (let slot = 0; slot < coverage[gateIndex].required; slot++)
       for (let shift = 0; shift < 2; shift++, index++) {
         const foundation = residentFoundationAt(place, index);
-        if (isGuardOnDuty(foundation, tick, place)) {
-          coverage[gateIndex].onDuty++;
-          coverage[gateIndex].residentCodes.push(foundation.code);
-        }
+        if (!isGuardOnDuty(foundation, tick, place)) continue;
+        const gate = coverage[gateIndex], resident = residentAt(place, index, tick),
+          destination = canonicalOffset(place, foundation.workOffset.eastM, foundation.workOffset.northM),
+          east = normalizeLongitude(resident.position.lon - destination.lon) *
+            CANONICAL_PLANET_RADIUS * Math.cos(destination.lat),
+          north = (resident.position.lat - destination.lat) * CANONICAL_PLANET_RADIUS;
+        gate.scheduled++;
+        if (resident.grounded && resident.activity === "guard" &&
+            !resident.route.startsWith("BLOCKED:") && Math.hypot(east, north) <= 2) {
+          gate.onDuty++;
+          gate.residentCodes.push(foundation.code);
+        } else gate.unresolvedCodes.push(foundation.code);
       }
+  for (const gate of coverage) gate.missing = gate.required - gate.onDuty;
   return coverage;
 }
 
-/** Deterministic local commute corridor between a resident's assigned endpoints. */
-function routeOffset(
-  from: { eastM: number; northM: number },
-  to: { eastM: number; northM: number },
-  progress: number,
-) {
-  const t = Math.max(0, Math.min(1, progress));
-  return {
-    eastM: from.eastM + (to.eastM - from.eastM) * t,
-    northM: from.northM + (to.northM - from.northM) * t,
-  };
-}
 function anchorOffset(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor): Offset {
   if (anchor === "home") return foundation.homeOffset;
   if (anchor === "work") return foundation.workOffset;
@@ -576,7 +580,7 @@ function standTableFor(place: Place): StandTable {
  * (pure function of place, resident and anchor, so walks start and end on the same spot). Indoors and at home: the anchor itself.
  */
 function standingSpot(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
-  if (!outdoors || anchor === "home") return base;
+  if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
   const anchors = settlementAnchors(place), ground = anchors.areas.get(coordKey(base));
   if (!ground) return base;
   const table = standTableFor(place), n = table.slotOf.get(`${ground.key}|${foundation.index}`) ?? (table.total.get(ground.key) ?? 0) + digest(`${foundation.code}/VISIT/${ground.key}`) % 509;
@@ -584,7 +588,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; cell: number };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; border: Offset[]; gates: Offset[]; cell: number };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -616,15 +620,20 @@ function streetGraphFor(place: Place): StreetGraph {
       previous = id;
     }
   });
-  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(), cell };
+  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(),
+    border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
+    gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
   streetGraphs.set(place.code, graph);
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
   return graph;
 }
-function nearestNode(graph: StreetGraph, offset: Offset) {
+/** Find the actual closest indexed street vertex, not the first occupied
+ * grid bucket. An adjacent cell can contain a closer vertex, especially at
+ * cell boundaries. After ring r, unseen cells start at least r cells away. */
+export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">, offset: Offset) {
   let best = -1, bestDistance = Infinity;
   const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
-  for (let ring = 0; ring < 40 && best < 0; ring++)
+  for (let ring = 0; ring < 40; ring++) {
     for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
       for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
@@ -632,6 +641,8 @@ function nearestNode(graph: StreetGraph, offset: Offset) {
         if (d < bestDistance) { best = id; bestDistance = d; }
       }
     }
+    if (best >= 0 && bestDistance <= ring * graph.cell) break;
+  }
   return best;
 }
 /** Sample the authoritative final surface every 2 physical metres, including endpoints.
@@ -648,25 +659,135 @@ export function continuousWalkableOffsetSegment(
   }
   return true;
 }
+/** A resident may cross the visible settlement enclosure only through a
+ * SEED-authored gate aperture. Final-surface walkability alone has no knowledge
+ * of the displayed wall/hedge/palisade segments. This check is symmetric. */
+export function legalEnclosureSegment(
+  from: Offset, to: Offset, border: readonly Offset[], gates: readonly Offset[], gateRadiusM = 9,
+): boolean {
+  const rx = to.eastM - from.eastM, rz = to.northM - from.northM;
+  const throughGate = (eastM: number, northM: number) =>
+    gates.some(gate => Math.hypot(gate.eastM - eastM, gate.northM - northM) <= gateRadiusM);
+  for (let index = 0; index < border.length; index++) {
+    const a = border[index], b = border[(index + 1) % border.length],
+      sx = b.eastM - a.eastM, sz = b.northM - a.northM,
+      qx = a.eastM - from.eastM, qz = a.northM - from.northM,
+      cross = rx * sz - rz * sx;
+    if (Math.abs(cross) < 1e-8) {
+      // A chord along an enclosure is not a legal path around its wall.
+      if (Math.abs(qx * rz - qz * rx) > 1e-6 || rx * rx + rz * rz < 1e-8) continue;
+      const denom = rx * rx + rz * rz,
+        t0 = (qx * rx + qz * rz) / denom,
+        t1 = ((b.eastM - from.eastM) * rx + (b.northM - from.northM) * rz) / denom,
+        lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(1, Math.max(t0, t1));
+      if (hi < lo) continue;
+      for (const t of [lo, (lo + hi) / 2, hi])
+        if (!throughGate(from.eastM + rx * t, from.northM + rz * t)) return false;
+      continue;
+    }
+    const t = (qx * sz - qz * sx) / cross,
+      u = (qx * rz - qz * rx) / cross;
+    if (t < -1e-7 || t > 1 + 1e-7 || u < -1e-7 || u > 1 + 1e-7) continue;
+    if (!throughGate(from.eastM + rx * t, from.northM + rz * t)) return false;
+  }
+  return true;
+}
+/** Final-surface bridge decks, not submerged ground, authorize a crossing.
+ * Dry paths retain the existing positive-ground requirement; unbridged water
+ * is never traversable, even if a presentation material says otherwise. */
+export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" | "water" | "groundHeight" | "deckHeight">) {
+  return surface.walkable &&
+    (surface.deckHeight !== null || (surface.water.kind === "none" && surface.groundHeight > 0.1));
+}
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
+  const { border, gates } = streetGraphFor(place);
+  if (!legalEnclosureSegment(from, to, border, gates)) return false;
   return continuousWalkableOffsetSegment(from, to, point => {
     const p = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(p.lon, p.lat),
-      surface = finalSurfaceAt(source.x, source.z);
-    return surface.walkable && heightAt(source.x, source.z) > 0.1;
+      source = lonLatToSource(p.lon, p.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
   });
 }
+/** A resident's nearest street vertex may lie across an impassable cut.
+ * Consider at most eight other local vertices (within 24 m of that nearest
+ * connection) and validate every replacement against the same final surface
+ * and enclosure. Never treat proximity alone as an accessible connector. */
+export function nearestLegalStreetNode(
+  graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
+  offset: Offset, legal: (from: Offset, to: Offset) => boolean,
+): number {
+  const nearest = nearestNode(graph, offset);
+  if (nearest < 0) return -1;
+  if (legal(offset, graph.nodes[nearest])) return nearest;
+  const distance = (node: Offset) => Math.hypot(node.eastM - offset.eastM, node.northM - offset.northM),
+    maxDistance = distance(graph.nodes[nearest]) + 24,
+    cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell),
+    rings = Math.min(40, Math.ceil(maxDistance / graph.cell) + 1),
+    candidates: { id: number; distance: number }[] = [];
+  for (let dx = -rings; dx <= rings; dx++) for (let dz = -rings; dz <= rings; dz++)
+    for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
+      if (id === nearest) continue;
+      const d = distance(graph.nodes[id]);
+      if (d <= maxDistance) candidates.push({ id, distance: d });
+    }
+  candidates.sort((a, b) => a.distance - b.distance || a.id - b.id);
+  for (const candidate of candidates.slice(0, 8))
+    if (legal(offset, graph.nodes[candidate.id])) return candidate.id;
+  return -1;
+}
+/** Small dry-land obstacles outside a settlement should not make an
+ * otherwise legal open-ground journey impossible. Try a deterministic,
+ * strictly bounded set of doglegs. Each complete leg still requires the
+ * identical gate/wall/final-surface verdict as ordinary resident movement;
+ * no bridge or water crossing is invented here. */
+export function legalOpenGroundDetour(
+  from: Offset, to: Offset, legal: (a: Offset, b: Offset) => boolean,
+): Offset[] | null {
+  const dx = to.eastM - from.eastM, dz = to.northM - from.northM,
+    length = Math.hypot(dx, dz);
+  if (length < 12 || length > 4000) return null;
+  const sideX = -dz / length, sideZ = dx / length;
+  for (const radius of [24, 64, 160, 320]) {
+    for (const progress of [.5, .25, .75]) {
+      for (const side of [-1, 1]) {
+        const pivot = { eastM: from.eastM + dx * progress + sideX * side * radius,
+          northM: from.northM + dz * progress + sideZ * side * radius };
+        if (legal(from, pivot) && legal(pivot, to)) return [from, pivot, to];
+      }
+    }
+  }
+  // Longer lakes and ravines may need a parallel dry corridor rather than a
+  // single central bend. Both approach links and the corridor itself must be
+  // physically legal. This branch is finite and never invents a crossing.
+  for (const radius of [64, 160, 320, 640]) {
+    for (const [start, end] of [[.12, .88], [.2, .8]]) {
+      for (const side of [-1, 1]) {
+        const shiftX = sideX * side * radius, shiftZ = sideZ * side * radius,
+          a = { eastM: from.eastM + dx * start + shiftX, northM: from.northM + dz * start + shiftZ },
+          b = { eastM: from.eastM + dx * end + shiftX, northM: from.northM + dz * end + shiftZ };
+        if (legal(from, a) && legal(a, b) && legal(b, to)) return [from, a, b, to];
+      }
+    }
+  }
+  return null;
+}
 const pathCache = new Map<string, Offset[] | null>();
+/** Distinct canonical entrances must never reuse a route with different endpoints.
+ * Exact finite SEED offsets are stable; rounding them could reuse an illegal connector. */
+export function residentStreetPathKey(placeCode: string, from: Offset, to: Offset, allowGateDetour: boolean) {
+  return `${placeCode}|${from.eastM},${from.northM}|${to.eastM},${to.northM}|${allowGateDetour ? "g" : "d"}`;
+}
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
-function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
-  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}`,
+function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
+  const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
-  const graph = streetGraphFor(place), start = nearestNode(graph, from), goal = nearestNode(graph, to);
+  const graph = streetGraphFor(place),
+    legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
+    start = nearestLegalStreetNode(graph, from, legalConnector),
+    goal = nearestLegalStreetNode(graph, to, legalConnector);
   let path: Offset[] | null = null;
-  if (start >= 0 && goal >= 0 &&
-      legalStreetSegment(place, from, graph.nodes[start]) &&
-      legalStreetSegment(place, graph.nodes[goal], to)) {
+  if (start >= 0 && goal >= 0) {
     if (start === goal) {
       path = [from, graph.nodes[start], to];
     } else {
@@ -706,6 +827,26 @@ function streetPath(place: Place, from: Offset, to: Offset): Offset[] | null {
   // settlement street. Allow that physical corridor only after checking EVERY
   // segment sample; a disconnected graph is never permission to cross obstacles.
   if (!path && legalStreetSegment(place, from, to)) path = [from, to];
+  // Exterior gate-to-habitat corridors can wind around small dry-land
+  // obstacles. Only nonrecursive detour legs use this extra bounded search;
+  // the main route must still connect through a legal SEED gate.
+  if (!path && !allowGateDetour)
+    path = legalOpenGroundDetour(from, to, (a, b) => legalStreetSegment(place, a, b));
+  // Outside farm/woodland/shore sites may lie beyond the enclosure. A direct
+  // dry chord through the wall is forbidden, but an actual SEED gate can join
+  // an internal street approach to a separately verified exterior corridor.
+  // Evaluate at most the settlement's two gates; never recurse into gate
+  // discovery or treat a missing/impassable side as successful arrival.
+  if (!path && allowGateDetour) {
+    for (const gate of graph.gates) {
+      const approach = streetPath(place, from, gate, false);
+      if (!approach) continue;
+      const exterior = streetPath(place, gate, to, false);
+      if (!exterior) continue;
+      const candidate = [...approach, ...exterior.slice(1)];
+      if (!path || pathLength(candidate) < pathLength(path)) path = candidate;
+    }
+  }
   pathCache.set(key, path);
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
@@ -738,6 +879,31 @@ function pointAlong(path: readonly Offset[], distanceM: number): Offset {
   return path[path.length - 1];
 }
 
+/** Advance a legal path only by the Fantasy Time actually available. */
+export function timedWalkOnPath(
+  path: readonly Offset[], elapsedSeconds: number,
+): { offset: Offset; progress: number; durationSeconds: number; lengthM: number } {
+  const lengthM = pathLength(path),
+    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+    progress = Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
+  return { offset: pointAlong(path, progress * lengthM), progress, durationSeconds, lengthM };
+}
+/** The legal path between the current walk position and the position one `aheadSeconds` later, keeping every corner in between. */
+export function walkWindowOnPath(path: readonly Offset[], elapsedSeconds: number, aheadSeconds: number): Offset[] {
+  const lengthM = pathLength(path),
+    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+    progressAt = (seconds: number) => Math.max(0, Math.min(1, seconds / durationSeconds)) * lengthM,
+    d0 = progressAt(elapsedSeconds), d1 = progressAt(elapsedSeconds + aheadSeconds),
+    points = [pointAlong(path, d0)];
+  let along = 0;
+  for (let i = 1; i < path.length - 1; i++) {
+    along += Math.hypot(path[i].eastM - path[i - 1].eastM, path[i].northM - path[i - 1].northM);
+    if (along > d0 && along < d1) points.push(path[i]);
+  }
+  points.push(pointAlong(path, d1));
+  return points;
+}
+
 /**
  * The resident's state at an absolute tick: today's seeded plan (role, age,
  * weekday, traits, mood) gives the activity and how far through it they are;
@@ -749,83 +915,145 @@ function workTask(foundation: ResidentFoundation) {
   if (site.id?.includes("/WOODLAND/")) return foundation.character.startsWith("hunter") ? "Hunting in the woodland" : foundation.character.startsWith("herbalist") ? "Gathering woodland herbs" : "Cutting timber in the woodland";
   return site.label ?? "Working";
 }
-function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) {
+type ScheduledResidentState = {
+  task: string; route: string; offset: Offset; activity: ActivityKind; indoors: boolean;
+  mood: ReturnType<typeof moodAt>;
+  activityStart: number; activityEnd: number; activityProgress: number;
+  travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
+};
+function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
-    { activity, previous, index } = activityAt(plan, second),
+    { activity, index } = activityAt(plan, second),
     end = plan[index + 1]?.start ?? 24 * HOUR,
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
-    target = standingSpot(place, foundation, activity.anchor, anchorOffset(place, foundation, activity.anchor), !activity.indoors),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // The walk to this place began with the first step of the run of steps at this anchor; it
-  // continues until it arrives, even if a later step at the same place has already started.
-  let arrival = index;
-  while (arrival > 0 && plan[arrival - 1].anchor === activity.anchor) arrival--;
-  const departure = plan[arrival - 1];
-  if (departure && previous) {
-    const earlier = plan.slice(0, arrival);
-    const stops = earlier
-      .filter((step, i) => i === earlier.length - 1 || step.anchor !== earlier[i + 1].anchor)
-      .map(step => ({
-        anchor: step.anchor,
-        indoors: step.indoors,
-        offset: standingSpot(place, foundation, step.anchor, anchorOffset(place, foundation, step.anchor), !step.indoors),
-      }));
-    const reached = lastReachableRoutineStop(stops, (a, b) => streetPath(place, a.offset, b.offset) !== null),
-      from = reached.offset, path = streetPath(place, from, target);
-    if (!path)
-      return {
-        task: `Blocked: no legal walking route to ${activity.anchor}`,
-        route: `BLOCKED: ${anchorRoute(place, foundation, reached.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
-        offset: from, activity: "rest" as ActivityKind, indoors: reached.indoors, mood,
-        ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
-      };
-    const lengthM = pathLength(path),
-      travel = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS), elapsed = second - plan[arrival].start;
-    if (elapsed < travel)
-      return {
-        task: plan[arrival].kind === "commute" ? plan[arrival].task : `Walking to ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}`,
-        route: `${anchorRoute(place, foundation, departure.anchor)} → ${anchorRoute(place, foundation, activity.anchor)}`,
-        offset: pointAlong(path, (elapsed / travel) * lengthM), activity: "commute" as ActivityKind, indoors: false, mood,
-        ...timing, travelProgress: elapsed / travel, travelDistanceM: lengthM,
-      };
+  // The one-day history check must start at the guard's owned home, not
+  // at the scheduled 00:00 post. Otherwise a disconnected gate can stay
+  // fictitiously staffed after the evening commute fails in both directions.
+  const historicalNightStart = !replayOvernight && foundation.role === "guard" && foundation.guardShift === 1,
+    previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
+      ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
+    initialAnchor: RoutineAnchor = historicalNightStart ? "home" : plan[0].anchor,
+    post = foundation.workOffset,
+    atPost = !!previousWatch && previousWatch.activity === "guard" &&
+      Math.hypot(previousWatch.offset.eastM - post.eastM, previousWatch.offset.northM - post.northM) <= 2;
+  // Replay only changed anchors from absolute Fantasy Time. A later routine
+  // never starts from an endpoint that an earlier walk did not actually reach.
+  let offset = previousWatch?.offset ??
+      standingSpot(place, foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
+        historicalNightStart ? false : !plan[0].indoors),
+    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : initialAnchor,
+    actuallyIndoors = previousWatch ? false : historicalNightStart || plan[0].indoors;
+  type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
+  let leg: Leg | undefined;
+  let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
+  if (previousWatch && !atPost) {
+    // If yesterday's legal commute is still in progress, continue from its
+    // exact location; an unresolved crossing stays blocked, never teleports.
+    const continuation = previousWatch.activity === "commute"
+      ? streetPath(place, offset, post) : null;
+    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: "work" };
+    else blocked = { origin: "en route", destination: "work" };
   }
+  const advance = (atSecond: number) => {
+    if (!leg) return;
+    const moved = timedWalkOnPath(leg.path, atSecond - leg.start);
+    offset = moved.offset;
+    if (moved.progress >= 1) {
+      actualAnchor = leg.destination;
+      actuallyIndoors = false;
+      leg = undefined;
+    } else {
+      actualAnchor = "en route";
+      actuallyIndoors = false;
+    }
+  };
+  for (let step = 1; step <= index; step++) {
+    if (plan[step].anchor === plan[step - 1].anchor) continue;
+    advance(plan[step].start);
+    if (!leg && !blocked && actualAnchor === plan[step - 1].anchor)
+      actuallyIndoors = plan[step - 1].indoors;
+    const next = plan[step],
+      destination = standingSpot(place, foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
+      origin = actualAnchor,
+      path = streetPath(place, offset, destination);
+    if (!path) {
+      leg = undefined;
+      blocked = { origin, destination: next.anchor };
+    } else {
+      leg = { path, start: next.start, origin, destination: next.anchor };
+      blocked = undefined;
+    }
+  }
+  if (leg) {
+    const moved = timedWalkOnPath(leg.path, second - leg.start);
+    if (moved.progress < 1)
+      return {
+        task: `Walking to ${leg.destination === "work" ? "work" : leg.destination === "home" ? "home" : `the ${leg.destination}`}`,
+        route: `${leg.origin === "en route" ? "En route" : anchorRoute(place, foundation, leg.origin)} → ${anchorRoute(place, foundation, leg.destination)}`,
+        offset: moved.offset, activity: "commute" as ActivityKind, indoors: false, mood,
+        ...timing, travelProgress: moved.progress, travelDistanceM: moved.lengthM,
+        walkAhead: walkWindowOnPath(leg.path, second - leg.start, TIME_SCALE),
+      };
+    offset = moved.offset;
+  }
+  if (blocked)
+    return {
+      task: `Blocked: no legal walking route to ${blocked.destination}`,
+      route: `BLOCKED: ${blocked.origin === "en route" ? "en route" : anchorRoute(place, foundation, blocked.origin)} → ${anchorRoute(place, foundation, blocked.destination)}`,
+      offset, activity: "rest" as ActivityKind, indoors: actuallyIndoors, mood,
+      ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+      walkAhead: undefined as Offset[] | undefined,
+    };
   // A walk that arrived before the next step begins becomes waiting at the destination.
   const arrived = activity.kind === "commute";
-  return { task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` : activity.anchor === "work" && activity.kind === "work" && (foundation.workOffset as ActivitySite).label ? workTask(foundation) : activity.task, route: anchorRoute(place, foundation, activity.anchor), offset: target, activity: (arrived ? "rest" : activity.kind) as ActivityKind, indoors: activity.indoors, mood, ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined };
+  return {
+    task: arrived ? `Waiting at ${activity.anchor === "work" ? "work" : activity.anchor === "home" ? "home" : `the ${activity.anchor}`}` :
+      activity.anchor === "work" && activity.kind === "work" && (foundation.workOffset as ActivitySite).label ? workTask(foundation) : activity.task,
+    route: anchorRoute(place, foundation, activity.anchor), offset,
+    activity: (arrived ? "rest" : activity.kind) as ActivityKind,
+    indoors: activity.indoors, mood, ...timing,
+    travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+    walkAhead: undefined as Offset[] | undefined,
+  };
 }
-function legalPosition(
+/** Preserve the exact scheduled point. Invalid ground is reported, not
+ * "corrected" by moving a resident radially toward the settlement centre. */
+export function legalPosition(
   place: Place,
   eastM: number,
   northM: number,
-): { position: CanonicalPosition; x: number; z: number } {
-  let scale = 1;
-  for (let attempt = 0; attempt < 7; attempt++) {
-    const candidate = canonicalOffset(place, eastM * scale, northM * scale),
-      presentation = lonLatToSource(candidate.lon, candidate.lat),
-      surface = finalSurfaceAt(presentation.x, presentation.z);
-    if (surface.walkable && heightAt(presentation.x, presentation.z) > 0.1) {
-      const elevation = heightAt(presentation.x, presentation.z);
-      return {
-        position: { lon: candidate.lon, lat: candidate.lat, elevation },
-        x: presentation.x,
-        z: presentation.z,
-      };
-    }
-    scale *= 0.68;
-  }
-  const elevation = heightAt(place.x, place.z);
+): { position: CanonicalPosition; x: number; z: number; grounded: boolean } {
+  const candidate = canonicalOffset(place, eastM, northM),
+    presentation = lonLatToSource(candidate.lon, candidate.lat),
+    surface = finalSurfaceAt(presentation.x, presentation.z);
   return {
-    position: {
-      lon: place.canonicalPosition.lon,
-      lat: place.canonicalPosition.lat,
-      elevation,
-    },
-    x: place.x,
-    z: place.z,
+    position: { lon: candidate.lon, lat: candidate.lat, elevation: surface.surfaceHeight },
+    x: presentation.x,
+    z: presentation.z,
+    grounded: residentWalkableSurface(surface),
   };
+}
+
+/** A resident's indoor state belongs to an authoritative site, not any nearby
+ * footprint. Feature IDs contain the canonical plot ID after their world prefix. */
+export function residentOccupiesBuilding(
+  resident: Pick<Resident, "indoors" | "route" | "homeBuilding" | "homeEntrance" | "workplace">,
+  building: { code: string; kind: string; service?: string },
+): boolean {
+  if (!resident.indoors || resident.route.startsWith("BLOCKED:")) return false;
+  if (building.kind === "residence")
+    return building.code.endsWith(`/${resident.homeBuilding}`) &&
+      (resident.route === resident.homeEntrance || resident.route.startsWith(`${resident.homeBuilding}/`));
+  if (building.kind !== "service" || !building.service) return false;
+  const settlementCode = resident.homeBuilding.split("/RESIDENCE/")[0];
+  if (!building.code.includes(`/${settlementCode}/PLOT/`)) return false;
+  const site = building.service.replaceAll("-", "_").toUpperCase();
+  return resident.route === `${settlementCode}/${site}` ||
+    (resident.route === resident.workplace && resident.workplace === `${settlementCode}/SERVICE/${site}`);
 }
 
 /** Readable site caption for the inspector only. Full SEED identities remain accessible. */
@@ -836,31 +1064,91 @@ export function readableResidentSite(code: string): string {
     const number = parts[residence + 1] ?? "";
     return `Residence ${number}${parts.includes("ENTRANCE") ? " entrance" : ""}`;
   }
+  const gate = parts.lastIndexOf("GATE");
+  if (gate >= 0 && /^[0-9]+$/.test(parts[gate + 1] ?? "")) {
+    const number = Number(parts[gate + 1]) + 1;
+    const post = parts[gate + 2] === "POST" && /^[0-9]+$/.test(parts[gate + 3] ?? "")
+      ? ` post ${Number(parts[gate + 3]) + 1}` : "";
+    return `Gate ${number}${post}`;
+  }
   const site = parts.slice(-2);
   return site.join(" ").replaceAll("_", " ").toLowerCase();
 }
 
+/** A failed walk is a concrete origin/destination fact, not a generic warning.
+ * Retain the precise authoritative code in the expandable diagnostics. */
+export function readableResidentRoute(route: string): string {
+  const blocked = route.startsWith("BLOCKED:");
+  const detail = blocked ? route.slice("BLOCKED:".length).trim() : route;
+  const readable = detail.split(" → ").map(part => part.includes("/") ? readableResidentSite(part) : part).join(" → ");
+  return blocked ? `Blocked — ${readable}` : readable;
+}
+
+/** Player-facing resident facts are not optional scenery. Keep the existing
+ * sub-pixel actor budget while permitting a bounded inspector query at village
+ * scale whenever the information panel is actually open. */
+export function residentViewQuery(
+  halfHeight: number, panelOpen: boolean, rendererReady: boolean,
+  settlementDetailReady: boolean, smallDetailReady: boolean,
+) {
+  const actors = rendererReady && settlementDetailReady && smallDetailReady && halfHeight < 20;
+  return { actors, inspect: actors || (panelOpen && halfHeight < 80) };
+}
+
+/** Keep the explicitly selected SEED identity across camera/LOD query changes.
+ * Only one off-screen resident is resolved; never scan or rebuild the population. */
+export function residentInspectorSelection<T extends { code: string; index: number }>(
+  visible: readonly T[], selectedCode: string, resolve: (code: string) => T | undefined,
+  limit = 16,
+) {
+  const nearby = [...visible].sort((a, b) => a.index - b.index).slice(0, limit),
+    selectedNearby = nearby.find(resident => resident.code === selectedCode),
+    selectedVisible = visible.find(resident => resident.code === selectedCode),
+    extra = selectedCode && !selectedNearby ? selectedVisible ?? resolve(selectedCode) : undefined,
+    records = extra ? [extra, ...nearby] : nearby,
+    retained = selectedCode || nearby[0]?.code || "";
+  return {
+    records,
+    selectedCode: retained,
+    outsideView: !!extra && !selectedVisible,
+    unavailable: !!selectedCode && !selectedNearby && !extra,
+  };
+}
+
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
 export function residentAt(place: Place, index: number, tick: number): Resident {
-  const foundation = residentFoundationAt(place, index),
+  const seeded = residentFoundationAt(place, index),
+    door = resolvedSettlementHomeDoorFor(place, index),
+    // The character stands at the same resolved front-wall door as the house
+    // renderer/inspector. Keep this lazy: registry and spatial-index builds must
+    // never resolve every home's geometry just to query population identity.
+    homeOffset = door ? offsetForSource(place, door.x, door.z) : seeded.homeOffset,
+    foundation = door ? { ...seeded, homeOffset,
+      workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
     schedule = scheduleAt(place, foundation, tick),
-    location = legalPosition(
-      place,
-      schedule.offset.eastM,
-      schedule.offset.northM,
-    );
+    location = legalPosition(place, schedule.offset.eastM, schedule.offset.northM),
+    grounded = !!door && location.grounded,
+    blockedReason = !door ? "assigned house has no legally resolved doorway"
+      : !location.grounded ? "scheduled position has no legal ground" : undefined;
   return {
     ...foundation,
     ...location,
-    task: schedule.task,
-    route: schedule.route,
-    activity: schedule.activity,
-    indoors: schedule.indoors,
+    grounded,
+    task: blockedReason ? `Blocked: ${blockedReason}` : schedule.task,
+    route: blockedReason ? `BLOCKED: ${blockedReason}` : schedule.route,
+    activity: blockedReason ? "rest" : schedule.activity,
+    indoors: !blockedReason && schedule.indoors,
     mood: schedule.mood,
     activityStart: schedule.activityStart,
     activityEnd: schedule.activityEnd,
     activityProgress: schedule.activityProgress,
-    ...(schedule.travelProgress === undefined ? {} : { travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM }),
+    ...(blockedReason || schedule.travelProgress === undefined ? {} : {
+      travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM,
+      walkAhead: schedule.walkAhead?.map((o) => {
+        const c = canonicalOffset(place, o.eastM, o.northM), p = lonLatToSource(c.lon, c.lat);
+        return { x: p.x, z: p.z };
+      }),
+    }),
   };
 }
 export function summaryAt(code: string, tick: number): CountryState {
@@ -941,7 +1229,15 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index),
-      points = [foundation.homeOffset, foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep, gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")].map((offset) => relativeSourceForOffset(place, offset)),
+      // A guard whose assigned frontage was physically blocked may own a
+      // different legal SEED spare lot. Only the small fixed watch roster is
+      // resolved here; never materialize all household doors for indexing.
+      guardDoor = foundation.role === "guard" ? resolvedSettlementHomeDoorFor(place, index) : undefined,
+      resolvedGuardHome = guardDoor ? offsetForSource(place, guardDoor.x, guardDoor.z) : undefined,
+      points = [foundation.homeOffset, ...(resolvedGuardHome ? [resolvedGuardHome] : []),
+        foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep,
+        gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")]
+        .map((offset) => relativeSourceForOffset(place, offset)),
       // Street routes can bend away from the straight line between places: pad the box.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
       minX = Math.min(...points.map((point) => point.x)) - pad,
@@ -1013,6 +1309,7 @@ export class LazySimulation {
         <dt>Workplace / post</dt><dd id="resident-workplace">—</dd>
         <dt>Current route</dt><dd id="resident-route">—</dd>
         <dt>Guard assignment</dt><dd id="resident-guard">—</dd>
+        <dt>Actual gate staffing</dt><dd id="resident-gate-staffing" aria-live="polite">—</dd>
         <dt>Character</dt><dd id="resident-appearance">—</dd>
       </dl>
       <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
@@ -1045,13 +1342,12 @@ export class LazySimulation {
       if (!resident || !output) return;
       document.getElementById("travel-panel")?.classList.add("house-focused");
       const place = places.find((entry) => entry.id === resident.settlement),
-        home = place
-          ? legalPosition(place, resident.homeOffset.eastM, resident.homeOffset.northM)
-          : undefined;
+        home = place ? resolvedSettlementHomeDoorFor(place, resident.index) : undefined,
+        door = home ? sourceToLonLat(home.x, home.z) : undefined;
 
       const houseCode = document.getElementById("resident-house-code");
       if (houseCode) houseCode.textContent = `Home: ${resident.homeBuilding} · entrance: ${resident.homeEntrance} · owner: ${resident.homeOwner} · settlement: ${resident.settlement}`;
-      if (home) {
+      if (door) {
         const world = (
           window as typeof window & {
             advisorWorld?: {
@@ -1060,10 +1356,10 @@ export class LazySimulation {
           }
         ).advisorWorld;
         if (world?.navigation?.setFocus) {
-          world.navigation.setFocus(home.position.lon, home.position.lat);
-          output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on canonical entrance. Full identity below.`;
+          world.navigation.setFocus(door.lon, door.lat);
+          output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on legally resolved house doorway. Full identity below.`;
         } else output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focus unavailable. Full identity below.`;
-      } else output.textContent = "Assigned home entrance unavailable. Full identity below.";
+      } else output.textContent = "Assigned home has no legally resolved visible doorway; map focus unchanged. Full identity below.";
     });
   }
 
@@ -1086,14 +1382,19 @@ export class LazySimulation {
     text("resident-traits", `${resident.traits.temperament} · STR ${a.strength} DEX ${a.dexterity} CON ${a.constitution} KNO ${a.knowledge} WIS ${a.wisdom} CHA ${a.charisma}`);
     text("resident-home", `${familyName(resident.code, places.find((place) => place.id === resident.settlement)?.continent ?? 0)} home · assigned entrance`);
     text("resident-workplace", readableResidentSite(resident.workplace));
-    text("resident-route", resident.route.startsWith("BLOCKED:")
-      ? "Blocked — no continuous legal walking route"
-      : resident.route.includes(" → ")
-        ? resident.route.split(" → ").map(readableResidentSite).join(" → ")
-        : readableResidentSite(resident.route));
+    text("resident-route", readableResidentRoute(resident.route));
     text("resident-guard", resident.gatePost
       ? `${readableResidentSite(resident.gatePost)} · ${resident.guardShift === 0 ? "day" : "night"} watch`
       : "Not assigned to the watch");
+    const guardPlace = resident.gatePost ? places.find(place => place.id === resident.settlement) : undefined,
+      assignedGate = resident.gatePost ? /\/GATE\/(\d+)\/POST\//.exec(resident.gatePost) : null,
+      assignedIndex = assignedGate ? Number(assignedGate[1]) : -1,
+      currentCoverage = guardPlace && assignedIndex >= 0 ? guardCoverageAt(guardPlace, this.tick)[assignedIndex] : undefined;
+    text("resident-gate-staffing", currentCoverage
+      ? `Gate ${assignedIndex + 1}: ${currentCoverage.onDuty}/${currentCoverage.required} physically present${currentCoverage.missing
+        ? ` · ${currentCoverage.missing} uncovered post${currentCoverage.missing === 1 ? "" : "s"} (legal housing/route unresolved)`
+        : " · fully staffed"}`
+      : "No gate post assigned");
     text(
       "resident-appearance",
       `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,
@@ -1146,25 +1447,37 @@ export class LazySimulation {
     if (!this.inspector) this.installInspector();
     const select = document.getElementById("resident-select") as HTMLSelectElement | null;
     if (!select) return;
-    const sample = [...visible].sort((a, b) => a.index - b.index).slice(0, 16),
-      retained = sample.some((resident) => resident.code === this.selectedResidentCode)
-        ? this.selectedResidentCode
-        : sample[0]?.code ?? "";
+    const selection = residentInspectorSelection(visible, this.selectedResidentCode,
+      code => this.residentByCode(code)), retained = selection.selectedCode;
+    const missing = selection.unavailable ? (() => {
+      const option = document.createElement("option");
+      option.value = retained;
+      option.textContent = `Selected resident unavailable · ${retained}`;
+      return [option];
+    })() : [];
     select.replaceChildren(
-      ...sample.map((resident) => {
+      ...missing,
+      ...selection.records.map((resident) => {
         const option = document.createElement("option");
         option.value = resident.code;
-        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}`;
+        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}${selection.outsideView && resident.code === retained ? " · off-screen" : ""}`;
         return option;
       }),
     );
     this.selectedResidentCode = retained;
     select.value = retained;
-    const resident = sample.find((entry) => entry.code === retained);
-    if (resident) this.renderInspectorResident(resident);
-    else {
+    const resident = selection.records.find(entry => entry.code === retained);
+    if (resident) {
+      this.renderInspectorResident(resident);
+      if (selection.outsideView) {
+        const shortId = document.getElementById("resident-short-id");
+        if (shortId) shortId.textContent += " · off-screen";
+      }
+    } else {
       const name = document.getElementById("resident-name");
-      if (name) name.textContent = "Zoom closer to inspect inhabitants";
+      if (name) name.textContent = retained
+        ? "Selected resident unavailable — SEED identity retained"
+        : "Zoom closer to inspect inhabitants";
       const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
       if (button) button.disabled = true;
     }

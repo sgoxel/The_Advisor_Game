@@ -7,6 +7,8 @@ import {
   SETTLEMENT_POPULATION,
   settlementExteriorFor as coreSettlementExteriorFor,
   settlementLotFor,
+  settlementLotCount,
+  reconcileSettlementLotsToFinalBorder,
   type SettlementArchetype,
   type SettlementExteriorPlan as CoreExteriorPlan,
   type SettlementFieldForm,
@@ -72,14 +74,16 @@ export function homeClearanceRadius(widthM: number, depthM: number) {
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
   if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
-  void suppliedPlan;
+  // Residents queried before scenery generation still use the same final
+  // border allocation as world geometry and the reverse spatial lot index.
+  if (!suppliedPlan) settlementExteriorFor(place);
   const city = place.kind === "city", lot = settlementLotFor(place, index),
     house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
     shift = (house.depthM - lot.nominalDepthM) * .5,
     yawRad = lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * (city ? .06 : .1),
-    at = (along: number): SettlementPoint => ({
-      x: wrapSourceX(lot.x + lot.out.x * shift + lot.along.x * along),
-      z: lot.z + lot.out.z * shift + lot.along.z * along,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
     });
   return {
     id: `${place.code}/RESIDENCE/${index}`,
@@ -94,7 +98,32 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     house,
     yawRad,
     clearanceRadius: homeClearanceRadius(house.widthM, house.depthM),
-    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2)],
+    // Try nearby positions within the assigned frontage before declaring
+    // the house impossible. All candidates still pass final-surface, border,
+    // public plot, road and building collision checks at resolution.
+    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2),
+      at(0, -.8), at(0, .8), at(-.6, -.8), at(.6, -.8), at(-.6, .8), at(.6, .8),
+      at(0, 2), at(0, 4), at(0, 6), at(-.6, 4), at(.6, 4)],
+  };
+}
+
+/** Vacant frontage is SEED-canonical. A guard may use it only if their own
+ * lot has no valid door; no occupied lot is silently reassigned. */
+export function settlementSpareHomeFor(place: Place, index: number, ordinal: number,
+  suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan | undefined {
+  const population = canonicalSettlementPopulation(place);
+  if (!Number.isInteger(ordinal) || ordinal < 0 || population + ordinal >= settlementLotCount(place)) return undefined;
+  const house = settlementHomeFor(place, index, suppliedPlan),
+    lot = settlementLotFor(place, population + ordinal),
+    shift = ((house.depthM ?? 8) - lot.nominalDepthM) * .5,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
+    });
+  return { ...house,
+    yawRad: lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) *
+      (place.kind === "city" ? .06 : .1),
+    candidates: [at(0), at(-.6), at(.6), at(0, .8), at(0, 2)],
   };
 }
 
@@ -116,10 +145,12 @@ function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
   return { ...plot, ownerId: ownerIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${ownerIndex}`, residents: staff, capacity: Math.max(plot.capacity, staff) };
 }
 /** A small rear garden behind the house, inside its own frontage lot. */
-function gardenFor(place: Place, index: number): SettlementPlotPlan {
-  const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index),
+function gardenFor(place: Place, index: number, plan: SettlementExteriorPlan): SettlementPlotPlan {
+  const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index, plan),
     widthM = 3 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 1.2, depthM = 3 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 1.2,
-    behind = (home.depthM || 8) * .5 + depthM * .5 + .4;
+    behind = Math.max((home.depthM || 8) * .5 + depthM * .5 + .4,
+      Math.max(home.widthM ?? 8, home.depthM ?? 8) * .5 + .35 +
+      Math.hypot(widthM, depthM) * .5 + .5);
   return {
     id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0,
     width: metresToSource(widthM), depth: metresToSource(depthM), widthM, depthM, yawRad: home.yawRad,
@@ -443,7 +474,12 @@ function remember(plan: SettlementExteriorPlan) {
 
 export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const existing = cache.get(place.code);
-  if (existing) return remember(existing);
+  if (existing) {
+    // The smaller exterior cache can outlive the core lot cache. Reestablish
+    // its final-border seating after core eviction, never by visit order.
+    if (place.kind === "village") reconcileSettlementLotsToFinalBorder(place, existing.border);
+    return remember(existing);
+  }
   const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
   for (const plot of core.plots) if (plot.kind !== "house") {
     const owned = servicePlot(place, plot);
@@ -454,8 +490,13 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
     });
   }
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
-  for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, index));
+  // Road-aware enclosure trimming precedes home allocation. The core street
+  // grid alone cannot certify a residence behind the final village wall.
   const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
+  if (place.kind === "village")
+    reconcileSettlementLotsToFinalBorder(place, aligned.border);
+  for (let index = 0; index < residentHomeCount; index += gardenStride)
+    plots.push(gardenFor(place, index, aligned));
   const nearRoads=roads.filter(road=>roadDistanceAt(place.x,place.z,road)<aligned.radius+metresToSource(30));
   return remember({ ...aligned, streets: aligned.streets.map(street => {
     const points=mergeStreetWithRoads(street.points,street.width,nearRoads);
