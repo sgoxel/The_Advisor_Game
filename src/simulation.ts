@@ -939,8 +939,24 @@ export function readableResidentSite(code: string): string {
     const number = parts[residence + 1] ?? "";
     return `Residence ${number}${parts.includes("ENTRANCE") ? " entrance" : ""}`;
   }
+  const gate = parts.lastIndexOf("GATE");
+  if (gate >= 0 && /^[0-9]+$/.test(parts[gate + 1] ?? "")) {
+    const number = Number(parts[gate + 1]) + 1;
+    const post = parts[gate + 2] === "POST" && /^[0-9]+$/.test(parts[gate + 3] ?? "")
+      ? ` post ${Number(parts[gate + 3]) + 1}` : "";
+    return `Gate ${number}${post}`;
+  }
   const site = parts.slice(-2);
   return site.join(" ").replaceAll("_", " ").toLowerCase();
+}
+
+/** A failed walk is a concrete origin/destination fact, not a generic warning.
+ * Retain the precise authoritative code in the expandable diagnostics. */
+export function readableResidentRoute(route: string): string {
+  const blocked = route.startsWith("BLOCKED:");
+  const detail = blocked ? route.slice("BLOCKED:".length).trim() : route;
+  const readable = detail.split(" → ").map(part => part.includes("/") ? readableResidentSite(part) : part).join(" → ");
+  return blocked ? `Blocked — ${readable}` : readable;
 }
 
 /** Player-facing resident facts are not optional scenery. Keep the existing
@@ -1241,11 +1257,7 @@ export class LazySimulation {
     text("resident-traits", `${resident.traits.temperament} · STR ${a.strength} DEX ${a.dexterity} CON ${a.constitution} KNO ${a.knowledge} WIS ${a.wisdom} CHA ${a.charisma}`);
     text("resident-home", `${familyName(resident.code, places.find((place) => place.id === resident.settlement)?.continent ?? 0)} home · assigned entrance`);
     text("resident-workplace", readableResidentSite(resident.workplace));
-    text("resident-route", resident.route.startsWith("BLOCKED:")
-      ? (resident.grounded ? "Blocked — no continuous legal walking route" : `Blocked — ${resident.route.slice("BLOCKED:".length).trim()}`)
-      : resident.route.includes(" → ")
-        ? resident.route.split(" → ").map(readableResidentSite).join(" → ")
-        : readableResidentSite(resident.route));
+    text("resident-route", readableResidentRoute(resident.route));
     text("resident-guard", resident.gatePost
       ? `${readableResidentSite(resident.gatePost)} · ${resident.guardShift === 0 ? "day" : "night"} watch`
       : "Not assigned to the watch");
