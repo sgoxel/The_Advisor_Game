@@ -613,6 +613,19 @@ export function legalOpenGroundDetour(
       }
     }
   }
+  // Longer lakes and ravines may need a parallel dry corridor rather than a
+  // single central bend. Both approach links and the corridor itself must be
+  // physically legal. This branch is finite and never invents a crossing.
+  for (const radius of [64, 160, 320, 640]) {
+    for (const [start, end] of [[.12, .88], [.2, .8]]) {
+      for (const side of [-1, 1]) {
+        const shiftX = sideX * side * radius, shiftZ = sideZ * side * radius,
+          a = { eastM: from.eastM + dx * start + shiftX, northM: from.northM + dz * start + shiftZ },
+          b = { eastM: from.eastM + dx * end + shiftX, northM: from.northM + dz * end + shiftZ };
+        if (legal(from, a) && legal(a, b) && legal(b, to)) return [from, a, b, to];
+      }
+    }
+  }
   return null;
 }
 const pathCache = new Map<string, Offset[] | null>();
