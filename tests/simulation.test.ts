@@ -566,6 +566,35 @@ test("selected guard status distinguishes physical attendance from off-shift ass
     "scheduled duty alone is never a claim of physical presence");
 });
 
+test("late-closing innkeepers retain their actual position through local midnight", () => {
+  const trimmed = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(trimmed, "retain the real road-trimmed village fixture");
+  // Innkeepers close at 22:30 local time. Preserve the actual position reached
+  // or blocked on yesterday's journey rather than adopting scheduled home.
+  for (const place of [villages[0], trimmed, cities[0]]) {
+    const lon = place.canonicalPosition.lon,
+      beforeTick = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+      midnightTick = tickAtLocalTime(WORKDAY + 1, 0, lon),
+      before = residentAt(place, 0, beforeTick),
+      midnight = residentAt(place, 0, midnightTick),
+      next = residentAt(place, 0, midnightTick + 1);
+    assert.equal(before.role, "innkeeper", "the fixture must exercise late closing, not a guard");
+    assert.equal(midnight.code, before.code, "midnight cannot change SEED identity or home");
+    assert.equal(midnight.homeEntrance, before.homeEntrance);
+    assert.equal(midnight.workplace, before.workplace);
+    assert.ok(greatCircleDistance(before.position, midnight.position) < 3,
+      `${before.code}: midnight jumped away from the actual prior-day position`);
+    assert.ok(greatCircleDistance(midnight.position, next.position) < 3,
+      `${before.code}: the first next-day second cannot teleport`);
+    assert.deepEqual(residentAt(place, 0, midnightTick), midnight,
+      "direct time catch-up reproduces one canonical midnight state");
+    if (before.route.startsWith("BLOCKED:"))
+      assert.ok(midnight.route.startsWith("BLOCKED:") ||
+        greatCircleDistance(before.position, midnight.position) < 1,
+        "an impassable return must not fabricate an arrival");
+  }
+});
+
 test("both guard shifts preserve real gate/home positions at local midnight", () => {
   const fixtures = [villages[0], villages.find(p => p.code.includes("/CITY/6/VILLAGE/1"))!, cities[0]];
   for (const place of fixtures) {
