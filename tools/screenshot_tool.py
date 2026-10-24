@@ -503,9 +503,17 @@ class Session:
     def run(self, steps: list[str]) -> None:
         print(f"OPEN {self.name}-{self.profile}", flush=True)
         self.page.goto(self.args.url, wait_until="domcontentloaded")
-        print("DOM READY; waiting for settled world", flush=True)
-        self.settle()
-        print("INITIAL WORLD SETTLED", flush=True)
+        if self.args.initial_ready_only:
+            # First-answer evidence must not wait for optional LOD scenery to settle.
+            self.page.wait_for_function(
+                "() => window.advisorWorld?.state?.ready === true",
+                timeout=self.args.timeout * 1000,
+            )
+            print("INITIAL WORLD READY (optional scenery not required)", flush=True)
+        else:
+            print("DOM READY; waiting for settled world", flush=True)
+            self.settle()
+            print("INITIAL WORLD SETTLED", flush=True)
         for step in steps:
             print(f"STEP {step[:100]}", flush=True)
             try:
@@ -542,6 +550,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--device-scale-factor", type=float, default=1, help="emulated display DPR, not device GPU/RAM emulation")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
     parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
+    parser.add_argument("--initial-ready-only", action="store_true", help="wait for authoritative startup without optional terrain settling")
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
     parser.add_argument("--chromium", default=os.environ.get("ADVISOR_CHROMIUM"),
                         help="Chromium executable (default: env ADVISOR_CHROMIUM)")
