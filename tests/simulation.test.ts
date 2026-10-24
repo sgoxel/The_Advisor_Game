@@ -30,6 +30,7 @@ import {
   nearestNode,
   nearestLegalStreetNode,
   legalOpenGroundDetour,
+  exteriorGroundCorridor,
   residentStreetPathKey,
   residentViewQuery,
 } from "../src/simulation.ts";
@@ -203,6 +204,21 @@ test("outdoor journeys can legally detour around small barriers without crossing
     "a continuous impassable river remains blocked even if endpoints are dry");
   assert.equal(legalOpenGroundDetour(from, to, () => false), null,
     "a missing gate or blocked wall cannot be bypassed by doglegs");
+});
+
+test("unconnected town doors cannot shortcut through dry open ground", () => {
+  const p = (eastM: number, northM: number) => ({ eastM, northM }),
+    border = [p(-20, -20), p(20, -20), p(20, 20), p(-20, 20)];
+  assert.equal(exteriorGroundCorridor(p(-10, 0), p(10, 0), border), false,
+    "both inside town must use a connected validated street route, not a fallback chord");
+  assert.equal(exteriorGroundCorridor(p(10, 0), p(-10, 0), border), false,
+    "direction cannot legalize an interior shortcut");
+  assert.equal(exteriorGroundCorridor(p(10, 0), p(40, 0), border), true,
+    "a lawful exterior destination remains eligible for physical ground checks");
+  assert.equal(exteriorGroundCorridor(p(40, 0), p(10, 0), border), true,
+    "returning from an exterior service/field retains corridor search");
+  assert.equal(exteriorGroundCorridor(p(-30, 0), p(30, 0), border), true,
+    "exterior routing still needs the independent gate and surface predicate");
 });
 
 test("settlement walls admit resident crossings only through SEED gate apertures", () => {

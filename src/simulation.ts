@@ -782,6 +782,23 @@ export function legalOpenGroundDetour(
   }
   return null;
 }
+/** A dry, straight chord is an exterior/off-street fallback, not permission
+ * for two internal town doorways to skip a missing connected street route. */
+export function exteriorGroundCorridor(from: Offset, to: Offset, border: readonly Offset[]): boolean {
+  if (border.length < 3) return true;
+  const inside = (point: Offset) => {
+    let enclosed = false;
+    for (let i = 0, j = border.length - 1; i < border.length; j = i++) {
+      const a = border[i], b = border[j];
+      if ((a.northM > point.northM) !== (b.northM > point.northM) &&
+          point.eastM < (b.eastM - a.eastM) * (point.northM - a.northM) /
+            (b.northM - a.northM) + a.eastM)
+        enclosed = !enclosed;
+    }
+    return enclosed;
+  };
+  return !inside(from) || !inside(to);
+}
 const pathCache = new Map<string, Offset[] | null>();
 /** Distinct canonical entrances must never reuse a route with different endpoints.
  * Exact finite SEED offsets are stable; rounding them could reuse an illegal connector. */
@@ -854,7 +871,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   // Some outdoor work sites are reached over open walkable ground rather than a
   // settlement street. Allow that physical corridor only after checking EVERY
   // segment sample; a disconnected graph is never permission to cross obstacles.
-  if (!path && legalStreetSegment(place, from, to)) path = [from, to];
+  if (!path && exteriorGroundCorridor(from, to, graph.border) && legalStreetSegment(place, from, to)) path = [from, to];
   // Exterior gate-to-habitat corridors can wind around small dry-land
   // obstacles. Only nonrecursive detour legs use this extra bounded search;
   // the main route must still connect through a legal SEED gate.
