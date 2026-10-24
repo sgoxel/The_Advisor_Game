@@ -465,7 +465,7 @@ test("physical watchmen remain spatially inspectable at resolved homes after fro
     assert.ok(simulation.focusedResidents(person.x, person.z, .08, 160)
       .some(found => found.code === person.code),
       "bounded resident spatial query must include the physical home, not just its old SEED frontage");
-    assert.ok(simulation.telemetry().residentEvaluationsSinceAdvance <= populationOf(village),
+    assert.ok(simulation.stats.residentEvaluationsSinceAdvance <= populationOf(village),
       "a home lookup never materializes the entire settlement beyond its population bound");
   }
 });
