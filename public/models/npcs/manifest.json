@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "characters": {
+    "herbalist_female": {
+      "url": "models/npcs/herbalist_female.glb",
+      "heightM": 1.782,
+      "triangles": 15858,
+      "rigged": true
+    },
+    "baker_female": {
+      "url": "models/npcs/baker_female.glb",
+      "heightM": 1.782,
+      "triangles": 15912,
+      "rigged": true
+    },
+    "beggar_female": {
+      "url": "models/npcs/beggar_female.glb",
+      "heightM": 1.782,
+      "triangles": 15939,
+      "rigged": true
+    },
+    "beggar_male": {
+      "url": "models/npcs/beggar_male.glb",
+      "heightM": 1.782,
+      "triangles": 15915,
+      "rigged": true
+    },
+    "blacksmith_male": {
+      "url": "models/npcs/blacksmith_male.glb",
+      "heightM": 1.782,
+      "triangles": 15858,
+      "rigged": true
+    },
+    "butcher_male": {
+      "url": "models/npcs/butcher_male.glb",
+      "heightM": 1.782,
+      "triangles": 15852,
+      "rigged": true
+    },
+    "carpenter_male": {
+      "url": "models/npcs/carpenter_male.glb",
+      "heightM": 1.782,
+      "triangles": 15914,
+      "rigged": true
+    },
+    "child_female": {
+      "url": "models/npcs/child_female.glb",
+      "heightM": 1.782,
+      "triangles": 15918,
+      "rigged": true
+    }
+  }
+}

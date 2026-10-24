@@ -1,3 +1,4 @@
+import { mountNpcPortrait } from "./npc-portrait.ts";
 import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
 /**
  * NPC inspector popup: opened by clicking a resident on the map. Shows the
@@ -113,11 +114,10 @@ export function showNpcPopup(resident: Resident, tick: number) {
     { index } = activityAt(plan, second),
     where = (activity: Activity) => names[activity.anchor] ?? activity.anchor,
     ageYears = Math.floor(resident.birthDay / 365),
-    moodHue = resident.mood.value > .15 ? "#7fc77a" : resident.mood.value > -.15 ? "#d8b979" : "#d0705a",
-    picture = new URL(`characters/${resident.character}.webp`, document.baseURI).href;
+    moodHue = resident.mood.value > .15 ? "#7fc77a" : resident.mood.value > -.15 ? "#d8b979" : "#d0705a";
   root.innerHTML = `
     <div class="npc-head">
-      <img src="${picture}" alt="" class="npc-picture">
+      <div data-npc-portrait></div>
       <div>
         <div class="eyebrow">${escape(names.settlement ?? "")} · resident</div>
         <h2>${escape(resident.name)}</h2>
@@ -154,6 +154,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </section>
     </details>`;
   root.hidden = false;
+  mountNpcPortrait(root.querySelector<HTMLElement>("[data-npc-portrait]")!, resident.character, resident.name);
   root.scrollTop = previousScroll;
   if (focusSelector) root.querySelector<HTMLElement>(focusSelector)?.focus({ preventScroll: true });
 }

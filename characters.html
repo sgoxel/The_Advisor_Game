@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>The Advisor · Character workshop</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#16231e;color:#eee6d4;font:15px system-ui,sans-serif}canvas{width:100vw;height:100vh;display:block;touch-action:none}header{position:absolute;top:24px;left:28px;max-width:340px}small{color:#a9b8a1;text-transform:uppercase;letter-spacing:.17em;font-size:11px}h1{font:32px Georgia,serif;margin:10px 0}p{color:#bdc7bb;line-height:1.5}select,button,a{font:inherit}select,button{border:1px solid #647c5b;color:#eee6d4;background:#25382c;border-radius:5px;padding:9px;margin:0 4px 8px 0}a{color:#d5c28c}footer{position:absolute;bottom:20px;left:28px;color:#a9b8a1;font-size:12px}#status{max-width:330px;font-size:13px}@media(max-width:600px){header{top:14px;left:16px;max-width:260px}h1{font-size:25px}footer{left:16px;max-width:210px}#status{max-width:240px}}
+@media(max-width:600px){canvas{margin-top:250px}header p{margin:6px 0}}
+</style></head><body><canvas id="character"></canvas><header><small>The Advisor / Character workshop</small><h1 id="name">Character preview</h1><select id="character-select" aria-label="Character"></select><div><button data-motion="idle">Idle</button><button data-motion="walk">Walk</button></div><p id="status" role="status">Loading characters…</p><p><a href="./">Open the game</a></p></header><footer>Drag to orbit · Scroll to zoom · New characters appear as they are deployed</footer><script>
+(function () {
+  var status = document.getElementById('status');
+  if (location.protocol === 'file:') {
+    status.textContent = 'Opening the local gallery server. If it is stopped, double-click Open-Characters.cmd in the game folder.';
+    location.replace('http://127.0.0.1:5178/characters.html' + location.search + location.hash);
+    return;
+  }
+  window.addEventListener('error', function (event) {
+    if (event.target && event.target.tagName === 'SCRIPT') status.textContent = 'The preview code could not load. Refresh the page or restart the gallery with Open-Characters.cmd.';
+  }, true);
+  setTimeout(function () {
+    if (!document.getElementById('character').dataset.character && status.textContent.indexOf('could not') === -1)
+      status.textContent = 'The 3D preview is taking longer than expected. Refresh the page; if it continues, restart the gallery with Open-Characters.cmd.';
+  }, 45000);
+})();
+</script><script type="module" src="/src/npc-gallery.ts"></script></body></html>

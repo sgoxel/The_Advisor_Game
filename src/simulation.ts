@@ -1578,7 +1578,9 @@ export class LazySimulation {
       if (avatar.dataset.clothing !== String(resident.appearance.clothing)) avatar.dataset.clothing = String(resident.appearance.clothing);
       if (avatar.dataset.character !== resident.character) {
         avatar.dataset.character = resident.character;
-        avatar.style.backgroundImage = `url("${new URL(`characters/${resident.character}.webp`, document.baseURI).href}")`;
+        void import("./npc-portrait.ts").then(({ mountNpcPortrait }) => {
+            if (avatar.dataset.character === resident.character) mountNpcPortrait(avatar, resident.character, resident.name, "resident");
+          });
       }
     }
     const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;

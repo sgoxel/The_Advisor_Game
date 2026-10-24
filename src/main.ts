@@ -8,7 +8,8 @@ import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./s
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
-import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
+import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
+import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
@@ -322,8 +323,7 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
   const point = renderFrame.sourceToRender(x, z, finalSurfaceAt(x, z).surfaceHeight);
-  const footOffset = actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z * .5));
-  actor.setLocalPosition(point.x - footOffset.x, point.y - footOffset.y, point.z - footOffset.z);
+  actor.setLocalPosition(point.x, point.y, point.z);
 }
 
 function refreshRenderFrameTransforms() {
@@ -1432,50 +1432,6 @@ function setupTravel() {
     $("travel-panel").hidden = true;
   };
 }
-/**
- * One material per illustrated character type, created on first use. Textures
- * are uploaded from a canvas (the same path the old drawn sprites used), which
- * WebGPU and WebGL2 both accept; until the picture arrives the material shows a
- * fully transparent placeholder, so a resident never flashes as a blank card.
- */
-const characterMaterials = new Map<string, pc.StandardMaterial>();
-let characterTexturesLoaded = 0;
-function characterTexture(source: HTMLCanvasElement) {
-  const texture = new pc.Texture(app.graphicsDevice, { width: source.width, height: source.height, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
-  texture.setSource(source);
-  return texture;
-}
-function applyCharacterTexture(material: pc.StandardMaterial, texture: pc.Texture) {
-  material.diffuseMap = texture;
-  material.opacityMap = texture;
-  material.opacityMapChannel = "a";
-  material.update();
-}
-function characterMaterialFor(key: string): pc.StandardMaterial {
-  const existing = characterMaterials.get(key);
-  if (existing) return existing;
-  const material = new pc.StandardMaterial(), placeholder = document.createElement("canvas");
-  placeholder.width = placeholder.height = 4;
-  material.alphaTest = 0.4;
-  material.cull = pc.CULLFACE_NONE;
-  applyCharacterTexture(material, characterTexture(placeholder));
-  characterMaterials.set(key, material);
-  const load = (name: string) => {
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      canvas.getContext("2d")!.drawImage(image, 0, 0);
-      applyCharacterTexture(material, characterTexture(canvas));
-      characterTexturesLoaded++;
-    };
-    image.onerror = () => { if (name !== "default") load("default"); };
-    image.src = new URL(`characters/${name}.webp`, document.baseURI).href;
-  };
-  load(key);
-  return material;
-}
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
   $("fantasy-time").textContent = clock.labelAt(Date.now());
@@ -1504,10 +1460,12 @@ async function start() {
     pc.RenderComponentSystem,
     pc.CameraComponentSystem,
     pc.LightComponentSystem,
+    pc.AnimComponentSystem,
   ];
-  options.resourceHandlers = [pc.TextureHandler];
+  options.resourceHandlers = [pc.TextureHandler, pc.ContainerHandler, pc.AnimClipHandler];
   app = new pc.AppBase(canvas);
   app.init(options);
+  const characterVisuals = await loadDefaultCharacter(app);
   app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
   app.setCanvasResolution(pc.RESOLUTION_AUTO);
   app.scene.ambientLight = new pc.Color(0.4, 0.46, 0.41);
@@ -1562,6 +1520,7 @@ async function start() {
     sun.light!.color.set(...light.sunColor);
     sun.light!.intensity=light.sunIntensity;
     sun.setEulerAngles(light.sunPitch,light.sunYaw,0);
+    characterVisuals.setLighting(sun.up, light.terrainTint);
     // A directional light shines along its -Y axis, so its +Y axis points at the sun.
     const towardsSun=sun.up;sunDirUniform[0]=towardsSun.x;sunDirUniform[1]=towardsSun.y;sunDirUniform[2]=towardsSun.z;
     for(const material of [terrainMaterial,coarseTerrainMaterial]) {
@@ -1669,29 +1628,17 @@ async function start() {
     for (const actor of actors) {
       const resident = actorResidents.get(actor);
       if (!actor.enabled || !resident) continue;
-      const scale = actor.getLocalScale(), up = actor.getRotation().transformVector(new pc.Vec3(0, 0, -scale.z)), base = actor.getPosition(),
-        bottom = base.clone().sub(up.clone().mulScalar(.5)), top = base.clone().add(up.clone().mulScalar(.5));
+      const scale = actor.getLocalScale(), up = actor.getRotation().transformVector(new pc.Vec3(0, scale.y * DEFAULT_CHARACTER_HEIGHT_M, 0)), base = actor.getPosition(),
+        bottom = base.clone(), top = base.clone().add(up);
       lens.worldToScreen(bottom, feet);
       lens.worldToScreen(top, head);
-      const height = Math.abs(feet.y - head.y), halfWidth = Math.max(10, height * (scale.x / Math.max(1e-6, scale.z)) * .5 + 4),
+      const height = Math.abs(feet.y - head.y), halfWidth = Math.max(10, height * .26 + 4),
         minY = Math.min(feet.y, head.y) - 4, maxY = Math.max(feet.y, head.y) + 4, cx = (feet.x + head.x) * .5;
       if (x < cx - halfWidth || x > cx + halfWidth || y < Math.min(minY, feet.y - 18) || y > maxY) continue;
       const distance = Math.hypot(x - cx, y - (feet.y + head.y) * .5);
       if (distance < bestDistance) { best = resident; bestDistance = distance; }
     }
     return best;
-  };
-  let lastActorFacingX = Number.NaN,
-    lastActorFacingY = Number.NaN,
-    lastActorFacingZ = Number.NaN,
-    lastActorFacingW = Number.NaN;
-  const orientActor = (actor: pc.Entity) => {
-    // Cylindrical billboard: face the camera in heading while remaining upright
-    // in world space. Following camera pitch changes an NPC's physical height.
-    const forward = camera.forward;
-    actor.setEulerAngles(90, Math.atan2(-forward.x, -forward.z) * 180 / Math.PI, 0);
-    const source = actorSources.get(actor);
-    if (source) positionActor(actor, source.x, source.z);
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
   residentResultReady = () => { lastSimulationRealSecond = -1; };
@@ -1748,24 +1695,17 @@ async function start() {
           ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
         for (let i = 0; i < visible.length; i++) {
           if (!actors[i]) {
-            const actor = new pc.Entity("Resident billboard");
-            actor.addComponent("render", {
-              type: "plane",
-              castShadows: false,
-              receiveShadows: false,
-              material: characterMaterialFor(visible[i].character),
-            });
+            const actor = characterVisuals.create();
             flatRoot.addChild(actor);
             actors.push(actor);
           }
-          const residentMaterial = characterMaterialFor(visible[i].character);
-          // True metre size: the person's real height for their sex and age, the picture's own width.
-          const dimensions = characterSpriteM(CHARACTER_TYPES[visible[i].character] || CHARACTER_TYPES.default, visible[i].appearance.silhouette);
-          actors[i].setLocalScale(elevationToRenderY(dimensions.widthM), 1, elevationToRenderY(dimensions.heightM));
-          for (const meshInstance of actors[i].render?.meshInstances ?? [])
-            if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
+          const height = characterHeightM(CHARACTER_TYPES[visible[i].character] || CHARACTER_TYPES.default, visible[i].appearance.silhouette);
+          const scale = elevationToRenderY(height / DEFAULT_CHARACTER_HEIGHT_M);
+          actors[i].setLocalScale(scale, scale, scale);
+          characterVisuals.palette(actors[i], visible[i].variant);
+          void characterVisuals.character(actors[i], visible[i].character);
+          characterVisuals.move(actors[i], 0, 0, 1);
           actors[i].enabled = true;
-          orientActor(actors[i]);
           actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
           actorResidents.set(actors[i], visible[i]);
           // Walkers glide along the legal street path over the next real second (the simulation's walk window).
@@ -1810,20 +1750,8 @@ async function start() {
           x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
+        characterVisuals.move(actor, .8, b.x-a.x, b.z-a.z);
       }
-    }
-    const actorFacing = camera.getRotation();
-    if (
-      Math.abs(actorFacing.x - lastActorFacingX) > 1e-7 ||
-      Math.abs(actorFacing.y - lastActorFacingY) > 1e-7 ||
-      Math.abs(actorFacing.z - lastActorFacingZ) > 1e-7 ||
-      Math.abs(actorFacing.w - lastActorFacingW) > 1e-7
-    ) {
-      lastActorFacingX = actorFacing.x;
-      lastActorFacingY = actorFacing.y;
-      lastActorFacingZ = actorFacing.z;
-      lastActorFacingW = actorFacing.w;
-      for (const actor of actors) if (actor.enabled) orientActor(actor);
     }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
@@ -2128,7 +2056,7 @@ async function start() {
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
           if (!actor.enabled || !resident) continue;
-          camera.camera!.worldToScreen(actor.getPosition(), point);
+          camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
           const clientX = rect.left + point.x, clientY = rect.top + point.y;
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
           if (document.elementFromPoint(clientX, clientY) !== canvas) continue;
@@ -2283,9 +2211,9 @@ async function start() {
             logicalResidents: simulation.stats.logicalResidents,
             pooledActors: actors.length,
             visibleActors: actors.filter(actor => actor.enabled).length,
-            reusableMaterials: characterMaterials.size, characterTexturesLoaded, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
-            physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().z * CANONICAL_METRES_PER_SOURCE_UNIT),
-            worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
+            format: "skinned-3d", generatedActors: actors.filter(actor => actor.enabled && actor.tags.has("generated-npc")).length, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
+            physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * CANONICAL_METRES_PER_SOURCE_UNIT),
+            worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M, 0)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
