@@ -137,6 +137,8 @@ type Layout = {
   lots?: SettlementLot[];
   lotGrid?: Map<number, number[]>;
   lotOrder?: { offset: number; step: number; inverse: number };
+  finalBorderSignature?: string;
+  finalBorderReconciled?: boolean;
   grid?: Map<number, number[]>;
 };
 
@@ -737,6 +739,8 @@ export function reconcileSettlementLotsToFinalBorder(
 ): boolean {
   settlementExteriorFor(place);
   const layout = layouts.get(place.code)!;
+  const signature = finalBorder.map(point => `${point.x}/${point.z}`).join("|");
+  if (layout.finalBorderSignature === signature) return layout.finalBorderReconciled!;
   const frame = layout.frame;
   const clipped = finalBorder.map(point => {
     const x = wrapSourceX(point.x - place.x) / (U * frame.kx);
@@ -755,14 +759,24 @@ export function reconcileSettlementLotsToFinalBorder(
   // and avoid a second lot-generation pass when no assigned lot was clipped.
   if (Array.from({ length: SETTLEMENT_POPULATION[place.kind] }, (_, index) =>
       localLot(originalLots[(order.offset + index * order.step) % originalLots.length]))
-    .every(lot => insideBorder(clipped, lot.a, lot.l, 10))) return true;
+    .every(lot => insideBorder(clipped, lot.a, lot.l, 10))) {
+    layout.finalBorderSignature = signature;
+    layout.finalBorderReconciled = true;
+    return true;
+  }
   const candidate = computeLots({ ...layout, border: clipped }, place,
     Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03));
-  if (candidate.length < SETTLEMENT_POPULATION[place.kind]) return false;
+  if (candidate.length < SETTLEMENT_POPULATION[place.kind]) {
+    layout.finalBorderSignature = signature;
+    layout.finalBorderReconciled = false;
+    return false;
+  }
   layout.border = clipped;
   layout.lots = candidate;
   layout.lotGrid = undefined;
   layout.lotOrder = undefined;
+  layout.finalBorderSignature = signature;
+  layout.finalBorderReconciled = true;
   return true;
 }
 
