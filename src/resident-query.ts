@@ -5,17 +5,25 @@ import type { Resident, QueryStats } from "./simulation.ts";
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number } };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
-/** A completed coarse viewport is sufficient for first resident facts on a multi-worker
- * device. Keep the sole worker for terrain until detail is prepared. Once a batch
- * has started, finish dispatching its shards even if the camera moves so the
- * bounded query can retire and the newest request can replace stale results. */
+/** Coherent current-view terrain, not optional detail, authorizes a bounded
+ * first resident query on every device. Only idle existing workers participate;
+ * an in-flight batch may finish its shards after navigation. */
 export function residentDispatchAllowed(
-  selectionDirty: boolean, coverageComplete: boolean, detailReady: boolean,
-  idleWorkerCount: number, workerCount: number, batchStarted: boolean,
+  selectionDirty: boolean, coverageComplete: boolean,
+  idleWorkerCount: number, batchStarted: boolean,
 ): boolean {
   if (idleWorkerCount === 0) return false;
   if (batchStarted) return true;
-  return !selectionDirty && coverageComplete && (detailReady || workerCount > 1);
+  return !selectionDirty && coverageComplete;
+}
+
+/** Freeze the available worker subset per query. Shard indices must be dense
+ * even if busy terrain workers have noncontiguous global worker IDs; otherwise
+ * an actor query can wait indefinitely for a worker that never joined it. */
+export function residentWorkerShardPlan(idleWorkerIds: readonly number[]) {
+  const selected = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
+    .sort((a, b) => a - b);
+  return selected.map((workerId, shardIndex) => ({ workerId, shardIndex, count: selected.length }));
 }
 
 /** One in-flight job, latest camera request wins. Stale clock/view results never
