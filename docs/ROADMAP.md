@@ -31,19 +31,19 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident journeys: civilian midnight continuity, real doors/bridges & first-use UX
+- WP-S006-001-001 — Simulation-legal resident journeys: real doors/crossings, midnight continuity & truthful inspection
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UI/UX: seven viewports, 44px touch, keyboard selection & focus return
+- WP-S008-001-001 — Accessible atlas tasks: canonical keyboard/touch selection, 44px targets & focus return
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance: ≤1 upload/frame, bounded queues, first-answer & 3D-settle p95
-- WP-S009-002-001 — Canonical picking & idle UI: bounded true hits, first-answer p95 & zero layout reads
-- WP-S009-003-001 — Mobile WebGPU/WebGL2: 256MB soft trim, 1GB CPU+GPU cap, DPR tiers & recovery
-- WP-S009-004-001 — README compatibility ledger: honest Advisor readiness, campaign-time/age/lighting gaps & future scope
-- WP-S009-005-001 — Pure-zoom readiness UX: no stale terrain, truthful first inspect & fully settled 3D
+- WP-S009-001-001 — Exact-SHA streaming performance: one upload/frame, 4/6/8 queues & truthful first-use p95
+- WP-S009-002-001 — Canonical hit-testing & idle UI: bounded picks, zero unchanged-frame layout reads
+- WP-S009-003-001 — Mobile rendering compatibility: WebGPU→WebGL2 recovery, 256MB trim, 1GB cap & DPR
+- WP-S009-004-001 — README conformance ledger: Advisor autonomy, campaign time/age, persistence & honest build claims
+- WP-S009-005-001 — Pure-zoom readiness: no stale terrain, focus-locked transitions & honest 3D settling
