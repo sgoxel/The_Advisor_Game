@@ -1,8 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("first close-up residents are queried under a finite identical rendered/state budget", () => {
+  assert.equal(residentQueryLimitForView(true), 32,
+    "first street characters must not wait for 160 complete path evaluations");
+  assert.equal(residentQueryLimitForView(false), 24,
+    "non-actor inspection still uses the existing fact budget");
+  assert.equal(residentQueryLimitForView(true), residentQueryLimitForView(true),
+    "camera/frame timing must not choose the visible resident limit");
+});
 
 test("visible S006 residents retain a 44px CSS touch target without selecting distant actors", () => {
   const feet = { x: 100, y: 100 }, head = { x: 100, y: 94 };

@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1701,7 +1701,7 @@ async function start() {
       // Logical inspection remains available before optional meshes and billboards
       // finish. Actor allocation keeps the original strict close-detail budget.
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
-      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined;
+      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors)) : undefined;
       const previousSnapshot = residentQueries.current;
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
@@ -2116,7 +2116,7 @@ async function start() {
       },
       get state() {
         const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready),
-          residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined,
+          residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors)) : undefined,
           residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key, residentRequest.tick);
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
