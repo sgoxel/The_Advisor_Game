@@ -14,8 +14,8 @@ import {
   type Tile,
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
-import { settlementHomeIndicesNear } from "./settlement-exterior-core.ts";
-import { settlementExteriorFor, settlementHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
+import { settlementHomeIndicesNear, settlementLotCount, SETTLEMENT_POPULATION } from "./settlement-exterior-core.ts";
+import { settlementExteriorFor, settlementHomeFor, settlementSpareHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
@@ -51,7 +51,7 @@ type MorphologyFeature = {
 type StreetHit = { id: string; width: number; distance: number; x: number; z: number };
 type Resolved = { x: number; z: number } | null;
 type Occupant = { x: number; z: number; radius: number };
-type ResolvedSettlement = { staticAnchors: Map<string, Resolved>; staticOccupants: Occupant[]; homes: Map<string, Resolved>; homePlots?: Map<number, SettlementPlotPlan> };
+type ResolvedSettlement = { staticAnchors: Map<string, Resolved>; staticOccupants: Occupant[]; homes: Map<string, Resolved>; homePlots?: Map<number, SettlementPlotPlan>; guardsReady?: boolean };
 
 export const SETTLEMENT_PRESENTATION_CACHE_LIMIT = 12;
 const MAX_CACHED_HOME_ANCHORS = 2560;
@@ -151,17 +151,73 @@ function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
   }
   return rememberResolution(place.code, { staticAnchors, staticOccupants, homes: new Map() });
 }
-/** Resolve ONE home on demand. Lots never overlap each other, so only static plots and terrain decide. */
+/** Extra frontage options must not extend through a different resident's
+ * original owned house. Only nearby SEED lots are examined. */
+function conflictsWithAssignedHome(place: Place, plan: SettlementExteriorPlan,
+  index: number, candidate: { x: number; z: number }, radius: number) {
+  const reach = radius + metresToSource(12);
+  return settlementHomeIndicesNear(place, candidate.x - reach, candidate.x + reach,
+    candidate.z - reach, candidate.z + reach).some(other => {
+    if (other === index) return false;
+    const home = settlementHomeFor(place, other, plan), point = home.candidates[0];
+    return Math.hypot(wrapSourceX(candidate.x - point.x), candidate.z - point.z) <
+      radius + home.clearanceRadius;
+  });
+}
+function guardHomeCount(plan: SettlementExteriorPlan) {
+  return plan.gates.reduce((sum, gate) => sum + gate.guardPosts.length * 2, 0);
+}
+/** Reserve mandatory guard homes in fixed SEED order so direct resident lookup,
+ * LOD, tile emission, and unload/revisit cannot change which guard receives
+ * the finite vacant frontage. Every chosen house keeps its unique owner ID. */
+function resolveGuardHomes(place: Place, plan: SettlementExteriorPlan, resolution: ResolvedSettlement) {
+  if (resolution.guardsReady) return;
+  const plots = resolution.homePlots || (resolution.homePlots = new Map<number, SettlementPlotPlan>()),
+    reserved: Occupant[] = [], usedSpare = new Set<number>(),
+    count = guardHomeCount(plan);
+  for (let index = 6; index < 6 + count; index++) {
+    let plot = settlementHomeFor(place, index, plan), chosen: Resolved = null;
+    for (const [attempt, candidate] of plot.candidates.entries()) {
+      if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) ||
+          overlaps(reserved, candidate.x, candidate.z, plot.clearanceRadius) ||
+          !candidateLegal(place, plan, plot, candidate) ||
+          (attempt >= 11 && conflictsWithAssignedHome(place, plan, index, candidate, plot.clearanceRadius))) continue;
+      chosen = candidate; break;
+    }
+    if (!chosen) for (let ordinal = 0,
+      vacant = Math.max(0, settlementLotCount(place) - SETTLEMENT_POPULATION[place.kind]);
+      ordinal < vacant; ordinal++) {
+      if (usedSpare.has(ordinal)) continue;
+      const spare = settlementSpareHomeFor(place, index, ordinal, plan);
+      if (!spare) continue;
+      const point = spare.candidates.find(candidate =>
+        !overlaps(resolution.staticOccupants, candidate.x, candidate.z, spare.clearanceRadius) &&
+        !overlaps(reserved, candidate.x, candidate.z, spare.clearanceRadius) &&
+        !conflictsWithAssignedHome(place, plan, index, candidate, spare.clearanceRadius) &&
+        candidateLegal(place, plan, spare, candidate));
+      if (!point) continue;
+      plot = spare; chosen = point; usedSpare.add(ordinal); break;
+    }
+    plots.set(index, plot);
+    resolution.homes.set(plot.id, chosen);
+    if (chosen) reserved.push({ ...chosen, radius: plot.clearanceRadius });
+  }
+  resolution.guardsReady = true;
+}
+/** Resolve a unique owned frontage lazily while protecting required guard
+ * reservations and exact street/water/wall/building placement constraints. */
 function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: ResolvedSettlement, index: number) {
   const plots = resolution.homePlots || (resolution.homePlots = new Map<number, SettlementPlotPlan>());
+  if (index >= 6 && index < 6 + guardHomeCount(plan)) resolveGuardHomes(place, plan, resolution);
   let plot = plots.get(index);
   if (plot) return plot;
   plot = settlementHomeFor(place, index, plan);
   let chosen: Resolved = null;
-  for (const candidate of plot.candidates) {
-    if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) || !candidateLegal(place, plan, plot, candidate)) continue;
-    chosen = candidate;
-    break;
+  for (const [attempt, candidate] of plot.candidates.entries()) {
+    if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) ||
+        !candidateLegal(place, plan, plot, candidate) ||
+        (attempt >= 11 && conflictsWithAssignedHome(place, plan, index, candidate, plot.clearanceRadius))) continue;
+    chosen = candidate; break;
   }
   plots.set(index, plot);
   resolution.homes.set(plot.id, chosen);
@@ -255,11 +311,16 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       const point = resolution.staticAnchors.get(plot.id);
       if (point) emitPlot(place, plan, plot, point);
     }
-    const stride = homeStride(place, tile.size), pad = metresToSource(20);
-    for (const index of settlementHomeIndicesNear(place, tile.minX - pad, tile.minX + tile.size + pad, tile.minZ - pad, tile.minZ + tile.size + pad)) {
+    const stride = homeStride(place, tile.size), pad = metresToSource(20),
+      nearbyHomes = new Set(settlementHomeIndicesNear(place, tile.minX - pad, tile.minX + tile.size + pad,
+        tile.minZ - pad, tile.minZ + tile.size + pad));
+    // A watchman's vacant replacement lot can be away from their former slot.
+    // Resolve only the small fixed SEED watch roster in addition to nearby homes.
+    for (let index = 6; index < 6 + guardHomeCount(plan); index++) nearbyHomes.add(index);
+    for (const index of nearbyHomes) {
       if (index % stride !== 0) continue;
       const plot = resolveHome(place, plan, resolution, index), point = resolution.homes.get(plot.id);
-      if (point && nearTile(tile, plot.candidates[0], 12)) emitPlot(place, plan, plot, point);
+      if (point && nearTile(tile, point, 12)) emitPlot(place, plan, plot, point);
     }
     for (const gate of plan.gates) {
       const gateYaw = Math.PI / 2 - gate.bearingRad;
