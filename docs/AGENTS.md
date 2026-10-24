@@ -37,7 +37,15 @@ Before any action or response:
 9. If work becomes unmanageable, reduce it to the minimum deterministic steps for the ACTIVE WP. Do not expand scope.
 10. Keep process overhead proportional to game improvement.
 
-CHECK FIRST → ACT ONLY WHEN NECESSARY → VERIFY SUFFICIENTLY → STOP WHEN REQUIRED WORK IS DONE.
+CHECK FIRST → ACT ON THE ACTIVE WP → VERIFY SUFFICIENTLY → RELEASE USEFUL INCREMENTS → CONTINUE UNRESOLVED ACCEPTANCE.
+
+# CONTINUOUS, EVIDENCE-DRIVEN WP RESOLUTION
+
+- An incomplete ACTIVE WP continues across runs and may require multiple independently releasable corrections. Do not impose an arbitrary count of attempts, screenshots, iterations, or runs. A previous failure or elapsed time does not by itself make a WP impossible or authorize switching it.
+- On each run, re-evaluate persistent unresolved acceptance items against **current code and actual evidence**. Mark a previously reported problem resolved only when the evidence proves it; distinguish reproduced, unverified, stale, and solved findings.
+- Turn each still-relevant failure into an actionable next step: exact failing behavior/fixture, SEED or Simulation authority, smallest scoped source change, focused assertion or required visual proof, and deployment status. Prioritize actual game improvements over diagnostic or process work.
+- Implement and release the smallest safe incremental improvement once essential startup, SEED, Simulation, focused release checks, and build pass. Keep the WP Issue OPEN and ownership unchanged until all acceptance criteria, real visual evidence where required, and exact deployed-main verification pass. Deployment is not WP completion.
+- Never restart a valid running test solely because it is slow, duplicate passing validation without a relevant change, create endless retries, or let optional diagnostics block a ready release. Each individual job and run must have a finite end condition. If no useful current-run action remains while independent checks finish, record the accurate pending state and resume the **same ACTIVE WP** in the next run.
 
 # AGENT IDENTITY AND ACTIVE WP
 
@@ -83,7 +91,7 @@ DO NOT ADD DESCRIPTIONS OR INFLATE THE ROADMAP.
 
 Create each WP as a GitHub Issue with: Objective, Scope, Rules, In-Game Evidence, Success Criteria.
 
-Each WP must be solvable in one pass. If not, split it into smaller sub-WPs.
+Each WP must be independently solvable without dependencies on other WPs. Plan oversized new WPs as smaller independent packages; an ACTIVE WP may be resolved incrementally over multiple runs and releases.
 
 After creating/updating the next STAGE and Issues, stop and await the next command.
 
@@ -151,17 +159,15 @@ Functional tests, logs, JSON, telemetry, or workflow success MUST NEVER be used 
 
 If tools/screenshot_tool.py needs improvement, update it first, then test again.
 
-A VISUAL/MIXED WP passes only with score >=8/10 and no obvious major visual defects. If below 8, improve and retest, up to 3 attempts.
-
-If 3 attempts are exhausted, stop the run with the same WP still ACTIVE. Do NOT switch WPs.
+A VISUAL/MIXED WP passes only with score >=8/10 and no obvious major visual defects. If below 8, identify the specific observed defect, make the smallest useful correction, and inspect new evidence. Continue evidence-driven iterations across runs as needed; no fixed attempt ceiling excuses unfinished acceptance. Keep individual captures finite and do not repeat already-valid scenes.
 
 ## FUNCTIONAL
 
 For genuinely FUNCTIONAL WPs where screenshots are not meaningful, record VISUAL: N/A with a short reason and use functional tests.
 
-Never loop more than 3 test/improvement attempts.
+Do not impose a fixed correction or test/improvement attempt ceiling. Each correction must address a concrete reproduced failure, and each validation run must be finite; reuse passing evidence and avoid redundant full-suite checks.
 
-Do not finish merely because a test is still running. Wait and retrieve the result in the same run when technically possible.
+Retrieve a running test's result in the same run when useful and possible. If it remains independently running and no further useful current-run action exists, record PENDING truthfully, retain the ACTIVE WP and continue in the next run.
 
 A queued/delayed test does NOT authorize switching WPs, claiming another WP, marking completion, or assigning an unsupported visual score.
 
