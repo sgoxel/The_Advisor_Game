@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -244,7 +244,7 @@ const uploads: {
   precision: PatchConversionStats;
 }[] = [];
 /** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
-const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2);
+const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2, TIME_SCALE);
 const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(place)]));
 let residentResultReady = () => {};
 function residentRequestForView(tick: number, limit: number): ResidentQuery | undefined {
@@ -1603,7 +1603,7 @@ async function start() {
           if (residentBatch.completed.size === residentBatch.count) {
             const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
             residentBatch = undefined;
-            if (residentQueries.complete(event.data.id, merged)) residentResultReady();
+            if (residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())))) residentResultReady();
           }
         }
         return;
@@ -1708,9 +1708,10 @@ async function start() {
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen,
         ready, settlementDetailVisible, smallDetailsVisible);
       const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentMode.actors ? 160 : 24) : undefined;
+      const previousSnapshot = residentQueries.current;
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
-      const snapshot = residentQueries.current;
+      const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2);
       if (!residentMode.inspect || !residentMode.actors || (snapshot && snapshot.id !== lastResidentSnapshot)) {
         const residents = snapshot?.residents ?? [];
         if (snapshot) { lastResidentSnapshot = snapshot.id; simulation.acceptResidentQuery(residents, snapshot.query); }
