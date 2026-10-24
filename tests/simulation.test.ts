@@ -142,6 +142,15 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+  // A one-metre-deep water/cut strip lies precisely between the old 2 m
+  // probes (x=0,2,...). Endpoints are valid; the interior must still block.
+  const narrowCut = (point: typeof start) => point.eastM < .75 || point.eastM > 1.25;
+  assert.equal(narrowCut(start), true);
+  assert.equal(narrowCut(goal), true);
+  assert.equal(continuousWalkableOffsetSegment(start, goal, narrowCut), false,
+    "an unbridged one-metre obstacle cannot be skipped by coarse sampling");
+  assert.equal(continuousWalkableOffsetSegment(goal, start, narrowCut), false,
+    "reverse travel cannot bypass the same narrow physical crossing");
 });
 
 test("S006 residents traverse only authoritative bridge decks and stand at deck elevation", () => {

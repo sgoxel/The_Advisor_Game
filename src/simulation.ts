@@ -655,13 +655,14 @@ export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
   }
   return best;
 }
-/** Sample the authoritative final surface every 2 physical metres, including endpoints.
+/** Sample the authoritative final surface at most one physical metre apart, including endpoints.
+ * A sub-2 m stream/cut between formerly legal samples cannot authorize an invented shortcut.
  * Presentation streets alone are not walking authority. */
 export function continuousWalkableOffsetSegment(
   from: Offset, to: Offset, walkable: (point: Offset) => boolean,
 ): boolean {
   const length = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
-  const steps = Math.max(1, Math.ceil(length / 2));
+  const steps = Math.max(1, Math.ceil(length));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     if (!walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
