@@ -608,18 +608,19 @@ function buildPlan(place: Place, radiusBoostM: number): SettlementExteriorPlan {
 
 /**
  * Lazy deterministic exterior record. Camera/visit order never contributes.
- * A city that cannot seat every canonical household on its frontage lots grows
- * in fixed 30 m steps until it can (a function of the seed-keyed layout only).
+ * A settlement lacking legal spare household frontages grows in fixed,
+ * bounded seed-keyed steps until its canonical one-person population fits.
+ * Both villages and cities need vacant capacity for physically rejected lots.
  */
 export function settlementExteriorFor(place: Place) {
   let plan = plans.get(place.code);
   if (!plan) {
     const wanted = Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03);
     for (let boost = 0; boost <= 10; boost++) {
-      plan = buildPlan(place, place.kind === "city" ? boost * 30 : 0);
+      plan = buildPlan(place, boost * (place.kind === "city" ? 30 : 16));
       const layout = layouts.get(place.code)!;
       layout.lots = computeLots(layout, place, wanted);
-      if (layout.lots.length >= wanted || place.kind !== "city") break;
+      if (layout.lots.length >= wanted) break;
     }
     plans.set(place.code, plan!);
     while (plans.size > 24) {
