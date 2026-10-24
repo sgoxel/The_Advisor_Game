@@ -120,3 +120,49 @@ test("exact pole coverage is unique bounded and independent of degenerate longit
   }
   assert.deepEqual(sortedKeys(northA), sortedKeys(northB));
 });
+
+test("tile generation uses every spare core, limited only by device memory", async () => {
+  const { generationWorkerCount, streamingBudgetForPool, streamingBudgetForViewport } = await import("../src/streaming.ts");
+  assert.equal(generationWorkerCount(12, 8), 11, "12-core PC: 11 workers");
+  assert.equal(generationWorkerCount(8, 8), 7, "8-core phone with 8 GB: 7 workers");
+  assert.equal(generationWorkerCount(8, 4), 7, "8-core phone with 4 GB: 7 workers");
+  assert.equal(generationWorkerCount(8, 2), 4, "a 2 GB device is held back only by memory");
+  assert.equal(generationWorkerCount(2, 8), 1, "two cores: one worker, one core left for rendering");
+  assert.equal(generationWorkerCount(1, 1), 1, "always at least one worker");
+  assert.equal(generationWorkerCount(undefined, undefined), 3, "unknown hardware is treated as 4 cores and 4 GB");
+  assert.equal(generationWorkerCount(64, 8), 16, "memory caps very large core counts");
+  for (const [width, height] of [[390, 844], [1024, 768], [1440, 900]]) {
+    const base = streamingBudgetForViewport(width, height);
+    assert.equal(streamingBudgetForPool(width, height, 1).generationReady, base.generationReady, "a single worker keeps the viewport budget");
+    assert.equal(streamingBudgetForPool(width, height, 11).generationReady, Math.max(base.generationReady, 13), "a large pool gets a slot per worker plus two uploads");
+    const memory = { cacheTrimStartBytes: 0, combinedBytes: 0, cpuBytes: 0, gpuBytes: 0 };
+    assert.deepEqual({ ...streamingBudgetForPool(width, height, 11), generationReady: 0, ...memory }, { ...base, generationReady: 0, ...memory }, "the pool changes only job slots and memory");
+  }
+});
+
+test("the tile cache grows with device memory and uploads use a per-frame budget", async () => {
+  const { streamingMemoryBytesForDevice, streamingBudgetForPool, STREAMING_BUDGETS, UPLOAD_FRAME_BUDGET_MS } = await import("../src/streaming.ts");
+  assert.equal(streamingMemoryBytesForDevice("desktop", 8), 4e9, "a desktop reporting 8 GB (the browser maximum) gets 4 GB");
+  assert.equal(streamingMemoryBytesForDevice("desktop", 4), 2e9);
+  assert.equal(streamingMemoryBytesForDevice("phone", 8), 2.8e9, "phones keep 35% of RAM");
+  assert.equal(streamingMemoryBytesForDevice("phone", 4), 1.4e9);
+  assert.equal(streamingMemoryBytesForDevice("phone", 2), 1e9, "never below the old 1 GB floor");
+  assert.equal(streamingMemoryBytesForDevice("tablet", undefined), 1.4e9, "unknown memory is treated as 4 GB");
+  const desktop = streamingBudgetForPool(1440, 900, 11, 8);
+  assert.equal(desktop.cacheTrimStartBytes, 4e9);
+  assert.equal(desktop.combinedBytes, 4e9);
+  assert.equal(desktop.maxUploadsPerFrame, 8);
+  assert.ok(STREAMING_BUDGETS.phone.maxUploadsPerFrame >= 3 && STREAMING_BUDGETS.tablet.maxUploadsPerFrame >= 4);
+  assert.ok(UPLOAD_FRAME_BUDGET_MS > 0 && UPLOAD_FRAME_BUDGET_MS < 16, "uploads leave most of a 60 fps frame to drawing");
+});
+
+test("render resolution starts at native and steps down only when frames are slow", async () => {
+  const { nextPixelRatio } = await import("../src/render-resolution.ts");
+  assert.equal(nextPixelRatio(3, 16, 3), 3, "smooth: stay at native");
+  assert.equal(nextPixelRatio(3, 30, 3), 2.75, "slow: one step down");
+  assert.equal(nextPixelRatio(1, 40, 3), 1, "never below 1× on a high-DPI screen");
+  assert.equal(nextPixelRatio(2, 12, 3), 2.25, "headroom: one step back up");
+  assert.equal(nextPixelRatio(3, 12, 3), 3, "never above native");
+  assert.equal(nextPixelRatio(1, 40, 1), 1, "a 1× screen stays at 1×");
+  assert.equal(nextPixelRatio(2.5, 21, 3), 2.5, "in the comfortable band nothing changes");
+});

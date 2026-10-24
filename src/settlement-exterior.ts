@@ -127,6 +127,17 @@ export function settlementSpareHomeFor(place: Place, index: number, ordinal: num
   };
 }
 
+/**
+ * A café or restaurant run from resident home `index`, a pure function of the seed. Cities: about one home in 41.
+ * Villages: one café on every 40th home (indices 3 and 43). Out-of-range indices have no shop.
+ */
+export function settlementShopFor(place: Place, index: number): "cafe" | "restaurant" | undefined {
+  if (!Number.isInteger(index) || index < 0 || index >= canonicalSettlementPopulation(place)) return undefined;
+  if (place.kind !== "city") return index % 40 === 3 ? "cafe" : undefined;
+  if (digest(`${place.code}/SHOP/${index}`) % 41 !== 0) return undefined;
+  return digest(`${place.code}/SHOP-TYPE/${index}`) & 1 ? "restaurant" : "cafe";
+}
+
 function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
   if (plot.kind !== "service" || !plot.service) return plot;
   const ownerIndex = SERVICE_OWNER[plot.service], population = canonicalSettlementPopulation(place),

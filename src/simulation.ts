@@ -109,7 +109,7 @@ type GuardAssignment = {
   shift: 0 | 1;
 };
 
-type QueryStats = {
+export type QueryStats = {
   settlements: number;
   candidateResidents: number;
   evaluatedResidents: number;
@@ -207,7 +207,30 @@ function offsetForSource(place: Place, x: number, z: number) {
 }
 type Offset = { eastM: number; northM: number };
 type ActivitySite = Offset & { id: string; label: string };
-type SettlementAnchors = { markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][] };
+/** A shared outdoor standing ground (square, trading pitch, garden, field, gate post...): residents stand on seeded slots inside it. */
+type StandArea = { key: string; eastM: number; northM: number; radiusM: number; kerbM: number; clearM: number; field?: boolean };
+type SlotState = { valid: Offset[]; next: number; exhausted: boolean; rivals?: StandArea[] };
+type StreetSegment = { ax: number; az: number; bx: number; bz: number; halfM: number };
+type StandTable = { slotOf: Map<string, number>; total: Map<string, number> };
+type SettlementAnchors = {
+  markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][];
+  /** Standing grounds by anchor coordinates, all of them (each once), the slots generated so far, street segments in metres and the resident-to-slot table. */
+  areas: Map<string, StandArea>; areaList: StandArea[]; slots: Map<string, SlotState>; streetCells?: Map<string, StreetSegment[]>; stand?: StandTable;
+};
+const coordKey = (offset: Offset) => `${offset.eastM.toFixed(2)}/${offset.northM.toFixed(2)}`;
+/** Width of the pavement beside a street (mirrors world.ts): nobody stands on the road or its pavement. */
+const STREET_CLEAR_M = 1.8;
+/** Golden-angle (Vogel) spiral constant: neighbouring slots are at least 0.9 m apart. */
+const SLOT_SPIRAL = 0.6;
+const SLOT_GAP_M = 0.9;
+/** Registers a standing ground at an anchor (the first one registered at a spot wins). */
+function standArea(anchors: SettlementAnchors, centre: Offset, radiusM: number, kerbM = STREET_CLEAR_M, clearM = 0, key = coordKey(centre)) {
+  const taken = anchors.areas.get(coordKey(centre));
+  if (taken) return taken;
+  const made: StandArea = { key, eastM: centre.eastM, northM: centre.northM, radiusM, kerbM, clearM };
+  anchors.areas.set(coordKey(centre), made); anchors.areaList.push(made);
+  return made;
+}
 const anchorCache = new Map<string, SettlementAnchors>();
 /** Real public places of the focused settlement (inn, market, well square, keep, workshops, fields, gate posts); bounded cache. */
 function settlementAnchors(place: Place): SettlementAnchors {
@@ -217,21 +240,24 @@ function settlementAnchors(place: Place): SettlementAnchors {
     plotPoint = (kind: string, service?: string) => plan.plots.find((plot) => plot.kind === kind && (!service || plot.service === service))?.candidates[0],
     services = new Map<string, Offset>();
   for (const plot of plan.plots) if (plot.kind === "service" && plot.service) services.set(plot.service, at(plot.candidates[0]));
+  // Public trading pitches at street edges, spread through neighbourhoods and thinned evenly over all streets.
+  const allPitches = plan.streets.flatMap(street => street.points.slice(0, -1).flatMap((point, i) => {
+    if (i % Math.max(1, Math.ceil(street.points.length / 4))) return [];
+    const next = street.points[i + 1], scale = sourceUnitsPerMetreAt(point.z),
+      dx = wrapSourceX(next.x - point.x) / scale.x, dz = (next.z - point.z) / scale.z,
+      length = Math.hypot(dx, dz);
+    if (length < 6) return [];
+    const side = (i % 2 ? -1 : 1) * (street.width * CANONICAL_METRES_PER_SOURCE_UNIT * .5 + .7);
+    return [{ ...at({ x: wrapSourceX(point.x + (next.x - point.x) * .5 - dz / length * side * scale.x),
+      z: (point.z + next.z) * .5 + dx / length * side * scale.z }),
+      id: `${street.id}/TRADING/${i}`, label: "Trading along the high street" }];
+  })).filter(site => outdoorSiteLegal(place, site)),
+    pitchCap = place.kind === "city" ? 64 : 16,
+    pitches = allPitches.length <= pitchCap ? allPitches : Array.from({ length: pitchCap }, (_, i) => allPitches[Math.floor(i * allPitches.length / pitchCap)]);
   const anchors: SettlementAnchors = {
     inn: at(plotPoint("service", "inn")), market: at(plotPoint("service", "market")),
     plaza: at(plotPoint("well")), keep: at(plotPoint("keep")), services,
-    // Public trading pitches at street edges, spread through neighbourhoods.
-    markets: plan.streets.flatMap(street => street.points.slice(0, -1).flatMap((point, i) => {
-      if (i % Math.max(1, Math.ceil(street.points.length / 4))) return [];
-      const next = street.points[i + 1], scale = sourceUnitsPerMetreAt(point.z),
-        dx = wrapSourceX(next.x - point.x) / scale.x, dz = (next.z - point.z) / scale.z,
-        length = Math.hypot(dx, dz);
-      if (length < 6) return [];
-      const side = (i % 2 ? -1 : 1) * (street.width * CANONICAL_METRES_PER_SOURCE_UNIT * .5 + .7);
-      return [{ ...at({ x: wrapSourceX(point.x + (next.x - point.x) * .5 - dz / length * side * scale.x),
-        z: (point.z + next.z) * .5 + dx / length * side * scale.z }),
-        id: `${street.id}/TRADING/${i}`, label: "Trading along the high street" }];
-    })).filter(site => outdoorSiteLegal(place, site)).slice(0, 16),
+    markets: pitches,
     gardens: plan.plots.filter(plot => plot.kind === "garden").map(plot => ({ ...at(plot.candidates[0]), id: plot.id, label: "Neighbourhood garden" })).filter(site => outdoorSiteLegal(place, site)),
     fieldsSites: plan.plots.filter(plot => plot.kind === "field").flatMap(plot => {
       // Separate working patches across a real cultivated plot, not one shared centre.
@@ -246,7 +272,24 @@ function settlementAnchors(place: Place): SettlementAnchors {
       }).filter(site => outdoorSiteLegal(place, site));
     }),
     posts: plan.gates.map((gate) => (gate.guardPosts.length ? gate.guardPosts : [gate]).map((post) => at(post))),
+    areas: new Map(), areaList: [], slots: new Map(),
   };
+  // Standing grounds sized by the real footprint: the well square 12 m, service plots and the keep by their half size,
+  // gardens by their plot, one shared ground per field, trading pitches and gate posts small.
+  const area = (centre: Offset, radiusM: number, kerbM = STREET_CLEAR_M, clearM = 0, key = coordKey(centre)) => standArea(anchors, centre, radiusM, kerbM, clearM, key),
+    half = (plot: { widthM?: number; depthM?: number }) => Math.min(plot.widthM ?? 8, plot.depthM ?? 8) / 2;
+  area(anchors.plaza, 12, STREET_CLEAR_M, 1.9);
+  for (const plot of plan.plots) {
+    if (plot.kind === "service" || plot.kind === "keep") area(at(plot.candidates[0]), Math.max(2.5, Math.min(12, half(plot) - .5)));
+    else if (plot.kind === "garden") area(at(plot.candidates[0]), Math.max(1.8, Math.min(3.2, half(plot) + .6)));
+    else if (plot.kind === "field") {
+      const field = area(at(plot.candidates[0]), Math.max(3, Math.min(12, half(plot) * .85)), STREET_CLEAR_M, 0, plot.id);
+      field.field = true;
+      for (const patch of anchors.fieldsSites) if (patch.id.startsWith(`${plot.id}/PATCH/`) && !anchors.areas.has(coordKey(patch))) anchors.areas.set(coordKey(patch), field);
+    }
+  }
+  for (const post of anchors.posts.flat()) area(post, 2.5);
+  for (const site of anchors.markets) area(site, 4.5, .4);
   anchorCache.set(place.code, anchors);
   while (anchorCache.size > 16) anchorCache.delete(anchorCache.keys().next().value!);
   return anchors;
@@ -282,6 +325,8 @@ function natureSites(place: Place) {
       return finalSurfaceAt(p.x, p.z).water.kind !== "none";
     }) && reachable(point)) fishing.push({ ...point, id: `${place.code}/SHORE/${i}`, label: "Fishing from the bank" });
   }
+  // Fishing banks and woodland work sites are small standing grounds of their own.
+  for (const site of [...fishing, ...woodland]) standArea(anchors, site, 2.5);
   return anchors.nature = { fishing, woodland };
 }
 function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
@@ -346,7 +391,12 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
       const habitat = natureSites(place), sites = character.startsWith("fisherman") ? habitat.fishing : /^(hunter|woodcutter|herbalist)/.test(character) ? habitat.woodland : [];
       return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
     }
-    case "clergy": return anchors.plaza;
+    // A city's clergy minister at the well square and, for two in three, at a shrine in a neighbourhood garden, not all on one spot.
+    case "clergy": {
+      if (place.kind !== "city" || !anchors.gardens.length || !(digest(`${place.code}/RESIDENT/${index}/SHRINE`) % 3)) return anchors.plaza;
+      const shrine: ActivitySite = { ...neighbourhoodSite(place, { code: `${place.code}/RESIDENT/${index}`, homeOffset: home }, "garden"), label: "Tending the shrine" };
+      return shrine;
+    }
     case "noble": return anchors.keep;
     default: return home; // artisans keep their workshop at home; children and elders have no workplace
   }
@@ -463,12 +513,88 @@ function anchorRoute(place: Place, foundation: ResidentFoundation, anchor: Routi
   if (anchor === "garden" || anchor === "market") return (anchorOffset(place, foundation, anchor) as ActivitySite).id;
   return anchor === "home" ? foundation.homeEntrance : anchor === "work" ? ((foundation.workOffset as ActivitySite).id ?? foundation.workplace) : `${foundation.settlement}/${anchor.toUpperCase()}`;
 }
-/** Small seeded standing spot around an outdoor anchor, so a crowd at the market does not stack. */
-function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
-  // A posted guard stands at their SEED post, not an arbitrary crowd offset.
+/** Street centre lines in local metres with their half widths, bucketed in 24 m cells (cached per settlement). */
+function streetCellsFor(place: Place, anchors: SettlementAnchors) {
+  if (anchors.streetCells) return anchors.streetCells;
+  const cells = new Map<string, StreetSegment[]>(), size = 24;
+  for (const street of settlementExteriorFor(place).streets) {
+    const halfM = street.width * CANONICAL_METRES_PER_SOURCE_UNIT * .5, points = street.points.map((point) => offsetForSource(place, point.x, point.z));
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i], segment: StreetSegment = { ax: a.eastM, az: a.northM, bx: b.eastM, bz: b.northM, halfM }, reach = halfM + STREET_CLEAR_M + 1;
+      for (let cx = Math.floor((Math.min(a.eastM, b.eastM) - reach) / size); cx <= Math.floor((Math.max(a.eastM, b.eastM) + reach) / size); cx++)
+        for (let cz = Math.floor((Math.min(a.northM, b.northM) - reach) / size); cz <= Math.floor((Math.max(a.northM, b.northM) + reach) / size); cz++) {
+          const key = `${cx}/${cz}`, bucket = cells.get(key);
+          if (bucket) bucket.push(segment); else cells.set(key, [segment]);
+        }
+    }
+  }
+  return anchors.streetCells = cells;
+}
+/** True when a point is on a street's road or closer than `kerbM` beyond its edge. */
+function onStreetBand(place: Place, anchors: SettlementAnchors, point: Offset, kerbM: number) {
+  for (const s of streetCellsFor(place, anchors).get(`${Math.floor(point.eastM / 24)}/${Math.floor(point.northM / 24)}`) ?? []) {
+    const dx = s.bx - s.ax, dz = s.bz - s.az, t = Math.max(0, Math.min(1, ((point.eastM - s.ax) * dx + (point.northM - s.az) * dz) / (dx * dx + dz * dz || 1)));
+    if (Math.hypot(point.eastM - s.ax - dx * t, point.northM - s.az - dz * t) < s.halfM + kerbM) return true;
+  }
+  return false;
+}
+/**
+ * The n-th free standing slot of an area: a golden-angle spiral around its centre (seeded start angle), skipping
+ * the street band, the middle clearance and the discs of smaller neighbouring areas, so slots never share a spot.
+ * Slots beyond four times its radius wrap, which only happens for a crowd far larger than the ground.
+ */
+function slotOffset(place: Place, anchors: SettlementAnchors, area: StandArea, n: number): Offset {
+  let state = anchors.slots.get(area.key);
+  if (!state) anchors.slots.set(area.key, state = { valid: [], next: 0, exhausted: false });
+  const rivals = state.rivals ?? (state.rivals = anchors.areaList.filter((other) => other !== area && (other.radiusM < area.radiusM || (other.radiusM === area.radiusM && other.key < area.key))
+    && Math.hypot(other.eastM - area.eastM, other.northM - area.northM) < area.radiusM * 2 + other.radiusM + 1)),
+    phase = (digest(`${area.key}/SLOTS`) % 360) * Math.PI / 180;
+  while (state.valid.length <= n && !state.exhausted) {
+    const j = state.next++, radius = SLOT_SPIRAL * Math.sqrt(j + .5);
+    if (radius > area.radiusM * 4) { state.exhausted = true; break; }
+    const angle = phase + j * 2.399963229728653, point = { eastM: area.eastM + Math.cos(angle) * radius, northM: area.northM + Math.sin(angle) * radius };
+    if (radius < area.clearM || onStreetBand(place, anchors, point, area.kerbM)
+      || rivals.some((other) => Math.hypot(point.eastM - other.eastM, point.northM - other.northM) < other.radiusM + SLOT_GAP_M)) continue;
+    state.valid.push(point);
+  }
+  return state.valid.length ? state.valid[n % state.valid.length] : area;
+}
+const KIND_RANK: Readonly<Partial<Record<ActivityKind, number>>> = { guard: 0, work: 1, lunch: 2, errand: 3, play: 4, stroll: 5, rest: 6, socialise: 7, pray: 8, commute: 9 };
+/**
+ * Which residents use which standing ground, from their workday and rest-day plans. Each resident gets one slot per
+ * ground, numbered by (most frequent use first, resident index), so any two residents at a ground are on different slots.
+ */
+function standTableFor(place: Place): StandTable {
+  const anchors = settlementAnchors(place);
+  if (anchors.stand) return anchors.stand;
+  const users = new Map<string, [number, number][]>();
+  for (let index = 0; index < populationOf(place); index++) {
+    const foundation = residentFoundationAt(place, index), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, best = new Map<string, number>();
+    for (const [day, weekday] of [[0, 0], [6, 6]]) for (const entry of dailyPlan(subject, foundation.traits, day, weekday)) {
+      if (entry.indoors || entry.anchor === "home") continue;
+      const ground = anchors.areas.get(coordKey(anchorOffset(place, foundation, entry.anchor)));
+      if (ground) best.set(ground.key, Math.min(best.get(ground.key) ?? 99, KIND_RANK[entry.kind] ?? 9));
+    }
+    for (const [key, rank] of best) { const list = users.get(key); if (list) list.push([rank, index]); else users.set(key, [[rank, index]]); }
+  }
+  const slotOf = new Map<string, number>(), total = new Map<string, number>();
+  for (const [key, list] of users) {
+    list.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    list.forEach(([, index], slot) => slotOf.set(`${key}|${index}`, slot));
+    total.set(key, list.length);
+  }
+  return anchors.stand = { slotOf, total };
+}
+/**
+ * Where a resident stands while stationary at an outdoor anchor: a seeded slot inside the shared standing ground
+ * (pure function of place, resident and anchor, so walks start and end on the same spot). Indoors and at home: the anchor itself.
+ */
+function standingSpot(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
   if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
-  const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = (anchor === "garden" || (base as ActivitySite).id) ? .3 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 7) / 10 : 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
-  return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
+  const anchors = settlementAnchors(place), ground = anchors.areas.get(coordKey(base));
+  if (!ground) return base;
+  const table = standTableFor(place), n = table.slotOf.get(`${ground.key}|${foundation.index}`) ?? (table.total.get(ground.key) ?? 0) + digest(`${foundation.code}/VISIT/${ground.key}`) % 509;
+  return slotOffset(place, anchors, ground, n);
 }
 // ---------------------------------------------------------------- street paths
 
@@ -735,6 +861,29 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
 }
+/** Field crews share the fixed SEED field centre as an approach, then walk
+ * to their own standing slot. Every added connector uses the same authoritative
+ * ground and enclosure checks; failed approaches fall back to the exact search. */
+const fieldRouteCache = new Map<string, Offset[] | null>();
+function fieldEntry(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor) {
+  const ground = settlementAnchors(place).areas.get(coordKey(anchorOffset(place, foundation, anchor)));
+  return ground?.field ? ground : undefined;
+}
+function routinePath(place: Place, from: Offset, to: Offset, fromEntry?: Offset, toEntry?: Offset): Offset[] | null {
+  if (!fromEntry && !toEntry) return streetPath(place, from, to);
+  const key = residentStreetPathKey(place.code, from, to, true) +
+    `|${fromEntry?.eastM},${fromEntry?.northM}|${toEntry?.eastM},${toEntry?.northM}`,
+    cached = fieldRouteCache.get(key);
+  if (cached !== undefined) return cached;
+  const core = streetPath(place, fromEntry ?? from, toEntry ?? to);
+  const route = core && (!fromEntry || legalStreetSegment(place, from, fromEntry)) &&
+    (!toEntry || legalStreetSegment(place, toEntry, to))
+    ? [...(fromEntry ? [from] : []), ...core, ...(toEntry ? [to] : [])]
+    : streetPath(place, from, to);
+  fieldRouteCache.set(key, route);
+  while (fieldRouteCache.size > 4000) fieldRouteCache.delete(fieldRouteCache.keys().next().value!);
+  return route;
+}
 /** Replay earlier routine destinations from the last place actually reached. A failed
  * leg cannot become the origin of a later move just because Fantasy Time advances. */
 export function lastReachableRoutineStop<T>(
@@ -821,7 +970,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
   // post/worksite. Both guard shifts must carry their actual prior-day end
   // position through midnight, including blocked returns.
   const initialAnchor: RoutineAnchor = !replayOvernight ? "home" : plan[0].anchor,
-    morning = standingSpot(foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
+    morning = standingSpot(place, foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
       !replayOvernight ? false : !plan[0].indoors),
     previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
   let previousDay: ScheduledResidentState | undefined;
@@ -870,9 +1019,11 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     if (!leg && !blocked && actualAnchor === plan[step - 1].anchor)
       actuallyIndoors = plan[step - 1].indoors;
     const next = plan[step],
-      destination = standingSpot(foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
+      destination = standingSpot(place, foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
       origin = actualAnchor,
-      path = streetPath(place, offset, destination);
+      path = routinePath(place, offset, destination,
+        origin === "en route" ? undefined : fieldEntry(place, foundation, origin),
+        fieldEntry(place, foundation, next.anchor));
     if (!path) {
       leg = undefined;
       blocked = { origin, destination: next.anchor };
@@ -1079,6 +1230,11 @@ for (const place of places) {
     bucket = placeBuckets.get(key);
   if (bucket) bucket.push(place);
   else placeBuckets.set(key, [place]);
+}
+/** Shared stable population sampling order for serial and parallel view queries. */
+export function residentOrderFor(place: Place) {
+  const population = populationOf(place), start = digest(`${place.code}/VISIBLE_START`) % population;
+  return (index: number) => (index - start + population) % population;
 }
 function nearbyPlaces(x: number, z: number, radius: number) {
   const countX = Math.ceil(SOURCE_PRESENTATION_WIDTH / PLACE_BUCKET_SOURCE),
@@ -1330,12 +1486,8 @@ export class LazySimulation {
       for (let bx = bx0; bx <= bx1; bx++)
         for (const resident of index.buckets.get(`${bx}/${bz}`) ?? [])
           found.add(resident);
-    const start = digest(`${place.code}/VISIBLE_START`) % index.population;
-    return [...found].sort(
-      (a, b) =>
-        ((a - start + index.population) % index.population) -
-        ((b - start + index.population) % index.population),
-    );
+    const rank = residentOrderFor(place);
+    return [...found].sort((a, b) => rank(a) - rank(b));
   }
 
   private updateInspector(visible: Resident[], query: QueryStats) {
@@ -1423,6 +1575,7 @@ export class LazySimulation {
     z: number,
     radius: number,
     limit = DEFAULT_VISIBLE_LIMIT,
+    shard?: { index: number; count: number },
   ) {
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
     // A zero actor budget must be a zero-work, zero-actor query (never one
@@ -1442,7 +1595,7 @@ export class LazySimulation {
     });
     const candidateSets = settlements.map((place) => ({
       place,
-      residents: this.residentCandidates(place, x, z, radius),
+      residents: this.residentCandidates(place, x, z, radius).filter(index => !shard || index % shard.count === shard.index),
     }));
     const query: QueryStats = {
       settlements: settlements.length,
@@ -1469,6 +1622,12 @@ export class LazySimulation {
     this.lastQuery = query;
     this.updateInspector(visible, query);
     return visible;
+  }
+
+  /** Worker results feed the same inspector without reconstructing a population on the UI thread. */
+  acceptResidentQuery(residents: Resident[], query: QueryStats) {
+    this.lastQuery = query;
+    this.updateInspector(residents, query);
   }
 
   residentByCode(code: string, tick = this.tick) {

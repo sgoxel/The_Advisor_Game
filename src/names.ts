@@ -94,7 +94,8 @@ export function personName(address: string, sex: NameSex, continent: number) {
 const INN_ADJECTIVES = ["Gilded", "Sleeping", "Prancing", "Drowned", "Laughing", "Silver", "Crooked", "Golden", "Wandering", "Red", "Merry", "Hungry", "Blind", "Jolly", "Rusty", "Weary"];
 const INN_NOUNS = ["Boar", "Fox", "Stag", "Goose", "Lantern", "Kettle", "Raven", "Hound", "Barrel", "Crown", "Pony", "Anchor", "Plough", "Tankard", "Owl", "Ram"];
 
-export type BuildingKind = "inn" | "market" | "blacksmith" | "butcher" | "guard-office" | "farmstead" | "keep" | "well" | "house" | "garden" | "field" | "headman" | "merchant";
+export type BuildingKind = "inn" | "market" | "blacksmith" | "butcher" | "guard-office" | "farmstead" | "keep" | "well" | "house" | "garden" | "field" | "headman" | "merchant"
+  | "cafe" | "restaurant" | "square" | "playground" | "flower-garden";
 
 /**
  * A building's proper name. `address` is its plot id; `place` the settlement's
@@ -115,6 +116,11 @@ export function buildingName(kind: BuildingKind, address: string, place: string,
     case "merchant": return `${family} Trading House`;
     case "garden": return `${family} Garden`;
     case "field": return pick([`${family} Acre`, `Long Meadow`, `${stem} Field`, `Mill Acre`, `${family} Strip`, `Upper Pasture`, `${stem} Orchard`], `${address}/FIELD`);
+    case "cafe": return pick([`The Copper Kettle`, `Rosewater Café`, `${family}'s Coffee House`, `The Sleepy Cat Café`], `${address}/CAFE`);
+    case "restaurant": return pick([`The Golden Ladle`, `${family}'s Kitchen`, `The Roasted Hen`, `Saffron & Thyme`], `${address}/RESTAURANT`);
+    case "square": return pick([`${place} Square`, `Town Square`, `${stem} Square`, `Guildhall Square`], `${address}/SQUARE`);
+    case "playground": return pick([`Children's Green`, `${stem} Playground`, `The Swing Yard`], `${address}/PLAYGROUND`);
+    case "flower-garden": return pick([`${family} Rose Garden`, `Lavender Walk`, `${stem} Gardens`, `The Physic Garden`], `${address}/FLOWER-GARDEN`);
     default: return `${family} House`;
   }
 }

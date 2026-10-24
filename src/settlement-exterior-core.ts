@@ -18,7 +18,11 @@ export type SettlementService =
   | "guard-office"
   | "farmstead";
 
-export type SettlementPlotKind = "keep" | "well" | "house" | "field" | "service";
+export type SettlementPlotKind = "keep" | "well" | "house" | "field" | "service" | "park";
+/** Public green space sub-type (a `park` plot). */
+export type SettlementParkKind = "square" | "playground" | "flower-garden";
+/** Seeded outline of a park: a rectangle, a rectangle with chamfered corners, an inscribed octagon or an inscribed ellipse. */
+export type SettlementParkShape = "rect" | "cut" | "octagon" | "round";
 export type SettlementArchetype =
   | "roadside"
   | "green"
@@ -46,6 +50,8 @@ export type SettlementPlotPlan = {
   kind: SettlementPlotKind;
   service?: SettlementService;
   fieldForm?: SettlementFieldForm;
+  park?: SettlementParkKind;
+  parkShape?: SettlementParkShape;
   ownerId?: string;
   capacity: number;
   residents: number;
@@ -98,8 +104,11 @@ export type SettlementLot = {
 };
 
 export const SETTLEMENT_POPULATION = { city: 2400, village: 80 } as const;
-/** Smallest centre-to-centre distance between two lots: two clearance circles of the largest house. */
-export const MINIMUM_LOT_SPACING_M = 10.9;
+/**
+ * Smallest centre-to-centre distance between two lots: two clearance circles of the largest house (10.7 m), plus
+ * the 0.25 m outward shift each largest house takes from its lot centre. Shorter spacing lets two homes overlap.
+ */
+export const MINIMUM_LOT_SPACING_M = 11.2;
 
 const TAU = Math.PI * 2;
 const PHI = 0.6180339887498949;
@@ -155,12 +164,17 @@ const yawOf = (f: Frame, a: number, l: number) => {
   return Math.atan2(v.x, v.z);
 };
 
+/** Source units (~15 µm): distances closer than this count as equal when choosing a settlement's road. */
+const ROAD_TIE_EPSILON = 1e-6;
 function closestRoad(place: Place) {
   let chosen: Road | undefined,
     distance = Infinity;
   for (const road of roads) {
     const candidate = roadDistanceAt(place.x, place.z, road);
-    if (candidate < distance || (candidate === distance && road.code < (chosen?.code || "~"))) {
+    // Several roads usually start at the settlement itself (distance ~0). JavaScript engines differ by
+    // ~1e-12 there, so near-ties are decided by road code, never by float noise (else the town's axis,
+    // and its whole layout, would differ between browsers).
+    if (candidate < distance - ROAD_TIE_EPSILON || (Math.abs(candidate - distance) <= ROAD_TIE_EPSILON && road.code < (chosen?.code || "~"))) {
       chosen = road;
       distance = candidate;
     }
@@ -409,16 +423,55 @@ function cityStreets(place: Place, border: LP[], e0: number, e1: number, stretch
   return streets;
 }
 
+/** Along-street offsets (metres) a park may slide to when its planned spot is blocked, nearest first. */
+const PARK_SLIDES_M = [6, -6, 12, -12, 18, -18, 24, -24, 30, -30, 36, -36, 42, -42, 48, -48, 54, -54, 60, -60] as const;
+/** Extra metres a park may sit further back from its street (tried after every plain slide), so a wide park on a curved street clears its pavement. */
+const PARK_PUSHES_M = [3, 6] as const;
+/** Park size ranges in metres (width along the street, depth towards the rear), city and village. */
+type MetreRange = readonly [number, number];
+const PARK_RANGES: Record<SettlementParkKind, { city: { width: MetreRange; depth: MetreRange }; village: { width: MetreRange; depth: MetreRange } }> = {
+  square: { city: { width: [24, 38], depth: [18, 28] }, village: { width: [16, 26], depth: [12, 20] } },
+  playground: { city: { width: [12, 20], depth: [10, 15] }, village: { width: [11, 16], depth: [9, 13] } },
+  "flower-garden": { city: { width: [9, 16], depth: [7, 12] }, village: { width: [8, 14], depth: [6, 10] } },
+};
+/** The outlines a park of each sub-type may take (equal weights). */
+const PARK_SHAPES: Record<SettlementParkKind, readonly SettlementParkShape[]> = {
+  square: ["rect", "cut", "octagon", "round"],
+  playground: ["rect", "cut"],
+  "flower-garden": ["rect", "round", "octagon"],
+};
+
+/**
+ * A seeded park size and outline. Widths and depths are rounded to 0.5 m and kept inside their ranges; depth never exceeds width.
+ * The shape is only a rendering hint: the placement footprint stays the full width × depth rectangle.
+ */
+export function parkFootprintFor(placeCode: string, id: string, park: SettlementParkKind, city: boolean): { width: number; depth: number; shape: SettlementParkShape } {
+  const range = PARK_RANGES[park][city ? "city" : "village"],
+    seeded = (salt: string, [low, high]: MetreRange) => Math.round((low + unit(`${placeCode}/PLOT/${id}/${salt}`) * (high - low)) * 2) / 2;
+  let width = seeded("PARK-W", range.width), depth = seeded("PARK-D", range.depth);
+  if (depth > width) [width, depth] = [depth, width];
+  const shapes = PARK_SHAPES[park], shape = shapes[Math.floor(unit(`${placeCode}/PLOT/${id}/PARK-SHAPE`) * shapes.length)];
+  return { width, depth, shape };
+}
+
+/** Park capacity scales with its area: one visitor per 12 m² (city square, flower garden), 18 m² (village square) or 9 m² (playground); at least 4. */
+function parkCapacityFor(park: SettlementParkKind, area: number, city: boolean) {
+  const perVisitor = park === "playground" ? 9 : park === "square" && !city ? 18 : 12;
+  return Math.max(4, Math.round(area / perVisitor));
+}
+
 function footprintFor(
   place: Place,
   id: string,
   kind: SettlementPlotKind,
   service?: SettlementService,
   fieldForm?: SettlementFieldForm,
-) {
+  park?: SettlementParkKind,
+): { width: number; depth: number; shape?: SettlementParkShape } {
   const u = unit(`${place.code}/PLOT/${id}/FOOTPRINT`), city = place.kind === "city";
   if (kind === "keep") return city ? { width: 34, depth: 28 } : { width: 15, depth: 13 };
   if (kind === "well") return { width: 3, depth: 3 };
+  if (kind === "park") return parkFootprintFor(place.code, id, park ?? "square", city);
   if (kind === "field") {
     if (fieldForm === "strip") return { width: 12 + u * 8, depth: 24 + u * 12 };
     if (fieldForm === "orchard") return { width: 22 + u * 8, depth: 20 + u * 7 };
@@ -462,19 +515,30 @@ function plotOnStreet(
   residents: number,
   service?: SettlementService,
   fieldForm?: SettlementFieldForm,
+  park?: SettlementParkKind,
 ): SettlementPlotPlan {
   const street = layout.streets[streetIndex % layout.streets.length],
     base = sampleStreet(street, fraction * street.length),
-    footprint = footprintFor(place, id, kind, service, fieldForm),
+    footprint = footprintFor(place, id, kind, service, fieldForm, park),
+    plotCapacity = kind === "park" && park ? parkCapacityFor(park, footprint.width * footprint.depth, place.kind === "city") : capacity,
     lateral = side * (street.width * .5 + setback + footprint.depth * .5),
     a = base.a + base.na * lateral, l = base.l + base.nl * lateral,
     yawRad = yawOf(layout.frame, -base.na * side, -base.nl * side) + (unit(`${place.code}/PLOT/${id}/YAW`) - .5) * .12,
     clearanceRadius = Math.hypot(footprint.width, footprint.depth) * .5 + 1.5;
   layout.statics.push({ a, l, r: clearanceRadius });
+  // A park that cannot take its planned spot may slide along the same street, on either side (planned spot first).
+  const slide = (along: number, sign: -1 | 1, push = 0) => {
+    const s = sampleStreet(street, fraction * street.length + along), offset = sign * side * (street.width * .5 + setback + push + footprint.depth * .5);
+    return toSource(layout.frame, s.a + s.na * offset, s.l + s.nl * offset);
+  };
   return {
-    id: `${place.code}/PLOT/${id}`, kind, service, fieldForm, capacity, residents,
+    id: `${place.code}/PLOT/${id}`, kind, service, fieldForm, park, parkShape: footprint.shape, capacity: plotCapacity, residents,
     width: footprint.width, depth: footprint.depth, yawRad, clearanceRadius,
-    candidates: cloud(layout, `${place.code}/PLOT/${id}`, a, l, base.ta, base.tl, side, kind === "service" ? 6 : 5),
+    candidates: [
+      ...cloud(layout, `${place.code}/PLOT/${id}`, a, l, base.ta, base.tl, side, kind === "service" ? 6 : 5),
+      ...(kind === "park" ? PARK_SLIDES_M.flatMap((along) => [slide(along, 1), slide(along, -1)]) : []),
+      ...(kind === "park" ? PARK_PUSHES_M.flatMap((push) => [0, ...PARK_SLIDES_M].flatMap((along) => [slide(along, 1, push), slide(along, -1, push)])) : []),
+    ],
   };
 }
 
@@ -551,6 +615,23 @@ function buildPlan(place: Place, radiusBoostM: number): SettlementExteriorPlan {
   plots.push(servicePlot(layout, place, "butcher", Math.min(1, streets.length - 1), .63, -1, 12, 4));
   plots.push(servicePlot(layout, place, "guard-office", 0, .12, 1, 18, 6));
   plots.push(servicePlot(layout, place, "farmstead", streets.length - 1, .82, 1, 14, 6));
+
+  // Public green spaces, placed after the services so they keep their own street frontage.
+  const park = (streetIndex: number, id: string, type: SettlementParkKind, fraction: number, side: -1 | 1) =>
+    plotOnStreet(layout, place, streetIndex, `PARK/${id}`, "park", fraction, side, 3, 0, 0, undefined, undefined, type);
+  if (city) {
+    plots.push(park(0, "SQUARE", "square", .44, 1));
+    plots.push(park(2 % streets.length, "PLAYGROUND/0", "playground", .5, 1));
+    plots.push(park(5 % streets.length, "PLAYGROUND/1", "playground", .5, -1));
+    plots.push(park(1 % streets.length, "FLOWER/0", "flower-garden", .3, 1));
+    plots.push(park(3 % streets.length, "FLOWER/1", "flower-garden", .3, -1));
+    plots.push(park(6 % streets.length, "FLOWER/2", "flower-garden", .3, 1));
+  } else {
+    plots.push(park(0, "SQUARE", "square", .42, 1));
+    plots.push(park(Math.min(1, streets.length - 1), "PLAYGROUND/0", "playground", .55, -1));
+    plots.push(park(2 % streets.length, "FLOWER/0", "flower-garden", .35, 1));
+    plots.push(park(3 % streets.length, "FLOWER/1", "flower-garden", .35, -1));
+  }
 
   // Farmland lies outside the enclosure, one plot per bearing, never across the wall.
   const forms: SettlementFieldForm[] = ["strip", "paddock", "orchard", "vegetable", "pasture"],
@@ -633,6 +714,22 @@ export function settlementExteriorFor(place: Place) {
   return plan!;
 }
 
+/** A placed frontage lot in metres: its centre, along-street axis (ta, tl) and outward axis (oa, ol). */
+type FrontageLot = { a: number; l: number; ta: number; tl: number; oa: number; ol: number };
+/** Conservative home box: the largest house (8 m wide, 10 m deep) with its eave overhang, plus the largest home shift (0.75 m). */
+const HOME_HALF_ALONG_M = 4.2, HOME_HALF_OUT_M = 5.95, HOME_REACH_M = 2 * Math.hypot(HOME_HALF_ALONG_M, HOME_HALF_OUT_M);
+/** Separating-axis test of two lots' home boxes, so neighbouring homes never overlap at any angle. */
+function homesMayOverlap(p: FrontageLot, q: FrontageLot) {
+  const dx = q.a - p.a, dl = q.l - p.l;
+  for (const [ax, al] of [[p.ta, p.tl], [p.oa, p.ol], [q.ta, q.tl], [q.oa, q.ol]] as const) {
+    const separation = Math.abs(dx * ax + dl * al),
+      reachP = HOME_HALF_ALONG_M * Math.abs(p.ta * ax + p.tl * al) + HOME_HALF_OUT_M * Math.abs(p.oa * ax + p.ol * al),
+      reachQ = HOME_HALF_ALONG_M * Math.abs(q.ta * ax + q.tl * al) + HOME_HALF_OUT_M * Math.abs(q.oa * ax + q.ol * al);
+    if (separation >= reachP + reachQ) return false;
+  }
+  return true;
+}
+
 /** Frontage lots. A bounded segment grid keeps generation linear; rejection keeps lots off streets, walls, gates and public buildings. */
 function tryLots(layout: Layout, place: Place, pitch: number): SettlementLot[] {
   const city = place.kind === "city", frame = layout.frame, nominalDepth = city ? 9.5 : 9,
@@ -660,12 +757,14 @@ function tryLots(layout: Layout, place: Place, pitch: number): SettlementLot[] {
     }
     return false;
   };
-  const placed = new Map<number, { a: number; l: number }[]>(), lotCell = 16,
+  const placed = new Map<number, FrontageLot[]>(), lotCell = 16,
     lotKey = (x: number, y: number) => (Math.floor(x / lotCell) + 1024) * 4096 + Math.floor(y / lotCell) + 1024,
-    crowded = (a: number, l: number) => {
-      const cx = Math.floor(a / lotCell), cy = Math.floor(l / lotCell);
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const other of placed.get((cx + dx + 1024) * 4096 + cy + dy + 1024) || [])
-        if (Math.hypot(a - other.a, l - other.l) < MINIMUM_LOT_SPACING_M) return true;
+    crowded = (lot: FrontageLot) => {
+      const cx = Math.floor(lot.a / lotCell), cy = Math.floor(lot.l / lotCell);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const other of placed.get((cx + dx + 1024) * 4096 + cy + dy + 1024) || []) {
+        const distance = Math.hypot(lot.a - other.a, lot.l - other.l);
+        if (distance < MINIMUM_LOT_SPACING_M || (distance < HOME_REACH_M && homesMayOverlap(lot, other))) return true;
+      }
       return false;
     },
     gateZone = city ? 46 : 30, main = layout.streets[0],
@@ -696,9 +795,10 @@ function tryLots(layout: Layout, place: Place, pitch: number): SettlementLot[] {
         if (ends.some((end) => Math.hypot(a - end.a, l - end.l) < gateZone)) continue;
         if (nearStreet(a, l)) continue;
         if (layout.statics.some((disk) => Math.hypot(a - disk.a, l - disk.l) < disk.r + 5.4)) continue;
-        if (crowded(a, l)) continue;
+        const frontage: FrontageLot = { a, l, ta: base.ta, tl: base.tl, oa: base.na * side, ol: base.nl * side };
+        if (crowded(frontage)) continue;
         const k = lotKey(a, l), bucket = placed.get(k) || [];
-        bucket.push({ a, l });
+        bucket.push(frontage);
         placed.set(k, bucket);
         const point = toSource(frame, a, l), jitterYaw = city ? 0 : (unit(`${salt}/${slot}/YAW`) - .5) * .1;
         lots.push({
