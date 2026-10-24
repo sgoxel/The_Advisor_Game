@@ -22,6 +22,7 @@ import {
   lastReachableRoutineStop,
   residentOccupiesBuilding,
   readableResidentSite,
+  readableResidentRoute,
   residentInspectorSelection,
   nearestNode,
   nearestLegalStreetNode,
@@ -386,6 +387,27 @@ test("resident inspector preserves the exact selected SEED identity across camer
   assert.equal(missing.records.length, 16);
   assert.equal(resolutions, 2);
   assert.equal(residentInspectorSelection([], "", resolve).selectedCode, "");
+});
+
+test("inspector names the actual blocked route and exact SEED gate instead of a generic warning", () => {
+  const foundation = residentFoundationAt(villages[0], 6),
+    from = foundation.homeEntrance,
+    to = foundation.gatePost!;
+  assert.equal(readableResidentSite(to),
+    `Gate 1 post 1`,
+    "gate captions must distinguish actual gate and watch position");
+  assert.equal(readableResidentRoute(`BLOCKED: ${from} → ${to}`),
+    "Blocked — Residence 6 entrance → Gate 1 post 1",
+    "a grounded-but-blocked watchman must expose the failed destination, not just 'no legal route'");
+  assert.equal(readableResidentRoute(`BLOCKED: en route → ${to}`),
+    "Blocked — en route → Gate 1 post 1",
+    "stranded commutes must retain their actual en-route origin");
+  assert.equal(readableResidentRoute("BLOCKED: assigned house has no legally resolved doorway"),
+    "Blocked — assigned house has no legally resolved doorway",
+    "unresolved owned houses keep their precise failure reason");
+  assert.equal(readableResidentRoute(`${from} → ${to}`),
+    "Residence 6 entrance → Gate 1 post 1",
+    "legal route captions share the same true physical destinations");
 });
 
 test("resident captions are short while authoritative site IDs stay unchanged", () => {
