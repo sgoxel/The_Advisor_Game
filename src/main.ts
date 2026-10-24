@@ -1629,6 +1629,10 @@ async function start() {
   simulation.advance(clock.tickAt(Date.now()));
   const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
   const actors: pc.Entity[] = [];
+  const selectedResidentMarker = $("selected-resident-marker"),
+    selectedResidentName = $("selected-resident-name"),
+    selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3();
+  let markedResidentCode = "", markedResidentTransform = "";
   pickResidentAt = (clientX: number, clientY: number) => {
     // Project each visible sprite's feet and head to the screen and test the click against
     // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
@@ -1761,6 +1765,31 @@ async function start() {
         characterVisuals.move(actor, .8, b.x-a.x, b.z-a.z);
       }
     }
+    // Keep one screen-space marker attached to the actual enabled 3D actor.
+    // A popup with no rendered, onscreen resident gets no invented world anchor.
+    const inspectedCode = npcPopupCode();
+    const inspectedActor = inspectedCode && projectionTransition <= 0.001
+      ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
+      : undefined;
+    if (inspectedActor) {
+      const foot = inspectedActor.getPosition();
+      selectedResidentWorld.set(foot.x, foot.y + inspectedActor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M + .04, foot.z);
+      camera.camera!.worldToScreen(selectedResidentWorld, selectedResidentScreen);
+      const x = Math.round(selectedResidentScreen.x), y = Math.round(selectedResidentScreen.y);
+      if (x >= 80 && x <= innerWidth - 80 && y >= 110 && y <= innerHeight - 120) {
+        if (markedResidentCode !== inspectedCode) {
+          markedResidentCode = inspectedCode;
+          selectedResidentName.textContent = `Selected · ${actorResidents.get(inspectedActor)!.name}`;
+          selectedResidentMarker.dataset.residentCode = inspectedCode;
+        }
+        const transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -110%)`;
+        if (transform !== markedResidentTransform) {
+          selectedResidentMarker.style.transform = transform;
+          markedResidentTransform = transform;
+        }
+        selectedResidentMarker.hidden = false;
+      } else selectedResidentMarker.hidden = true;
+    } else selectedResidentMarker.hidden = true;
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
     applyDaylight(simulationTick,dt);
