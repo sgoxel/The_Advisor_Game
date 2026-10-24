@@ -592,6 +592,42 @@ export function nearestLegalStreetNode(
     if (legal(offset, graph.nodes[candidate.id])) return candidate.id;
   return -1;
 }
+/** Small dry-land obstacles outside a settlement should not make an
+ * otherwise legal open-ground journey impossible. Try a deterministic,
+ * strictly bounded set of doglegs. Each complete leg still requires the
+ * identical gate/wall/final-surface verdict as ordinary resident movement;
+ * no bridge or water crossing is invented here. */
+export function legalOpenGroundDetour(
+  from: Offset, to: Offset, legal: (a: Offset, b: Offset) => boolean,
+): Offset[] | null {
+  const dx = to.eastM - from.eastM, dz = to.northM - from.northM,
+    length = Math.hypot(dx, dz);
+  if (length < 12 || length > 4000) return null;
+  const sideX = -dz / length, sideZ = dx / length;
+  for (const radius of [24, 64, 160, 320]) {
+    for (const progress of [.5, .25, .75]) {
+      for (const side of [-1, 1]) {
+        const pivot = { eastM: from.eastM + dx * progress + sideX * side * radius,
+          northM: from.northM + dz * progress + sideZ * side * radius };
+        if (legal(from, pivot) && legal(pivot, to)) return [from, pivot, to];
+      }
+    }
+  }
+  // Longer lakes and ravines may need a parallel dry corridor rather than a
+  // single central bend. Both approach links and the corridor itself must be
+  // physically legal. This branch is finite and never invents a crossing.
+  for (const radius of [64, 160, 320, 640]) {
+    for (const [start, end] of [[.12, .88], [.2, .8]]) {
+      for (const side of [-1, 1]) {
+        const shiftX = sideX * side * radius, shiftZ = sideZ * side * radius,
+          a = { eastM: from.eastM + dx * start + shiftX, northM: from.northM + dz * start + shiftZ },
+          b = { eastM: from.eastM + dx * end + shiftX, northM: from.northM + dz * end + shiftZ };
+        if (legal(from, a) && legal(a, b) && legal(b, to)) return [from, a, b, to];
+      }
+    }
+  }
+  return null;
+}
 const pathCache = new Map<string, Offset[] | null>();
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
@@ -643,6 +679,11 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   // settlement street. Allow that physical corridor only after checking EVERY
   // segment sample; a disconnected graph is never permission to cross obstacles.
   if (!path && legalStreetSegment(place, from, to)) path = [from, to];
+  // Exterior gate-to-habitat corridors can wind around small dry-land
+  // obstacles. Only nonrecursive detour legs use this extra bounded search;
+  // the main route must still connect through a legal SEED gate.
+  if (!path && !allowGateDetour)
+    path = legalOpenGroundDetour(from, to, (a, b) => legalStreetSegment(place, a, b));
   // Outside farm/woodland/shore sites may lie beyond the enclosure. A direct
   // dry chord through the wall is forbidden, but an actual SEED gate can join
   // an internal street approach to a separately verified exterior corridor.
