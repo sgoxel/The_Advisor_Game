@@ -796,6 +796,9 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
+// Last-day position is identical for every query within today's local day.
+// Cache only immutable SEED/time facts, never camera/actor state; bound residency.
+const overnightPositions = new Map<string, ScheduledResidentState>();
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
@@ -805,33 +808,39 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // The one-day history check must start at the guard's owned home, not
-  // at the scheduled 00:00 post. Otherwise a disconnected gate can stay
-  // fictitiously staffed after the evening commute fails in both directions.
-  const historicalNightStart = !replayOvernight && foundation.role === "guard" && foundation.guardShift === 1,
-    previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
-      ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
-    initialAnchor: RoutineAnchor = historicalNightStart ? "home" : plan[0].anchor,
-    post = foundation.workOffset,
-    atPost = !!previousWatch && previousWatch.activity === "guard" &&
-      Math.hypot(previousWatch.offset.eastM - post.eastM, previousWatch.offset.northM - post.northM) <= 2;
-  // Replay only changed anchors from absolute Fantasy Time. A later routine
-  // never starts from an endpoint that an earlier walk did not actually reach.
-  let offset = previousWatch?.offset ??
-      standingSpot(foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
-        historicalNightStart ? false : !plan[0].indoors),
-    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : initialAnchor,
-    actuallyIndoors = previousWatch ? false : historicalNightStart || plan[0].indoors;
+  // Seed the bounded history replay at an owned home, never at a scheduled
+  // post/worksite. All residents (not just night guards) must carry their
+  // actual prior-day end position through midnight, including blocked returns.
+  const initialAnchor: RoutineAnchor = !replayOvernight ? "home" : plan[0].anchor,
+    morning = standingSpot(foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
+      !replayOvernight ? false : !plan[0].indoors),
+    previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
+  let previousDay: ScheduledResidentState | undefined;
+  if (replayOvernight) {
+    previousDay = overnightPositions.get(previousKey);
+    if (!previousDay) {
+      previousDay = scheduleAt(place, foundation, tick - second - 1, false);
+      overnightPositions.set(previousKey, previousDay);
+      while (overnightPositions.size > 1024) overnightPositions.delete(overnightPositions.keys().next().value!);
+    }
+  }
+  const atMorning = !!previousDay &&
+    Math.hypot(previousDay.offset.eastM - morning.eastM, previousDay.offset.northM - morning.northM) <= 2 &&
+    (initialAnchor !== "work" || previousDay.activity === "guard");
+  // Replay only changed anchors from absolute Fantasy Time. A failed return
+  // does not reset a civilian to home when the local calendar day changes.
+  let offset = previousDay?.offset ?? morning,
+    actualAnchor: RoutineAnchor | "en route" = previousDay ? (atMorning ? initialAnchor : "en route") : initialAnchor,
+    actuallyIndoors = previousDay ? (atMorning && previousDay.indoors) : !replayOvernight || plan[0].indoors;
   type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
   let leg: Leg | undefined;
   let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
-  if (previousWatch && !atPost) {
-    // If yesterday's legal commute is still in progress, continue from its
-    // exact location; an unresolved crossing stays blocked, never teleports.
-    const continuation = previousWatch.activity === "commute"
-      ? streetPath(place, offset, post) : null;
-    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: "work" };
-    else blocked = { origin: "en route", destination: "work" };
+  if (previousDay && !atMorning) {
+    // Complete a real unfinished journey, or remain blocked at the previous
+    // position. Never adopt a schedule's new-day origin as an executed move.
+    const continuation = streetPath(place, offset, morning);
+    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: initialAnchor };
+    else blocked = { origin: "en route", destination: initialAnchor };
   }
   const advance = (atSecond: number) => {
     if (!leg) return;
