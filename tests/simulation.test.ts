@@ -403,6 +403,16 @@ test("every village has required service staff and continuous seeded gate covera
 test("guard shifts physically occupy their SEED posts and return home rather than counting assignments", () => {
   assert.ok(resolvedSettlementHomeDoorFor(villages[0], 8),
     "the guard's canonical residence must not be displaced by its own neighborhood garden");
+  const roadVillage = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(roadVillage, "retain the real previously road-blocked guard fixture");
+  const secondGuardDoor = resolvedSettlementHomeDoorFor(roadVillage, 7);
+  assert.ok(secondGuardDoor, "the second village's SEED watchman must own a legal replacement frontage");
+  const renderedHouse = featuresFor(tileForPosition(secondGuardDoor.x, secondGuardDoor.z, 12))
+    .find(feature => feature.kind === "residence" &&
+      feature.ownerId === `${roadVillage.code}/RESIDENT/7`);
+  assert.ok(renderedHouse, "a legal replacement watchman's house must render at its actual site");
+  assert.equal(renderedHouse.entranceX, secondGuardDoor.x);
+  assert.equal(renderedHouse.entranceZ, secondGuardDoor.z);
   for (const place of [villages[0], villages[Math.min(7, villages.length - 1)]]) {
     const lon = place.canonicalPosition.lon;
     for (const [index, hour] of [[6, 9], [7, 21]] as const) {
