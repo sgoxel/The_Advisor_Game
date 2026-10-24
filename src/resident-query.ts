@@ -1,4 +1,5 @@
 import { compareText } from "./compare-text.ts";
+import { wrapSourceX } from "./planet.ts";
 import type { Resident, QueryStats } from "./simulation.ts";
 
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number };
@@ -71,11 +72,16 @@ export function mergeResidentQueries(results: ResidentQueryResult[], limit: numb
 }
 
 
-/** A fresh snapshot keeps its world positions during a pan inside the same
- * settlement. A different settlement or stale realm tick cannot be reused. */
-export function currentResidentSnapshot<T extends { placeCode: string; tick: number }>(
+/** Retain a recent nearby snapshot only while the camera still overlaps its
+ * bounded source-space search. The same city name is not a valid nearby query
+ * after a long pan to another neighbourhood. */
+export function currentResidentSnapshot<T extends { placeCode: string; tick: number; x?: number; z?: number; radius?: number }>(
   current: T | undefined, previous: T | undefined, placeCode: string | undefined, tick: number, maxAgeTicks: number,
+  view?: Pick<ResidentQuery, "x" | "z" | "radius">,
 ): T | undefined {
-  const snapshot = current ?? previous;
-  return snapshot && snapshot.placeCode === placeCode && tick >= snapshot.tick && tick - snapshot.tick <= maxAgeTicks ? snapshot : undefined;
+  const relevant = (snapshot: T | undefined) => !!snapshot &&
+    snapshot.placeCode === placeCode && tick >= snapshot.tick && tick - snapshot.tick <= maxAgeTicks &&
+    (!view || (snapshot.x !== undefined && snapshot.z !== undefined && snapshot.radius !== undefined &&
+      Math.hypot(wrapSourceX(snapshot.x - view.x), snapshot.z - view.z) <= Math.min(snapshot.radius, view.radius) * 0.25));
+  return relevant(current) ? current : relevant(previous) ? previous : undefined;
 }
