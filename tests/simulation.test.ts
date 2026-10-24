@@ -890,6 +890,67 @@ test("nearby queries find residents at distributed farm and garden destinations"
 });
 
 
+test("real guard and fisherman outbound walking and owned-home returns use legal ground", () => {
+  const fishermanPlace = villages.find(place => place.name === "Falconham");
+  assert.ok(fishermanPlace, "the canonical Falconham fishing fixture must exist");
+  const fixtures = [
+    { place: villages[0], index: 6, workHour: 9, homeHour: 23.9, activity: "guard" },
+    { place: villages[0], index: 7, workHour: 21, homeHour: 11, activity: "guard" },
+    { place: fishermanPlace, index: 70, workHour: 15, homeHour: 23.9, activity: "work" },
+  ] as const;
+  let verifiedWalkingWindows = 0;
+  for (const { place, index, workHour, homeHour, activity } of fixtures) {
+    const lon = place.canonicalPosition.lon,
+      seed = residentFoundationAt(place, index),
+      door = resolvedSettlementHomeDoorFor(place, index);
+    assert.ok(door, `${seed.code}: an owned legal doorway is required`);
+    const home = residentAt(place, index, tickAtLocalTime(WORKDAY, homeHour * HOUR, lon)),
+      work = residentAt(place, index, tickAtLocalTime(WORKDAY, workHour * HOUR, lon));
+    assert.equal(home.code, seed.code);
+    assert.equal(work.code, seed.code);
+    assert.ok(home.grounded && home.indoors && home.route === seed.homeEntrance,
+      `${seed.code}: return must reach its actual owned home, got ${home.task} / ${home.route}`);
+    assert.ok(greatCircleDistance(home.position, sourceToLonLat(door.x, door.z)) < 0.05,
+      `${seed.code}: the return destination is the resolved doorway, not an invented home`);
+    assert.ok(work.grounded && work.activity === activity && !work.route.startsWith("BLOCKED:"),
+      `${seed.code}: physical outbound arrival failed: ${work.task} / ${work.route}`);
+
+    // Inspect only two bounded departure opportunities, never the population.
+    const day = localDayIndex(tickAtLocalTime(WORKDAY, 12 * HOUR, lon), lon),
+      weekday = localWeekday(tickAtLocalTime(WORKDAY, 12 * HOUR, lon), lon),
+      plan = dailyPlan({ code: seed.code, role: seed.role, ageGroup: seed.ageGroup,
+        guardShift: seed.guardShift }, seed.traits, day, weekday);
+    const departures = plan.filter((step, i) => i > 0 &&
+      step.anchor !== plan[i - 1].anchor && (step.anchor === "work" || step.anchor === "home"));
+    for (const departure of departures.slice(0, 2)) {
+      const walker = residentAt(place, index, tickAtLocalTime(WORKDAY, departure.start + 3, lon));
+      if (walker.activity !== "commute") continue;
+      const path = walker.walkAhead;
+      assert.ok(path && path.length >= 2,
+        `${seed.code}: a moving character must expose its canonical path, not an unchecked chord`);
+      assert.ok(greatCircleDistance(walker.position, sourceToLonLat(path[0].x, path[0].z)) < .1,
+        "actor movement begins at the Simulation's current physical position");
+      let distance = 0;
+      for (let j = 1; j < path.length; j++) {
+        const first = path[j - 1], last = path[j],
+          physicalM = greatCircleDistance(sourceToLonLat(first.x, first.z), sourceToLonLat(last.x, last.z));
+        distance += physicalM;
+        const steps = Math.max(1, Math.ceil(physicalM / 2));
+        for (let k = 0; k <= steps; k++) {
+          const t = k / steps,
+            surface = finalSurfaceAt(first.x + wrapSourceX(last.x - first.x) * t,
+              first.z + (last.z - first.z) * t);
+          assert.ok(residentWalkableSurface(surface),
+            `${seed.code}: visible walking segment crosses unbridged water or illegal ground`);
+        }
+      }
+      assert.ok(distance <= 24.1, `${seed.code}: one real-second path exceeds legal walking speed: ${distance}m`);
+      verifiedWalkingWindows++;
+    }
+  }
+  assert.ok(verifiedWalkingWindows >= 2, "real guard/fisherman departures must expose legal moving windows");
+});
+
 test("outlying woodland workers use real habitat and remain queryable away from town", async () => {
   const { climateSampleAt } = await import("../src/climate.ts"), place = villages[0], simulation = new LazySimulation(), tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon);
   simulation.setFocus(place); simulation.advance(tick);
