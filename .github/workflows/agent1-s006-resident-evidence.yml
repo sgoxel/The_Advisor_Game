@@ -39,13 +39,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-first-actor-evidence-20261024')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-strict-resident-canvas-evidence-20261024')
       - run: npx playwright install --with-deps chromium
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-first-actor-evidence-20261024')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-strict-resident-canvas-evidence-20261024')
       - run: python -m pip install playwright==1.63.0
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-first-actor-evidence-20261024')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-strict-resident-canvas-evidence-20261024')
       - name: Capture resident inspector evidence
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-first-actor-evidence-20261024')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-strict-resident-canvas-evidence-20261024')
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
@@ -54,13 +54,13 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;shot:resident-first-view;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:(a=>["pointerdown","pointerup"].forEach(type=>document.getElementById("world").dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:31,clientX:a.clientX,clientY:a.clientY}))))(window.__s006Resident);visible:#npc-popup:not([hidden]);eval:document.getElementById("npc-seed-code")?.textContent===window.__s006Resident.code||Promise.reject(new Error("Canvas pick and popup canonical resident disagree"));eval:document.getElementById("npc-home-entrance")?.textContent===window.__s006Resident.homeEntrance||Promise.reject(new Error("Selected resident owned-door mismatch"));eval:(document.getElementById("npc-route-code")?.textContent&&((window.advisorWorld.clock.tickAt(Date.now())!==window.__s006Resident.tick)||document.getElementById("npc-route-code").textContent===window.__s006Resident.route))||Promise.reject(new Error("Missing route or same-tick canonical route mismatch"));shot:resident-selected;eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details'
+          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;shot:resident-first-view;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());shot:resident-pre-click;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());tap:resident;visible:#npc-popup:not([hidden]);eval:(()=>{const r=window.__s006Resident;const get=id=>document.getElementById(id)?.textContent;for(const [id,expected] of [["npc-seed-code",r.code],["npc-home-entrance",r.homeEntrance],["npc-workplace-code",r.workplace],["npc-current-task",r.task],["npc-route-code",r.route]])if(get(id)!==expected)throw new Error("S006 actual browser click mismatch: "+id+" expected "+expected+" found "+get(id));return true})();shot:resident-selected;eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details'
           status=0
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
           exit "$status"
       - uses: actions/upload-artifact@v4
-        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-first-actor-evidence-20261024'))
+        if: always() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'agent1/s006-strict-resident-canvas-evidence-20261024'))
         with:
           name: s006-resident-evidence
           path: test-results/
