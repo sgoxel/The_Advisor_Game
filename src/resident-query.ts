@@ -18,13 +18,18 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
-/** Freeze the available worker subset per query. Shard indices must be dense
- * even if busy terrain workers have noncontiguous global worker IDs; otherwise
- * an actor query can wait indefinitely for a worker that never joined it. */
-export function residentWorkerShardPlan(idleWorkerIds: readonly number[]) {
-  const selected = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
+/** A cold population query builds the settlement index inside its worker.
+ * Sharding it onto several cold terrain workers duplicates that expensive
+ * SEED-only construction and competes with urgent terrain. Prefer an idle
+ * worker that has already served a resident query; otherwise choose the
+ * lowest stable idle ID. One query owns one worker/index, with no new workers. */
+export function residentWorkerShardPlan(
+  idleWorkerIds: readonly number[], warmedWorkerIds: ReadonlySet<number> = new Set(),
+) {
+  const idle = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
     .sort((a, b) => a - b);
-  return selected.map((workerId, shardIndex) => ({ workerId, shardIndex, count: selected.length }));
+  const workerId = idle.find(id => warmedWorkerIds.has(id)) ?? idle[0];
+  return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
 }
 
 /** A small visible resident must still be individually tappable. Screen-space
