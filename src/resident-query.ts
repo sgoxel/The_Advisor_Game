@@ -12,8 +12,16 @@ export class ResidentQueryQueue {
   private sequence = 0;
   private snapshot?: ResidentQueryJob & ResidentQueryResult;
   private maxAgeTicks: number;
-  constructor(maxAgeTicks: number) { this.maxAgeTicks = maxAgeTicks; }
-  offer(query: ResidentQuery) { this.desired = query; }
+  private sampleIntervalTicks: number;
+  constructor(maxAgeTicks: number, sampleIntervalTicks = 0) {
+    this.maxAgeTicks = maxAgeTicks;
+    this.sampleIntervalTicks = sampleIntervalTicks;
+  }
+  offer(query: ResidentQuery) {
+    if (this.desired?.key === query.key && query.tick >= this.desired.tick &&
+      this.sampleIntervalTicks > 0 && Math.floor(query.tick / this.sampleIntervalTicks) === Math.floor(this.desired.tick / this.sampleIntervalTicks)) return;
+    this.desired = query;
+  }
   clear() { this.desired = undefined; this.snapshot = undefined; }
   get busy() { return !!this.flight; }
   readyFor(key: string | undefined, tick = this.desired?.tick) {
@@ -27,11 +35,11 @@ export class ResidentQueryQueue {
     if (this.flight || !this.desired || (this.current?.tick === this.desired.tick)) return;
     return this.flight = { ...this.desired, kind: "residents", id: ++this.sequence };
   }
-  complete(id: number, result: ResidentQueryResult) {
+  complete(id: number, result: ResidentQueryResult, currentTick = this.desired?.tick) {
     if (this.flight?.id !== id) return false;
     const finished = this.flight;
     this.flight = undefined;
-    if (finished.key !== this.desired?.key || Math.abs(this.desired.tick - finished.tick) > this.maxAgeTicks) return false;
+    if (finished.key !== this.desired?.key || currentTick === undefined || Math.abs(currentTick - finished.tick) > this.maxAgeTicks) return false;
     this.snapshot = { ...finished, ...result };
     return true;
   }
@@ -47,4 +55,14 @@ export function mergeResidentQueries(results: ResidentQueryResult[], limit: numb
     evaluatedResidents: results.reduce((sum, result) => sum + result.query.evaluatedResidents, 0),
     returnedResidents: residents.length,
   } };
+}
+
+
+/** A fresh snapshot keeps its world positions during a pan inside the same
+ * settlement. A different settlement or stale realm tick cannot be reused. */
+export function currentResidentSnapshot<T extends { placeCode: string; tick: number }>(
+  current: T | undefined, previous: T | undefined, placeCode: string | undefined, tick: number, maxAgeTicks: number,
+): T | undefined {
+  const snapshot = current ?? previous;
+  return snapshot && snapshot.placeCode === placeCode && tick >= snapshot.tick && tick - snapshot.tick <= maxAgeTicks ? snapshot : undefined;
 }

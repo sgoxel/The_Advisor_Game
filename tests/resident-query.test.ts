@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -76,4 +76,41 @@ test("snapshot readiness expires with the realm clock even when the camera stays
   assert.equal(queue.ready, false);
   assert.equal(queue.current, undefined);
   assert.equal(queue.take()?.tick, 149, "expired snapshot schedules a current reconstruction");
+});
+
+
+test("completed frames cannot feed back into population queries within one real second", () => {
+  const queue = new ResidentQueryQueue(48, 24);
+  queue.offer(request("town-a", 100)); const initial = queue.take()!;
+  assert.equal(queue.complete(initial.id, result, 101), true);
+  for (let tick = 101; tick < 120; tick++) {
+    queue.offer(request("town-a", tick));
+    assert.equal(queue.take(), undefined, "actor refresh must not start another population scan");
+  }
+  queue.offer(request("town-a", 120));
+  const next = queue.take()!;
+  assert.equal(next.tick, 120, "the next real second samples the advancing realm clock");
+  queue.complete(next.id, result, 121);
+  queue.offer(request("town-b", 121));
+  assert.equal(queue.take()?.key, "town-b", "camera navigation stays immediate within the same sampling interval");
+});
+
+test("stale result validation uses actual realm time even between scheduled requests", () => {
+  const queue = new ResidentQueryQueue(48, 24);
+  queue.offer(request("town-a", 100)); const job = queue.take()!;
+  assert.equal(queue.complete(job.id, result, 149), false);
+  assert.equal(queue.ready, false);
+});
+
+
+test("panning retains fresh world positions while a newer view query is submitted", () => {
+  const previous = { placeCode: "town-a", tick: 100, x: 12.5, z: -8 };
+  assert.equal(currentResidentSnapshot(undefined, previous, "town-a", 101, 48), previous,
+    "a pan does not discard a completed same-town update or rewrite its coordinates");
+  assert.equal(currentResidentSnapshot(undefined, previous, "town-b", 101, 48), undefined,
+    "a distant settlement never inherits another town's population");
+  assert.equal(currentResidentSnapshot(undefined, previous, "town-a", 149, 48), undefined,
+    "old world positions are not refreshed indefinitely");
+  assert.equal(currentResidentSnapshot(undefined, previous, undefined, 101, 48), undefined,
+    "leaving actor detail clears any fallback");
 });
