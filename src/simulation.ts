@@ -1392,7 +1392,7 @@ export class LazySimulation {
   private renderInspectorResident(resident: Resident) {
     const text = (id: string, value: string) => {
       const node = document.getElementById(id);
-      if (node) node.textContent = value;
+      if (node && node.textContent !== value) node.textContent = value;
     };
     text("resident-name", resident.name);
     text("resident-short-id", `Resident ${resident.index + 1} · ${resident.role.replaceAll("-", " ")}`);
@@ -1475,23 +1475,25 @@ export class LazySimulation {
     if (!select) return;
     const selection = residentInspectorSelection(visible, this.selectedResidentCode,
       code => this.residentByCode(code)), retained = selection.selectedCode;
-    const missing = selection.unavailable ? (() => {
-      const option = document.createElement("option");
-      option.value = retained;
-      option.textContent = `Selected resident unavailable · ${retained}`;
-      return [option];
-    })() : [];
-    select.replaceChildren(
-      ...missing,
-      ...selection.records.map((resident) => {
+    // Stable-frame proximity queries must not recreate the focused select's
+    // options or repeatedly announce unchanged resident labels to assistive tech.
+    const desiredOptions = [
+      ...(selection.unavailable ? [{ value: retained, label: `Selected resident unavailable · ${retained}` }] : []),
+      ...selection.records.map((resident) => ({
+        value: resident.code,
+        label: `${resident.name} · ${resident.role.replaceAll("-", " ")}${selection.outsideView && resident.code === retained ? " · off-screen" : ""}`,
+      })),
+    ];
+    if (select.options.length !== desiredOptions.length || desiredOptions.some((option, i) =>
+      select.options[i].value !== option.value || select.options[i].textContent !== option.label))
+      select.replaceChildren(...desiredOptions.map(({ value, label }) => {
         const option = document.createElement("option");
-        option.value = resident.code;
-        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}${selection.outsideView && resident.code === retained ? " · off-screen" : ""}`;
+        option.value = value;
+        option.textContent = label;
         return option;
-      }),
-    );
+      }));
     this.selectedResidentCode = retained;
-    select.value = retained;
+    if (select.value !== retained) select.value = retained;
     const resident = selection.records.find(entry => entry.code === retained);
     if (resident) {
       this.renderInspectorResident(resident);
@@ -1553,6 +1555,14 @@ export class LazySimulation {
     limit = DEFAULT_VISIBLE_LIMIT,
   ) {
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
+    // A zero actor budget must be a zero-work, zero-actor query (never one
+    // accidental resident from the first candidate bucket).
+    if (limit === 0) {
+      const empty: QueryStats = { settlements: 0, candidateResidents: 0, evaluatedResidents: 0, returnedResidents: 0 };
+      this.lastQuery = empty;
+      this.updateInspector([], empty);
+      return [] as Resident[];
+    }
     const settlements = nearbyPlaces(x, z, radius).filter((place) => {
       const country = countries.find(
         (entry) =>
