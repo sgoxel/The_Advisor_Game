@@ -24,6 +24,7 @@ Steps, separated by ';' (write '\\;' for a semicolon inside eval):
     tap[:x,y]              click the canvas; fails if a panel covers that point
     key:<Key>[@ms]         focus the canvas and hold the key (default 250 ms)
     settle                 wait for ready and settled terrain, then two frames
+    until:<js expression>  poll an on-demand condition at 500ms intervals (max 60s)
     coverage               wait for current-view terrain submitted to a valid layer
     wait:<ms>  eval:<javascript>
     shot[:<suffix>]        capture now; put 'settle' first for a stable image
@@ -272,6 +273,7 @@ SETTLED_JS = """() => {
   if (!world || (loading && !loading.hidden && getComputedStyle(loading).opacity !== '0')) return false;
   return world.state.ready && world.state.settled;
 }"""
+READY_JS = SETTLED_JS.replace("world.state.ready && world.state.settled", "world.state.ready")
 TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))"
 # The keys below are written to capture.json unchanged.
 STATE_JS = """() => {
@@ -372,11 +374,11 @@ class Session:
         page.on("console", lambda m: self.console_errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda error: self.page_errors.append(str(error)))
 
-    def settle(self) -> None:
+    def settle(self, ready_only: bool = False) -> None:
         deadline = time.monotonic() + self.args.timeout
         while time.monotonic() < deadline:
             try:
-                result = self.page.wait_for_function(SETTLED_JS, polling=250, timeout=min(5000, max(1, (deadline-time.monotonic())*1000))).json_value()
+                result = self.page.wait_for_function(READY_JS if ready_only else SETTLED_JS, polling=250, timeout=min(5000, max(1, (deadline-time.monotonic())*1000))).json_value()
                 if result == "error":
                     raise CaptureError("page reports an error")
                 break
@@ -387,7 +389,7 @@ class Session:
                 except PlaywrightTimeoutError:
                     print("SETTLE main thread not responding", flush=True)
         else:
-            raise CaptureError("world did not settle within the capture timeout")
+            raise CaptureError("world did not become ready within the capture timeout" if ready_only else "world did not settle within the capture timeout")
         # A stalled renderer must fail the evidence capture rather than hold CI forever.
         self.page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
 
@@ -461,6 +463,9 @@ class Session:
             page.wait_for_timeout(float(arg))
         elif name == "eval":
             page.wait_for_function("async source => { await (0, eval)(source); return true; }", arg=arg, timeout=self.args.timeout * 1000)
+        elif name == "until":
+            page.wait_for_function("source => (0, eval)(source)", arg=arg, polling=500,
+                                   timeout=min(self.args.timeout, 60) * 1000)
         elif name == "shot":
             self.shot(arg)
         else:
@@ -503,9 +508,10 @@ class Session:
     def run(self, steps: list[str]) -> None:
         print(f"OPEN {self.name}-{self.profile}", flush=True)
         self.page.goto(self.args.url, wait_until="domcontentloaded")
-        print("DOM READY; waiting for settled world", flush=True)
-        self.settle()
-        print("INITIAL WORLD SETTLED", flush=True)
+        print("DOM READY; waiting for ready world" if self.args.initial_ready_only else
+              "DOM READY; waiting for settled world", flush=True)
+        self.settle(ready_only=self.args.initial_ready_only)
+        print("INITIAL WORLD READY" if self.args.initial_ready_only else "INITIAL WORLD SETTLED", flush=True)
         for step in steps:
             print(f"STEP {step[:100]}", flush=True)
             try:
@@ -542,6 +548,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--device-scale-factor", type=float, default=1, help="emulated display DPR, not device GPU/RAM emulation")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
     parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
+    parser.add_argument("--initial-ready-only", action="store_true", help="initial load waits only for coherent world readiness; explicit settle steps still wait for full detail")
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
     parser.add_argument("--chromium", default=os.environ.get("ADVISOR_CHROMIUM"),
                         help="Chromium executable (default: env ADVISOR_CHROMIUM)")
