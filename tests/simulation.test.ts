@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
-import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat } from "../src/planet.ts";
+import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { settlementExteriorFor, settlementHomeFor } from "../src/settlement-exterior.ts";
 import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
@@ -390,11 +391,60 @@ test("every village has required service staff and continuous seeded gate covera
       assert.equal(coverage.length, gateCountFor(village));
       for (const gate of coverage) {
         assert.equal(gate.required, guardsPerGateFor(village, gate.gateIndex));
-        assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}`);
-        assert.equal(new Set(gate.residentCodes).size, gate.onDuty);
+        assert.equal(gate.scheduled, gate.required, `${village.code}: the SEED watch roster is complete`);
+        assert.ok(gate.onDuty >= 0 && gate.onDuty <= gate.scheduled, "physical coverage never exceeds scheduled watchmen");
+        assert.equal(gate.missing, gate.required - gate.onDuty, "actual missing post capacity must stay visible");
+        assert.equal(gate.residentCodes.length, gate.onDuty);
+        assert.equal(gate.unresolvedCodes.length, gate.missing);
+        assert.equal(new Set([...gate.residentCodes, ...gate.unresolvedCodes]).size, gate.scheduled,
+          "every assigned watchman is present or explicitly unresolved, never silently counted twice");
       }
     }
   }
+});
+
+test("legal guard arrivals fill posts while unresolved homes remain explicit gate vacancies", () => {
+  const village = villages[0], lon = village.canonicalPosition.lon;
+  for (const [index, hour] of [[6, 9], [7, 21]] as const) {
+    const tick = tickAtLocalTime(WORKDAY, hour * HOUR, lon),
+      resident = residentAt(village, index, tick),
+      gate = guardCoverageAt(village, tick)[0];
+    assert.equal(resident.role, "guard");
+    assert.ok(resident.grounded && resident.activity === "guard",
+      `${resident.code}: a legal SEED watchman must actually arrive at the post`);
+    assert.ok(gate.residentCodes.includes(resident.code),
+      "a grounded watchman at the physical post must count in gate coverage");
+  }
+  const midnight = guardCoverageAt(village, 0);
+  const unresolved = residentAt(village, 8, 0);
+  if (!unresolved.grounded || unresolved.route.startsWith("BLOCKED:"))
+    assert.ok(midnight.every(gate => !gate.residentCodes.includes(unresolved.code)),
+      "an unresolved house must never become a fictitious physically staffed gate");
+});
+
+test("actual guard home lots follow the final road-trimmed village enclosure", () => {
+  const village = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(village, "retain the real village with a formerly blocked watchman's house");
+  const plan = settlementExteriorFor(village);
+  const inside = (x: number, z: number) => {
+    const px = wrapSourceX(x - village.x), pz = z - village.z;
+    let result = false;
+    for (let i = 0, j = plan.border.length - 1; i < plan.border.length; j = i++) {
+      const a = plan.border[i], b = plan.border[j],
+        ax = wrapSourceX(a.x - village.x), az = a.z - village.z,
+        bx = wrapSourceX(b.x - village.x), bz = b.z - village.z;
+      if ((az > pz) !== (bz > pz) && px < ax + (bx - ax) * (pz - az) / (bz - az)) result = !result;
+    }
+    return result;
+  };
+  const lots = Array.from({ length: populationOf(village) }, (_, index) =>
+    settlementHomeFor(village, index, plan).candidates[0]);
+  assert.ok(lots.every(lot => inside(lot.x, lot.z)),
+    "all owned homes must be drawn from within the final trimmed enclosure");
+  assert.equal(new Set(lots.map(lot => `${lot.x.toFixed(7)}/${lot.z.toFixed(7)}`)).size, lots.length,
+    "reconciliation must never allocate the same physical lot twice");
+  assert.ok(resolvedSettlementHomeDoorFor(village, 7),
+    "the formerly road-displaced watchman must own a real legal front door");
 });
 
 test("resident schedule state is analytical from absolute fantasy time", () => {

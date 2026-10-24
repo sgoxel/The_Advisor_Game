@@ -411,23 +411,33 @@ function isGuardOnDuty(foundation: ResidentFoundation, tick: number, place: Plac
   const second = daySecond(tick, place), daytime = second >= 6 * HOUR && second < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
 }
+/** Scheduled assignment and physical gate coverage are different facts.
+ * A guard with an unresolved house or illegal commute cannot fill a post. */
 export function guardCoverageAt(place: Place, tick: number) {
   const coverage = Array.from({ length: gateCountFor(place) }, (_, gateIndex) => ({
-    gateIndex,
-    required: guardsPerGateFor(place, gateIndex),
-    onDuty: 0,
-    residentCodes: [] as string[],
+    gateIndex, required: guardsPerGateFor(place, gateIndex),
+    scheduled: 0, onDuty: 0, missing: 0,
+    residentCodes: [] as string[], unresolvedCodes: [] as string[],
   }));
   let index = SERVICE_ROLES.length;
   for (let gateIndex = 0; gateIndex < coverage.length; gateIndex++)
     for (let slot = 0; slot < coverage[gateIndex].required; slot++)
       for (let shift = 0; shift < 2; shift++, index++) {
         const foundation = residentFoundationAt(place, index);
-        if (isGuardOnDuty(foundation, tick, place)) {
-          coverage[gateIndex].onDuty++;
-          coverage[gateIndex].residentCodes.push(foundation.code);
-        }
+        if (!isGuardOnDuty(foundation, tick, place)) continue;
+        const gate = coverage[gateIndex], resident = residentAt(place, index, tick),
+          destination = canonicalOffset(place, foundation.workOffset.eastM, foundation.workOffset.northM),
+          east = normalizeLongitude(resident.position.lon - destination.lon) *
+            CANONICAL_PLANET_RADIUS * Math.cos(destination.lat),
+          north = (resident.position.lat - destination.lat) * CANONICAL_PLANET_RADIUS;
+        gate.scheduled++;
+        if (resident.grounded && resident.activity === "guard" &&
+            !resident.route.startsWith("BLOCKED:") && Math.hypot(east, north) <= 2) {
+          gate.onDuty++;
+          gate.residentCodes.push(foundation.code);
+        } else gate.unresolvedCodes.push(foundation.code);
       }
+  for (const gate of coverage) gate.missing = gate.required - gate.onDuty;
   return coverage;
 }
 
@@ -445,7 +455,8 @@ function anchorRoute(place: Place, foundation: ResidentFoundation, anchor: Routi
 }
 /** Small seeded standing spot around an outdoor anchor, so a crowd at the market does not stack. */
 function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
-  if (!outdoors || anchor === "home") return base;
+  // A posted guard stands at their SEED post, not an arbitrary crowd offset.
+  if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
   const angle = (digest(`${foundation.code}/SPOT/${anchor}`) % 360) * Math.PI / 180, radius = (anchor === "garden" || (base as ActivitySite).id) ? .3 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 7) / 10 : 2 + (digest(`${foundation.code}/SPOT-R/${anchor}`) % 70) / 10;
   return { eastM: base.eastM + Math.cos(angle) * radius, northM: base.northM + Math.sin(angle) * radius };
 }
@@ -1101,6 +1112,7 @@ export class LazySimulation {
         <dt>Workplace / post</dt><dd id="resident-workplace">—</dd>
         <dt>Current route</dt><dd id="resident-route">—</dd>
         <dt>Guard assignment</dt><dd id="resident-guard">—</dd>
+        <dt>Actual gate staffing</dt><dd id="resident-gate-staffing" aria-live="polite">—</dd>
         <dt>Character</dt><dd id="resident-appearance">—</dd>
       </dl>
       <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
@@ -1181,6 +1193,15 @@ export class LazySimulation {
     text("resident-guard", resident.gatePost
       ? `${readableResidentSite(resident.gatePost)} · ${resident.guardShift === 0 ? "day" : "night"} watch`
       : "Not assigned to the watch");
+    const guardPlace = resident.gatePost ? places.find(place => place.id === resident.settlement) : undefined,
+      assignedGate = resident.gatePost ? /\/GATE\/(\d+)\/POST\//.exec(resident.gatePost) : null,
+      assignedIndex = assignedGate ? Number(assignedGate[1]) : -1,
+      currentCoverage = guardPlace && assignedIndex >= 0 ? guardCoverageAt(guardPlace, this.tick)[assignedIndex] : undefined;
+    text("resident-gate-staffing", currentCoverage
+      ? `Gate ${assignedIndex + 1}: ${currentCoverage.onDuty}/${currentCoverage.required} physically present${currentCoverage.missing
+        ? ` · ${currentCoverage.missing} uncovered post${currentCoverage.missing === 1 ? "" : "s"} (legal housing/route unresolved)`
+        : " · fully staffed"}`
+      : "No gate post assigned");
     text(
       "resident-appearance",
       `${resident.character.replaceAll("_", " ")} · ${resident.sex} · ${resident.ageGroup}, ${Math.floor(resident.birthDay / 365)} years`,

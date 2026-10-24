@@ -137,6 +137,8 @@ type Layout = {
   lots?: SettlementLot[];
   lotGrid?: Map<number, number[]>;
   lotOrder?: { offset: number; step: number; inverse: number };
+  finalBorderSignature?: string;
+  finalBorderReconciled?: boolean;
   grid?: Map<number, number[]>;
 };
 
@@ -722,6 +724,62 @@ function computeLots(layout: Layout, place: Place, wanted: number) {
   }
   return lots;
 }
+/**
+ * The displayed enclosure is aligned/clipped to canonical roads after the
+ * underlying street layout is generated. Re-seat household frontage on that
+ * FINAL polygon before any resident is assigned a house. A clipped-away lot
+ * must not remain in the SEED ownership permutation.
+ *
+ * Rebuild once per final exterior plan, never from camera/tile/resident order.
+ * Reject an undersized candidate rather than aliasing two households to one
+ * physical lot (callers can still report an unresolved home truthfully).
+ */
+export function reconcileSettlementLotsToFinalBorder(
+  place: Place, finalBorder: readonly SettlementPoint[],
+): boolean {
+  settlementExteriorFor(place);
+  const layout = layouts.get(place.code)!;
+  const signature = finalBorder.map(point => `${point.x}/${point.z}`).join("|");
+  if (layout.finalBorderSignature === signature) return layout.finalBorderReconciled!;
+  const frame = layout.frame;
+  const clipped = finalBorder.map(point => {
+    const x = wrapSourceX(point.x - place.x) / (U * frame.kx);
+    const z = (point.z - place.z) / U;
+    return { a: x * frame.axis.x + z * frame.axis.z,
+      l: -x * frame.axis.z + z * frame.axis.x };
+  });
+  const localLot = (lot: SettlementLot) => {
+    const x = wrapSourceX(lot.x - place.x) / (U * frame.kx), z = (lot.z - place.z) / U;
+    return { a: x * frame.axis.x + z * frame.axis.z,
+      l: -x * frame.axis.z + z * frame.axis.x };
+  };
+  const originalLots = layout.lots!;
+  const order = lotOrder(place, layout, originalLots.length);
+  // Most settlements need no change. Preserve their existing house identities
+  // and avoid a second lot-generation pass when no assigned lot was clipped.
+  if (Array.from({ length: SETTLEMENT_POPULATION[place.kind] }, (_, index) =>
+      localLot(originalLots[(order.offset + index * order.step) % originalLots.length]))
+    .every(lot => insideBorder(clipped, lot.a, lot.l, 10))) {
+    layout.finalBorderSignature = signature;
+    layout.finalBorderReconciled = true;
+    return true;
+  }
+  const candidate = computeLots({ ...layout, border: clipped }, place,
+    Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03));
+  if (candidate.length < SETTLEMENT_POPULATION[place.kind]) {
+    layout.finalBorderSignature = signature;
+    layout.finalBorderReconciled = false;
+    return false;
+  }
+  layout.border = clipped;
+  layout.lots = candidate;
+  layout.lotGrid = undefined;
+  layout.lotOrder = undefined;
+  layout.finalBorderSignature = signature;
+  layout.finalBorderReconciled = true;
+  return true;
+}
+
 function lotsFor(place: Place): readonly SettlementLot[] {
   settlementExteriorFor(place);
   return layouts.get(place.code)!.lots!;
