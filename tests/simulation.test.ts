@@ -27,6 +27,7 @@ import {
   nearestLegalStreetNode,
   legalOpenGroundDetour,
   residentStreetPathKey,
+  residentViewQuery,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -39,6 +40,19 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("resident inspector can resolve facts independently of optional actor detail", () => {
+  assert.deepEqual(residentViewQuery(48, true, false, false, false), { actors: false, inspect: true },
+    "open village-scale information must not wait for mesh refinement");
+  assert.deepEqual(residentViewQuery(48, false, false, false, false), { actors: false, inspect: false },
+    "hidden inspector performs no extra resident search");
+  assert.deepEqual(residentViewQuery(12, false, true, true, true), { actors: true, inspect: true },
+    "close-up street actors retain their usual bounded query");
+  assert.deepEqual(residentViewQuery(12, true, true, true, false), { actors: false, inspect: true },
+    "not-yet-ready optional billboards must not hide authoritative resident facts");
+  assert.deepEqual(residentViewQuery(100, true, true, true, true), { actors: false, inspect: false },
+    "remote city and realm views do not issue expensive resident searches");
+});
 
 test("resident walking path cache preserves exact doorway offsets, direction and gate policy", () => {
   const home = { eastM: 12.011, northM: -2.02 }, otherDoor = { eastM: 12.049, northM: -2.02 },

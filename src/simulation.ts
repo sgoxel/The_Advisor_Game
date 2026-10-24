@@ -943,6 +943,17 @@ export function readableResidentSite(code: string): string {
   return site.join(" ").replaceAll("_", " ").toLowerCase();
 }
 
+/** Player-facing resident facts are not optional scenery. Keep the existing
+ * sub-pixel actor budget while permitting a bounded inspector query at village
+ * scale whenever the information panel is actually open. */
+export function residentViewQuery(
+  halfHeight: number, panelOpen: boolean, rendererReady: boolean,
+  settlementDetailReady: boolean, smallDetailReady: boolean,
+) {
+  const actors = rendererReady && settlementDetailReady && smallDetailReady && halfHeight < 20;
+  return { actors, inspect: actors || (panelOpen && halfHeight < 80) };
+}
+
 /** Keep the explicitly selected SEED identity across camera/LOD query changes.
  * Only one off-screen resident is resolved; never scan or rebuild the population. */
 export function residentInspectorSelection<T extends { code: string; index: number }>(
