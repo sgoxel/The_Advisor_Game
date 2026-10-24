@@ -68,6 +68,19 @@ test("the roster and seeded population exclude child characters and deleted spri
   }
 });
 
+test("bounded resident foundation reuse does not rebuild SEED identity on a warm query", () => {
+  const place = villages[0], index = 70;
+  const initial = residentFoundationAt(place, index);
+  assert.equal(residentFoundationAt(place, index), initial,
+    "the spatial index, standing slots and route evaluation share one immutable foundation");
+  assert.equal(residentAt(place, index, at(15, WORKDAY)).code, initial.code,
+    "caching identity cannot change the actual Simulation actor");
+  assert.equal(residentFoundationAt(place, index), initial,
+    "route reconstruction must not evict the active village foundation");
+  assert.throws(() => residentFoundationAt(place, populationOf(place)), RangeError,
+    "bounded caching must not make an invalid resident index valid");
+});
+
 test("resident inspector off-screen status is stable and carries the same SEED identity", () => {
   const sample = { index: 6, role: "guard-officer" } as const;
   assert.equal(residentShortLabel(sample), "Resident 7 · guard officer");
