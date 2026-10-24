@@ -647,9 +647,14 @@ export function legalOpenGroundDetour(
   return null;
 }
 const pathCache = new Map<string, Offset[] | null>();
+/** Distinct canonical entrances must never reuse a route with different endpoints.
+ * Exact finite SEED offsets are stable; rounding them could reuse an illegal connector. */
+export function residentStreetPathKey(placeCode: string, from: Offset, to: Offset, allowGateDetour: boolean) {
+  return `${placeCode}|${from.eastM},${from.northM}|${to.eastM},${to.northM}|${allowGateDetour ? "g" : "d"}`;
+}
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
-  const key = `${place.code}|${from.eastM.toFixed(1)},${from.northM.toFixed(1)}|${to.eastM.toFixed(1)},${to.northM.toFixed(1)}|${allowGateDetour ? "g" : "d"}`,
+  const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
   const graph = streetGraphFor(place),
