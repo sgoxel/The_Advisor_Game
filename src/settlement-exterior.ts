@@ -435,7 +435,12 @@ function remember(plan: SettlementExteriorPlan) {
 
 export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const existing = cache.get(place.code);
-  if (existing) return remember(existing);
+  if (existing) {
+    // The smaller exterior cache can outlive the core lot cache. Reestablish
+    // its final-border seating after core eviction, never by visit order.
+    if (place.kind === "village") reconcileSettlementLotsToFinalBorder(place, existing.border);
+    return remember(existing);
+  }
   const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
   for (const plot of core.plots) if (plot.kind !== "house") {
     const owned = servicePlot(place, plot);
@@ -449,8 +454,7 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   // Road-aware enclosure trimming precedes home allocation. The core street
   // grid alone cannot certify a residence behind the final village wall.
   const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
-  if (place.kind === "village" && (aligned.border.length !== core.border.length ||
-      aligned.border.some((point, index) => point.x !== core.border[index].x || point.z !== core.border[index].z)))
+  if (place.kind === "village")
     reconcileSettlementLotsToFinalBorder(place, aligned.border);
   for (let index = 0; index < residentHomeCount; index += gardenStride)
     plots.push(gardenFor(place, index, aligned));
