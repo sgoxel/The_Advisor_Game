@@ -778,7 +778,13 @@ function workTask(foundation: ResidentFoundation) {
   if (site.id?.includes("/WOODLAND/")) return foundation.character.startsWith("hunter") ? "Hunting in the woodland" : foundation.character.startsWith("herbalist") ? "Gathering woodland herbs" : "Cutting timber in the woodland";
   return site.label ?? "Working";
 }
-function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) {
+type ScheduledResidentState = {
+  task: string; route: string; offset: Offset; activity: ActivityKind; indoors: boolean;
+  mood: ReturnType<typeof moodAt>;
+  activityStart: number; activityEnd: number; activityProgress: number;
+  travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
+};
+function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
@@ -787,14 +793,33 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
+  // A night watch spans midnight. Starting every fresh day at the gate post
+  // fabricated attendance after a blocked 17:24 home->gate journey. Replay
+  // yesterday's final second once, then carry its physical position forward.
+  // The inner replay starts from the historical work anchor but must still
+  // complete yesterday's actual home->gate journey to certify arrival.
+  const previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
+    ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
+    post = foundation.workOffset,
+    atPost = !!previousWatch && previousWatch.activity === "guard" &&
+      Math.hypot(previousWatch.offset.eastM - post.eastM, previousWatch.offset.northM - post.northM) <= 2;
   // Replay only changed anchors from absolute Fantasy Time. A later routine
   // never starts from an endpoint that an earlier walk did not actually reach.
-  let offset = standingSpot(foundation, plan[0].anchor, anchorOffset(place, foundation, plan[0].anchor), !plan[0].indoors),
-    actualAnchor: RoutineAnchor | "en route" = plan[0].anchor,
-    actuallyIndoors = plan[0].indoors;
+  let offset = previousWatch?.offset ??
+      standingSpot(foundation, plan[0].anchor, anchorOffset(place, foundation, plan[0].anchor), !plan[0].indoors),
+    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : plan[0].anchor,
+    actuallyIndoors = previousWatch ? false : plan[0].indoors;
   type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
   let leg: Leg | undefined;
   let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
+  if (previousWatch && !atPost) {
+    // If yesterday's legal commute is still in progress, continue from its
+    // exact location; an unresolved crossing stays blocked, never teleports.
+    const continuation = previousWatch.activity === "commute"
+      ? streetPath(place, offset, post) : null;
+    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: "work" };
+    else blocked = { origin: "en route", destination: "work" };
+  }
   const advance = (atSecond: number) => {
     if (!leg) return;
     const moved = timedWalkOnPath(leg.path, atSecond - leg.start);
