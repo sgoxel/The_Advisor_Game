@@ -422,6 +422,40 @@ test("legal guard arrivals fill posts while unresolved homes remain explicit gat
       "an unresolved house must never become a fictitious physically staffed gate");
 });
 
+test("night guards carry their lawful evening position through midnight and the morning shift", () => {
+  const affected = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(affected, "retain the prior road-trimmed village case");
+  for (const village of [villages[0], affected]) {
+    const lon = village.canonicalPosition.lon,
+      late = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+      midnight = tickAtLocalTime(WORKDAY + 1, 0, lon),
+      dawn = tickAtLocalTime(WORKDAY + 1, 6 * HOUR, lon);
+    let index = 6;
+    for (let gate = 0; gate < gateCountFor(village); gate++)
+      for (let slot = 0; slot < guardsPerGateFor(village, gate); slot++, index += 2) {
+        const code = residentFoundationAt(village, index + 1).code,
+          before = residentAt(village, index + 1, late),
+          after = residentAt(village, index + 1, midnight),
+          beforeDawn = residentAt(village, index + 1, dawn - 1),
+          afterDawn = residentAt(village, index + 1, dawn);
+        assert.equal(before.code, code);
+        assert.equal(after.code, code, "midnight may not replace canonical identity");
+        assert.ok(greatCircleDistance(before.position, after.position) < 3,
+          `${code}: fantasy midnight cannot teleport a watchman to the gate`);
+        assert.ok(greatCircleDistance(beforeDawn.position, afterDawn.position) < 3,
+          `${code}: the 06:00 watch handoff cannot teleport a stranded watchman`);
+        if (before.activity !== "guard" || !before.grounded) {
+          assert.notEqual(after.activity, "guard",
+            `${code}: blocked/incomplete evening approach cannot become a staffed midnight watch`);
+          assert.ok(!guardCoverageAt(village, midnight)[gate].residentCodes.includes(code),
+            "the physical gate roster must not count an unarrived guard");
+        } else {
+          assert.equal(after.activity, "guard", "an actually reached watch stays on its post overnight");
+        }
+      }
+  }
+});
+
 test("actual guard home lots follow the final road-trimmed village enclosure", () => {
   const village = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
   assert.ok(village, "retain the real village with a formerly blocked watchman's house");
