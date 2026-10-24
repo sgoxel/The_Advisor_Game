@@ -789,6 +789,15 @@ export function residentStreetPathKey(placeCode: string, from: Offset, to: Offse
 }
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
+  // Surface, enclosure and street links are bidirectional. Resolve the same
+  // canonical orientation regardless of query order, then reverse that exact
+  // lawful path for return travel. This avoids a second graph search for every
+  // homecoming without making path choice depend on cache visitation order.
+  const fromId = `${from.eastM},${from.northM}`, toId = `${to.eastM},${to.northM}`;
+  if (compareText(fromId, toId) > 0) {
+    const reverse = streetPath(place, to, from, allowGateDetour);
+    return reverse ? [...reverse].reverse() : null;
+  }
   const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
