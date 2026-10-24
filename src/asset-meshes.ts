@@ -22,6 +22,11 @@ export const ASSET_URLS: Record<string, string> = {
   woodpile: new URL("./models/woodpile.glb", import.meta.url).href,
   barrels: new URL("./models/barrels.glb", import.meta.url).href,
   barrels_v2: new URL("./models/barrels_v2.glb", import.meta.url).href,
+  washline: new URL("./models/washline.glb", import.meta.url).href,
+  washline_v2: new URL("./models/washline_v2.glb", import.meta.url).href,
+  coop: new URL("./models/coop.glb", import.meta.url).href,
+  "door-bench": new URL("./models/door-bench.glb", import.meta.url).href,
+  "door-bench_v2": new URL("./models/door-bench_v2.glb", import.meta.url).href,
 };
 
 const registry = new Map<string, AssetMesh>();

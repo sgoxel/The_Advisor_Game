@@ -15,7 +15,7 @@ import sys
 
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = os.path.abspath(argv[0] if argv else "src/models")
@@ -290,11 +290,206 @@ def build_barrels(variant):
     return join("barrels", parts)
 
 
+LINEN = (0.93, 0.91, 0.85, 1)
+CREAM = (0.89, 0.82, 0.66, 1)
+RED_CLOTH = (0.66, 0.24, 0.2, 1)
+BLUE_CLOTH = (0.29, 0.4, 0.6, 1)
+GREEN_CLOTH = (0.42, 0.55, 0.32, 1)
+BROWN_CLOTH = (0.45, 0.33, 0.22, 1)
+OCHRE_CLOTH = (0.78, 0.66, 0.38, 1)
+ROPE = (0.82, 0.8, 0.74, 1)
+WALL_PLANK = (0.6, 0.45, 0.28, 1)
+ROOF_RED = (0.47, 0.28, 0.2, 1)
+HEN_COLOURS = [(0.95, 0.94, 0.9, 1), (0.66, 0.42, 0.22, 1), (0.22, 0.2, 0.19, 1)]
+COMB = (0.78, 0.15, 0.12, 1)
+BEAK = (0.9, 0.68, 0.2, 1)
+TERRACOTTA = (0.71, 0.4, 0.27, 1)
+LEAF = (0.3, 0.48, 0.22, 1)
+FLOWER_PINK = (0.89, 0.45, 0.6, 1)
+FLOWER_YELLOW = (0.96, 0.82, 0.3, 1)
+WICKER = (0.74, 0.6, 0.38, 1)
+
+
+def cloth(name, kind, x, y, top, mat, peg):
+    """Laundry hanging from a line at height `top`, facing the front: sheet, towel, shirt or trousers."""
+    parts = []
+    if kind == "sheet":
+        parts.append(box(name, (0.62, 0.02, 0.78), (x, y, top - 0.39), mat))
+    elif kind == "towel":
+        parts.append(box(name, (0.36, 0.02, 0.5), (x, y, top - 0.25), mat))
+    elif kind == "shirt":
+        parts.append(box(name + "_body", (0.34, 0.025, 0.5), (x, y, top - 0.25), mat))
+        for side in (-1, 1):
+            parts.append(box(f"{name}_sleeve{side}", (0.12, 0.025, 0.3), (x + side * 0.22, y, top - 0.13), mat, rotation=(0, side * 0.5, 0)))
+    elif kind == "trousers":
+        parts.append(box(name + "_waist", (0.34, 0.025, 0.14), (x, y, top - 0.07), mat))
+        for side in (-1, 1):
+            parts.append(box(f"{name}_leg{side}", (0.15, 0.025, 0.56), (x + side * 0.095, y, top - 0.42), mat))
+    for side in (-1, 1):
+        parts.append(box(f"{name}_peg{side}", (0.025, 0.035, 0.07), (x + side * 0.12, y, top + 0.01), peg))
+    return parts
+
+
+def build_washline(variant):
+    """Washing line between two T-posts with laundry; footprint 3.2 m x 0.5 m."""
+    dark, peg, rope = material("dark_wood", DARK_WOOD), material("wood", WOOD), material("rope", ROPE)
+    parts = []
+    for side in (-1, 1):
+        parts.append(box(f"post{side}", (0.08, 0.08, 1.9), (side * 1.5, 0, 0.95), dark))
+        parts.append(box(f"cross{side}", (0.06, 0.42, 0.06), (side * 1.5, 0, 1.82), dark))
+        parts.append(stick(f"brace{side}", (side * 1.5, 0, 1.55), (side * 1.5, 0.17, 1.8), 0.035, dark))
+    lines = (-0.15, 0.15)
+    for k, y in enumerate(lines):
+        parts.append(box(f"line{k}", (3.0, 0.012, 0.012), (0, y, 1.8), rope))
+    if variant == 1:
+        laundry = [("sheet", -0.95, lines[0], LINEN), ("shirt", -0.15, lines[0], BLUE_CLOTH), ("trousers", 0.45, lines[0], BROWN_CLOTH),
+                   ("towel", 1.05, lines[0], RED_CLOTH), ("towel", -0.5, lines[1], CREAM), ("sheet", 0.6, lines[1], LINEN)]
+    else:
+        laundry = [("shirt", -1.0, lines[0], LINEN), ("towel", -0.45, lines[0], GREEN_CLOTH), ("sheet", 0.3, lines[0], CREAM),
+                   ("shirt", 1.05, lines[0], RED_CLOTH), ("trousers", -0.8, lines[1], BLUE_CLOTH), ("towel", 0.85, lines[1], OCHRE_CLOTH)]
+    for k, (kind, x, y, colour) in enumerate(laundry):
+        parts += cloth(f"cloth{k}", kind, x, y, 1.79, material(f"cloth{k}_{variant}", colour), peg)
+    return join("washline", parts)
+
+
+def gable_roof(name, w, d, h, location, roof_mat, gable_mat, overhang=0.08):
+    """Pitched roof with its ridge along X: two slopes (roof material) and two gable triangles (wall material)."""
+    bm = bmesh.new()
+    hw, hd = w / 2, d / 2
+    ends = []
+    for x, o in ((-hw, -overhang), (hw, overhang)):
+        ends.append((bm.verts.new((x + o, -hd - overhang, 0)), bm.verts.new((x + o, hd + overhang, 0)), bm.verts.new((x + o, 0, h))))
+    gables = []
+    for x in (-hw, hw):
+        gables.append((bm.verts.new((x, -hd, 0)), bm.verts.new((x, hd, 0)), bm.verts.new((x, 0, h - 0.04))))
+    (a0, a1, a2), (b0, b1, b2) = ends
+    bm.faces.new((a0, b0, b2, a2))
+    bm.faces.new((b1, a1, a2, b2))
+    g0, g1 = gables
+    f = bm.faces.new((g0[1], g0[0], g0[2]))
+    f.material_index = 1
+    f = bm.faces.new((g1[0], g1[1], g1[2]))
+    f.material_index = 1
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    obj = add_mesh(name, bm, roof_mat)
+    obj.data.materials.append(gable_mat)
+    obj.location = location
+    return obj
+
+
+def hen(name, x, y, yaw, colour):
+    """Low-poly hen (~80 triangles), 0.3 m long, facing yaw (radians about Z)."""
+    body_mat, comb, beak = material(f"hen_{colour}", colour), material("comb", COMB), material("beak", BEAK)
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=6, v_segments=4, radius=1)
+    bmesh.ops.scale(bm, vec=(0.11, 0.16, 0.11), verts=bm.verts)
+    body = add_mesh(name + "_body", bm, body_mat)
+    body.location = (0, 0, 0.13)
+    parts = [body,
+             box(name + "_head", (0.07, 0.08, 0.09), (0, -0.15, 0.25), body_mat),
+             box(name + "_comb", (0.02, 0.06, 0.04), (0, -0.15, 0.31), comb),
+             box(name + "_beak", (0.03, 0.04, 0.025), (0, -0.21, 0.24), beak),
+             box(name + "_tail", (0.06, 0.1, 0.1), (0, 0.15, 0.22), body_mat, rotation=(-0.6, 0, 0))]
+    for side in (-1, 1):
+        parts.append(box(f"{name}_leg{side}", (0.015, 0.015, 0.06), (side * 0.04, 0, 0.03), beak))
+    pivot = bpy.data.objects.new(name + "_pivot", None)
+    bpy.context.collection.objects.link(pivot)
+    for part in parts:
+        part.parent = pivot
+    pivot.location, pivot.rotation_euler = (x, y, 0), (0, 0, yaw)
+    bpy.context.view_layer.update()
+    for part in parts:
+        world = part.matrix_world.copy()
+        part.parent = None
+        part.matrix_world = world
+    bpy.data.objects.remove(pivot)
+    return parts
+
+
+def build_coop():
+    """Hen house on short legs with a pitched roof, ramp and nest box, a fenced run and three hens;
+    footprint 2.6 m x 2.2 m. Game front (+Z) = Blender -Y."""
+    planks, dark, roof, wood = material("wall_plank", WALL_PLANK), material("dark_wood", DARK_WOOD), material("roof_red", ROOF_RED), material("wood", WOOD)
+    hx, hy = -0.45, 0.45
+    parts = [box("house", (1.0, 0.8, 0.6), (hx, hy, 0.65), planks, bevel=0.01)]
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            parts.append(box(f"leg{sx}{sy}", (0.06, 0.06, 0.36), (hx + sx * 0.44, hy + sy * 0.34, 0.18), dark))
+    parts.append(gable_roof("roof", 1.0, 0.8, 0.38, (hx, hy, 0.95), roof, planks))
+    parts.append(box("door", (0.22, 0.02, 0.28), (hx + 0.2, hy - 0.41, 0.55), dark))
+    parts.append(stick("ramp", (hx + 0.2, hy - 0.42, 0.4), (hx + 0.2, hy - 0.95, 0.02), 0.03, wood))
+    parts[-1].scale = (6, 1, 1)
+    parts.append(box("nest_box", (0.22, 0.5, 0.3), (hx - 0.6, hy, 0.6), planks))
+    parts.append(box("nest_lid", (0.26, 0.54, 0.03), (hx - 0.6, hy, 0.77), roof, rotation=(0, -0.35, 0)))
+    # Fenced run: posts around the yard, two rails.
+    xs, ys = (-1.25, 0.0, 1.25), (-1.05, 0.0, 1.05)
+    corners = [(-1.25, -1.05), (1.25, -1.05), (1.25, 1.05), (-1.25, 1.05)]
+    for k, (x, y) in enumerate([(x, y) for x in xs for y in ys if abs(x) == 1.25 or abs(y) == 1.05]):
+        parts.append(box(f"fpost{k}", (0.05, 0.05, 0.62), (x, y, 0.31), dark))
+    for k in range(4):
+        (x0, y0), (x1, y1) = corners[k], corners[(k + 1) % 4]
+        for z in (0.28, 0.56):
+            parts.append(stick(f"rail{k}_{z}", (x0, y0, z), (x1, y1, z), 0.03, wood))
+    parts.append(box("trough", (0.5, 0.14, 0.08), (0.55, 0.6, 0.04), dark))
+    parts.append(box("feed", (0.44, 0.1, 0.02), (0.55, 0.6, 0.085), material("grain", GRAIN)))
+    for k, (x, y, yaw) in enumerate(((0.35, -0.45, 0.6), (0.85, 0.15, -1.9), (-0.05, -0.75, 2.6))):
+        parts += hen(f"hen{k}", x, y, yaw, HEN_COLOURS[k])
+    return join("coop", parts)
+
+
+def build_door_bench(variant):
+    """Bench by the front door with a backrest; variant 1 adds a flower pot, variant 2 a basket and a broom.
+    Footprint 2.6 m x 0.6 m; the house wall is behind (Blender +Y)."""
+    wood, dark = material("wood", WOOD), material("dark_wood", DARK_WOOD)
+    bx = -0.4
+    parts = [box("seat", (1.4, 0.36, 0.05), (bx, 0.02, 0.45), wood, bevel=0.008)]
+    for sx in (-1, 1):
+        parts.append(box(f"leg_front{sx}", (0.06, 0.06, 0.43), (bx + sx * 0.6, -0.12, 0.215), dark))
+        parts.append(box(f"leg_back{sx}", (0.06, 0.06, 0.9), (bx + sx * 0.6, 0.17, 0.45), dark))
+        parts.append(box(f"arm{sx}", (0.06, 0.38, 0.04), (bx + sx * 0.66, 0.02, 0.66), dark))
+        parts.append(box(f"arm_post{sx}", (0.04, 0.04, 0.2), (bx + sx * 0.66, -0.14, 0.56), dark))
+    for k, z in enumerate((0.62, 0.78)):
+        parts.append(box(f"back{k}", (1.3, 0.03, 0.1), (bx, 0.18, z), wood, bevel=0.005))
+    if variant == 1:
+        pot = material("terracotta", TERRACOTTA)
+        parts.append(frustum("pot", 0.17, 0.22, 0.0, 0.36, (0.95, 0.0, 0), pot, segments=8))
+        parts.append(cylinder("pot_soil", 0.2, 0.02, (0.95, 0.0, 0.34), material("soil", (0.3, 0.21, 0.14, 1)), segments=8))
+        bm = bmesh.new()
+        bmesh.ops.create_icosphere(bm, subdivisions=1, radius=0.22)
+        bush = add_mesh("bush", bm, material("leaf", LEAF))
+        bush.location, bush.scale = (0.95, 0.0, 0.52), (1, 1, 0.8)
+        parts.append(bush)
+        for k, (dx, dy, dz, col) in enumerate(((0.1, -0.12, 0.66, FLOWER_PINK), (-0.12, -0.08, 0.62, FLOWER_YELLOW), (0.02, -0.18, 0.55, FLOWER_PINK), (-0.05, 0.08, 0.7, FLOWER_YELLOW))):
+            parts.append(box(f"flower{k}", (0.07, 0.07, 0.05), (0.95 + dx, dy, dz), material(f"flower{k % 2}", col)))
+    else:
+        wicker = material("wicker", WICKER)
+        parts.append(frustum("basket", 0.16, 0.2, 0.0, 0.24, (0.8, -0.02, 0), wicker, segments=8))
+        parts.append(cylinder("basket_floor", 0.16, 0.02, (0.8, -0.02, 0.03), dark, segments=8))
+        parts.append(box("basket_apples", (0.24, 0.24, 0.05), (0.8, -0.02, 0.2), material("apples", APPLES), rotation=(0, 0, 0.4)))
+        parts.append(stick("broom_handle", (1.12, 0.2, 0.18), (1.2, 0.26, 1.15), 0.03, wood))
+        # Straw brush: narrow at the binding, fanning out to the floor.
+        straw = material("straw", OCHRE_CLOTH)
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=True, segments=4, radius1=0.16, radius2=0.04, depth=0.26)
+        bmesh.ops.rotate(bm, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 4, 3, "Z"), verts=bm.verts)
+        bmesh.ops.scale(bm, vec=(1, 0.35, 1), verts=bm.verts)
+        brush = add_mesh("broom_brush", bm, straw)
+        brush.location, brush.rotation_euler = (1.11, 0.19, 0.13), (0, -0.08, 0)
+        parts.append(brush)
+        parts.append(box("broom_band", (0.07, 0.06, 0.05), (1.12, 0.195, 0.27), dark, rotation=(0, -0.08, 0)))
+    return join("door-bench", parts)
+
+
 ASSETS = {
     "cart": build_cart,
     "woodpile": build_woodpile,
     "barrels": lambda: build_barrels(1),
     "barrels_v2": lambda: build_barrels(2),
+    "washline": lambda: build_washline(1),
+    "washline_v2": lambda: build_washline(2),
+    "coop": build_coop,
+    "door-bench": lambda: build_door_bench(1),
+    "door-bench_v2": lambda: build_door_bench(2),
 }
 
 for asset_name, builder in ASSETS.items():

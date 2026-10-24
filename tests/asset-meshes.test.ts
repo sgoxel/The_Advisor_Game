@@ -7,7 +7,9 @@ import { buildPropForTest } from "../src/geometry.ts";
 
 const fromDisk = async (url: string) => { const bytes = await readFile(fileURLToPath(url)); return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); };
 /** Yard footprints (width x depth, metres) from world.ts YARD_PROP_SIZES, plus a height limit. */
-const FOOTPRINTS: Record<string, [number, number, number]> = { cart: [1.5, 2.4, 1.2], woodpile: [1.9, 1.1, 1.3], barrels: [1.3, .9, 1.2] };
+const FOOTPRINTS: Record<string, [number, number, number]> = {
+  cart: [1.5, 2.4, 1.2], woodpile: [1.9, 1.1, 1.3], barrels: [1.3, .9, 1.2], washline: [3.2, .5, 2.0], coop: [2.6, 2.2, 1.5], "door-bench": [2.6, .6, 1.25],
+};
 
 test("Blender assets parse into flat-coloured, metre-scale meshes inside their yard footprint", async () => {
   for (const [name, url] of Object.entries(ASSET_URLS)) {
@@ -39,7 +41,8 @@ test("yard objects use the Blender models once loaded, one SEED-chosen variant p
   const result = await loadAssetMeshes(fromDisk);
   assert.deepEqual(result.failed, []);
   assert.equal(result.loaded, Object.keys(ASSET_URLS).length);
-  assert.equal(assetVariants("barrels").length, 2);
+  for (const kind of ["barrels", "washline", "door-bench"]) assert.equal(assetVariants(kind).length, 2, `${kind}: two variants`);
+  assert.deepEqual(Object.keys(FOOTPRINTS).filter((kind) => !assetVariants(kind).length), [], "every yard kind has a Blender model");
   for (const label of Object.keys(FOOTPRINTS)) for (const variant of [0, 1, 3, 42]) {
     const drawn = prop(label, variant);
     assert.equal(drawn.indices.length / 3, assetFor(label, variant)!.triangles, `${label} v${variant}: drawn exactly as the Blender mesh`);
