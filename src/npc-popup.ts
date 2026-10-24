@@ -97,10 +97,11 @@ export function hideNpcPopup() {
 export function showNpcPopup(resident: Resident, tick: number) {
   install();
   if (!root) return;
+  const sameResident = currentKind === "npc" && currentCode === resident.code;
+  const technicalOpen = sameResident && !!root.querySelector<HTMLDetailsElement>(".npc-technical")?.open;
+  const previousScroll = sameResident ? root.scrollTop : 0;
   currentCode = resident.code;
   currentKind = "npc";
-  // The popup refreshes with Fantasy Time: keep player-expanded SEED evidence open.
-  const technicalOpen = !!root.querySelector<HTMLDetailsElement>(".npc-technical")?.open;
   const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
     plan = dailyPlan({ code: resident.code, role: resident.role, ageGroup: resident.ageGroup, guardShift: resident.guardShift }, t, day, weekday),
     { index } = activityAt(plan, second),
@@ -144,6 +145,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
       <div><span class="npc-label">Actual route</span><code id="npc-route-code" class="npc-code">${escape(resident.route)}</code></div>
     </details>`;
   root.hidden = false;
+  root.scrollTop = previousScroll;
 }
 
 // ---------------------------------------------------------------- buildings
