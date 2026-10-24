@@ -36,7 +36,9 @@ one capture. The exit code is 1 when any scenario failed.
 from __future__ import annotations
 
 import argparse
+import base64
 import glob
+import struct
 import json
 import os
 import re
@@ -483,11 +485,37 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
+    def capture_viewport(self, path: Path) -> None:
+        # The regular Playwright screenshot waits on browser page stability.
+        # On a streaming 3D cold start this has stalled for 180 seconds without
+        # a PNG, even after the world reports ready. Bound that first attempt,
+        # then ask Chromium directly for the REAL composited viewport pixels.
+        # Neither method fabricates a resident, scene or synthetic image.
+        try:
+            self.page.screenshot(path=str(path), timeout=min(15000, self.args.timeout * 1000),
+                                 animations="disabled")
+            return
+        except PlaywrightTimeoutError:
+            print(f"SCREENSHOT Playwright timeout; trying direct Chromium viewport capture for {path.name}",
+                  flush=True)
+        session = self.page.context.new_cdp_session(self.page)
+        try:
+            encoded = session.send("Page.captureScreenshot", {
+                "format": "png", "fromSurface": True, "captureBeyondViewport": False,
+            })["data"]
+        finally:
+            session.detach()
+        pixels = base64.b64decode(encoded, validate=True)
+        dimensions = struct.unpack(">II", pixels[16:24]) if len(pixels) >= 24 and pixels[:8] == b"\x89PNG\r\n\x1a\n" else None
+        if dimensions != self.viewport:
+            raise CaptureError(f"direct Chromium screenshot is not the actual {self.viewport} viewport: {dimensions}")
+        path.write_bytes(pixels)
+
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
         state = self.page.evaluate(STATE_JS)
-        self.page.screenshot(path=str(path))
+        self.capture_viewport(path)
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
         self.shots += 1
