@@ -19,6 +19,7 @@ import {
   residentWalkableSurface,
   legalEnclosureSegment,
   timedWalkOnPath,
+  unfinishedOrBlockedOvernightReturn,
   walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -592,6 +593,46 @@ test("late-closing innkeepers retain their actual position through local midnigh
       assert.ok(midnight.route.startsWith("BLOCKED:") ||
         greatCircleDistance(before.position, midnight.position) < 1,
         "an impassable return must not fabricate an arrival");
+  }
+});
+
+test("civilian midnight replay is gated by an actual blocked or overlong return", () => {
+  const leg = [{ eastM: 0, northM: 0 }, { eastM: 120, northM: 0 }];
+  assert.equal(unfinishedOrBlockedOvernightReturn(null, 86_400), true,
+    "no connector cannot be called a successful homecoming");
+  assert.equal(unfinishedOrBlockedOvernightReturn(leg, 10), true,
+    "not enough Fantasy Time to walk the legal route before midnight");
+  assert.equal(unfinishedOrBlockedOvernightReturn(leg, 300), false,
+    "a completed short homecoming avoids full civilian history replay");
+  assert.equal(unfinishedOrBlockedOvernightReturn([leg[0], leg[0]], 1), false,
+    "same-door arrivals never need a phantom commute");
+});
+
+test("ordinary civilian identity and real ground persist across local midnight", () => {
+  const trimmed = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(trimmed, "retain the physically trimmed road village");
+  for (const place of [villages[0], trimmed, cities[0]]) {
+    const lon = place.canonicalPosition.lon,
+      beforeTick = tickAtLocalTime(WORKDAY, 24 * HOUR - 1, lon),
+      midnightTick = tickAtLocalTime(WORKDAY + 1, 0, lon);
+    for (const index of [16, 25, 42, 70]) {
+      const previous = residentAt(place, index, beforeTick),
+        midnight = residentAt(place, index, midnightTick),
+        next = residentAt(place, index, midnightTick + 1);
+      assert.ok(previous.role !== "guard" && index >= 6, "probe ordinary seeded citizens, not the service roster");
+      assert.equal(midnight.code, previous.code, "day rollover cannot replace canonical civilian identity");
+      assert.equal(midnight.homeEntrance, previous.homeEntrance, "owned door is canonical across midnight");
+      assert.equal(midnight.workplace, previous.workplace, "worksite is canonical across midnight");
+      assert.ok(greatCircleDistance(previous.position, midnight.position) < 3,
+        `${previous.code}: local midnight cannot teleport from the actual last position`);
+      assert.ok(greatCircleDistance(midnight.position, next.position) < 3,
+        `${previous.code}: following second must be physically continuous`);
+      assert.deepEqual(residentAt(place, index, midnightTick), midnight,
+        "direct-time reconstruction retains exactly the same physical facts");
+      if (!previous.grounded)
+        assert.ok(!midnight.grounded || midnight.route.startsWith("BLOCKED:"),
+          "unresolved physical ground must never fabricate successful arrival");
+    }
   }
 });
 

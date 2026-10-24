@@ -789,6 +789,15 @@ export function residentStreetPathKey(placeCode: string, from: Offset, to: Offse
 }
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
+  // Surface, enclosure and street links are bidirectional. Resolve the same
+  // canonical orientation regardless of query order, then reverse that exact
+  // lawful path for return travel. This avoids a second graph search for every
+  // homecoming without making path choice depend on cache visitation order.
+  const fromId = `${from.eastM},${from.northM}`, toId = `${to.eastM},${to.northM}`;
+  if (compareText(fromId, toId) > 0) {
+    const reverse = streetPath(place, to, from, allowGateDetour);
+    return reverse ? [...reverse].reverse() : null;
+  }
   const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
@@ -965,11 +974,62 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
-// Carry yesterday's actual position for guards and the six fixed service-roster
-// residents (including late-closing innkeepers), never the entire civilian population.
-// Whole-civilian replay on every query previously exceeded the bounded release test.
-// Cache only immutable SEED/time facts, never camera/actor state; bound residency.
+// Carry yesterday's actual position for guards, the fixed service roster, and
+// civilians with a physically blocked or overlong final return. Do not replay
+// the entire civilian population on every query; cache only SEED/time facts.
 const overnightPositions = new Map<string, ScheduledResidentState>();
+// Only uncertain civilian homecomings need yesterday's expensive physical replay.
+// Ordinary residents with a proven timely final return keep the cheap analytic path.
+const civilianOvernightRisk = new Map<string, boolean>();
+/** The final homecoming needs history if its real route is absent or cannot finish
+ * by midnight; never infer arrival from the scheduled destination alone. */
+export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | null, remainingSeconds: number): boolean {
+  return !path || timedWalkOnPath(path, remainingSeconds).progress < 1;
+}
+function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
+  const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
+    key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
+    cached = civilianOvernightRisk.get(key);
+  if (cached !== undefined) return cached;
+  const plan = dailyPlan({ code: foundation.code, role: foundation.role,
+    ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, foundation.traits,
+    priorDay, localWeekday(priorTick, lon));
+  // A lawful final homeward route is NOT proof the resident reached its
+  // scheduled origin: an earlier failed leg may have left them elsewhere.
+  // Prove each distinct anchor reached its physical stop before the following
+  // departure. Only an uncertain chain needs the expensive prior-day replay.
+  let fromAnchor = plan[0].anchor,
+    from = standingSpot(place, foundation, fromAnchor,
+      anchorOffset(place, foundation, fromAnchor), !plan[0].indoors),
+    risk = false;
+  for (let i = 1; i < plan.length; i++) {
+    const next = plan[i];
+    if (next.anchor === plan[i - 1].anchor) continue;
+    const to = standingSpot(place, foundation, next.anchor,
+      anchorOffset(place, foundation, next.anchor), !next.indoors),
+      route = routinePath(place, from, to,
+        fieldEntry(place, foundation, fromAnchor),
+        fieldEntry(place, foundation, next.anchor));
+    let nextDeparture = DAY_SECONDS;
+    for (let j = i + 1; j < plan.length; j++)
+      if (plan[j].anchor !== plan[j - 1].anchor) {
+        nextDeparture = plan[j].start;
+        break;
+      }
+    if (unfinishedOrBlockedOvernightReturn(route, nextDeparture - next.start - 1)) {
+      risk = true;
+      break;
+    }
+    from = to;
+    fromAnchor = next.anchor;
+  }
+  civilianOvernightRisk.set(key, risk);
+  // Three city rosters and their frequent direct-time queries fit without
+  // evicting and recomputing every unique door route during bounded queries.
+  while (civilianOvernightRisk.size > 16384)
+    civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
+  return risk;
+}
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
@@ -987,7 +1047,8 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
       !replayOvernight ? false : !plan[0].indoors),
     previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
   let previousDay: ScheduledResidentState | undefined;
-  if (replayOvernight && (foundation.role === "guard" || foundation.index < SERVICE_ROLES.length)) {
+  if (replayOvernight && (foundation.role === "guard" || foundation.index < SERVICE_ROLES.length ||
+      civilianReturnAtRisk(place, foundation, tick - second - 1))) {
     previousDay = overnightPositions.get(previousKey);
     if (!previousDay) {
       previousDay = scheduleAt(place, foundation, tick - second - 1, false);
