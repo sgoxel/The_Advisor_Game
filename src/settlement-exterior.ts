@@ -77,9 +77,9 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
     shift = (house.depthM - lot.nominalDepthM) * .5,
     yawRad = lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * (city ? .06 : .1),
-    at = (along: number): SettlementPoint => ({
-      x: wrapSourceX(lot.x + lot.out.x * shift + lot.along.x * along),
-      z: lot.z + lot.out.z * shift + lot.along.z * along,
+    at = (along: number, depth = 0): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * (shift + depth) + lot.along.x * along),
+      z: lot.z + lot.out.z * (shift + depth) + lot.along.z * along,
     });
   return {
     id: `${place.code}/RESIDENCE/${index}`,
@@ -94,7 +94,11 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     house,
     yawRad,
     clearanceRadius: homeClearanceRadius(house.widthM, house.depthM),
-    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2)],
+    // If local final terrain rejects the usual frontage position, keep
+    // searching within the SAME assigned SEED lot. No radial town relocation
+    // and no change of resident identity or housing ownership.
+    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2),
+      at(0, -.8), at(0, .8), at(-.6, -.8), at(.6, -.8), at(-.6, .8), at(.6, .8)],
   };
 }
 
