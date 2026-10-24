@@ -113,7 +113,7 @@ function gardenFor(place: Place, index: number): SettlementPlotPlan {
     // reject the required house (e.g. guard residence 8) as "unresolved".
     behind = Math.max(
       (home.depthM || 8) * .5 + depthM * .5 + .4,
-      Math.max(home.widthM, home.depthM) * .5 + .35 + Math.hypot(widthM, depthM) * .5 + .1 + .4,
+      Math.max(home.widthM ?? 8, home.depthM ?? 8) * .5 + .35 + Math.hypot(widthM, depthM) * .5 + .1 + .4,
     );
   return {
     id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0,
