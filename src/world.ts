@@ -14,7 +14,7 @@ import {
   type Tile,
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
-import { settlementHomeIndicesNear } from "./settlement-exterior-core.ts";
+import { settlementHomeIndicesNear, settlementLotCount, SETTLEMENT_POPULATION } from "./settlement-exterior-core.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementSpareHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -201,7 +201,9 @@ function resolveGuardHomes(place: Place, plan: SettlementExteriorPlan, resolutio
           (attempt >= 11 && conflictsWithAssignedHome(place, plan, index, point, plot.clearanceRadius))) continue;
       chosen = point; break;
     }
-    if (!chosen) for (let ordinal = 0; ordinal < 32; ordinal++) {
+    if (!chosen) for (let ordinal = 0,
+      vacant = Math.max(0, settlementLotCount(place) - SETTLEMENT_POPULATION[place.kind]);
+      ordinal < vacant; ordinal++) {
       if (usedSpareLots.has(ordinal)) continue;
       const spare = settlementSpareHomeFor(place, index, ordinal, plan);
       if (!spare) break;
