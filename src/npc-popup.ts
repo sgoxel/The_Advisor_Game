@@ -148,7 +148,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
       <button class="npc-close" data-close aria-label="Close character">×</button>
     </div>
     <div class="npc-now">
-      <div><span class="npc-label">Now</span><b>${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
+      <div><span class="npc-label">Now</span><b id="npc-current-task">${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
       <div><span class="npc-label">Route</span><span id="npc-route">${escape(readableResidentRoute(resident.route))}</span></div>
       ${resident.travelProgress !== undefined
         ? `<div><span class="npc-label">Progress</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`
