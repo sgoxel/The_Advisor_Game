@@ -700,6 +700,28 @@ function pointAlong(path: readonly Offset[], distanceM: number): Offset {
   return path[path.length - 1];
 }
 
+/** Source-of-truth subpath between two Fantasy-Time samples. Keep each
+ * real street corner instead of rendering a straight chord through an obstacle. */
+export function timedWalkPolyline(
+  path: readonly Offset[], fromSeconds: number, toSeconds: number,
+): { offset: Offset; fraction: number }[] {
+  if (!path.length) return [];
+  const length = pathLength(path), duration = Math.max(60, length / GOOD_ROAD_WALK_SPEED_MPS),
+    fromM = Math.min(length, Math.max(0, fromSeconds / duration * length)),
+    toM = Math.min(length, Math.max(fromM, toSeconds / duration * length)),
+    distance = toM - fromM;
+  const result = [{ offset: pointAlong(path, fromM), fraction: 0 }];
+  if (distance <= 0) return result;
+  let covered = 0;
+  for (let i = 1; i < path.length; i++) {
+    covered += Math.hypot(path[i].eastM - path[i-1].eastM, path[i].northM - path[i-1].northM);
+    if (covered > fromM + 1e-8 && covered < toM - 1e-8)
+      result.push({ offset: path[i], fraction: (covered - fromM) / distance });
+  }
+  result.push({ offset: pointAlong(path, toM), fraction: 1 });
+  return result;
+}
+
 /** Advance a legal path only by the Fantasy Time actually available. */
 export function timedWalkOnPath(
   path: readonly Offset[], elapsedSeconds: number,
@@ -776,6 +798,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
         route: `${leg.origin === "en route" ? "En route" : anchorRoute(place, foundation, leg.origin)} → ${anchorRoute(place, foundation, leg.destination)}`,
         offset: moved.offset, activity: "commute" as ActivityKind, indoors: false, mood,
         ...timing, travelProgress: moved.progress, travelDistanceM: moved.lengthM,
+        walking: { path: leg.path, elapsedSeconds: second - leg.start },
       };
     offset = moved.offset;
   }
@@ -797,6 +820,48 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
     travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
   };
 }
+/** Reconstruct the selected resident's *actual* legal route through the
+ * next real-time display interval. The renderer only follows these SEED /
+ * Simulation-authorized vertices; it never invents a shortcut at a bend.
+ * Re-evaluate on a Fantasy-Time routine boundary (at most two per 24 s). */
+export function residentWalkSourcePolyline(
+  place: Place, index: number, tick: number, secondsAhead: number,
+): { x: number; z: number; fraction: number }[] {
+  if (!(secondsAhead > 0) || secondsAhead > 30) return [];
+  const door = resolvedSettlementHomeDoorFor(place, index);
+  if (!door) return [];
+  const seeded = residentFoundationAt(place, index),
+    homeOffset = offsetForSource(place, door.x, door.z),
+    foundation = { ...seeded, homeOffset,
+      workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset },
+    points: { x: number; z: number; fraction: number }[] = [];
+  let passed = 0;
+  for (let segment = 0; segment < 3 && passed < secondsAhead - 1e-8; segment++) {
+    const schedule = scheduleAt(place, foundation, tick + passed),
+      currentSecond = daySecond(tick + passed, place),
+      span = Math.min(secondsAhead - passed, Math.max(0.001, schedule.activityEnd - currentSecond)),
+      walking = "walking" in schedule ? schedule.walking : undefined,
+      duration = walking ? Math.max(60, pathLength(walking.path) / GOOD_ROAD_WALK_SPEED_MPS) : 0,
+      active = walking ? Math.min(span, Math.max(0, duration - walking.elapsedSeconds)) : 0,
+      offsets = walking && active > 0
+        ? timedWalkPolyline(walking.path, walking.elapsedSeconds, walking.elapsedSeconds + active)
+          .map(point => ({ ...point, fraction: (passed + point.fraction * active) / secondsAhead }))
+        : [{ offset: schedule.offset, fraction: passed / secondsAhead }];
+    for (const point of offsets) {
+      const ll = canonicalOffset(place, point.offset.eastM, point.offset.northM),
+        p = lonLatToSource(ll.lon, ll.lat);
+      points.push({ x: p.x, z: p.z, fraction: point.fraction });
+    }
+    // Once an authorized walk arrives, stand still until the next routine.
+    if (active < span) {
+      const last = points[points.length - 1];
+      if (last) points.push({ ...last, fraction: (passed + span) / secondsAhead });
+    }
+    passed += span;
+  }
+  return points.length > 1 ? points : [];
+}
+
 /** Preserve the exact scheduled point. Invalid ground is reported, not
  * "corrected" by moving a resident radially toward the settlement centre. */
 export function legalPosition(
@@ -1294,6 +1359,16 @@ export class LazySimulation {
     this.lastQuery = query;
     this.updateInspector(visible, query);
     return visible;
+  }
+
+  /** Only visible walking actors request this bounded display slice once
+   * per real second. This never changes a resident's logical schedule. */
+  residentMotionByCode(code: string, tick = this.tick, secondsAhead = 24) {
+    const match = /^(.*)\\/RESIDENT\\/(\\d+)$/.exec(code);
+    if (!match) return [];
+    const place = places.find(entry => entry.code === match[1]), index = Number(match[2]);
+    return place && Number.isInteger(index) && index >= 0 && index < populationOf(place)
+      ? residentWalkSourcePolyline(place, index, tick, secondsAhead) : [];
   }
 
   residentByCode(code: string, tick = this.tick) {
