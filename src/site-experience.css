@@ -147,7 +147,7 @@
 .panel.critical-site-panel {
   position: fixed;
   z-index: 30;
-  right: 72px;
+  right: max(72px, calc(env(safe-area-inset-right) + 64px));
   top: 92px;
   width: min(350px, calc(100vw - 90px));
   max-height: calc(100dvh - 190px);
@@ -208,7 +208,7 @@
   border-radius: 18px;
   background: rgba(22, 37, 32, .96);
   color: #f2e2bd;
-  font: 600 11px/1.35 Georgia, serif;
+  font: 600 12px/1.35 Georgia, serif;
   text-align: center;
   pointer-events: none;
 }
@@ -224,33 +224,33 @@
 
 @media (max-width: 620px) {
   .critical-site-marker .site-label {
-    max-width: 108px;
+    max-width: 120px;
     padding: 3px 5px 4px;
-    font-size: 9.5px;
+    font-size: 11px;
     line-height: 1.12;
   }
   .panel.critical-site-panel {
-    left: 8px;
-    right: 64px;
+    left: max(8px, calc(env(safe-area-inset-left) + 8px));
+    right: max(64px, calc(env(safe-area-inset-right) + 56px));
     top: auto;
-    bottom: 88px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
     width: auto;
     /* Leave the centered 44px focused-site glyph above the phone sheet. */
     max-height: min(52dvh, 360px, calc(50dvh - 116px));
     padding: 7px 10px 9px;
   }
-  .critical-site-panel .eyebrow { min-height: 38px; }
+  .critical-site-panel .eyebrow { min-height: 44px; }
   .critical-site-panel h2 { margin: 0 0 1px; font-size: 19px; line-height: 1.08; }
-  .critical-site-panel .site-kind { margin: 0 0 4px; font-size: 10.5px; }
+  .critical-site-panel .site-kind { margin: 0 0 4px; font-size: 12px; }
   .critical-site-panel .divider { margin: 4px 0; }
-  .critical-site-panel .seed-label { margin: 0; font-size: 9px; }
-  .critical-site-panel code { margin: 1px 0 5px; font-size: 9px; line-height: 1.2; }
+  .critical-site-panel .seed-label { margin: 0; font-size: 11px; }
+  .critical-site-panel code { margin: 1px 0 5px; font-size: 10px; line-height: 1.25; }
   .critical-site-panel dl {
     grid-template-columns: 78px minmax(0, 1fr);
     gap: 2px 6px;
     margin: 5px 0 7px;
-    font-size: 10.5px;
-    line-height: 1.2;
+    font-size: 12px;
+    line-height: 1.25;
   }
   .critical-site-panel .region-actions { margin-top: 4px; }
   .critical-site-panel #focus-critical-site { min-height: 44px; padding: 6px 8px; }
@@ -259,23 +259,23 @@
 
 @media (max-height: 500px) {
   .critical-site-marker .site-label {
-    max-width: 108px;
+    max-width: 120px;
     padding: 3px 5px 4px;
-    font-size: 9.5px;
+    font-size: 11px;
     line-height: 1.12;
   }
   .panel.critical-site-panel {
     top: 60px;
-    bottom: 58px;
+    bottom: calc(58px + env(safe-area-inset-bottom));
     left: auto;
-    right: 64px;
+    right: max(64px, calc(env(safe-area-inset-right) + 56px));
     width: min(310px, calc(100vw - 76px));
     max-height: none;
     padding: 6px 9px 8px;
   }
   .critical-site-panel h2 { font-size: 18px; }
   .critical-site-panel .site-kind { margin-bottom: 2px; }
-  .critical-site-panel dl { gap: 1px 6px; margin: 4px 0 5px; font-size: 10px; }
+  .critical-site-panel dl { gap: 1px 6px; margin: 4px 0 5px; font-size: 12px; line-height: 1.25; }
   .critical-site-panel .hint { display: none; }
 }
 

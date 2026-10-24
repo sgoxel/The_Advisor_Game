@@ -240,6 +240,10 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat-return"
     ),
     "cell": "tap;visible:#cell-panel",
+    "a11y-panels": (
+        "eval:document.getElementById('open-travel').click();settle;shot:travel-open;"
+        "eval:document.getElementById('close-travel').click();tap;visible:#npc-popup;shot:tap-info"
+    ),
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
     # WP-S002-004-008 walking routes. Seeded 6 km road pair (the travel-panel click flow is covered by tests/browser/routes.spec.js).
     "route-road": "eval:window.advisorRoutes.select('2/3/1/1','2/3/1/0');settle;shot:road",

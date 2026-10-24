@@ -28,11 +28,13 @@ input {
 button {
   cursor: pointer;
 }
-button:focus-visible,
-input:focus-visible,
+/* Keyboard focus ring for every HUD and panel control. :where() keeps the
+   specificity at (0,1,0) so component rings (site markers, wilderness labels)
+   still win. */
+:where(button, select, summary, input, a, [tabindex]:not([tabindex="-1"])):focus-visible,
 canvas:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 4px;
+  outline: 2px solid #f2d27a;
+  outline-offset: 2px;
 }
 button {
   color: inherit;
@@ -71,7 +73,7 @@ h2 {
   line-height: 1.25;
 }
 .eyebrow {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 2px;
   color: var(--gold);
   font-weight: 600;
@@ -102,7 +104,7 @@ h2 {
 }
 .live {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 2px;
   background: #172823d9;
   padding: 12px 16px;
@@ -129,7 +131,7 @@ h2 {
 }
 .region-panel {
   top: 115px;
-  left: 30px;
+  left: max(30px, calc(env(safe-area-inset-left) + 12px));
   width: 270px;
 }
 .region-panel h2 {
@@ -146,7 +148,7 @@ h2 {
   margin: 19px 0;
 }
 .seed-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 1.4px;
   color: var(--muted);
   display: flex;
@@ -155,7 +157,7 @@ h2 {
 }
 .seed-label span {
   color: var(--gold);
-  font-size: 8px;
+  font-size: 10px;
 }
 .panel code {
   font:
@@ -171,7 +173,7 @@ h2 {
   margin-top: 14px;
 }
 .region-actions button {
-  font-size: 10px;
+  font-size: 12px;
   padding: 8px 7px;
   white-space: nowrap;
 }
@@ -179,7 +181,7 @@ h2 {
   display: flex;
   gap: 9px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 17px;
   color: #d9ded3;
   cursor: pointer;
@@ -206,8 +208,8 @@ h2 {
   background: var(--gold);
 }
 .panel .hint {
-  font-size: 10px;
-  color: #819a8e;
+  font-size: 12px;
+  color: #a9bdb1;
   margin-top: 24px;
 }
 .map-controls {
@@ -257,7 +259,7 @@ h2 {
   gap: 12px;
 }
 .detail .eyebrow {
-  font-size: 9px;
+  font-size: 11px;
 }
 .detail strong {
   font-size: 12px;
@@ -278,7 +280,7 @@ h2 {
   background: var(--gold);
 }
 .travel-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin: auto;
 }
@@ -291,7 +293,7 @@ h2 {
 .scale {
   width: 125px;
   text-align: center;
-  font-size: 9px;
+  font-size: 11px;
   color: #c2d1c2;
 }
 .scale div {
@@ -304,15 +306,15 @@ h2 {
 .telemetry {
   position: absolute;
   bottom: 92px;
-  left: 33px;
+  left: max(33px, calc(env(safe-area-inset-left) + 12px));
   color: #253a2e;
-  font-size: 9px;
+  font-size: 10px;
   background: #e2e6d4ba;
   border-radius: 3px;
   padding: 5px 9px;
 }
 .cell-panel {
-  right: 88px;
+  right: max(88px, calc(env(safe-area-inset-right) + 76px));
   top: 115px;
   width: 280px;
 }
@@ -332,7 +334,7 @@ h2 {
   background: none;
 }
 .cell-coordinates {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 8px;
 }
@@ -340,7 +342,7 @@ h2 {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px;
-  font-size: 10px;
+  font-size: 12px;
   margin: 20px 0;
 }
 .cell-panel dt {
@@ -350,11 +352,11 @@ h2 {
   margin: 0;
 }
 .cell-panel #copy-code {
-  font-size: 10px;
+  font-size: 12px;
   width: 100%;
 }
 #copy-status {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--gold);
   display: block;
   margin-top: 6px;
@@ -501,7 +503,7 @@ h2 {
   }
   .region-panel {
     top: 84px;
-    left: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
     width: 208px;
     padding: 16px;
   }
@@ -509,13 +511,14 @@ h2 {
     font-size: 28px;
   }
   .region-panel p {
-    font-size: 10px;
+    font-size: 12px;
+    line-height: 1.5;
   }
   .region-panel .divider {
     margin: 12px 0;
   }
   .region-panel label {
-    font-size: 10px;
+    font-size: 11px;
     margin-top: 13px;
   }
   .region-actions {
@@ -524,6 +527,7 @@ h2 {
   }
   .region-actions button {
     padding: 6px;
+    white-space: normal;
   }
   .panel .hint {
     margin-top: 13px;
@@ -553,9 +557,9 @@ h2 {
     width: 80px;
   }
   .telemetry {
-    left: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
     bottom: 80px;
-    font-size: 8px;
+    font-size: 10px;
   }
   .map-controls {
     right: 17px;
@@ -563,9 +567,9 @@ h2 {
   }
   .cell-panel {
     top: auto;
-    bottom: 170px;
-    left: 17px;
-    right: 71px;
+    bottom: calc(170px + env(safe-area-inset-bottom));
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
+    right: max(71px, calc(env(safe-area-inset-right) + 64px));
     width: auto;
     padding: 17px;
     z-index: 3;
@@ -619,13 +623,13 @@ h2 {
 }
 .travel-button {
   width: 100%;
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 8px;
   padding: 8px;
 }
 .travel-panel {
   top: 115px;
-  left: 315px;
+  left: calc(max(30px, calc(env(safe-area-inset-left) + 12px)) + 285px);
   width: 300px;
   z-index: 4;
 }
@@ -634,7 +638,7 @@ h2 {
   margin: 12px 0;
 }
 .travel-panel label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   display: block;
   margin: 12px 0 5px;
@@ -647,7 +651,7 @@ h2 {
   border-radius: 4px;
   padding: 9px;
   font:
-    11px "DM Sans",
+    12px "DM Sans",
     sans-serif;
 }
 .travel-panel .eyebrow {
@@ -663,7 +667,7 @@ h2 {
 .cell-panel details {
   margin: 10px 0 16px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .cell-panel summary {
   cursor: pointer;
@@ -677,13 +681,13 @@ h2 {
   margin-top: 6px;
 }
 .cell-panel li code {
-  font-size: 9px;
+  font-size: 10px;
 }
 @media (max-width: 700px) {
   .travel-panel {
     top: 85px;
-    left: 17px;
-    right: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
+    right: max(17px, calc(env(safe-area-inset-right) + 8px));
     width: auto;
   }
   .travel-panel .region-actions {
@@ -725,7 +729,7 @@ h2 {
   letter-spacing: 1px;
 }
 .world-clock .eyebrow {
-  font-size: 8px;
+  font-size: 11px;
 }
 #map-labels {
   position: absolute;
@@ -777,10 +781,10 @@ h2 {
     gap: 3px;
   }
   .world-clock time {
-    font-size: 11px;
+    font-size: 13px;
   }
   .world-clock .eyebrow {
-    font-size: 7px;
+    font-size: 11px;
     letter-spacing: 0.5px;
   }
   .masthead h1 {
@@ -881,7 +885,7 @@ body.globe-mode .region-panel .region-actions button {
     padding-inline: 6px;
   }
   body.globe-mode .travel-panel {
-    left: calc(45px + var(--globe-panel-width));
+    left: calc(max(30px, calc(env(safe-area-inset-left) + 12px)) + var(--globe-panel-width) + 15px);
   }
 }
 @media (min-width: 701px) and (max-height: 760px) {
@@ -954,7 +958,7 @@ body.globe-mode .region-panel .region-actions button {
     min-height: 42px;
     margin: 0;
     padding: 4px;
-    font-size: clamp(10px, 2.8vw, 11px);
+    font-size: clamp(11px, 3vw, 12px);
     line-height: 1.3;
     white-space: normal;
   }
@@ -1054,7 +1058,7 @@ body.globe-mode .region-panel .region-actions button {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 #map-scale {
@@ -1079,7 +1083,7 @@ body.globe-mode .region-panel .region-actions button {
   gap: 0;
   background: #172823e8;
   color: #e9dfc6;
-  font-size: 10px;
+  font-size: 11px;
 }
 #compass-needle {
   display: block;
@@ -1088,14 +1092,14 @@ body.globe-mode .region-panel .region-actions button {
   transform-origin: center;
 }
 #compass > span:last-child {
-  font-size: 9px;
+  font-size: 11px;
 }
 .region-panel {
   box-sizing: border-box;
 }
 @media (max-width: 700px) {
   body:not(.globe-mode) .region-panel {
-    left: 12px;
+    left: max(12px, calc(env(safe-area-inset-left) + 8px));
     max-width: calc(50vw - 30px);
   }
 }
@@ -1141,14 +1145,14 @@ body.globe-mode .travel-button {
   }
   #focus-coordinates {
     bottom: calc(87px + env(safe-area-inset-bottom));
-    font-size: 10px;
+    font-size: 11px;
     padding: 5px 8px;
   }
   .telemetry {
     bottom: calc(70px + env(safe-area-inset-bottom));
     max-width: calc(100vw - 120px);
     padding: 3px 5px;
-    font-size: 7px;
+    font-size: 10px;
   }
   .region-panel {
     max-width: calc(50vw - 24px);
@@ -1165,7 +1169,7 @@ body.globe-mode .travel-button {
     display: none;
   }
   .region-panel .eyebrow {
-    font-size: 8px;
+    font-size: 11px;
     letter-spacing: 1px;
   }
   .region-panel .divider {
@@ -1201,7 +1205,7 @@ body.globe-mode .travel-button {
   .region-panel,
   body.globe-mode .region-panel {
     top: 70px;
-    left: 12px;
+    left: max(12px, calc(env(safe-area-inset-left) + 8px));
     width: 170px;
     padding: 9px;
     max-height: calc(100dvh - 160px);
@@ -1224,13 +1228,13 @@ body.globe-mode .travel-button {
     margin: 0;
   }
   .region-actions button {
-    font-size: 9px;
+    font-size: 11px;
     padding: 4px;
   }
   .travel-button {
     padding: 4px;
     margin-top: 4px;
-    font-size: 9px;
+    font-size: 11px;
   }
   .bottom-bar {
     padding: 5px 10px;
@@ -1240,15 +1244,15 @@ body.globe-mode .travel-button {
     display: none;
   }
   #focus-coordinates {
-    bottom: 68px;
+    bottom: calc(68px + env(safe-area-inset-bottom));
   }
   .telemetry {
-    bottom: 69px;
-    left: 12px;
+    bottom: calc(69px + env(safe-area-inset-bottom));
+    left: max(12px, calc(env(safe-area-inset-left) + 8px));
     max-width: 190px;
   }
   .map-controls {
-    bottom: 78px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
     gap: 4px;
   }
   .map-controls button {
@@ -1314,14 +1318,17 @@ body.globe-mode .travel-button {
 /* Character popup (click a villager). */
 #npc-popup {
   position: absolute;
-  top: 84px;
-  right: 72px;
+  /* The masthead clock card ends at 100px + the top safe area: clear it by 12px. */
+  top: calc(112px + env(safe-area-inset-top));
+  right: max(72px, calc(env(safe-area-inset-right) + 64px));
   z-index: 15;
   width: min(430px, calc(100vw - 32px));
-  max-height: calc(100vh - 180px);
+  /* Stop above the coordinate readout (y ~ bottom 134px) and the bottom bar. */
+  max-height: calc(100vh - 252px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 252px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overflow-y: auto;
   padding: 16px 18px 14px;
-  background: rgba(22, 37, 33, 0.97);
+  background: #162521;
   border: 1px solid #d8b97966;
   border-radius: 14px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
@@ -1349,15 +1356,43 @@ body.globe-mode .travel-button {
 .npc-routine li.past { color: #8d8572; }
 .npc-routine li.current { background: rgba(216, 185, 121, 0.18); color: #fff3d4; font-weight: 600; }
 .npc-routine time { font-variant-numeric: tabular-nums; color: #d8b979; }
-.npc-routine em { font-style: normal; color: #a99d82; font-size: 11.5px; text-align: right; }
+.npc-routine em { font-style: normal; color: #a99d82; font-size: 12px; text-align: right; }
 .npc-code { display: block; margin-top: 10px; font-size: 10px; color: #7f7864; word-break: break-all; }
 .npc-technical { margin-top: 10px; border-top: 1px solid rgba(216, 185, 121, 0.25); }
 .npc-technical summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: #d8b979; }
 .npc-technical .npc-label { width: auto; display: block; margin-top: 5px; }
 .npc-technical .npc-code { margin: 2px 0 8px; color: #cdbf9f; font-size: 11px; }
 @media (max-width: 700px) {
-  #npc-popup { top: auto; right: 16px; left: 16px; bottom: 76px; width: auto; max-height: 62vh; }
+  /* Bottom sheet above the coordinate readout (top edge ~113px from the bottom). */
+  #npc-popup { top: auto; right: max(16px, calc(env(safe-area-inset-right) + 8px)); left: max(16px, calc(env(safe-area-inset-left) + 8px)); bottom: calc(124px + env(safe-area-inset-bottom)); width: auto; max-height: min(62vh, calc(100dvh - 124px - 100px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); }
   .npc-columns { grid-template-columns: 1fr; gap: 0; }
+  /* The compass/zoom column and telemetry badge would show through or peek out
+     beside the sheet; they return when it closes. */
+  body:has(#npc-popup:not([hidden])) .map-controls,
+  body:has(#npc-popup:not([hidden])) .telemetry {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+/* Short landscape: clock bottom ~71px, coordinate readout top ~96px from the bottom. */
+@media (min-width: 701px) and (max-height: 500px) {
+  #npc-popup {
+    top: calc(80px + env(safe-area-inset-top));
+    max-height: calc(100dvh - 192px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+/* Dismiss controls: 44 px targets with a 26 px glyph centred in them. */
+#npc-popup [data-close],
+#npc-popup [data-minimize] {
+  font-size: 26px;
+  line-height: 1;
+  padding: 0;
+}
+/* Single-line badge: truncate instead of wrapping into the bottom bar. */
+.telemetry {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Town/village labels open the settlement card. */
 .map-label.clickable { pointer-events: auto; cursor: pointer; }
@@ -1369,4 +1404,32 @@ body.globe-mode .travel-button {
 .info-list li { padding: 3px 0; border-bottom: 1px solid rgba(216, 185, 121, 0.1); }
 .info-list li:last-child { border-bottom: 0; }
 #npc-popup section > p { margin: 2px 0; }
-.world-clock .local-time { display: block; font-size: 10.5px; color: #cdbf9f; margin-top: 2px; letter-spacing: .02em; white-space: nowrap; }
+.world-clock .local-time { display: block; font-size: 11px; color: #cdbf9f; margin-top: 2px; letter-spacing: .02em; white-space: nowrap; }
+/* Compact clock on phones: the 11px caption floor must not push the masthead
+   into the region panel, so tighten line boxes instead of shrinking text. */
+@media (max-width: 700px), (max-height: 500px) {
+  .world-clock {
+    gap: 2px;
+    padding-block: 6px;
+    line-height: 1.15;
+  }
+  .world-clock time {
+    line-height: 1.15;
+  }
+  .world-clock .local-time {
+    margin-top: 0;
+  }
+}
+/* Reduced motion: collapse every panel, popup, overlay and loading transition or
+   animation to an instant change (state classes still apply, so JS that waits
+   on transitionend/animationend still fires). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

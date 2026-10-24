@@ -269,7 +269,13 @@ function renderRoutes(selectedId: string | undefined) {
       route = routeBetweenVillages(selectedId, place.id);
     row.dataset.state = route.found ? "ready" : "blocked";
     if (route.found) {
-      meta.textContent = routeMeta(route);
+      const speedUp = " at 24×", text = routeMeta(route);
+      if (text.endsWith(speedUp)) {
+        const unit = document.createElement("span");
+        unit.className = "route-speed";
+        unit.textContent = speedUp.trimStart();
+        meta.replaceChildren(text.slice(0, -speedUp.length) + " ", unit);
+      } else meta.textContent = text;
       row.dataset.distanceM = String(route.distanceM);
       row.dataset.fantasySeconds = String(route.fantasySeconds);
       row.dataset.realSeconds = String(route.realSeconds);

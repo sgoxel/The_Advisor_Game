@@ -82,8 +82,8 @@ body.political-detail-labels #label-leaders {
 #map-context {
   margin: 5px 0 0;
   color: #c9c2ae;
-  font-size: 10px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.35;
 }
 @media (max-width: 700px) {
   .political-label.country {
@@ -91,7 +91,7 @@ body.political-detail-labels #label-leaders {
   }
   .political-label.city,
   .political-label.village {
-    font-size: 10px;
+    font-size: 11px;
     padding: 3px 5px;
   }
   .political-border-underlay {

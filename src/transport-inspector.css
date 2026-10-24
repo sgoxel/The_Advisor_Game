@@ -39,7 +39,7 @@
 .transport-panel {
   position: fixed;
   top: 5.9rem;
-  right: 1rem;
+  right: max(1rem, calc(env(safe-area-inset-right) + .5rem));
   width: min(410px, calc(100vw - 2rem));
   max-height: calc(100vh - 10.5rem);
   overflow: auto;
@@ -83,7 +83,7 @@
 .transport-resume {
   position: fixed;
   top: 6rem;
-  right: 1rem;
+  right: max(1rem, calc(env(safe-area-inset-right) + .5rem));
   z-index: 26;
   min-height: 44px;
   padding: .6rem .9rem;
@@ -134,7 +134,7 @@
   min-height: 26px;
   padding: .2rem .48rem;
   border-radius: 999px;
-  font-size: .68rem;
+  font-size: .6875rem; /* 11px uppercase badge */
   letter-spacing: .07em;
   font-weight: 700;
 }
@@ -147,7 +147,7 @@
   border: 1px dashed rgba(154, 211, 226, .65);
   border-radius: .2rem;
   color: #bde3ec;
-  font-size: .68rem;
+  font-size: .6875rem;
   letter-spacing: .04em;
 }
 .transport-metrics { margin-top: .65rem; }
@@ -155,18 +155,18 @@
   /* Reserve the map centre for the selected road, junction or crossing. */
   .transport-panel {
     top: auto;
-    bottom: 5.4rem;
+    bottom: calc(5.4rem + env(safe-area-inset-bottom));
     max-height: min(36vh, calc(50vh - 5.4rem - 28px));
   }
 }
 @media (max-width: 700px) {
   .transport-panel {
-    right: .6rem;
-    left: .6rem;
+    right: max(.6rem, calc(env(safe-area-inset-right) + .5rem));
+    left: max(.6rem, calc(env(safe-area-inset-left) + .5rem));
     width: auto;
   }
   .transport-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .transport-summary span { padding: .38rem; text-align: center; font-size: .72rem; }
+  .transport-summary span { padding: .38rem; text-align: center; font-size: .75rem; }
   .transport-summary .transport-scale-state { grid-column: 1 / -1; text-align: left; }
   #transport-selection dl,
   #transport-site-answer dl,
@@ -178,7 +178,7 @@
 @media (max-width: 850px) and (orientation: landscape) {
   .transport-panel {
     top: 5.9rem;
-    right: .6rem;
+    right: max(.6rem, calc(env(safe-area-inset-right) + .5rem));
     bottom: auto;
     left: auto;
     width: min(360px, calc(50vw - 2.75rem));

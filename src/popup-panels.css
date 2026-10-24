@@ -7,6 +7,21 @@
   scrollbar-width: thin;
   scrollbar-color: #bba779 #20372e;
   overscroll-behavior: contain;
+  /* Keep focused/scrolled-to controls clear of the sticky 44px heading. */
+  scroll-padding-top: 56px;
+}
+/* Scroll cue (CSS only, no JS): a soft gold glow pinned to the bottom edge of
+   the visible panel (scroll-attached) that a panel-coloured cover (local-
+   attached, riding at the end of the content) hides once the end is reached. */
+body .panel:not(:where(#region-panel)),
+body #region-panel:not(.minimized) {
+  background-image:
+    linear-gradient(to bottom, #16252100, #162521),
+    linear-gradient(to top, #e6cf8f66, #e6cf8f00);
+  background-size: 100% 36px, 100% 36px;
+  background-position: bottom, bottom;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: local, scroll;
 }
 .panel > .popup-heading {
   position: sticky;
@@ -15,32 +30,64 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 44px;
   margin-top: 0;
   background: #162521;
+  /* Span the panel's full inner width whatever the breakpoint's padding is:
+     the shadow spreads outward (clipped by the panel's padding box) and the
+     clip-path stops it at the heading's bottom edge. */
+  box-shadow: 0 0 0 100px #162521;
+  clip-path: inset(-100px -100px 0 -100px);
 }
 .popup-caption { flex: 1; min-width: 0; }
-.panel .popup-heading button {
+/* WCAG 2.5.5: every popup heading control is a 44 x 44 CSS px touch target at
+   all widths. `body` lifts specificity above `.cell-panel .eyebrow button` and
+   `.travel-panel .eyebrow button`, whichever stylesheet the bundle emits first. */
+body .panel .popup-heading button {
   float: none;
-  flex: 0 0 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 2px;
+  flex: 0 0 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   margin: 0;
-  font-size: 20px;
+  font-size: 26px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Close/minimize/clear controls keep 44 px even before popup-panels.ts adds
+   .popup-heading, and in the character/building popup. */
+#close-cell,
+#close-travel,
+#close-critical-site,
+#transport-close,
+#route-clear,
+#toggle-region-panel,
+#npc-popup [data-close],
+#npc-popup [data-minimize] {
+  min-width: 44px;
+  min-height: 44px;
+}
+#npc-popup [data-close],
+#npc-popup [data-minimize] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.panel select {
+  min-height: 44px;
 }
 .panel.popup-minimized {
   height: auto !important;
   min-height: 0 !important;
   max-height: 64px !important;
-  padding-top: 10px;
-  padding-bottom: 10px;
+  /* 9 + 44 + 9 + 2px border = 64px: the 44px heading fits the pill exactly. */
+  padding-top: 9px;
+  padding-bottom: 9px;
   overflow: hidden !important;
   scrollbar-gutter: auto;
 }
+body .panel.popup-minimized { background-image: none; }
 .panel.popup-minimized > :not(.popup-heading) { display: none !important; }
 .panel.popup-minimized .popup-caption h2 { display: none; }
-@media (max-width: 700px) {
-  .panel .popup-heading button { flex-basis: 40px; min-width: 40px; min-height: 40px; }
-}

@@ -13,6 +13,9 @@
 }
 
 /* Walking routes (WP-S002-004-008) */
+.route-speed {
+  white-space: nowrap;
+}
 .route-block {
   margin-top: 14px;
 }
@@ -22,7 +25,7 @@
   align-items: center;
 }
 .route-block .eyebrow button {
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px 8px;
 }
 .route-list {
@@ -53,13 +56,13 @@
   color: #efece1;
 }
 .route-row .route-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
 }
 .route-detail {
   margin: 8px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 #route-overlay {
@@ -138,4 +141,48 @@
 }
 .route-detail:empty {
   display: none;
+}
+
+/* Short landscape phones: the clock card (top-centre) reaches ~y=71, so the
+   open travel panel starts below it and stops above the bottom bar. The
+   engineering telemetry badge would peek out from under it, so it hides. */
+@media (max-height: 500px) {
+  /* #travel-panel outranks the resident inspector's :has(#resident-inspector) rules. */
+  body.travel-panel-open #travel-panel {
+    top: calc(78px + env(safe-area-inset-top));
+  }
+  body.travel-panel-open #travel-panel:not(.house-focused) {
+    /* Clock bottom ~71px above, bottom bar top ~322px (68px up from the bottom): 6px gaps. */
+    max-height: calc(100dvh - 152px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  /* Compact intro so the Continent and Country selects fit without scrolling:
+     the heading is redundant with the "EXPLORE THE REALM" caption. */
+  #travel-panel > h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #travel-panel > .hint:first-of-type {
+    margin: 2px 0 0;
+    line-height: 1.3;
+  }
+  #travel-panel > label {
+    margin: 6px 0 3px;
+  }
+}
+@media (max-height: 500px) and (max-width: 700px) {
+  /* Narrow house focus stays a short bottom sheet. */
+  body.travel-panel-open #travel-panel.house-focused {
+    top: auto;
+  }
+}
+/* Narrow or short screens: telemetry sits where the panel's bottom edge lands. */
+@media (max-width: 700px), (max-height: 500px), (orientation: portrait) {
+  body.travel-panel-open .telemetry {
+    visibility: hidden;
+  }
 }
