@@ -1364,7 +1364,7 @@ export class LazySimulation {
   /** Only visible walking actors request this bounded display slice once
    * per real second. This never changes a resident's logical schedule. */
   residentMotionByCode(code: string, tick = this.tick, secondsAhead = 24) {
-    const match = /^(.*)\\/RESIDENT\\/(\\d+)$/.exec(code);
+    const match = /^(.*)\/RESIDENT\/(\d+)$/.exec(code);
     if (!match) return [];
     const place = places.find(entry => entry.code === match[1]), index = Number(match[2]);
     return place && Number.isInteger(index) && index >= 0 && index < populationOf(place)
