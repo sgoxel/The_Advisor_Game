@@ -260,12 +260,19 @@ function outdoorSiteLegal(place: Place, offset: Offset) {
 function natureSites(place: Place) {
   const anchors = settlementAnchors(place);
   if (anchors.nature) return anchors.nature;
-  const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place);
-  // An open-air worksite is a legal assignment only if the same SEED street,
-  // gate/enclosure and 2 m final-surface path used by residents reaches it.
-  // A 20 m straight-ground probe from the nearest street vertex could miss a
-  // narrow water cut or cross a wall away from its gate.
-  const reachable = (point: Offset) => streetPath(place, anchors.plaza, point) !== null;
+  const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place),
+    streetPoints = plan.streets.flatMap(street => street.points.map(point => offsetForSource(place, point.x, point.z)));
+  const reachable = (point: Offset) => {
+    const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
+    if (!start) return false;
+    // Preserve the cheap 20 m rejection probe before any expensive canonical queries.
+    const steps = Math.ceil(Math.hypot(start.eastM-point.eastM,start.northM-point.northM) / 20);
+    for (let i = 1; i <= steps; i++) if (!outdoorSiteLegal(place, { eastM: start.eastM + (point.eastM-start.eastM)*i/steps, northM: start.northM + (point.northM-start.northM)*i/steps })) return false;
+    // A plausible site must also have a continuous dry/deck-supported approach
+    // through a lawful wall aperture. Actual home-to-site travel is validated
+    // separately by streetPath; proximity alone never authorizes arrival.
+    return legalStreetSegment(place, start, point);
+  };
   for (let i = 0; i < 48; i++) {
     const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
       radius = [Math.max(65, plan.radiusM + 24), 900, 2400, 3500][i % 4],
