@@ -137,6 +137,20 @@ function rememberResolution(placeCode: string, resolution: ResolvedSettlement) {
   while (resolvedSettlements.size > SETTLEMENT_PRESENTATION_CACHE_LIMIT) resolvedSettlements.delete(resolvedSettlements.keys().next().value!);
   return resolution;
 }
+/** Optional gardens must not reserve the footprint of an assigned
+ * one-person house. Query just the nearby SEED frontage lots, not all homes,
+ * so housing wins independent of camera, tile and lookup order. */
+function gardenDisplacesHome(place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, candidate: { x: number; z: number }) {
+  if (plot.kind !== "garden") return false;
+  const reach = plot.clearanceRadius + metresToSource(15);
+  return settlementHomeIndicesNear(place, candidate.x - reach, candidate.x + reach,
+    candidate.z - reach, candidate.z + reach).some(index => {
+    const home = settlementHomeFor(place, index, plan);
+    return home.candidates.some(point =>
+      Math.hypot(wrapSourceX(candidate.x - point.x), candidate.z - point.z) <
+        plot.clearanceRadius + home.clearanceRadius);
+  });
+}
 function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
   const cached = resolvedSettlements.get(place.code);
   if (cached) return rememberResolution(place.code, cached);
@@ -144,7 +158,9 @@ function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
   for (const plot of plan.plots) {
     let chosen: Resolved = null;
     for (const candidate of plot.candidates) {
-      if (!candidateLegal(place, plan, plot, candidate) || overlaps(staticOccupants, candidate.x, candidate.z, plot.clearanceRadius)) continue;
+      if (!candidateLegal(place, plan, plot, candidate) ||
+          overlaps(staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) ||
+          gardenDisplacesHome(place, plan, plot, candidate)) continue;
       chosen = candidate; staticOccupants.push({ x: candidate.x, z: candidate.z, radius: plot.clearanceRadius }); break;
     }
     staticAnchors.set(plot.id, chosen);
