@@ -6,7 +6,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, heightAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
-import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
+import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
@@ -89,6 +89,8 @@ export type Resident = ResidentFoundation & {
   /** While walking between places: share of the street route covered (0-1) and its length. */
   travelProgress?: number;
   travelDistanceM?: number;
+  /** While walking: source x/z points along the legal street path for the next TIME_SCALE fantasy seconds (the next real second), so the drawn actor follows corners instead of a chord. */
+  walkAhead?: { x: number; z: number }[];
 };
 
 export type CountryState = {
@@ -429,18 +431,6 @@ export function guardCoverageAt(place: Place, tick: number) {
   return coverage;
 }
 
-/** Deterministic local commute corridor between a resident's assigned endpoints. */
-function routeOffset(
-  from: { eastM: number; northM: number },
-  to: { eastM: number; northM: number },
-  progress: number,
-) {
-  const t = Math.max(0, Math.min(1, progress));
-  return {
-    eastM: from.eastM + (to.eastM - from.eastM) * t,
-    northM: from.northM + (to.northM - from.northM) * t,
-  };
-}
 function anchorOffset(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor): Offset {
   if (anchor === "home") return foundation.homeOffset;
   if (anchor === "work") return foundation.workOffset;
@@ -709,6 +699,21 @@ export function timedWalkOnPath(
     progress = Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
   return { offset: pointAlong(path, progress * lengthM), progress, durationSeconds, lengthM };
 }
+/** The legal path between the current walk position and the position one `aheadSeconds` later, keeping every corner in between. */
+export function walkWindowOnPath(path: readonly Offset[], elapsedSeconds: number, aheadSeconds: number): Offset[] {
+  const lengthM = pathLength(path),
+    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+    progressAt = (seconds: number) => Math.max(0, Math.min(1, seconds / durationSeconds)) * lengthM,
+    d0 = progressAt(elapsedSeconds), d1 = progressAt(elapsedSeconds + aheadSeconds),
+    points = [pointAlong(path, d0)];
+  let along = 0;
+  for (let i = 1; i < path.length - 1; i++) {
+    along += Math.hypot(path[i].eastM - path[i - 1].eastM, path[i].northM - path[i - 1].northM);
+    if (along > d0 && along < d1) points.push(path[i]);
+  }
+  points.push(pointAlong(path, d1));
+  return points;
+}
 
 /**
  * The resident's state at an absolute tick: today's seeded plan (role, age,
@@ -776,6 +781,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
         route: `${leg.origin === "en route" ? "En route" : anchorRoute(place, foundation, leg.origin)} → ${anchorRoute(place, foundation, leg.destination)}`,
         offset: moved.offset, activity: "commute" as ActivityKind, indoors: false, mood,
         ...timing, travelProgress: moved.progress, travelDistanceM: moved.lengthM,
+        walkAhead: walkWindowOnPath(leg.path, second - leg.start, TIME_SCALE),
       };
     offset = moved.offset;
   }
@@ -785,6 +791,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
       route: `BLOCKED: ${blocked.origin === "en route" ? "en route" : anchorRoute(place, foundation, blocked.origin)} → ${anchorRoute(place, foundation, blocked.destination)}`,
       offset, activity: "rest" as ActivityKind, indoors: actuallyIndoors, mood,
       ...timing, travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+      walkAhead: undefined as Offset[] | undefined,
     };
   // A walk that arrived before the next step begins becomes waiting at the destination.
   const arrived = activity.kind === "commute";
@@ -795,6 +802,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
     activity: (arrived ? "rest" : activity.kind) as ActivityKind,
     indoors: activity.indoors, mood, ...timing,
     travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
+    walkAhead: undefined as Offset[] | undefined,
   };
 }
 /** Preserve the exact scheduled point. Invalid ground is reported, not
@@ -893,7 +901,13 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
     activityStart: schedule.activityStart,
     activityEnd: schedule.activityEnd,
     activityProgress: schedule.activityProgress,
-    ...(blockedReason || schedule.travelProgress === undefined ? {} : { travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM }),
+    ...(blockedReason || schedule.travelProgress === undefined ? {} : {
+      travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM,
+      walkAhead: schedule.walkAhead?.map((o) => {
+        const c = canonicalOffset(place, o.eastM, o.northM), p = lonLatToSource(c.lon, c.lat);
+        return { x: p.x, z: p.z };
+      }),
+    }),
   };
 }
 export function summaryAt(code: string, tick: number): CountryState {

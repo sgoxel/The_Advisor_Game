@@ -11,7 +11,7 @@ import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
-import { clockLabel, localSecondOfDay, timeZoneOffsetHours, TIME_SCALE } from "./clock.ts";
+import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -251,7 +251,7 @@ const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
 /** Walking actors: positions at this and the next simulation second, animated per frame. */
-const actorMotion = new Map<pc.Entity, { fromX: number; fromZ: number; toX: number; toZ: number; startMs: number }>();
+const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startMs: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
 let navigationFingerprint = "";
@@ -1647,10 +1647,17 @@ async function start() {
         orientActor(actors[i]);
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
         actorResidents.set(actors[i], visible[i]);
-        // Walkers glide: animate from this second's position to the next second's over one real second.
-        if (visible[i].activity === "commute") {
-          const next = simulation.residentByCode(visible[i].code, simulation.tick + TIME_SCALE);
-          actorMotion.set(actors[i], { fromX: visible[i].x, fromZ: visible[i].z, toX: next?.x ?? visible[i].x, toZ: next?.z ?? visible[i].z, startMs: performance.now() });
+        // Walkers glide along the legal street path over the next real second (the simulation's walk window).
+        const walk = visible[i].walkAhead;
+        if (visible[i].activity === "commute" && walk && walk.length >= 2) {
+          // Unwrapped across the date line: x follows the shortest wrapped step from the previous point.
+          const points = [{ x: walk[0].x, z: walk[0].z }], lengths = [0];
+          for (let k = 1; k < walk.length; k++) {
+            const dx = wrapSourceX(walk[k].x - walk[k - 1].x), dz = walk[k].z - walk[k - 1].z;
+            points.push({ x: points[k - 1].x + dx, z: walk[k].z });
+            lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
+          }
+          actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startMs: performance.now() });
         } else actorMotion.delete(actors[i]);
         positionActor(actors[i], visible[i].x, visible[i].z);
       }
@@ -1673,7 +1680,12 @@ async function start() {
       const nowMs = performance.now();
       for (const [actor, motion] of actorMotion) {
         if (!actor.enabled) continue;
-        const t = Math.min(1, (nowMs - motion.startMs) / 1000), x = motion.fromX + wrapSourceX(motion.toX - motion.fromX) * t, z = motion.fromZ + (motion.toZ - motion.fromZ) * t;
+        const { points, lengths } = motion, target = Math.min(1, (nowMs - motion.startMs) / 1000) * motion.total;
+        let k = 1;
+        while (k < lengths.length - 1 && lengths[k] < target) k++;
+        const a = points[k - 1], b = points[k], span = lengths[k] - lengths[k - 1],
+          f = span > 0 ? Math.min(1, (target - lengths[k - 1]) / span) : 1,
+          x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
       }
