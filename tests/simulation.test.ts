@@ -478,6 +478,39 @@ test("night guards carry their lawful evening position through midnight and the 
   }
 });
 
+test("midnight watch attendance requires a previous-day journey from a legal owned home", () => {
+  const affected = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
+  assert.ok(affected, "retain the road-trimmed village");
+  let arrived = 0;
+  for (const village of [villages[0], affected]) {
+    const lon = village.canonicalPosition.lon,
+      homeTick = tickAtLocalTime(WORKDAY, 11 * HOUR, lon),
+      eveningTick = tickAtLocalTime(WORKDAY, 21 * HOUR, lon),
+      midnightTick = tickAtLocalTime(WORKDAY + 1, 0, lon);
+    let index = 6;
+    for (let gate = 0; gate < gateCountFor(village); gate++)
+      for (let slot = 0; slot < guardsPerGateFor(village, gate); slot++, index += 2) {
+        const code = residentFoundationAt(village, index + 1).code,
+          home = residentAt(village, index + 1, homeTick),
+          evening = residentAt(village, index + 1, eveningTick),
+          midnight = residentAt(village, index + 1, midnightTick),
+          staffing = guardCoverageAt(village, midnightTick)[gate].residentCodes.includes(code);
+        assert.equal(staffing, midnight.grounded && midnight.activity === "guard" &&
+          !midnight.route.startsWith("BLOCKED:"),
+          `${code}: only a physically present guard can fill the watch post`);
+        if (!staffing) continue;
+        arrived++;
+        assert.ok(home.grounded && home.indoors && home.route === home.homeEntrance,
+          `${code}: a midnight watch must have reached its real home before departing`);
+        assert.ok(evening.grounded && evening.activity === "guard" && !evening.route.startsWith("BLOCKED:"),
+          `${code}: a midnight watch requires a lawful evening arrival`);
+        assert.ok(greatCircleDistance(evening.position, midnight.position) < 2,
+          `${code}: the actual evening post must persist through midnight`);
+      }
+  }
+  assert.ok(arrived > 0, "at least one real village night watch must be physically staffed");
+});
+
 test("actual guard home lots follow the final road-trimmed village enclosure", () => {
   const village = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
   assert.ok(village, "retain the real village with a formerly blocked watchman's house");

@@ -800,22 +800,23 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // A night watch spans midnight. Starting every fresh day at the gate post
-  // fabricated attendance after a blocked 17:24 home->gate journey. Replay
-  // yesterday's final second once, then carry its physical position forward.
-  // The inner replay starts from the historical work anchor but must still
-  // complete yesterday's actual home->gate journey to certify arrival.
-  const previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
-    ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
+  // The one-day history check must start at the guard's owned home, not
+  // at the scheduled 00:00 post. Otherwise a disconnected gate can stay
+  // fictitiously staffed after the evening commute fails in both directions.
+  const historicalNightStart = !replayOvernight && foundation.role === "guard" && foundation.guardShift === 1,
+    previousWatch = replayOvernight && foundation.role === "guard" && foundation.guardShift === 1
+      ? scheduleAt(place, foundation, tick - second - 1, false) : undefined,
+    initialAnchor: RoutineAnchor = historicalNightStart ? "home" : plan[0].anchor,
     post = foundation.workOffset,
     atPost = !!previousWatch && previousWatch.activity === "guard" &&
       Math.hypot(previousWatch.offset.eastM - post.eastM, previousWatch.offset.northM - post.northM) <= 2;
   // Replay only changed anchors from absolute Fantasy Time. A later routine
   // never starts from an endpoint that an earlier walk did not actually reach.
   let offset = previousWatch?.offset ??
-      standingSpot(foundation, plan[0].anchor, anchorOffset(place, foundation, plan[0].anchor), !plan[0].indoors),
-    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : plan[0].anchor,
-    actuallyIndoors = previousWatch ? false : plan[0].indoors;
+      standingSpot(foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
+        historicalNightStart ? false : !plan[0].indoors),
+    actualAnchor: RoutineAnchor | "en route" = previousWatch ? (atPost ? "work" : "en route") : initialAnchor,
+    actuallyIndoors = previousWatch ? false : historicalNightStart || plan[0].indoors;
   type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
   let leg: Leg | undefined;
   let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
