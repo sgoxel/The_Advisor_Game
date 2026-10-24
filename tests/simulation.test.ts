@@ -270,6 +270,37 @@ test("time-bounded legal paths never jump to an unfinished endpoint", () => {
   assert.deepEqual(midway, replay);
 });
 
+test("same-door indoor work needs no invented street commute", () => {
+  const point = { eastM: 8, northM: -3 }, stationary = [point, point],
+    arrived = timedWalkOnPath(stationary, 0);
+  assert.equal(arrived.progress, 1);
+  assert.equal(arrived.durationSeconds, 0);
+  assert.equal(arrived.lengthM, 0);
+  assert.deepEqual(arrived.offset, point);
+  assert.deepEqual(walkWindowOnPath(stationary, 0, 24), [point, point]);
+
+  const village = villages[0], index = Array.from({ length: populationOf(village) }, (_, i) => i)
+    .find(i => {
+      const f = residentFoundationAt(village, i);
+      return f.role === "artisan" && f.ageGroup === "adult" &&
+        f.workOffset === f.homeOffset && !!resolvedSettlementHomeDoorFor(village, i);
+    });
+  assert.notEqual(index, undefined, "fixture requires a real artisan living and working through one legal door");
+  const f = residentFoundationAt(village, index!),
+    planDay = localDayIndex(tickAtLocalTime(WORKDAY, 12 * HOUR, village.canonicalPosition.lon), village.canonicalPosition.lon),
+    weekday = localWeekday(tickAtLocalTime(WORKDAY, 12 * HOUR, village.canonicalPosition.lon), village.canonicalPosition.lon),
+    plan = dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup, guardShift: f.guardShift }, f.traits, planDay, weekday),
+    start = plan.find(step => step.kind === "work" && step.anchor === "work");
+  assert.ok(start, "artisan has a deterministic work start");
+  const resident = residentAt(village, index!, tickAtLocalTime(WORKDAY, start.start + 1, village.canonicalPosition.lon)),
+    doorway = resolvedSettlementHomeDoorFor(village, index!);
+  assert.ok(resident.grounded && doorway, "working state is grounded at a verified house door");
+  assert.equal(resident.activity, "work", "stationary home-work transition is not a fictional walk");
+  assert.equal(resident.travelProgress, undefined, "no one-minute phantom commute");
+  assert.ok(greatCircleDistance(resident.position, sourceToLonLat(doorway.x, doorway.z)) < 0.1,
+    "actual artisan stays at the same owned entrance");
+});
+
 test("walk windows keep the corners of the legal street path", () => {
   const path = [{ eastM: 0, northM: 0 }, { eastM: 100, northM: 0 }, { eastM: 100, northM: 100 }];
   const near = (a: { eastM: number; northM: number }, b: { eastM: number; northM: number }) => {

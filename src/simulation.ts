@@ -792,6 +792,14 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
+  // A home-work pair at the same lawful doorway is already at its destination.
+  // Do not invent a trip out to a street vertex and back before allowing work.
+  if (Math.hypot(to.eastM - from.eastM, to.northM - from.northM) <= 1e-6) {
+    const stationary = legalStreetSegment(place, from, to) ? [from, to] : null;
+    pathCache.set(key, stationary);
+    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+    return stationary;
+  }
   const graph = streetGraphFor(place),
     legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
     start = nearestLegalStreetNode(graph, from, legalConnector),
@@ -916,15 +924,18 @@ function pointAlong(path: readonly Offset[], distanceM: number): Offset {
 export function timedWalkOnPath(
   path: readonly Offset[], elapsedSeconds: number,
 ): { offset: Offset; progress: number; durationSeconds: number; lengthM: number } {
-  const lengthM = pathLength(path),
-    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+  const lengthM = pathLength(path);
+  if (lengthM <= 1e-6)
+    return { offset: path[path.length - 1], progress: 1, durationSeconds: 0, lengthM };
+  const durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
     progress = Math.max(0, Math.min(1, elapsedSeconds / durationSeconds));
   return { offset: pointAlong(path, progress * lengthM), progress, durationSeconds, lengthM };
 }
 /** The legal path between the current walk position and the position one `aheadSeconds` later, keeping every corner in between. */
 export function walkWindowOnPath(path: readonly Offset[], elapsedSeconds: number, aheadSeconds: number): Offset[] {
-  const lengthM = pathLength(path),
-    durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+  const lengthM = pathLength(path);
+  if (lengthM <= 1e-6) return [path[path.length - 1], path[path.length - 1]];
+  const durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
     progressAt = (seconds: number) => Math.max(0, Math.min(1, seconds / durationSeconds)) * lengthM,
     d0 = progressAt(elapsedSeconds), d1 = progressAt(elapsedSeconds + aheadSeconds),
     points = [pointAlong(path, d0)];
