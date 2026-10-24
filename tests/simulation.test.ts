@@ -1171,9 +1171,10 @@ test("real guard and fisherman outbound: Falconham full gated workday reaches th
   const index = 70, seed = residentFoundationAt(place, index), lon = place.canonicalPosition.lon,
     door = resolvedSettlementHomeDoorFor(place, index);
   assert.ok(door && seed.character.startsWith("fisherman"), "the subject has a rendered owned door and fishing trade");
-  const weekday = localWeekday(tickAtLocalTime(WORKDAY, 12 * HOUR, lon), lon),
+  const localNoon = tickAtLocalTime(WORKDAY, 12 * HOUR, lon),
+    day = localDayIndex(localNoon, lon), weekday = localWeekday(localNoon, lon),
     plan = dailyPlan({ code: seed.code, role: seed.role, ageGroup: seed.ageGroup,
-      guardShift: seed.guardShift }, seed.traits, WORKDAY, weekday),
+      guardShift: seed.guardShift }, seed.traits, day, weekday),
     transitions = plan.filter((step, i) => i > 0 && step.anchor !== plan[i - 1].anchor);
   assert.equal(transitions[0]?.anchor, "work", "the observed journey starts from the owned home");
   assert.equal(transitions[transitions.length - 1]?.anchor, "home", "the last journey returns to the same owned door");
