@@ -3,7 +3,8 @@ import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
-import { digest, finalSurfaceAt, heightAt, resolvedSettlementHomeDoorFor } from "./world.ts";
+import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
+import type { FinalSurface } from "./final-surface.ts";
 import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
@@ -566,14 +567,20 @@ export function legalEnclosureSegment(
   }
   return true;
 }
+/** Final-surface bridge decks, not submerged ground, authorize a crossing.
+ * Dry paths retain the existing positive-ground requirement; unbridged water
+ * is never traversable, even if a presentation material says otherwise. */
+export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" | "water" | "groundHeight" | "deckHeight">) {
+  return surface.walkable &&
+    (surface.deckHeight !== null || (surface.water.kind === "none" && surface.groundHeight > 0.1));
+}
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const { border, gates } = streetGraphFor(place);
   if (!legalEnclosureSegment(from, to, border, gates)) return false;
   return continuousWalkableOffsetSegment(from, to, point => {
     const p = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(p.lon, p.lat),
-      surface = finalSurfaceAt(source.x, source.z);
-    return surface.walkable && heightAt(source.x, source.z) > 0.1;
+      source = lonLatToSource(p.lon, p.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
   });
 }
 /** A resident's nearest street vertex may lie across an impassable cut.
@@ -891,13 +898,12 @@ export function legalPosition(
 ): { position: CanonicalPosition; x: number; z: number; grounded: boolean } {
   const candidate = canonicalOffset(place, eastM, northM),
     presentation = lonLatToSource(candidate.lon, candidate.lat),
-    surface = finalSurfaceAt(presentation.x, presentation.z),
-    elevation = heightAt(presentation.x, presentation.z);
+    surface = finalSurfaceAt(presentation.x, presentation.z);
   return {
-    position: { lon: candidate.lon, lat: candidate.lat, elevation },
+    position: { lon: candidate.lon, lat: candidate.lat, elevation: surface.surfaceHeight },
     x: presentation.x,
     z: presentation.z,
-    grounded: surface.walkable && elevation > 0.1,
+    grounded: residentWalkableSurface(surface),
   };
 }
 

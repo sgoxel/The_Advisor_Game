@@ -275,7 +275,7 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 }
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
-  const point = renderFrame.sourceToRender(x, z, heightAt(x, z));
+  const point = renderFrame.sourceToRender(x, z, finalSurfaceAt(x, z).surfaceHeight);
   const footOffset = actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z * .5));
   actor.setLocalPosition(point.x - footOffset.x, point.y - footOffset.y, point.z - footOffset.z);
 }

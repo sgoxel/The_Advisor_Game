@@ -3,7 +3,7 @@ import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
 import { CANONICAL_PLANET_RADIUS, greatCircleDistance, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { settlementExteriorFor, settlementHomeFor } from "../src/settlement-exterior.ts";
-import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
+import { featuresFor, finalSurfaceAt, finalSurfaceEvidenceAnchors, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
   RESIDENTIAL_CAPACITY,
@@ -15,6 +15,7 @@ import {
   residentFoundationAt,
   legalPosition,
   continuousWalkableOffsetSegment,
+  residentWalkableSurface,
   legalEnclosureSegment,
   timedWalkOnPath,
   walkWindowOnPath,
@@ -89,6 +90,27 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("S006 residents traverse only authoritative bridge decks and stand at deck elevation", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge,
+    surface = finalSurfaceAt(bridge.x, bridge.z);
+  assert.equal(surface.traversal, "bridge", "retain the known physical canonical crossing");
+  assert.notEqual(surface.water.kind, "none", "deck overlays natural water, not rewritten land");
+  assert.ok(surface.deckHeight !== null && residentWalkableSurface(surface),
+    "a physically valid bridge is walkable despite the submerged ground beneath it");
+  assert.equal(residentWalkableSurface({ ...surface, deckHeight: null, walkable: true }), false,
+    "an open water gap without a deck cannot become a walkable shortcut");
+  assert.equal(residentWalkableSurface({
+    ...surface, water: { ...surface.water, kind: "none" }, deckHeight: null, groundHeight: 0, walkable: true,
+  }), false, "near-sea-level non-deck ground keeps its existing clearance rule");
+  const coords = sourceToLonLat(bridge.x, bridge.z),
+    place = { ...villages[0], code: `${villages[0].code}/BRIDGE-TEST`,
+      canonicalPosition: { ...villages[0].canonicalPosition, lon: coords.lon, lat: coords.lat } },
+    resident = legalPosition(place, 0, 0);
+  assert.ok(resident.grounded, "a resident can stand on the real bridge top");
+  assert.equal(resident.position.elevation, finalSurfaceAt(resident.x, resident.z).surfaceHeight,
+    "Simulation elevation must follow the composed bridge deck, not submerged terrain");
 });
 
 test("outdoor journeys can legally detour around small barriers without crossing water or walls", () => {
