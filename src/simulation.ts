@@ -208,7 +208,7 @@ function offsetForSource(place: Place, x: number, z: number) {
 type Offset = { eastM: number; northM: number };
 type ActivitySite = Offset & { id: string; label: string };
 /** A shared outdoor standing ground (square, trading pitch, garden, field, gate post...): residents stand on seeded slots inside it. */
-type StandArea = { key: string; eastM: number; northM: number; radiusM: number; kerbM: number; clearM: number };
+type StandArea = { key: string; eastM: number; northM: number; radiusM: number; kerbM: number; clearM: number; field?: boolean };
 type SlotState = { valid: Offset[]; next: number; exhausted: boolean; rivals?: StandArea[] };
 type StreetSegment = { ax: number; az: number; bx: number; bz: number; halfM: number };
 type StandTable = { slotOf: Map<string, number>; total: Map<string, number> };
@@ -284,6 +284,7 @@ function settlementAnchors(place: Place): SettlementAnchors {
     else if (plot.kind === "garden") area(at(plot.candidates[0]), Math.max(1.8, Math.min(3.2, half(plot) + .6)));
     else if (plot.kind === "field") {
       const field = area(at(plot.candidates[0]), Math.max(3, Math.min(12, half(plot) * .85)), STREET_CLEAR_M, 0, plot.id);
+      field.field = true;
       for (const patch of anchors.fieldsSites) if (patch.id.startsWith(`${plot.id}/PATCH/`) && !anchors.areas.has(coordKey(patch))) anchors.areas.set(coordKey(patch), field);
     }
   }
@@ -851,6 +852,29 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
 }
+/** Field crews share the fixed SEED field centre as an approach, then walk
+ * to their own standing slot. Every added connector uses the same authoritative
+ * ground and enclosure checks; failed approaches fall back to the exact search. */
+const fieldRouteCache = new Map<string, Offset[] | null>();
+function fieldEntry(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor) {
+  const ground = settlementAnchors(place).areas.get(coordKey(anchorOffset(place, foundation, anchor)));
+  return ground?.field ? ground : undefined;
+}
+function routinePath(place: Place, from: Offset, to: Offset, fromEntry?: Offset, toEntry?: Offset): Offset[] | null {
+  if (!fromEntry && !toEntry) return streetPath(place, from, to);
+  const key = residentStreetPathKey(place.code, from, to, true) +
+    `|${fromEntry?.eastM},${fromEntry?.northM}|${toEntry?.eastM},${toEntry?.northM}`,
+    cached = fieldRouteCache.get(key);
+  if (cached !== undefined) return cached;
+  const core = streetPath(place, fromEntry ?? from, toEntry ?? to);
+  const route = core && (!fromEntry || legalStreetSegment(place, from, fromEntry)) &&
+    (!toEntry || legalStreetSegment(place, toEntry, to))
+    ? [...(fromEntry ? [from] : []), ...core, ...(toEntry ? [to] : [])]
+    : streetPath(place, from, to);
+  fieldRouteCache.set(key, route);
+  while (fieldRouteCache.size > 4000) fieldRouteCache.delete(fieldRouteCache.keys().next().value!);
+  return route;
+}
 /** Replay earlier routine destinations from the last place actually reached. A failed
  * leg cannot become the origin of a later move just because Fantasy Time advances. */
 export function lastReachableRoutineStop<T>(
@@ -979,7 +1003,9 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     const next = plan[step],
       destination = standingSpot(place, foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
       origin = actualAnchor,
-      path = streetPath(place, offset, destination);
+      path = routinePath(place, offset, destination,
+        origin === "en route" ? undefined : fieldEntry(place, foundation, origin),
+        fieldEntry(place, foundation, next.anchor));
     if (!path) {
       leg = undefined;
       blocked = { origin, destination: next.anchor };
