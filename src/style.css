@@ -1351,8 +1351,10 @@ body.globe-mode .travel-button {
 .npc-routine time { font-variant-numeric: tabular-nums; color: #d8b979; }
 .npc-routine em { font-style: normal; color: #a99d82; font-size: 11.5px; text-align: right; }
 .npc-code { display: block; margin-top: 10px; font-size: 10px; color: #7f7864; word-break: break-all; }
-.npc-technical { margin-top: 10px; border-top: 1px solid rgba(216, 185, 121, 0.25); }
-.npc-technical summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: #d8b979; }
+.npc-technical, .npc-secondary { margin-top: 10px; border-top: 1px solid rgba(216, 185, 121, 0.25); }
+.npc-technical summary, .npc-secondary summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; color: #d8b979; }
+.npc-secondary summary { font-weight: 600; }
+.npc-now > div { overflow-wrap: anywhere; }
 .npc-technical .npc-label { width: auto; display: block; margin-top: 5px; }
 .npc-technical .npc-code { margin: 2px 0 8px; color: #cdbf9f; font-size: 11px; }
 @media (max-width: 700px) {
