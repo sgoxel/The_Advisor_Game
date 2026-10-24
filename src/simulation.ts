@@ -965,7 +965,9 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
-// Guard post/home positions at yesterday's end are fixed within the next local day.
+// Guard and late-closing innkeeper positions at yesterday's end are fixed
+// within the next local day. Keep the replay narrowly scoped: full civilian
+// replay on every query previously exceeded the bounded release test.
 // Cache only immutable SEED/time facts, never camera/actor state; bound residency.
 const overnightPositions = new Map<string, ScheduledResidentState>();
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
@@ -985,7 +987,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
       !replayOvernight ? false : !plan[0].indoors),
     previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
   let previousDay: ScheduledResidentState | undefined;
-  if (replayOvernight && foundation.role === "guard") {
+  if (replayOvernight && (foundation.role === "guard" || foundation.role === "innkeeper")) {
     previousDay = overnightPositions.get(previousKey);
     if (!previousDay) {
       previousDay = scheduleAt(place, foundation, tick - second - 1, false);
