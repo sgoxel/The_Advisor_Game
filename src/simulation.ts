@@ -796,7 +796,7 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
-// Last-day position is identical for every query within today's local day.
+// Guard post/home positions at yesterday's end are fixed within the next local day.
 // Cache only immutable SEED/time facts, never camera/actor state; bound residency.
 const overnightPositions = new Map<string, ScheduledResidentState>();
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
@@ -809,14 +809,14 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
   // Seed the bounded history replay at an owned home, never at a scheduled
-  // post/worksite. All residents (not just night guards) must carry their
-  // actual prior-day end position through midnight, including blocked returns.
+  // post/worksite. Both guard shifts must carry their actual prior-day end
+  // position through midnight, including blocked returns.
   const initialAnchor: RoutineAnchor = !replayOvernight ? "home" : plan[0].anchor,
     morning = standingSpot(foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
       !replayOvernight ? false : !plan[0].indoors),
     previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
   let previousDay: ScheduledResidentState | undefined;
-  if (replayOvernight) {
+  if (replayOvernight && foundation.role === "guard") {
     previousDay = overnightPositions.get(previousKey);
     if (!previousDay) {
       previousDay = scheduleAt(place, foundation, tick - second - 1, false);
@@ -828,7 +828,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     Math.hypot(previousDay.offset.eastM - morning.eastM, previousDay.offset.northM - morning.northM) <= 2 &&
     (initialAnchor !== "work" || previousDay.activity === "guard");
   // Replay only changed anchors from absolute Fantasy Time. A failed return
-  // does not reset a civilian to home when the local calendar day changes.
+  // cannot reset an unarrived day watchman to home at midnight.
   let offset = previousDay?.offset ?? morning,
     actualAnchor: RoutineAnchor | "en route" = previousDay ? (atMorning ? initialAnchor : "en route") : initialAnchor,
     actuallyIndoors = previousDay ? (atMorning && previousDay.indoors) : !replayOvernight || plan[0].indoors;
