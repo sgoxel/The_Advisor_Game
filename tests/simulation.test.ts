@@ -25,6 +25,7 @@ import {
   readableResidentSite,
   readableResidentRoute,
   residentInspectorSelection,
+  residentShortLabel,
   nearestNode,
   nearestLegalStreetNode,
   legalOpenGroundDetour,
@@ -43,6 +44,15 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("resident inspector off-screen status is stable and carries the same SEED identity", () => {
+  const sample = { index: 6, role: "guard-officer" } as const;
+  assert.equal(residentShortLabel(sample), "Resident 7 · guard officer");
+  const caption = residentShortLabel(sample, true);
+  assert.equal(caption, "Resident 7 · guard officer · off-screen");
+  assert.equal(residentShortLabel(sample, true), caption, "repeat queries must not grow the caption");
+  assert.equal(residentShortLabel(sample, false), "Resident 7 · guard officer", "return to view clears the status");
+});
 
 test("resident inspector can resolve facts independently of optional actor detail", () => {
   assert.deepEqual(residentViewQuery(48, true, false, false, false), { actors: false, inspect: true },
