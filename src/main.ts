@@ -15,7 +15,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
-import { hideNpcPopup, npcPopupCode, setPopupNavigator, popupFocusHalfHeight, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { hideNpcPopup, npcPopupCode, setPopupNavigator, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -1327,7 +1327,13 @@ function setupControls() {
   );
   // Place rows in the settlement card (notable places, nearby sites, neighbours) centre the camera on
   // the place at Hero zoom; the card stays open so the next place can be picked.
-  setPopupNavigator((x, z, ref) => navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT, innerHeight)));
+  setPopupNavigator((x, z, ref) => {
+    // Camera-only owned-home inspection faces its SEED-resolved front door;
+    // unchanged Simulation, resident position, route, home ID, and collision.
+    const facing = popupOwnedHomeFacing(ref);
+    if (facing !== undefined) view.yaw = facing;
+    navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT, innerHeight));
+  });
   $("home").onclick = () => {
     view.yaw = -0.22;
     navigate(villages[0].x, villages[0].z + metresToSource(6), HERO_HALF_HEIGHT);
