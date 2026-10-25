@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { places, villages } from "../src/geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
-import { resolvedSettlementHomeDoorFor } from "../src/world.ts";
+import { resolvedSettlementHomeDoorFor, resolvedSettlementHomeFacingFor } from "../src/world.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
 import { metresToSource } from "../src/physical-scale.ts";
@@ -10,7 +10,7 @@ import { lonLatToSource, sourceToLonLat } from "../src/planet.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
 (globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
-const { resolveGoTarget, popupFocusHalfHeight, HOME_ENTRANCE_FOCUS_HALF_HEIGHT, RESIDENT_OBSERVE_HALF_HEIGHT, residentObservationPoint } = await import("../src/npc-popup.ts");
+const { resolveGoTarget, popupFocusHalfHeight, popupOwnedHomeFacing, HOME_ENTRANCE_FOCUS_HALF_HEIGHT, RESIDENT_OBSERVE_HALF_HEIGHT, residentObservationPoint } = await import("../src/npc-popup.ts");
 
 test("settlement card place links resolve to their positions only when clicked", () => {
   const home = villages[0], other = places.find((place) => place.id !== home.id)!;
@@ -34,6 +34,22 @@ test("resident camera focus reaches actual SEED-owned entrance", () => {
   assert.equal(resolveGoTarget(`home:${place.id}:-1`), undefined);
   assert.equal(resolveGoTarget(`home:${place.id}:999999`), undefined);
   assert.equal(resolveGoTarget(`home:${place.id}:2.5`), undefined);
+});
+
+test("owned home inspection faces the resolved physical front wall without inventing a home", () => {
+  const place = villages[0];
+  for (const index of [0, 6, 37]) {
+    const door = resolvedSettlementHomeDoorFor(place, index);
+    const yaw = popupOwnedHomeFacing(`home:${place.id}:${index}`);
+    assert.equal(yaw, resolvedSettlementHomeFacingFor(place, index),
+      "camera faces the same resolved house as the Simulation's owned doorway");
+    assert.equal(door === undefined, yaw === undefined,
+      "an invalid/unplaced home cannot acquire a fake camera facade");
+  }
+  assert.equal(popupOwnedHomeFacing("resident:0:37"), undefined);
+  assert.equal(popupOwnedHomeFacing("home:0:-1"), undefined);
+  assert.equal(popupOwnedHomeFacing("home:0:999999"), undefined);
+  assert.equal(popupOwnedHomeFacing("home:0:37.1"), undefined);
 });
 
 test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {

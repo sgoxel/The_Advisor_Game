@@ -391,6 +391,16 @@ export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x:
   return settlementFrontWallDoor(point, plot);
 }
 
+/** Camera-only house inspection faces the exact rendered front-wall yaw.
+ * Read the same resolved SEED home as the door; guard replacement lots may
+ * have a different yaw from the originally assigned frontage. */
+export function resolvedSettlementHomeFacingFor(place: Place, index: number): number | undefined {
+  const plan = settlementExteriorFor(place),
+    resolution = resolveStaticPlan(place, plan),
+    plot = resolveHome(place, plan, resolution, index);
+  return resolution.homes.get(plot.id) ? plot.yawRad : undefined;
+}
+
 export function settlementPresentationCacheState() {
   let homeAnchors = 0;
   for (const resolution of resolvedSettlements.values()) homeAnchors += resolution.homes.size;

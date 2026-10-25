@@ -10,7 +10,7 @@ import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
 import { continents, countries, places, roadConnections, type Place } from "./geography.ts";
 import { greatCircleDistance, lonLatToSource } from "./planet.ts";
 import { criticalSites, nearbyCriticalSites } from "./sites.ts";
-import { finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
+import { finalSurfaceAt, resolvedSettlementHomeDoorFor, resolvedSettlementHomeFacingFor } from "./world.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { buildingName, familyName, type BuildingKind } from "./names.ts";
@@ -90,6 +90,17 @@ export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewpo
     RESIDENT_OBSERVE_HALF_HEIGHT * viewportHeight / 1920));
   return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight)
     : ref.startsWith("resident:") ? observeHalfHeight : heroHalfHeight;
+}
+/** Camera-facing-only view of the real front wall; never rotates a resident. */
+export function popupOwnedHomeFacing(ref: string): number | undefined {
+  const [kind, id, sub] = ref.split(":");
+  // Place IDs are SEED identities, not numeric array indexes. Match the
+  // canonical resolver: validate only the resident index, then look up the
+  // exact settlement identifier rather than rejecting non-numeric IDs.
+  if (kind !== "home" || !/^(0|[1-9][0-9]*)$/.test(sub ?? "")) return undefined;
+  const place = places.find(entry => String(entry.id) === id), index = Number(sub);
+  if (!place || !Number.isSafeInteger(index) || index >= populationOf(place)) return undefined;
+  return resolvedSettlementHomeFacingFor(place, index);
 }
 let goTo: ((x: number, z: number, ref: string) => void) | undefined;
 export function setPopupNavigator(navigator: (x: number, z: number, ref: string) => void) { goTo = navigator; }
