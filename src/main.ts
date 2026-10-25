@@ -2135,6 +2135,36 @@ async function start() {
         }
         return null;
       },
+      /** Read-only, bounded explanation of why real resident meshes fail a canvas click.
+       * The screenshot gate must never substitute these counts for visual evidence. */
+      residentEvidenceDiagnosis() {
+        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
+        const counts = { enabled: 0, withResident: 0, withMesh: 0, onScreen: 0, unoccluded: 0, pickMatched: 0 };
+        const samples: { index: number; mesh: boolean; x: number; y: number; depth: number; obstruction: string; pickMatched: boolean }[] = [];
+        for (const actor of actors) {
+          if (!actor.enabled) continue;
+          counts.enabled++;
+          const resident = actorResidents.get(actor);
+          if (!resident) continue;
+          counts.withResident++;
+          const mesh = hasResidentMesh(actor);
+          if (mesh) counts.withMesh++;
+          camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
+          const onScreen = point.x >= 12 && point.y >= 12 && point.x <= rect.width - 12 && point.y <= rect.height - 12;
+          if (onScreen) counts.onScreen++;
+          const clientX = rect.left + point.x, clientY = rect.top + point.y,
+            obstruction = onScreen ? document.elementFromPoint(clientX, clientY) : null,
+            unobstructed = obstruction === canvas,
+            pickMatched = mesh && unobstructed && pickResidentAt?.(clientX, clientY)?.code === resident.code;
+          if (unobstructed) counts.unoccluded++;
+          if (pickMatched) counts.pickMatched++;
+          if (samples.length < 8)
+            samples.push({ index: resident.index, mesh, x: Math.round(point.x), y: Math.round(point.y),
+              depth: Math.round(point.z * 100) / 100, obstruction: !onScreen ? "offscreen" : unobstructed ? "canvas" : obstruction?.id || obstruction?.tagName || "none",
+              pickMatched: !!pickMatched });
+        }
+        return { ...counts, samples };
+      },
       get state() {
         const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready),
           residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined,
