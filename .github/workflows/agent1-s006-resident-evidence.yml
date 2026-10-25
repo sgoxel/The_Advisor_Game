@@ -1,7 +1,7 @@
 name: Validate S006 living residents
 on:
   workflow_dispatch:
-  # Run a single exact-main capture after the bounded real-viewport screenshot fallback.
+  # Capture actual current-main actor evidence separately per viewport/backend.
   push:
     branches: [main]
     paths:
@@ -26,10 +26,10 @@ concurrency:
 permissions:
   contents: read
 jobs:
-  resident-evidence:
-    if: github.event.action != 'closed'
+  resident-invariants:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,17 +38,39 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Validate resident release invariants (bounded PR gate)
-        if: github.event_name == 'pull_request'
         run: npm run test:s006:focused
+  resident-diagnostics:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - name: Full resident authority diagnostics (on demand)
-        if: github.event_name == 'workflow_dispatch'
         run: node --experimental-strip-types --test tests/simulation.test.ts
+  resident-evidence:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgl2, webgpu]
+        profile: [fullhd-landscape, fullhd-portrait]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - run: npm run build
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
       - run: npx playwright install --with-deps chromium
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
       - run: python -m pip install playwright==1.63.0
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
       - name: Capture resident inspector evidence
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: |
@@ -63,12 +85,12 @@ jobs:
           # This does not freeze browser timers/animation or change game code/SEED.
           FIXED_TIME_MS=1792874335750 # Fantasy tick 36274242 (same proven daylight evidence tick)
           RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;shot:resident-first-view;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());shot:resident-pre-click;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:window.__s006Focus=JSON.stringify(window.advisorWorld.state.focus);tap:resident;visible:#npc-popup:not([hidden]);eval:window.__s006Focus===JSON.stringify(window.advisorWorld.state.focus)||(()=>{throw Error("S006 resident inspection changed geographic focus")})();eval:(()=>{const r=window.__s006Resident\;const get=id=>document.getElementById(id)?.textContent\;for(const [id,expected] of [["npc-seed-code",r.code],["npc-home-entrance",r.homeEntrance],["npc-workplace-code",r.workplace],["npc-current-task",r.task],["npc-route-code",r.route]])if(get(id)!==expected)throw new Error("S006 actual browser click mismatch: "+id+" expected "+expected+" found "+get(id))\;return true})();visible:#selected-resident-marker:not([hidden]);eval:document.getElementById("selected-resident-marker").dataset.residentCode===window.__s006Resident.code||(()=>{throw Error("S006 on-scene selected marker identity mismatch")})();shot:resident-selected;eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details'
-          status=0
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile fullhd-landscape,fullhd-portrait --renderer webgpu --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS" || status=1
-          exit "$status"
+          # Exactly one actual tool capture per job. A failed WebGPU or portrait
+          # cannot withhold already-produced PNGs for another backend/viewport.
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
-        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+        if: always()
         with:
-          name: s006-resident-evidence
-          path: test-results/
+          name: s006-resident-${{ matrix.renderer }}-${{ matrix.profile }}
+          path: test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }}/
+          if-no-files-found: warn
