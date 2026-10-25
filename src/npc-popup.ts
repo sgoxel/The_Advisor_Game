@@ -81,9 +81,14 @@ export function residentObservationPoint(resident: Pick<Resident, "grounded" | "
   return resident.grounded && !resident.indoors
     ? lonLatToSource(resident.position.lon, resident.position.lat) : undefined;
 }
-export function popupFocusHalfHeight(ref: string, heroHalfHeight: number): number {
+export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewportHeight = 1920): number {
+  // A fixed angular height made the same real actor barely visible on 1080px
+  // landscape while readable on 1920px portrait. Preserve the same physical
+  // screen-space person size, never change Simulation/SEED or move the actor.
+  const observeHalfHeight = Math.max(.36, Math.min(RESIDENT_OBSERVE_HALF_HEIGHT,
+    RESIDENT_OBSERVE_HALF_HEIGHT * viewportHeight / 1920));
   return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight)
-    : ref.startsWith("resident:") ? RESIDENT_OBSERVE_HALF_HEIGHT : heroHalfHeight;
+    : ref.startsWith("resident:") ? observeHalfHeight : heroHalfHeight;
 }
 let goTo: ((x: number, z: number, ref: string) => void) | undefined;
 export function setPopupNavigator(navigator: (x: number, z: number, ref: string) => void) { goTo = navigator; }
