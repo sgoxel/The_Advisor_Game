@@ -329,6 +329,7 @@ STATE_JS = """() => {
     } : null,
     informationExpanded: document.getElementById('toggle-region-panel')?.getAttribute('aria-expanded') === 'true',
     detailName: detail ? detail.textContent.trim() : null,
+    tileStatusText: document.getElementById('tile-status')?.textContent ?? null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
   };
 }"""
@@ -673,10 +674,10 @@ class Session:
         state = self.page.evaluate(STATE_JS)
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
-        tile_status_before = self.page.locator("#tile-status").text_content(timeout=5000)
+        tile_status_before = state["tileStatusText"]
         self.capture_viewport(path)
         post_capture_state = self.page.evaluate(STATE_JS)
-        tile_status_after = self.page.locator("#tile-status").text_content(timeout=5000)
+        tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
         self.shots += 1
