@@ -107,10 +107,14 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   const requested = new WeakMap<pc.Entity, string>();
   const assigned = new WeakMap<pc.Entity, string>();
   const loaded = new Map<string, Promise<pc.ContainerResource>>();
-  function install(actor: pc.Entity, resource: pc.ContainerResource, generated: boolean) {
+  function install(actor: pc.Entity, resource: pc.ContainerResource, generated: boolean, sourceHeightM = DEFAULT_CHARACTER_HEIGHT_M) {
     models.get(actor)?.destroy();
     const model = resource.instantiateRenderEntity();
     actor.addChild(model);
+    if (generated) {
+      const scale = DEFAULT_CHARACTER_HEIGHT_M / sourceHeightM;
+      model.setLocalScale(scale, scale, scale);
+    }
     for (const render of model.findComponents('render') as pc.RenderComponent[]) {
       render.castShadows = !render.entity.name.includes('Ink Outline');
       render.receiveShadows = generated;
@@ -161,7 +165,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       try {
         const resource = await loading;
         if (requested.get(actor) !== key || assigned.get(actor) === identity) return;
-        install(actor, resource, true);
+        install(actor, resource, true, entry.heightM);
         assigned.set(actor, identity);
         actor.tags.add('generated-npc');
       } catch (error) { loaded.delete(entry.url); console.warn('NPC model could not load', key, error); }

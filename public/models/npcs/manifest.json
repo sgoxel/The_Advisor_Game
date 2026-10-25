@@ -42,6 +42,14 @@
       "heightM": 1.782,
       "triangles": 15914,
       "rigged": true
+    },
+    "default": {
+      "url": "models/npcs/default.glb",
+      "heightM": 1.78,
+      "triangles": 15882,
+      "rigged": true,
+      "style": "studio-lowpoly-hires-v4",
+      "revision": "aa613a31f49227a9"
     }
   }
 }
