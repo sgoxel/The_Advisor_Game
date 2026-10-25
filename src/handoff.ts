@@ -8,8 +8,9 @@ export const HANDOFF_LOCAL_FOOTPRINT = 127_420;
 export const HANDOFF_GLOBE_FOOTPRINT = 318_550;
 export const HANDOFF_LOCAL_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_LOCAL_FOOTPRINT);
 export const HANDOFF_GLOBE_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_GLOBE_FOOTPRINT);
-/** Closest zoom: about 2.7 m of half-height, so a 1.7 m character fills about a third of the screen (RPG close-up). */
-export const MIN_HALF_HEIGHT = 0.18;
+/** True physical close-up: 16m vertical footprint. The old 0.18 SOURCE-unit
+ * minimum was 55 metres tall, not 5.4m; keep a real sized person visible. */
+export const MIN_HALF_HEIGHT = halfHeightForCanonicalFootprint(16);
 export const SCALE_LADDER = [0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 /** Startup and Home use the exact Hero menu stop, above the wheel zoom clamp. */
 export const HERO_HALF_HEIGHT = halfHeightForCanonicalFootprint(CANONICAL_PLANET_DIAMETER * SCALE_LADDER[0] / 10000);
