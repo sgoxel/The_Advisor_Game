@@ -70,8 +70,16 @@ function anchorNames(resident: Resident) {
 }
 
 /** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
-let goTo: ((x: number, z: number) => void) | undefined;
-export function setPopupNavigator(navigator: (x: number, z: number) => void) { goTo = navigator; }
+// Camera-only resident entrance inspection needs a legible street/house framing.
+// Deep Hero zoom below this value caused a real software-WebGL2 device loss
+ // while mandatory scene detail was still streaming; the player may still zoom
+ // manually, but a read-only popup action must not force that unstable state.
+export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 10;
+export function popupFocusHalfHeight(ref: string, heroHalfHeight: number): number {
+  return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight) : heroHalfHeight;
+}
+let goTo: ((x: number, z: number, ref: string) => void) | undefined;
+export function setPopupNavigator(navigator: (x: number, z: number, ref: string) => void) { goTo = navigator; }
 /**
  * A list row that takes the camera to a place when clicked. The row only carries a reference
  * ("plot:<settlement>:<plot>", "site:<settlement>:<code>", "place:<id>"); the position is worked out
@@ -107,7 +115,7 @@ function install() {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
     if (target) {
-      goTo!(target.x, target.z);
+      goTo!(target.x, target.z, go!.dataset.go ?? "");
       if (go?.dataset.go?.startsWith("home:")) {
         // Map inspection should reveal the real entrance, not leave the long
         // optional SEED-ID ledger covering it. The IDs remain in the DOM.
