@@ -582,10 +582,21 @@ class Session:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
         state = self.page.evaluate(STATE_JS)
+        # Capture real game state and the painted HUD on both sides of the
+        # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
+        tile_status_before = self.page.locator("#tile-status").text_content(timeout=5000)
         self.capture_viewport(path)
+        post_capture_state = self.page.evaluate(STATE_JS)
+        tile_status_after = self.page.locator("#tile-status").text_content(timeout=5000)
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
         self.shots += 1
+        frame_settled_consistent = (
+            all(sample["ready"] and sample["settled"] and sample["pending"] == 0
+                for sample in (state, post_capture_state))
+            and all(label is not None and "ready" in label.lower() and "refining" not in label.lower()
+                    for label in (tile_status_before, tile_status_after))
+        )
         fell_back = self.args.renderer == "webgpu" and state["backend"] != "webgpu"
         record = {
             "file": file, "scenario": self.name, "profile": self.profile,
@@ -595,6 +606,15 @@ class Session:
             "deviceScaleFactor": self.args.device_scale_factor, "mobileEmulation":self.args.touch,
             "browserVersion":self.page.context.browser.version,
             "requestedRenderer": self.args.renderer, "webgpuFellBack": fell_back, **state,
+            "postCaptureReadiness": {
+                "ready": post_capture_state["ready"],
+                "settled": post_capture_state["settled"],
+                "pending": post_capture_state["pending"],
+                "active": post_capture_state["active"],
+                "tileStatusBefore": tile_status_before,
+                "tileStatusAfter": tile_status_after,
+                "consistent": frame_settled_consistent,
+            },
             "browserChannel": self.args.browser_channel,
             "consoleErrors": list(self.console_errors), "pageErrors": list(self.page_errors),
         }
@@ -607,8 +627,15 @@ class Session:
         if fell_back:
             print(f"WARNING: {file}: WebGPU was requested but the page rendered with "
                   f"{state['backend'] or 'no backend'}: {state['fallbackReason']}", file=sys.stderr)
-        if state["error"]:
-            raise CaptureError(f"page reports an error: {state['error']}")
+        if state["error"] or post_capture_state["error"]:
+            raise CaptureError(f"page reports an error: {state['error'] or post_capture_state['error']}")
+        if suffix == "owned-home-entrance" and not frame_settled_consistent:
+            raise CaptureError(
+                "owned-home PNG cannot prove fully settled geometry: "
+                f"pre={state['ready']}/{state['settled']}/{state['pending']} "
+                f"post={post_capture_state['ready']}/{post_capture_state['settled']}/{post_capture_state['pending']} "
+                f"HUD={tile_status_before!r} -> {tile_status_after!r}"
+            )
 
     def run(self, steps: list[str]) -> None:
         print(f"OPEN {self.name}-{self.profile}", flush=True)
