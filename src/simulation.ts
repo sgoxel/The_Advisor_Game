@@ -308,9 +308,11 @@ function natureSites(place: Place) {
   const reachable = (point: Offset) => {
     const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
     if (!start) return false;
-    const steps = Math.ceil(Math.hypot(start.eastM-point.eastM,start.northM-point.northM) / 20);
-    for (let i = 1; i <= steps; i++) if (!outdoorSiteLegal(place, { eastM: start.eastM + (point.eastM-start.eastM)*i/steps, northM: start.northM + (point.northM-start.northM)*i/steps })) return false;
-    return true;
+    // A coarse dry-line scan can both skip an unbridged narrow stream and
+    // reject a real bridge deck. Choose outdoor jobs only when the identical
+    // bounded, gate-aware final-surface route used by residents reaches them.
+    // This runs once per seeded habitat candidate, not per tick or render.
+    return streetPath(place, start, point) !== null;
   };
   for (let i = 0; i < 48; i++) {
     const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
