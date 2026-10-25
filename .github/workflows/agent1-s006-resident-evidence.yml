@@ -82,6 +82,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Under bare Xvfb the real game remains interactive, yet Chrome's OS
+      # framebuffer and CDP compositor stop advancing after Hero zoom.
+      # Test an actual managed headed window before changing renderer/SEED.
+      - name: Start with a managed X11 desktop
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends openbox
       # Linux software Vulkan presentation needs an actual ICD/runtime. The
       # Playwright browser dependency installer does not guarantee Mesa's ICD.
       # Limit this package install to the WebGPU evidence jobs only.
@@ -113,7 +118,7 @@ jobs:
           # no screencast frames after a successful canvas click (4/4 zero PNG).
           # One consolidated real-click/details tool PNG per job avoids a second very slow GPU readback. A failed WebGPU or portrait
           # cannot withhold already-produced PNGs for another backend/viewport.
-          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
+          xvfb-run -a -s '-screen 0 2560x2560x24' bash -c 'openbox --sm-disable >/tmp/s006-openbox.log 2>&1 & sleep 1; exec "$@"' bash timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
