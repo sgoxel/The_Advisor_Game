@@ -928,9 +928,14 @@ function refreshSelection() {
       : "The wild marches";
   updateNavigationHud();
 }
+let captureFrameHeld = false;
 function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
   dispatchResidentQuery();
+  // An on-demand, evidence-only finished-frame handoff must not keep
+  // preparing new GPU buffers while Chromium tries to present the real
+  // scene. Authoritative resident queries and Fantasy-Time routines continue.
+  if (captureFrameHeld) return;
   if (selectionDirty) refreshSelection();
   // Move finished tiles to the GPU until this frame's upload time (or count) budget is used.
   // Generation itself runs in the worker pool.
@@ -2178,9 +2183,16 @@ async function start() {
     ? (() => {
         let token = 0, paintedToken = 0;
         return {
-          hold() {
+          hold(requireSettled = false) {
             if (!app.autoRender) return 0;
+            // Atomically freeze the actual already-settled game frame before
+            // background prefetch can queue fresh GPU work. A transient
+            // settled probe outside this call would not be enough.
+            if (requireSettled && !(window as Window & {
+              advisorWorld?: { state: { settled: boolean; pending: number } }
+            }).advisorWorld?.state?.settled) return 0;
             const current = ++token;
+            captureFrameHeld = true;
             app.once("postrender", () => { paintedToken = current; });
             // PlayCanvas submits the actual current camera/actor/geometry
             // frame once, then relinquishes the software-GPU queue long enough
@@ -2190,7 +2202,10 @@ async function start() {
             return current;
           },
           get paintedToken() { return paintedToken; },
-          release() { app.autoRender = true; },
+          release() {
+            captureFrameHeld = false;
+            app.autoRender = true;
+          },
         };
       })()
     : undefined;
