@@ -350,6 +350,20 @@ FREE_POINT_JS = """() => {
 }"""
 
 
+def resident_scene_flat_fraction(path: Path) -> float:
+    """Flag near-monochrome real PNGs; never invent or replace their pixels.
+
+    A screenshot can contain a freshly painted popup/marker but no 3D scene.
+    This conservative 60% guard is a CI failure hint, never visual acceptance.
+    """
+    from collections import Counter
+    from PIL import Image
+    with Image.open(path) as image:
+        sampled = image.convert("RGB").resize((120, 90))
+        bins = Counter(tuple(channel >> 3 for channel in rgb) for rgb in sampled.getdata())
+    return bins.most_common(1)[0][1] / (120 * 90)
+
+
 class CaptureError(Exception):
     """A step, wait or page check failed."""
 
@@ -827,6 +841,7 @@ class Session:
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
         self.shots += 1
+        scene_flat_fraction = resident_scene_flat_fraction(path) if resident_proof else None
         frame_settled_consistent = (
             all(sample["ready"] and sample["settled"] and sample["pending"] == 0
                 for sample in (state, post_capture_state))
@@ -851,6 +866,7 @@ class Session:
                 "tileStatusAfter": tile_status_after,
                 "consistent": frame_settled_consistent,
             },
+            "residentSceneLargestColorBinFraction": scene_flat_fraction,
             "browserChannel": self.args.browser_channel,
             "consoleErrors": list(self.console_errors), "pageErrors": list(self.page_errors),
         }
@@ -865,6 +881,10 @@ class Session:
                   f"{state['backend'] or 'no backend'}: {state['fallbackReason']}", file=sys.stderr)
         if state["error"] or post_capture_state["error"]:
             raise CaptureError(f"page reports an error: {state['error'] or post_capture_state['error']}")
+        if scene_flat_fraction is not None and scene_flat_fraction > 0.60:
+            raise CaptureError(f"real PNG appears to contain no rendered 3D world: "
+                               f"{scene_flat_fraction:.1%} of pixels share one 8-bit RGB bin; "
+                               "retain PNG for required manual inspection")
         if suffix == "owned-home-entrance" and not frame_settled_consistent:
             raise CaptureError(
                 "owned-home PNG cannot prove fully settled geometry: "
