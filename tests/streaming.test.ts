@@ -151,8 +151,8 @@ test("the tile cache grows with device memory and uploads use a per-frame budget
   const desktop = streamingBudgetForPool(1440, 900, 11, 8);
   assert.equal(desktop.cacheTrimStartBytes, 4e9);
   assert.equal(desktop.combinedBytes, 4e9);
-  assert.equal(desktop.maxUploadsPerFrame, 8);
-  assert.ok(STREAMING_BUDGETS.phone.maxUploadsPerFrame >= 3 && STREAMING_BUDGETS.tablet.maxUploadsPerFrame >= 4);
+  assert.equal(desktop.maxUploadsPerFrame, 1, "each rendered frame admits at most one real GPU mesh group");
+  assert.ok(Object.values(STREAMING_BUDGETS).every(budget => budget.maxUploadsPerFrame === 1), "no device class can burst multiple mesh-group uploads into one frame");
   assert.ok(UPLOAD_FRAME_BUDGET_MS > 0 && UPLOAD_FRAME_BUDGET_MS < 16, "uploads leave most of a 60 fps frame to drawing");
 });
 
