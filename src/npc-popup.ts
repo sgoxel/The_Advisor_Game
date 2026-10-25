@@ -10,14 +10,14 @@ import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
 import { continents, countries, places, roadConnections, type Place } from "./geography.ts";
 import { greatCircleDistance } from "./planet.ts";
 import { criticalSites, nearbyCriticalSites } from "./sites.ts";
-import { finalSurfaceAt } from "./world.ts";
+import { finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { buildingName, familyName, type BuildingKind } from "./names.ts";
 import { activityAt, dailyPlan, type Activity } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { settlementExteriorFor } from "./settlement-exterior.ts";
-import { readableResidentRoute, type Resident } from "./simulation.ts";
+import { populationOf, readableResidentRoute, type Resident } from "./simulation.ts";
 
 const ABILITY_LABELS: [keyof Resident["traits"]["abilities"], string][] = [
   ["strength", "Strength"], ["dexterity", "Dexterity"], ["constitution", "Constitution"],
@@ -84,6 +84,13 @@ export function resolveGoTarget(ref: string): { x: number; z: number } | undefin
   if (kind === "place") return place(id);
   const settlement = place(id);
   if (!settlement) return;
+  if (kind === "home") {
+    // Real doorway only, resolved lazily on the player camera-focus action.
+    if (!/^(0|[1-9][0-9]*)$/.test(sub ?? "")) return;
+    const index = Number(sub);
+    if (!Number.isSafeInteger(index) || index >= populationOf(settlement)) return;
+    return resolvedSettlementHomeDoorFor(settlement, index) ?? undefined;
+  }
   if (kind === "plot") return settlementExteriorFor(settlement).plots.find((plot) => plot.id === sub)?.candidates[0];
   if (kind === "site") return criticalSites.find((site) => site.code === sub)
     ?? nearbyWilderness(settlement.x, settlement.z, metresToSource(8000), 8).find((site) => site.code === sub);
@@ -128,6 +135,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
   const active = sameResident && root.contains(document.activeElement) ? document.activeElement : null;
   const focusSelector = active?.matches(".npc-technical summary") ? ".npc-technical summary"
     : active?.matches(".npc-secondary summary") ? ".npc-secondary summary"
+    : active?.matches('[data-go^="home:"]') ? '[data-go^="home:"]'
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
@@ -155,7 +163,10 @@ export function showNpcPopup(resident: Resident, tick: number) {
         : ""}
       <div><span class="npc-label">Step</span>${bar(resident.activityProgress, 1, "#d8b979")} <b>${Math.round(resident.activityProgress * 100)}%</b> <span class="npc-muted">${clock(resident.activityStart)}–${clock(resident.activityEnd % 86400)}</span></div>
       <div><span class="npc-label">Mood</span><b style="color:${moodHue}">${escape(resident.mood.label)}</b> ${bar(resident.mood.value + 1, 2, moodHue)}</div>
-      <div><span class="npc-label">Home</span>${escape(names.home ?? "")}</div>
+      <div><span class="npc-label">Home</span>${escape(names.home ?? "")}
+        ${resident.grounded
+          ? goRow("Show entrance on map", `home:${resident.settlement}:${resident.index}`, "owned home entrance (camera only)")
+          : '<span class="npc-muted">· No legally resolved entrance</span>'}</div>
       <div><span class="npc-label">Work</span>${escape(names.work ?? resident.workplace)}</div>
     </div>
     <details class="npc-technical"${technicalOpen ? " open" : ""}>

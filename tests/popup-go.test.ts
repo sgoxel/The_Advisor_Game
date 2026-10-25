@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { places, villages } from "../src/geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
+import { resolvedSettlementHomeDoorFor } from "../src/world.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
 import { metresToSource } from "../src/physical-scale.ts";
@@ -23,4 +24,13 @@ test("settlement card place links resolve to their positions only when clicked",
   assert.equal(resolveGoTarget(`plot:${home.id}:no-such-plot`), undefined);
   assert.equal(resolveGoTarget("place:no-such-place"), undefined);
   assert.equal(resolveGoTarget(""), undefined);
+});
+
+test("resident camera focus reaches actual SEED-owned entrance", () => {
+  const place = villages[0], index = 37, door = resolvedSettlementHomeDoorFor(place, index);
+  assert.ok(door, "fixture must have a real owned doorway");
+  assert.deepEqual(resolveGoTarget(`home:${place.id}:${index}`), door);
+  assert.equal(resolveGoTarget(`home:${place.id}:-1`), undefined);
+  assert.equal(resolveGoTarget(`home:${place.id}:999999`), undefined);
+  assert.equal(resolveGoTarget(`home:${place.id}:2.5`), undefined);
 });
