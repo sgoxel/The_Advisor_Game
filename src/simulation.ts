@@ -732,9 +732,10 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   });
 }
 /** A resident's nearest street vertex may lie across an impassable cut.
- * Consider at most eight other local vertices (within 24 m of that nearest
- * connection) and validate every replacement against the same final surface
- * and enclosure. Never treat proximity alone as an accessible connector. */
+ * Inspect at most sixteen other local vertices (within 24 m of that nearest
+ * connection). Dense street junctions can have eight nearby blocked nodes
+ * before the first valid approach; every candidate must still pass the same
+ * final-surface and enclosure checks. Never accept proximity alone. */
 export function nearestLegalStreetNode(
   graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
   offset: Offset, legal: (from: Offset, to: Offset) => boolean,
@@ -754,7 +755,7 @@ export function nearestLegalStreetNode(
       if (d <= maxDistance) candidates.push({ id, distance: d });
     }
   candidates.sort((a, b) => a.distance - b.distance || a.id - b.id);
-  for (const candidate of candidates.slice(0, 8))
+  for (const candidate of candidates.slice(0, 16))
     if (legal(offset, graph.nodes[candidate.id])) return candidate.id;
   return -1;
 }

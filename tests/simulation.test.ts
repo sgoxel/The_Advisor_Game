@@ -185,6 +185,31 @@ test("resident street connectors choose a nearby legal vertex, never an unverifi
     "no street network cannot create a connection");
 });
 
+test("resident street connectors at dense SEED junctions find later legal nodes without wall shortcuts", () => {
+  const cell = 12, from = { eastM: 0, northM: 0 };
+  // The nine nearest approaches terminate across a blocked wall or water
+  // strip; a tenth node is still within the existing nearest + 24m radius.
+  const nodes = Array.from({ length: 24 }, (_, i) => ({ eastM: i + 1, northM: 0 })),
+    grid = new Map<string, number[]>();
+  nodes.forEach((node, id) => {
+    const key = `${Math.floor(node.eastM / cell)}/0`;
+    grid.set(key, [...(grid.get(key) ?? []), id]);
+  });
+  const graph = { nodes, grid, cell }, legalNode = nodes[9];
+  let checked = 0;
+  assert.equal(nearestLegalStreetNode(graph, from, (_, candidate) => {
+    checked++;
+    return candidate === legalNode;
+  }), 9, "a verified tenth-nearest, still-local street is not a fabricated blocked route");
+  assert.ok(checked <= 17, "nearest node plus at most sixteen alternatives keep resident queries bounded");
+  let blockedChecks = 0;
+  assert.equal(nearestLegalStreetNode(graph, from, () => {
+    blockedChecks++;
+    return false;
+  }), -1, "a failed real ground/gate check cannot turn proximity into a lawful path");
+  assert.ok(blockedChecks <= 17, "even a fully blocked dense junction cannot trigger an unbounded scan");
+});
+
 test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
   const start = { eastM: 0, northM: 0 }, goal = { eastM: 12, northM: 0 };
   assert.equal(continuousWalkableOffsetSegment(start, goal, point => point.eastM < 5 || point.eastM > 7), false,
