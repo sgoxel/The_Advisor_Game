@@ -524,6 +524,15 @@ test("house inspection resolves the rendered legal doorway, never an unverified 
       if (feature) {
         assert.equal(feature.entranceX, door.x, "inspector focus must match the rendered door X");
         assert.equal(feature.entranceZ, door.z, "inspector focus must match the rendered door Z");
+        // The rendered door is at local (0, +depth/2), rotated by the
+        // actual house yaw, NOT a ray towards a possibly perpendicular street.
+        const metric = sourceUnitsPerMetreAt(feature.z),
+          halfDepthM = (feature.depthM ?? 0) * .5,
+          frontX = wrapSourceX(feature.x + Math.sin(feature.yawRad ?? 0) * metric.x * halfDepthM),
+          frontZ = feature.z + Math.cos(feature.yawRad ?? 0) * metric.z * halfDepthM;
+        assert.ok(halfDepthM > 0, "real rendered home has physical wall depth");
+        assert.ok(Math.hypot(wrapSourceX(door.x - frontX) / metric.x, (door.z - frontZ) / metric.z) < .03,
+          `${resident.code}: canonical entrance must be on the actual rendered front wall, not a side street`);
         matched++;
       }
     }
