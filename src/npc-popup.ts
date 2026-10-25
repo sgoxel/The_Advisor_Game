@@ -106,7 +106,16 @@ function install() {
   root.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
-    if (target) goTo!(target.x, target.z);
+    if (target) {
+      goTo!(target.x, target.z);
+      if (go?.dataset.go?.startsWith("home:")) {
+        // Map inspection should reveal the real entrance, not leave the long
+        // optional SEED-ID ledger covering it. The IDs remain in the DOM.
+        const technical = root?.querySelector<HTMLDetailsElement>(".npc-technical");
+        if (technical) technical.open = false;
+        if (root) root.scrollTop = 0;
+      }
+    }
     const minimize=(event.target as HTMLElement).closest<HTMLButtonElement>("[data-minimize]"),content=root?.querySelector<HTMLElement>("[data-wilderness-content]");
     if(minimize&&content){content.hidden=!content.hidden;minimize.textContent=content.hidden?"+":"−";minimize.setAttribute("aria-expanded",String(!content.hidden));minimize.setAttribute("aria-label",content.hidden?"Restore window":"Minimize window");}
   });
