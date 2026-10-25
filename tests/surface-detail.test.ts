@@ -20,6 +20,9 @@ test("lit surfaces pick a pattern from their colour and orientation", () => {
   assert.equal(litSurfaceKind([70, 110, 50], roof), K.foliage, "tree crown");
   assert.equal(litSurfaceKind([30, 40, 46], wall), K.glass, "dark window glass shines");
   assert.equal(litSurfaceKind([52, 50, 48], wall), K.metal, "iron (barrel hoops, lamp posts)");
+  // Dark grey flat roofs must not read as shiny metal (they glowed blue at night).
+  assert.equal(litSurfaceKind([64, 64, 66], flat), K.roof, "dark grey flat roof is roof, not metal");
+  assert.equal(litSurfaceKind([64, 64, 66], wall), K.metal, "the same grey on a wall is still metal");
   assert.equal(litSurfaceKind([70, 120, 150], flat), K.water, "fountain water");
   assert.equal(litSurfaceKind([74, 102, 153], wall), K.none, "blue laundry is cloth, not water");
 });

@@ -35,7 +35,7 @@ export function litSurfaceKind(rgb: readonly [number, number, number], ny: numbe
   if (lum < .16) return b >= r ? K.glass : K.none;
   if (ny > .975) {
     if (b > r * 1.35 && b > g * 1.04 && lum > .25) return K.water;
-    return green ? K.grass : metal ? K.metal : sat < .07 && lum > .3 ? K.paving : r > g * 1.3 && sat > .12 ? K.roof : brown || red ? K.dirt : K.none;
+    return green ? K.grass : metal ? K.roof : sat < .07 && lum > .3 ? K.paving : r > g * 1.3 && sat > .12 ? K.roof : brown || red ? K.dirt : K.none;
   }
   if (ny > .2) return green ? K.foliage : K.roof;
   if (metal) return K.metal;
@@ -208,7 +208,7 @@ float sdKindLit(vec3 c, float ny) {
   if (ny > 0.975) {
     if (c.b > c.r * 1.35 && c.b > c.g * 1.04 && lum > 0.25) { return 14.0; }
     if (green) { return 1.0; }
-    if (metal) { return 20.0; }
+    if (metal) { return 11.0; }
     if (sat < 0.07 && lum > 0.3) { return 7.0; }
     if (c.r > c.g * 1.3 && sat > 0.12) { return 11.0; }
     if (brown || red) { return 2.0; }
@@ -428,7 +428,7 @@ fn sdKindLit(c: vec3f, ny: f32) -> f32 {
   if (ny > 0.975) {
     if (c.b > c.r * 1.35 && c.b > c.g * 1.04 && lum > 0.25) { return 14.0; }
     if (green) { return 1.0; }
-    if (metal) { return 20.0; }
+    if (metal) { return 11.0; }
     if (sat < 0.07 && lum > 0.3) { return 7.0; }
     if (c.r > c.g * 1.3 && sat > 0.12) { return 11.0; }
     if (brown || red) { return 2.0; }
