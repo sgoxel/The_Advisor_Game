@@ -799,30 +799,36 @@ class Session:
             # Resident selection still captures a truly rendered active actor,
             # even before optional terrain details have finished refining.
             self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
-        state = self.page.evaluate(STATE_JS)
-        # Capture real game state and the painted HUD on both sides of the
-        # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
-        tile_status_before = state["tileStatusText"]
         # Only screenshot-tool sessions expose this opt-in engine hook.
-        # Finish one genuine PlayCanvas render of the current scene and
-        # release software-GPU submission pressure while Chromium composites
-        # an actual framebuffer. Never synthesize or alter captured pixels.
+        # Freeze actual optional GPU uploads, NOT Simulation or NPC queries.
+        # For owned doors, acquire the true settled state and the rendering
+        # hold in one JS turn, before any further prefetch can start.
         token = 0
         try:
             if resident_proof:
-                token = self.page.evaluate(
-                    "window.advisorWorld.capturePresentation?.hold() ?? 0")
-                if token:
-                    self.page.wait_for_function(
-                        "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
-                        arg=token, timeout=min(15000, self.args.timeout * 1000))
-                    self.page.wait_for_timeout(350)
+                for _ in range(24 if suffix == "owned-home-entrance" else 1):
+                    token = self.page.evaluate(
+                        "(settled) => window.advisorWorld.capturePresentation?.hold(settled) ?? 0",
+                        suffix == "owned-home-entrance")
+                    if token:
+                        break
+                    self.page.wait_for_timeout(250)
+                if not token:
+                    raise CaptureError("no genuine settled frame available for owned-door capture")
+                self.page.wait_for_function(
+                    "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
+                    arg=token, timeout=min(30000, self.args.timeout * 1000))
+                self.page.wait_for_timeout(350)
+            # These states bound the actual compositor readback, rather than
+            # sampling after the game has resumed optional GPU streaming.
+            state = self.page.evaluate(STATE_JS)
+            tile_status_before = state["tileStatusText"]
             self.capture_viewport(path, require_fresh_paint=resident_proof)
+            post_capture_state = self.page.evaluate(STATE_JS)
         finally:
             if token:
                 self.page.evaluate(
                     "window.advisorWorld.capturePresentation.release()")
-        post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
