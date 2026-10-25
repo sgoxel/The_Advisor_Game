@@ -803,7 +803,25 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = state["tileStatusText"]
-        self.capture_viewport(path, require_fresh_paint=resident_proof)
+        # Only screenshot-tool sessions expose this opt-in engine hook.
+        # Finish one genuine PlayCanvas render of the current scene and
+        # release software-GPU submission pressure while Chromium composites
+        # an actual framebuffer. Never synthesize or alter captured pixels.
+        token = 0
+        try:
+            if resident_proof:
+                token = self.page.evaluate(
+                    "window.advisorWorld.capturePresentation?.hold() ?? 0")
+                if token:
+                    self.page.wait_for_function(
+                        "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
+                        arg=token, timeout=min(15000, self.args.timeout * 1000))
+                    self.page.wait_for_timeout(350)
+            self.capture_viewport(path, require_fresh_paint=resident_proof)
+        finally:
+            if token:
+                self.page.evaluate(
+                    "window.advisorWorld.capturePresentation.release()")
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
@@ -935,6 +953,9 @@ def main(argv: list[str] | None = None) -> int:
                 context = browser.new_context(
                     viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=args.device_scale_factor, is_mobile=args.touch, has_touch=args.touch)
                 context.set_default_timeout(args.timeout * 1000)
+                # Enables a one-frame renderer quiescence handshake only
+                # within this required real-game evidence session.
+                context.add_init_script("Object.defineProperty(window, '__advisorCaptureMode', {value:true})")
                 if args.renderer == "webgl2":
                     context.add_init_script("Object.defineProperty(navigator, 'gpu', {value: undefined, configurable: true})")
                 for name, steps in args.jobs:
