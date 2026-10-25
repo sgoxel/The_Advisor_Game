@@ -42,6 +42,8 @@ import struct
 import json
 import os
 import re
+import shutil
+import subprocess
 import signal
 import sys
 import time
@@ -528,6 +530,51 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
+    def capture_x11_viewport(self, path: Path) -> bool:
+        """Capture real headed Chromium pixels from Xvfb when CDP readback stalls.
+
+        This is an alternative capture *inside the mandatory screenshot tool*,
+        not a synthetic/reconstructed screenshot. The PNG still needs manual
+        visual inspection before any S006 acceptance score can be assigned.
+        """
+        display = os.environ.get("DISPLAY")
+        ffmpeg = shutil.which("ffmpeg")
+        if not self.args.headed or not display or not ffmpeg:
+            return False
+        try:
+            # Page inner dimensions are the game viewport; the root X11 region
+            # begins below the headed browser frame, not at Xvfb screen (0,0).
+            box = self.page.evaluate("""() => ({
+                x: window.screenX + Math.max(0, (window.outerWidth - window.innerWidth) / 2),
+                y: window.screenY + Math.max(0, window.outerHeight - window.innerHeight),
+                width: window.innerWidth, height: window.innerHeight
+            })""")
+            if (box["width"], box["height"]) != self.viewport:
+                print(f"X11 fallback skipped: browser content {box['width']}x{box['height']} != {self.viewport}", flush=True)
+                return False
+            x, y = round(box["x"]), round(box["y"])
+            if x < 0 or y < 0:
+                return False
+            result = subprocess.run(
+                [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+                 "-f", "x11grab", "-video_size", f"{self.viewport[0]}x{self.viewport[1]}",
+                 "-i", f"{display}+{x},{y}", "-frames:v", "1", "-update", "1",
+                 "-y", str(path)],
+                capture_output=True, text=True, timeout=12, check=False,
+            )
+            pixels = path.read_bytes() if path.exists() else b""
+            valid = (len(pixels) >= 24 and
+                     pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10)) and
+                     struct.unpack(">II", pixels[16:24]) == self.viewport)
+            if result.returncode == 0 and valid:
+                print(f"X11 actual headed compositor fallback: {self.viewport} at ({x},{y}) to {path.name}; INSPECTION REQUIRED", flush=True)
+                return True
+            print(f"X11 fallback produced no valid exact-viewport PNG: {result.stderr[-300:]}", flush=True)
+        except (PlaywrightError, subprocess.TimeoutExpired, OSError, ValueError, KeyError) as error:
+            print(f"X11 fallback unavailable: {str(error)[:250]}", flush=True)
+        path.unlink(missing_ok=True)
+        return False
+
     def capture_viewport(self, path: Path) -> None:
         # Live software WebGL2/WebGPU rendering can make Playwright's ordinary
         # full-resolution screenshot hang. Only actual exact-size compositor
@@ -595,6 +642,10 @@ class Session:
                 if started:
                     session.send("Page.stopScreencast")
                 session.detach()
+        # A real Xvfb viewport can still exist even when both Chromium GPU
+        # readback APIs stall. Never forge pixels or accept an uninspected frame.
+        if self.capture_x11_viewport(path):
+            return
         # Retain the strictly bounded existing genuine-Chromium fallback.
         # A stalled GPU makes this fail honestly without a fake screenshot.
         self.page.screenshot(path=str(path), timeout=min(15000, self.args.timeout * 1000),
