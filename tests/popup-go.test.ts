@@ -6,7 +6,8 @@ import { resolvedSettlementHomeDoorFor } from "../src/world.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
 import { metresToSource } from "../src/physical-scale.ts";
-import { lonLatToSource, sourceToLonLat } from "../src/planet.ts";
+import { canonicalFootprintForHalfHeight, lonLatToSource, sourceToLonLat } from "../src/planet.ts";
+import { MIN_HALF_HEIGHT } from "../src/handoff.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
 (globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
@@ -59,5 +60,12 @@ test("true-scale resident observation uses the real canonical position and canno
     "a constructed resident ref alone cannot manufacture an inspected world actor");
   assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10), RESIDENT_OBSERVE_HALF_HEIGHT,
     "an explicit inspect-close action must actually show the physical person rather than a 300m-wide map");
-  assert.ok(RESIDENT_OBSERVE_HALF_HEIGHT > 0.18, "camera stays above the existing minimum zoom");
+  assert.equal(canonicalFootprintForHalfHeight(RESIDENT_OBSERVE_HALF_HEIGHT), 24,
+    "the actual source-to-metre camera conversion must frame only 24 physical metres vertically");
+  assert.equal(canonicalFootprintForHalfHeight(MIN_HALF_HEIGHT), 16,
+    "the world camera clamp must allow a legible but genuine 16m vertical view");
+  assert.ok(RESIDENT_OBSERVE_HALF_HEIGHT > MIN_HALF_HEIGHT,
+    "true-scale inspection remains above the camera clamp without enlarging the resident mesh");
+  assert.ok(1080 * 1.6 / canonicalFootprintForHalfHeight(RESIDENT_OBSERVE_HALF_HEIGHT) >= 70,
+    "a real small adult has a physically projected screen height exceeding 70px in landscape");
 });
