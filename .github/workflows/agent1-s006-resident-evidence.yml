@@ -82,6 +82,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Linux software Vulkan presentation needs an actual ICD/runtime. The
+      # Playwright browser dependency installer does not guarantee Mesa's ICD.
+      # Limit this package install to the WebGPU evidence jobs only.
+      - name: Install Vulkan software ICD for WebGPU
+        if: matrix.renderer == 'webgpu'
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers
       - run: python -m pip install playwright==1.63.0 mss==10.1.0
       - name: Capture resident inspector evidence
         run: |

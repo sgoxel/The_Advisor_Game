@@ -462,8 +462,12 @@ class Session:
                     if (!r.width || !r.height || r.top >= innerHeight || r.bottom <= 0) return null;
                     const x = Math.round((Math.max(0, r.left) + Math.min(innerWidth, r.right)) / 2);
                     const y = Math.round((Math.max(0, r.top) + Math.min(innerHeight, r.bottom)) / 2);
-                    const hit = document.elementFromPoint(x, y);
-                    return hit && (hit === element || element.contains(hit)) ? [x, y] : null;
+                    // Fantasy-Time refresh replaces popup DOM while keeping
+                    // the same SEED action. Check the *currently visible*
+                    // button's canonical action, not stale element identity.
+                    const action = element.getAttribute('data-go');
+                    const hit = document.elementFromPoint(x, y)?.closest('[data-go]');
+                    return action && hit?.getAttribute('data-go') === action ? [x, y] : null;
                 }""", timeout=min(15000, self.args.timeout * 1000))
                 if point is None:
                     raise CaptureError(f"resident popup control not genuinely clickable: {arg}")
