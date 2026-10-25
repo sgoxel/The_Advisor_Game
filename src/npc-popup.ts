@@ -135,6 +135,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
   const active = sameResident && root.contains(document.activeElement) ? document.activeElement : null;
   const focusSelector = active?.matches(".npc-technical summary") ? ".npc-technical summary"
     : active?.matches(".npc-secondary summary") ? ".npc-secondary summary"
+    : active?.matches('[data-go^="home:"]') ? '[data-go^="home:"]'
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
