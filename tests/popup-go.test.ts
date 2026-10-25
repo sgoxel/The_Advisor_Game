@@ -60,4 +60,10 @@ test("true-scale resident observation uses the real canonical position and canno
   assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10), RESIDENT_OBSERVE_HALF_HEIGHT,
     "an explicit inspect-close action must actually show the physical person rather than a 300m-wide map");
   assert.ok(RESIDENT_OBSERVE_HALF_HEIGHT > 0.18, "camera stays above the existing minimum zoom");
+  assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10, 1080), .421875,
+    "landscape narrows only the camera to retain portrait physical actor readability");
+  assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10, 1920), RESIDENT_OBSERVE_HALF_HEIGHT,
+    "portrait keeps the already-proven actual actor size");
+  assert.equal(popupFocusHalfHeight(`home:${place.id}:37`, 10, 1080), 10,
+    "owned-door and ordinary navigation do not change with viewport height");
 });
