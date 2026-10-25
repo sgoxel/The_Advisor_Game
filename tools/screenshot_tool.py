@@ -392,8 +392,10 @@ class Session:
                     print("SETTLE main thread not responding", flush=True)
         else:
             raise CaptureError("world did not become ready within the capture timeout" if ready_only else "world did not settle within the capture timeout")
-        # A stalled renderer must fail the evidence capture rather than hold CI forever.
-        self.page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
+        # Software WebGPU can render coherently but take over 15 seconds for
+        # two initial frames while cold terrain/resident workers contend.
+        # Honour a finite frame cap (at most 60s), never bypass actual frames.
+        self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
 
     def locate(self, selector: str) -> Locator:
         locator = self.page.locator(selector).first
@@ -476,8 +478,28 @@ class Session:
         elif name == "eval":
             page.wait_for_function("async source => { await (0, eval)(source); return true; }", arg=arg, timeout=self.args.timeout * 1000)
         elif name == "until":
-            page.wait_for_function("source => (0, eval)(source)", arg=arg, polling=500,
-                                   timeout=min(self.args.timeout, 60) * 1000)
+            # Cold SEED residents can need more than 60s to finish their first
+            # legal door/route query on software GPU runners. Honour the
+            # configured per-wait timeout; the CI job still has its own hard
+            # 840s cap. Never treat a pending/absent actor as a visual PASS.
+            try:
+                page.wait_for_function("source => (0, eval)(source)", arg=arg, polling=500,
+                                       timeout=self.args.timeout * 1000)
+            except PlaywrightTimeoutError:
+                try:
+                    diagnosis = page.wait_for_function("""() => {
+                      const s = window.advisorWorld?.state;
+                      return {ready:s?.ready, settled:s?.settled, halfHeight:s?.view?.halfHeight,
+                        visibleActors:s?.visibleResidents, residentWorkerBusy:s?.simulation?.residentWorkerBusy,
+                        snapshotReady:s?.simulation?.residentSnapshotReady,
+                        snapshotTick:s?.simulation?.residentSnapshotTick,
+                        query:s?.simulation?.query, backend:window.advisorWorld?.renderer?.backend,
+                        error:s?.error};
+                    }""", timeout=3000).json_value()
+                    print("UNTIL no real resident actor: " + json.dumps(diagnosis), flush=True)
+                except PlaywrightError:
+                    print("UNTIL actor diagnostics unavailable: main thread unresponsive", flush=True)
+                raise
         elif name == "shot":
             self.shot(arg)
         else:
