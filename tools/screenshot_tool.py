@@ -320,6 +320,7 @@ STATE_JS = """() => {
     navigation: state.navigation ?? null,
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
     performance: state.performance ?? null, coverage: state.coverage ?? null,
+    visibleMeshes: state.visibleMeshes ?? null, visibleGeometryTriangles: state.visibleGeometryTriangles ?? null, residentPresentation: state.residentPresentation ?? null,
     continuity: world && world.continuity ? world.continuity.telemetry() : null,
     transportInspection: transport ? {
       digest: transport.digest, selected: transport.selection,
