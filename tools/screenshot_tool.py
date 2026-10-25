@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Screenshot capture for The Advisor Game (PlayCanvas world atlas).
 
-Loads a running build in headless Chromium, drives it with a small step
+Loads a running build in Chromium (headless by default), drives it with a small step
 language, and writes PNG screenshots plus a capture.json describing each image
 (renderer backend, view, tile counts, console and page errors). Score visuals
 from the images only; the JSON is supporting evidence.
@@ -330,8 +330,9 @@ class CaptureError(Exception):
     """A step, wait or page check failed."""
 
 
-def launch(playwright: Playwright, renderer: str, chromium: str | None, channel: str | None = None) -> Browser:
-    options: dict[str, Any] = {"headless": True, "args": WEBGL2_ARGS}
+def launch(playwright: Playwright, renderer: str, chromium: str | None, channel: str | None = None,
+           headed: bool = False) -> Browser:
+    options: dict[str, Any] = {"headless": not headed, "args": WEBGL2_ARGS}
     if renderer == "webgpu":
         options.update(args=WEBGPU_ARGS, ignore_default_args=["--disable-dev-shm-usage"])
     if channel:
@@ -622,6 +623,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--touch", action="store_true", help="emulate mobile viewport/touch; does not emulate phone hardware")
     parser.add_argument("--device-scale-factor", type=float, default=1, help="emulated display DPR, not device GPU/RAM emulation")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
+    parser.add_argument("--headed", action="store_true", help="use a real headed Chromium compositor (Linux requires Xvfb or a display)")
     parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
     parser.add_argument("--fixed-time-ms", type=int, help="optional fixed UTC epoch milliseconds for reproducible Fantasy Time; browser timers and animation continue")
     parser.add_argument("--initial-ready-only", action="store_true", help="initial load waits only for coherent world readiness; explicit settle steps still wait for full detail")
@@ -652,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))  # close the browser when terminated
     write_records(args.out, records)
     with sync_playwright() as playwright:
-        browser = launch(playwright, args.renderer, args.chromium, args.browser_channel)
+        browser = launch(playwright, args.renderer, args.chromium, args.browser_channel, args.headed)
         try:
             for profile in args.profiles:
                 viewport = (args.width or PROFILES[profile][0], args.height or PROFILES[profile][1])
