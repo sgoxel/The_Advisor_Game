@@ -450,7 +450,9 @@ class Session:
             selector, value = arg.rsplit("=", 1)
             self.locate(selector.strip()).select_option(value.strip())
         elif name == "visible":
-            self.locate(arg).wait_for(state="visible")
+            # An asynchronously installed actor/door marker may not exist yet.
+            # Playwright must wait for the real element, not fail a count() precheck.
+            page.locator(arg).first.wait_for(state="visible", timeout=self.args.timeout * 1000)
         elif name in ("zoom-in", "zoom-out"):
             for _ in range(int(arg or 1)):
                 self.locate(f"#{name}").click()
