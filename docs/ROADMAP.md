@@ -31,28 +31,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Lawful resident journeys & visible identity: owned door→gate/bridge→work→home, blocked/midnight and dual-backend proof
+- WP-S006-001-001 — Resident journeys & rendered-home proof: owned door/gate/bridge/work replay, real picking, dual-backend PNGs
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Keyboard/touch map→inspect UX: ≥44px targets, seven layouts, safe areas & focus return
+- WP-S008-001-001 — Accessible map→inspect→return: semantic keyboard/touch paths, ≥44px controls, seven safe-area layouts
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Bounded streaming & first interaction: ≤4/6/8 queue, ≤1 upload/frame, exact-SHA p95
-- WP-S009-002-001 — Bounded canonical picking & idle UI: exact final-surface hits, zero redundant layout reads
-- WP-S009-003-001 — Mobile renderer/resource enforcement: 256MB cache trim, ≤1GB combined cap, DPR & recovery
-- WP-S009-004-001 — README capability conformance audit: Advisor autonomy, campaign time, 2D actors & honest copy
-- WP-S009-005-001 — Pure zoom & truthful readiness: fixed focus, no blank terrain, inspect-before-settled milestones
+- WP-S009-001-001 — Streaming admission & first-use latency: aggregate 4/6/8 queue, one upload/frame, exact-SHA milestones
+- WP-S009-002-001 — Fast canonical picking & idle UI: bounded final-surface hits, zero stable-frame layout reads
+- WP-S009-003-001 — Mobile memory & renderer resilience: >256MB trim, ≤1GB combined, adaptive DPR, GPU fallback
+- WP-S009-004-001 — README conformance ledger & honest UI: Advisor authority, campaign time, 2D proof, persistence
+- WP-S009-005-001 — Pure-zoom continuity & visible-scene readiness: fixed focus, no blank home, no false 100%
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Tools & Same-World Interiors
 
 - WP-S010-001-001 — Research Hero/Close UX architecture: lawful 3D spaces, 2D residents, Advisor-only control & mobile limits
 - WP-S010-002-001 — SEED-owned 3D prop/GLB kits: collision-safe Hero/Close placement, instancing & reuse
-- WP-S010-003-001 — Hero/Close 2D resident selection: accurate keyboard/touch hits, occlusion & focus return
+- WP-S010-003-001 — Hero/Close 2D resident proof & accessible selection: foot anchoring, occlusion, canonical hits
 - WP-S010-003-002 — Read-only Advisor inspect/follow/measure: camera-only tracking, legal distances & bounded answers
 - WP-S010-004-001 — Simulation-truthful workstations: legal tasks, owned tools & 2D resident action sprites
 - WP-S010-004-002 — Deterministic homes/yards: grounded 3D props, traversable doors & mobile reuse
