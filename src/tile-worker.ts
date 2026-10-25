@@ -20,7 +20,7 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       if (!place) throw new Error("Unknown resident settlement");
       simulation.setFocus(place);
       simulation.advance(job.tick);
-      const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard);
+      const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true);
       self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query });
     } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
     return;
