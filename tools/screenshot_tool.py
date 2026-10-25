@@ -562,11 +562,11 @@ class Session:
         if not self.args.headed or not display:
             return False
         try:
-            box = self.page.evaluate("""() => ({
+            box = self.page.wait_for_function("""() => ({
                 x: window.screenX + Math.max(0, (window.outerWidth - window.innerWidth) / 2),
                 y: window.screenY + Math.max(0, window.outerHeight - window.innerHeight),
                 width: window.innerWidth, height: window.innerHeight
-            })""", timeout=min(15000, self.args.timeout * 1000))
+            })""", timeout=min(15000, self.args.timeout * 1000)).json_value()
             if (box["width"], box["height"]) != self.viewport:
                 print(f"X11 fallback skipped: browser content {box['width']}x{box['height']} != {self.viewport}", flush=True)
                 return False
