@@ -580,7 +580,9 @@ function applyPresentation() {
   );
   const active = projectionTransition > 0.001,
     fullGlobe = projectionTransition >= 0.999,
-    targetY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z))),
+    // The actual rendered ground/bridge/settlement pad owns camera elevation;
+    // raw noise height can clip the entire authoritative 3D close-up.
+    targetY = elevationToRenderY(Math.max(0, visibleSurfaceElevation(finalSurfaceAt(view.x, view.z)))),
     focusRender = renderFrame.sourceToRender(view.x, view.z);
   globeShown = fullGlobe;
   document.body.classList.toggle("globe-mode", fullGlobe);
