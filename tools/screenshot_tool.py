@@ -552,45 +552,64 @@ class Session:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
     def capture_x11_viewport(self, path: Path) -> bool:
-        """Capture real headed Chromium pixels from Xvfb when CDP readback stalls.
+        """Read an actual headed Chromium framebuffer when CDP GPU capture stalls.
 
-        This is an alternative capture *inside the mandatory screenshot tool*,
-        not a synthetic/reconstructed screenshot. The PNG still needs manual
-        visual inspection before any S006 acceptance score can be assigned.
+        This is not a rendered substitute: the pixels are from Xvfb's live
+        display at the real Chrome content window, and require manual visual
+        inspection even when a dimensionally valid PNG is produced.
         """
         display = os.environ.get("DISPLAY")
-        ffmpeg = shutil.which("ffmpeg")
-        if not self.args.headed or not display or not ffmpeg:
+        if not self.args.headed or not display:
             return False
         try:
-            # Page inner dimensions are the game viewport; the root X11 region
-            # begins below the headed browser frame, not at Xvfb screen (0,0).
             box = self.page.evaluate("""() => ({
                 x: window.screenX + Math.max(0, (window.outerWidth - window.innerWidth) / 2),
                 y: window.screenY + Math.max(0, window.outerHeight - window.innerHeight),
                 width: window.innerWidth, height: window.innerHeight
-            })""")
+            })""", timeout=min(15000, self.args.timeout * 1000))
             if (box["width"], box["height"]) != self.viewport:
                 print(f"X11 fallback skipped: browser content {box['width']}x{box['height']} != {self.viewport}", flush=True)
                 return False
             x, y = round(box["x"]), round(box["y"])
             if x < 0 or y < 0:
                 return False
-            result = subprocess.run(
-                [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-                 "-f", "x11grab", "-video_size", f"{self.viewport[0]}x{self.viewport[1]}",
-                 "-i", f"{display}+{x},{y}", "-frames:v", "1", "-update", "1",
-                 "-y", str(path)],
-                capture_output=True, text=True, timeout=12, check=False,
-            )
-            pixels = path.read_bytes() if path.exists() else b""
-            valid = (len(pixels) >= 24 and
-                     pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10)) and
-                     struct.unpack(">II", pixels[16:24]) == self.viewport)
-            if result.returncode == 0 and valid:
-                print(f"X11 actual headed compositor fallback: {self.viewport} at ({x},{y}) to {path.name}; INSPECTION REQUIRED", flush=True)
-                return True
-            print(f"X11 fallback produced no valid exact-viewport PNG: {result.stderr[-300:]}", flush=True)
+
+            def exact_png() -> bool:
+                pixels = path.read_bytes() if path.exists() else b""
+                return (len(pixels) >= 24 and
+                        pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10)) and
+                        struct.unpack(">II", pixels[16:24]) == self.viewport)
+
+            ffmpeg = shutil.which("ffmpeg")
+            if ffmpeg:
+                result = subprocess.run(
+                    [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+                     "-f", "x11grab", "-video_size", f"{self.viewport[0]}x{self.viewport[1]}",
+                     "-i", f"{display}+{x},{y}", "-frames:v", "1", "-update", "1",
+                     "-y", str(path)],
+                    capture_output=True, text=True, timeout=12, check=False,
+                )
+                if result.returncode == 0 and exact_png():
+                    print(f"X11 real framebuffer (ffmpeg) {self.viewport} at ({x},{y}); INSPECTION REQUIRED", flush=True)
+                    return True
+                print(f"X11 ffmpeg readback unavailable: {result.stderr[-220:]}", flush=True)
+            # CI's Playwright FFmpeg codec bundle is not necessarily a system
+            # x11grab binary. mss reads actual X11 framebuffer pixels directly.
+            try:
+                from mss import mss
+                from mss.tools import to_png
+                with mss() as display_capture:
+                    frame = display_capture.grab({
+                        "left": x, "top": y,
+                        "width": self.viewport[0], "height": self.viewport[1],
+                    })
+                    to_png(frame.rgb, frame.size, output=str(path))
+                if exact_png():
+                    print(f"X11 real framebuffer (mss) {self.viewport} at ({x},{y}); INSPECTION REQUIRED", flush=True)
+                    return True
+                print("X11 mss readback had wrong PNG dimensions", flush=True)
+            except Exception as error:
+                print(f"X11 mss readback unavailable: {str(error)[:220]}", flush=True)
         except (PlaywrightError, subprocess.TimeoutExpired, OSError, ValueError, KeyError) as error:
             print(f"X11 fallback unavailable: {str(error)[:250]}", flush=True)
         path.unlink(missing_ok=True)
