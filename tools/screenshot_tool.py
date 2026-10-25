@@ -522,7 +522,7 @@ class Session:
         # (including the 3D canvas), never a mocked or reconstructed scene.
         session = self.page.context.new_cdp_session(self.page)
         frames: list[dict[str, Any]] = []
-        session.on("Page.screencastFrame", lambda frame: frames.append(frame) if not frames else None)
+        session.on("Page.screencastFrame", lambda frame: frames.append(frame))
         started = False
         try:
             session.send("Page.startScreencast", {
@@ -531,21 +531,31 @@ class Session:
             })
             started = True
             deadline = time.monotonic() + min(20, self.args.timeout)
-            while not frames and time.monotonic() < deadline:
-                self.page.wait_for_timeout(100)
-            if frames:
-                pixels = base64.b64decode(frames[0]["data"], validate=True)
+            received = 0
+            # The initial CDP frame may be a stale compositor snapshot taken
+            # before the validated DOM click/selection update. Acknowledge and
+            # discard it so Chrome must produce a subsequent REAL rendered
+            # compositor frame. Never accept a stale first frame as proof of
+            # a visible selected character or owned doorway.
+            while time.monotonic() < deadline:
+                if not frames:
+                    self.page.wait_for_timeout(100)
+                    continue
+                frame = frames.pop(0)
+                session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
+                received += 1
+                if received == 1:
+                    continue
+                pixels = base64.b64decode(frame["data"], validate=True)
                 dimensions = (struct.unpack(">II", pixels[16:24])
                               if len(pixels) >= 24 and pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
                               else None)
-                session.send("Page.screencastFrameAck", {"sessionId": frames[0]["sessionId"]})
                 if dimensions == self.viewport:
                     path.write_bytes(pixels)
-                    print(f"SCREENCAST actual compositor viewport {dimensions} to {path.name}", flush=True)
+                    print(f"SCREENCAST fresh compositor frame #{received} {dimensions} to {path.name}", flush=True)
                     return
                 print(f"SCREENCAST rejected non-exact viewport {dimensions}; expected {self.viewport}", flush=True)
-            else:
-                print(f"SCREENCAST no real frame within bounded wait for {path.name}", flush=True)
+            print(f"SCREENCAST only {received} real compositor frame(s); no fresh exact-size frame within the bounded wait for {path.name}", flush=True)
         finally:
             if started:
                 session.send("Page.stopScreencast")
