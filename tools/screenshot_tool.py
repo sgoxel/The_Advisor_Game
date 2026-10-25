@@ -494,6 +494,7 @@ class Session:
                         snapshotReady:s?.simulation?.residentSnapshotReady,
                         snapshotTick:s?.simulation?.residentSnapshotTick,
                         query:s?.simulation?.query, backend:window.advisorWorld?.renderer?.backend,
+                        actorEvidence:window.advisorWorld?.residentEvidenceDiagnosis?.(),
                         error:s?.error};
                     }""", timeout=3000).json_value()
                     print("UNTIL no real resident actor: " + json.dumps(diagnosis), flush=True)
