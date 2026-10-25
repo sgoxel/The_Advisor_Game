@@ -2,6 +2,7 @@ name: Validate S006 living residents
 on:
   workflow_dispatch:
   # Capture actual current-main actor evidence separately per viewport/backend.
+  # WP-S006-001-001: retest exact deployed camera-nearest resident query on 2026-10-25.
   push:
     branches: [main]
     paths:
