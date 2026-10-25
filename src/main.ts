@@ -1027,7 +1027,7 @@ function processStreaming(material: pc.StandardMaterial) {
     // Otherwise a cold close-up can wait for entire mesh generation batches.
     const mode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready);
     if (mode.inspect) {
-      const request = residentRequestForView(simulation.tick, residentQueryLimitForView(mode.actors));
+      const request = residentRequestForView(simulation.tick, residentQueryLimitForView(mode.actors), mode.actors);
       if (request) residentQueries.offer(request);
       dispatchResidentQuery();
     }
