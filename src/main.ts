@@ -254,13 +254,13 @@ const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(pl
 // Resident index construction is cold and expensive: reuse its owning worker.
 const warmedResidentWorkers = new Set<number>();
 let residentResultReady = () => {};
-function residentRequestForView(tick: number, limit: number): ResidentQuery | undefined {
+function residentRequestForView(tick: number, limit: number, actors: boolean): ResidentQuery | undefined {
   const place = nearestPlace(view.x, view.z);
   if (!place) return;
   const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
     radius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
-    key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}`;
-  return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick };
+    key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}|${actors}`;
+  return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick, actors };
 }
 let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; assignments: Map<number, number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
 function dispatchResidentQuery() {
@@ -1722,7 +1722,7 @@ async function start() {
       // Logical inspection remains available before optional meshes and billboards
       // finish. Actor allocation keeps the original strict close-detail budget.
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
-      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors)) : undefined;
+      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined;
       const previousSnapshot = residentQueries.current;
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
@@ -2137,7 +2137,7 @@ async function start() {
       },
       get state() {
         const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready),
-          residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors)) : undefined,
+          residentRequest = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined,
           residentViewReady = !residentRequest || residentQueries.readyFor(residentRequest.key, residentRequest.tick);
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
