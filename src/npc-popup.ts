@@ -76,18 +76,19 @@ function anchorNames(resident: Resident) {
 // preserve the real front wall, path and adjacent street, with no resident,
 // Simulation, route, ownership or 3D geometry changes.
 export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 1.45;
-/** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
-export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
+/** Portrait observation must show the real 1.5–1.8m person clearly, not as a tiny cutout in empty terrain. */
+export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.52;
 export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {
   return resident.grounded && !resident.indoors
     ? lonLatToSource(resident.position.lon, resident.position.lat) : undefined;
 }
 export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewportHeight = 1920): number {
-  // A fixed angular height made the same real actor barely visible on 1080px
-  // landscape while readable on 1920px portrait. Preserve the same physical
-  // screen-space person size, never change Simulation/SEED or move the actor.
+  // The actual screenshot-tool portrait shows the SEED character head-up but
+  // too small to inspect on the ground. Keep the proven landscape footprint
+  // while moving portrait observation closer to that same physical position.
+  // This is camera magnification only; the resident is never moved or resized.
   const observeHalfHeight = Math.max(.36, Math.min(RESIDENT_OBSERVE_HALF_HEIGHT,
-    RESIDENT_OBSERVE_HALF_HEIGHT * viewportHeight / 1920));
+    .75 * viewportHeight / 1920));
   // Landscape has fewer vertical pixels for the same house: tighten only the
   // camera footprint so the owned front door, physical facade and connected
   // street remain legible. Preserve the wider proven portrait composition and
