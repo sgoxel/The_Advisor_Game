@@ -545,6 +545,20 @@ class Session:
                 session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
                 received += 1
                 if received == 1:
+                    # A fully settled static home camera may not deliver a second
+                    # screencast frame by itself. Invalidate a REAL existing DOM
+                    # marker's compositor layer after acknowledging the possibly
+                    # stale initial frame. This changes no game logic, SEED,
+                    # canvas pixels, identity, position or screenshot content.
+                    # A fresh frame is still mandatory; never reuse frame #1.
+                    session.send("Runtime.evaluate", {
+                        "expression": """(() => {
+                            const marker = document.querySelector(
+                                '#selected-home-door-marker:not([hidden]), #selected-resident-marker:not([hidden])');
+                            if (marker) marker.style.opacity =
+                                marker.style.opacity === '0.999' ? '0.998' : '0.999';
+                        })()""",
+                    })
                     continue
                 pixels = base64.b64decode(frame["data"], validate=True)
                 dimensions = (struct.unpack(">II", pixels[16:24])
