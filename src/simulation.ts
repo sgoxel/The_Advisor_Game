@@ -410,6 +410,7 @@ const RESIDENT_FOUNDATION_CACHE_LIMIT = 3200;
 export function residentFoundationAt(
   place: Place,
   index: number,
+  exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
 ): ResidentFoundation {
   if (!Number.isInteger(index) || index < 0 || index >= populationOf(place))
     throw new RangeError(`Resident index ${index} is outside ${place.code}`);
@@ -424,7 +425,7 @@ export function residentFoundationAt(
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
     // Stable SEED lot for population indexing; resolving rendered doors is
     // expensive and belongs to bounded per-resident evaluation, not full rosters.
-    homeLot = settlementHomeFor(place, index).candidates[0],
+    homeLot = settlementHomeFor(place, index, exteriorPlan).candidates[0],
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
   const foundation: ResidentFoundation = {
@@ -1409,10 +1410,14 @@ function relativeSourceForOffset(
 function residentIndexFor(place: Place): ResidentSpatialIndex {
   const buckets = new Map<string, number[]>(),
     population = populationOf(place),
-    anchors = settlementAnchors(place);
+    anchors = settlementAnchors(place),
+    // One final SEED border/lot reconciliation per cold spatial index.
+    // Previously each residentFoundationAt() called settlementExteriorFor()
+    // and repeated the same village border reconciliation thousands of times.
+    exteriorPlan = settlementExteriorFor(place);
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
-    const foundation = residentFoundationAt(place, index),
+    const foundation = residentFoundationAt(place, index, exteriorPlan),
       // A guard whose assigned frontage was physically blocked may own a
       // different legal SEED spare lot. Only the small fixed watch roster is
       // resolved here; never materialize all household doors for indexing.

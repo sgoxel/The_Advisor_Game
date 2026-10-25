@@ -81,6 +81,20 @@ test("bounded resident foundation reuse does not rebuild SEED identity on a warm
     "bounded caching must not make an invalid resident index valid");
 });
 
+test("resident inspector can resolve facts with one shared cold exterior plan", () => {
+  const place = villages[11], plan = settlementExteriorFor(place), index = 61,
+    indexed = residentFoundationAt(place, index, plan),
+    ordinary = residentFoundationAt(place, index);
+  assert.strictEqual(indexed, ordinary,
+    "cold spatial-index reuse must not produce an alternate SEED resident or home lot");
+  assert.equal(indexed.homeEntrance, `${place.code}/RESIDENCE/${index}/ENTRANCE`);
+  const actor = residentAt(place, index, at(15, WORKDAY));
+  assert.equal(actor.code, indexed.code,
+    "a cached indexed identity must still resolve the same Simulation actor");
+  assert.equal(actor.homeBuilding, indexed.homeBuilding);
+  assert.equal(actor.homeEntrance, indexed.homeEntrance);
+});
+
 test("resident inspector off-screen status is stable and carries the same SEED identity", () => {
   const sample = { index: 6, role: "guard-officer" } as const;
   assert.equal(residentShortLabel(sample), "Resident 7 · guard officer");
