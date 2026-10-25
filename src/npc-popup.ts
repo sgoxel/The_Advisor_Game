@@ -71,10 +71,11 @@ function anchorNames(resident: Resident) {
 }
 
 /** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
-// Camera-only SEED door inspection should show an actual house, not the
-// entire 300-metre neighbourhood. Keep this more conservative than true
-// resident close-up and preserve the world's ordinary bounded streaming.
-export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 2.5;
+// The camera-only owned-door preview must frame the actual house and its
+// street, not crop a multi-metre building to an isolated entrance marker.
+// Widen the visible footprint without changing the canonical doorway or
+// commanding/moving the resident. World detail still streams normally.
+export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 8;
 /** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
 export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
 export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {
