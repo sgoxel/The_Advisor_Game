@@ -596,7 +596,7 @@ class Session:
                 print(f"X11 fallback skipped: browser content {box['width']}x{box['height']} != {self.viewport}", flush=True)
                 return False
             x, y = round(box["x"]), round(box["y"])
-            if x < 0 or y < 0:
+            if (x < 0 or y < 0) and not require_fresh_paint:
                 return False
 
             def exact_png() -> bool:
@@ -637,7 +637,7 @@ class Session:
                         # rather than doing millions of Python pixel calls.
                         raw = frame.bgra
                         seek = 0
-                        while (at := raw.find(b"\\xff\\x00\\xff", seek)) >= 0:
+                        while (at := raw.find(b"\xff\x00\xff", seek)) >= 0:
                             seek = at + 1
                             if at % 4:
                                 continue
