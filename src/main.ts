@@ -1874,7 +1874,7 @@ async function start() {
           (selectedResidentMarker.hidden ||
             Math.hypot(dx - selectedResidentScreen.x, dy - selectedResidentScreen.y) > 48);
       if (visibleDoor) {
-        const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -125%)`;
+        const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -190%)`;
         if (transform !== markedDoorTransform) {
           selectedHomeDoorMarker.style.transform = transform;
           markedDoorTransform = transform;

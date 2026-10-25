@@ -1379,14 +1379,31 @@ body.globe-mode .travel-button {
   text-align: center;
   white-space: nowrap;
 }
+/* Screen-space target is exactly the projected Simulation-resolved door,
+   not the adjacent road, roof centre, or an invented building position.
+   The callout is offset upward and connected to that exact pixel. */
+#selected-home-door-marker::before {
+  content: "";
+  position: absolute;
+  top: 190%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 14px;
+  border: 2px solid #b9ffff;
+  border-radius: 50%;
+  background: #73e4ed45;
+  box-shadow: 0 0 0 2px #172b2ccc, 0 0 10px #72f3ffb8;
+}
 #selected-home-door-marker::after {
   content: "";
   position: absolute;
   top: 100%;
   left: calc(50% - 1px);
   width: 2px;
-  height: 10px;
-  background: #9dd9db;
+  height: 90%;
+  background: #b9ffff;
+  box-shadow: 0 0 4px #14383a;
 }
 /* Exact SEED-owned door camera focus; never commands a resident. */
 #npc-popup [data-go^="home:"] {
