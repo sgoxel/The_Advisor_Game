@@ -365,16 +365,19 @@ export function settlementFrontDoorWalkway(
 ): { x: number; z: number; yawRad: number; length: number } | null {
   if (!street) return null;
   const dx = wrapSourceX(street.x - door.x), dz = street.z - door.z,
-    distance = Math.hypot(dx, dz);
-  if (distance < 1e-9) return null;
-  const ux = dx / distance, uz = dz / distance;
-  // Only a street on the SEED-assigned outward-facing side of this wall
-  // can receive the walkway. This also prevents diagonals through the house.
+    metric = sourceUnitsPerMetreAt(door.z),
+    eastM = dx / metric.x, northM = dz / metric.z,
+    distanceM = Math.hypot(eastM, northM);
+  if (distanceM < 1e-6) return null;
+  // Use the canonical physical metric (east and north differ with latitude);
+  // source-space angles would choose the wrong frontage at high latitude.
+  const ux = eastM / distanceM, uz = northM / distanceM;
   if (ux * Math.sin(yawRad) + uz * Math.cos(yawRad) < .65) return null;
-  const length = distance - street.width * .5;
-  if (length <= metresToSource(1.2) || length >= metresToSource(40)) return null;
-  return { x: wrapSourceX(door.x + ux * length * .5), z: door.z + uz * length * .5,
-    yawRad: Math.atan2(ux, uz), length };
+  const lengthM = distanceM - street.width / metric.z * .5;
+  if (lengthM <= 1.2 || lengthM >= 40) return null;
+  const midpoint = lengthM / (2 * distanceM);
+  return { x: wrapSourceX(door.x + dx * midpoint), z: door.z + dz * midpoint,
+    yawRad: Math.atan2(ux, uz), length: metresToSource(lengthM) };
 }
 
 /** Resolve one canonical home against the same legal lot and street frontage as
