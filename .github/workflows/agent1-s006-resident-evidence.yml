@@ -54,12 +54,14 @@ jobs:
       - name: Full resident authority diagnostics (on demand)
         run: node --experimental-strip-types --test tests/simulation.test.ts
   resident-evidence:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    # One real, live-game browser frame on PRs tests the capture failure,
+    # not just compilation; deploy pushes retain the full four-view matrix.
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
     strategy:
       fail-fast: false
       matrix:
-        renderer: [webgl2, webgpu]
-        profile: [fullhd-landscape, fullhd-portrait]
+        renderer: ${{ fromJSON(github.event_name == 'pull_request' && '["webgl2"]' || '["webgl2","webgpu"]') }}
+        profile: ${{ fromJSON(github.event_name == 'pull_request' && '["fullhd-landscape"]' || '["fullhd-landscape","fullhd-portrait"]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -73,7 +75,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: python -m pip install playwright==1.63.0
       - name: Capture resident inspector evidence
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
