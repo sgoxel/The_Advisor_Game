@@ -222,6 +222,26 @@ test("Alderwick retains legal S004 morphology across tile ownership", async () =
     assert.ok(surface.walkable, `${feature.kind} must remain walkable`);
   }
 });
+test("S006 legally resolved guard homes remain rendered at coarser Street LOD", async () => {
+  const { resolvedSettlementHomeDoorFor, tileForPosition } = await import("../src/world.ts");
+  const { metresToSource } = await import("../src/physical-scale.ts");
+  const place = villages[0], index = 7, door = resolvedSettlementHomeDoorFor(place, index);
+  assert.ok(door, "fixture requires a physical SEED-owned guard doorway");
+  // Level 11 is 128 source units and ordinary village home stride is 2.
+  // Guard index 7 used to be removed solely by its odd index, even after its
+  // actual lawful SEED frontage and possible replacement lot were resolved.
+  const tiles = new Map<string, ReturnType<typeof tileForPosition>>();
+  for (const dx of [-metresToSource(12), metresToSource(12)])
+    for (const dz of [-metresToSource(12), metresToSource(12)]) {
+      const tile = tileForPosition(door.x + dx, door.z + dz, 11);
+      tiles.set(tile.key, tile);
+    }
+  const visible = [...tiles.values()].flatMap(featuresFor).filter(feature =>
+    feature.kind === "residence" && feature.ownerId === `${place.code}/RESIDENT/${index}`);
+  assert.equal(visible.length, 1, "a legal guard door must have exactly one rendered SEED-owned home at the same LOD");
+  assert.equal(new Set(visible.map(feature => feature.code)).size, 1, "adjacent LOD tile ownership stays unique");
+});
+
 test("application source contains no random-number API or clock-driven world generation", () => {
   for (const file of [
     "world.ts",

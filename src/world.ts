@@ -596,12 +596,15 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     }
     const stride = homeStride(place, tile.size), pad = metresToSource(20),
       nearbyHomes = new Set(settlementHomeIndicesNear(place, tile.minX - pad, tile.minX + tile.size + pad,
-        tile.minZ - pad, tile.minZ + tile.size + pad));
+        tile.minZ - pad, tile.minZ + tile.size + pad)),
+      guardEnd = 6 + guardHomeCount(plan);
     // A watchman's vacant replacement lot can be away from their former slot.
-    // Resolve only the small fixed SEED watch roster in addition to nearby homes.
-    for (let index = 6; index < 6 + guardHomeCount(plan); index++) nearbyHomes.add(index);
+    // Preserve every resolved guard's SEED-owned house at intermediate LODs:
+    // filtering their IDs by ordinary residence stride made legal doors visible
+    // in Simulation but hid their corresponding actual building.
+    for (let index = 6; index < guardEnd; index++) nearbyHomes.add(index);
     for (const index of nearbyHomes) {
-      if (index % stride !== 0) continue;
+      if (index % stride !== 0 && (index < 6 || index >= guardEnd)) continue;
       const plot = resolveHome(place, plan, resolution, index), point = resolution.homes.get(plot.id);
       if (point && nearTile(tile, point, 12)) {
         emitPlot(place, plan, plot, point, index);
