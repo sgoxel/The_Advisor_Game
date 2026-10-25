@@ -8,6 +8,7 @@ on:
     paths:
       # Acceptance needs screenshots of deployed gameplay, not only edits to this workflow.
       - 'src/main.ts'
+      - 'src/render-resolution.ts'
       - 'src/simulation.ts'
       - 'src/world.ts'
       - 'src/resident-inspector.css'
@@ -21,6 +22,7 @@ on:
     paths:
       - 'src/clock.ts'
       - 'src/main.ts'
+      - 'src/render-resolution.ts'
       - 'src/political-settlement-access.ts'
       - 'src/resident-inspector.*'
       - 'src/settlement-exterior*.ts'

@@ -118,3 +118,18 @@ test("a non-rendering backend cannot be accepted", async () => {
   );
   assert.ok(destroyed);
 });
+
+test("adaptive WebGPU software rendering can fall below DPR=1 without changing viewport truth", async () => {
+  const { nextPixelRatio } = await import("../src/render-resolution.ts");
+  assert.equal(nextPixelRatio(1, 50, 1), .75,
+    "a slow 1x-DPR renderer must actually reduce software-GPU fragment load");
+  assert.equal(nextPixelRatio(.75, 50, 1), .5);
+  assert.equal(nextPixelRatio(.5, 50, 1), .5,
+    "bounded internal render resolution must not collapse to zero");
+  assert.equal(nextPixelRatio(.5, 12, 1), .75,
+    "performance recovery restores detail progressively and deterministically");
+  assert.equal(nextPixelRatio(1, 12, 1), 1,
+    "no supersampling above the native viewport");
+  assert.equal(nextPixelRatio(2, 50, 2), 1.75,
+    "high-DPR devices retain their existing progressive quality behavior");
+});
