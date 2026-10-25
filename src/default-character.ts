@@ -17,7 +17,9 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
      DEFAULT_CHARACTER_HEIGHT_M * .4453 / 2, DEFAULT_CHARACTER_HEIGHT_M, 0,
   ]);
   mesh.setNormals([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]);
-  mesh.setUvs(0, [0, 0, 1, 0, 0, 1, 1, 1]);
+  // WebP image origin is the upper-left in this texture handler; keep
+  // illustrated heads above their Simulation-grounded feet.
+  mesh.setUvs(0, [0, 1, 1, 1, 0, 0, 1, 0]);
   mesh.setIndices([0, 1, 2, 1, 3, 2]);
   mesh.update(pc.PRIMITIVE_TRIANGLES);
 
