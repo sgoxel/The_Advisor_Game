@@ -1723,23 +1723,23 @@ export class LazySimulation {
       );
       return country?.code === this.activeCountry;
     });
-    const candidateSets = settlements.map((place) => ({
-      place,
-      residents: this.residentCandidates(place, x, z, radius).filter(index => !shard || index % shard.count === shard.index),
-    }));
     const query: QueryStats = {
       settlements: settlements.length,
-      candidateResidents: candidateSets.reduce(
-        (total, candidate) => total + candidate.residents.length,
-        0,
-      ),
+      candidateResidents: 0,
       evaluatedResidents: 0,
       returnedResidents: 0,
     };
     const visible: Resident[] = [];
-    for (const candidate of candidateSets) {
-      for (const index of candidate.residents) {
-        const resident = residentAt(candidate.place, index, this.tick);
+    // Do not eagerly build every nearby settlement's entire resident index.
+    // The first bounded view can fill its canonical quota in one settlement;
+    // later settlements then contribute no residents and need no cold index.
+    // Preserve the exact original place/candidate ordering and legal checks.
+    for (const place of settlements) {
+      const candidates = this.residentCandidates(place, x, z, radius)
+        .filter(index => !shard || index % shard.count === shard.index);
+      query.candidateResidents += candidates.length;
+      for (const index of candidates) {
+        const resident = residentAt(place, index, this.tick);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
