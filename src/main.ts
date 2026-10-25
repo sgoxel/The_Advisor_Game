@@ -2190,10 +2190,31 @@ async function start() {
   // uploads and worker prefetch while continuing normal GPU frames, actor
   // animation, clock advancement, resident queries and Simulation validation.
   const capturePresentation = (window as Window & { __advisorCaptureMode?: boolean }).__advisorCaptureMode
-    ? {
-        quiesceStreaming() { captureStreamingQuiesced = true; },
-        resumeStreaming() { captureStreamingQuiesced = false; },
-      }
+    ? (() => {
+        let captureRenderToken = 0;
+        return {
+          quiesceStreaming() {
+            captureStreamingQuiesced = true;
+            const token = ++captureRenderToken;
+            // A settled software-WebGPU scene can still submit frames faster
+            // than Chromium's compositor can read them. Finish one REAL
+            // PlayCanvas frame before allowing the GPU queue to drain.
+            // The normal update/clock/Simulation loop continues untouched.
+            app.once("postrender", () => {
+              if (captureStreamingQuiesced && token === captureRenderToken)
+                app.autoRender = false;
+            });
+            app.renderNextFrame = true;
+          },
+          resumeStreaming() {
+            // Invalidate a delayed one-shot callback before restoring normal
+            // streaming and real-time rendering, including after capture errors.
+            ++captureRenderToken;
+            captureStreamingQuiesced = false;
+            app.autoRender = true;
+          },
+        };
+      })()
     : undefined;
   // Read-only diagnostic interface for deterministic generation and browser verification.
   Object.defineProperty(window, "advisorWorld", {
