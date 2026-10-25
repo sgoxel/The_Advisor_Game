@@ -457,19 +457,30 @@ class Session:
                 # heuristic. Find the genuinely visible, unobstructed button,
                 # then send a real CDP mouse click at its centre. The following
                 # S006 steps still verify the actual camera/SEED result.
-                point = page.locator(arg).first.evaluate("""element => {
+                # Locator.evaluate can block for 15s on software WebGPU
+                # even when the same live DOM, selected actor, and canonical
+                # popup fields already passed. Poll the live document directly
+                # (finite 15s); keep the real browser mouse click and exact
+                # post-click SEED/camera assertions. A hidden/clipped control
+                # is scrolled into the real popup viewport, never force-clicked.
+                point = page.wait_for_function("""selector => {
+                    const element = document.querySelector(selector);
+                    if (!element) return false;
                     const r = element.getBoundingClientRect();
-                    if (!r.width || !r.height || r.top >= innerHeight || r.bottom <= 0) return null;
+                    const panel = element.closest('#npc-popup')?.getBoundingClientRect();
+                    if (!r.width || !r.height || r.top >= innerHeight || r.bottom <= 0) return false;
+                    if (panel && (r.top < panel.top || r.bottom > panel.bottom)) {
+                        element.scrollIntoView({block:'center', inline:'nearest'});
+                        return false;
+                    }
                     const x = Math.round((Math.max(0, r.left) + Math.min(innerWidth, r.right)) / 2);
                     const y = Math.round((Math.max(0, r.top) + Math.min(innerHeight, r.bottom)) / 2);
-                    // Fantasy-Time refresh replaces popup DOM while keeping
-                    // the same SEED action. Check the *currently visible*
-                    // button's canonical action, not stale element identity.
                     const action = element.getAttribute('data-go');
                     const hit = document.elementFromPoint(x, y)?.closest('[data-go]');
-                    return action && hit?.getAttribute('data-go') === action ? [x, y] : null;
-                }""", timeout=min(15000, self.args.timeout * 1000))
-                if point is None:
+                    return action && hit?.getAttribute('data-go') === action ? [x, y] : false;
+                }""", arg=arg, polling=250,
+                    timeout=min(15000, self.args.timeout * 1000)).json_value()
+                if not point:
                     raise CaptureError(f"resident popup control not genuinely clickable: {arg}")
                 page.mouse.click(*point)
             else:
