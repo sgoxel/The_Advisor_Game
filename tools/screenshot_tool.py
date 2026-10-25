@@ -562,7 +562,7 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
-    def capture_x11_viewport(self, path: Path) -> bool:
+    def capture_x11_viewport(self, path: Path, require_fresh: bool = False) -> bool:
         """Read an actual headed Chromium framebuffer when CDP GPU capture stalls.
 
         This is not a rendered substitute: the pixels are from Xvfb's live
@@ -592,7 +592,7 @@ class Session:
                         struct.unpack(">II", pixels[16:24]) == self.viewport)
 
             ffmpeg = shutil.which("ffmpeg")
-            if ffmpeg:
+            if ffmpeg and not require_fresh:
                 result = subprocess.run(
                     [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
                      "-f", "x11grab", "-video_size", f"{self.viewport[0]}x{self.viewport[1]}",
@@ -659,7 +659,16 @@ class Session:
         path.unlink(missing_ok=True)
         return False
 
-    def capture_viewport(self, path: Path) -> None:
+    def capture_viewport(self, path: Path, require_fresh: bool = False) -> None:
+        # Headed S006 proof must show the actual CURRENT map camera and DOM,
+        # not a valid-size CDP frame cached before Observe resident or Home.
+        # Prefer a pixel-verified X11 repaint before trying the potentially
+        # stale screencast. Fail honestly if the live compositor cannot paint.
+        # Ordinary screenshots keep their previous CDP/X11 fallback behavior.
+        if require_fresh and self.args.headed and os.environ.get("DISPLAY"):
+            if self.capture_x11_viewport(path, require_fresh=True):
+                return
+            raise CaptureError("S006 resident evidence has no freshly painted live X11 frame")
         # Live software WebGL2/WebGPU rendering can make Playwright's ordinary
         # full-resolution screenshot hang. Only actual exact-size compositor
         # PNGs count: do not substitute DOM state or manufacture a frame.
@@ -756,7 +765,7 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = state["tileStatusText"]
-        self.capture_viewport(path)
+        self.capture_viewport(path, require_fresh=resident_proof)
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
