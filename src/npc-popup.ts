@@ -8,7 +8,7 @@ import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
  * pure SEED + Fantasy Time functions, so it can be refreshed at any moment.
  */
 import { continents, countries, places, roadConnections, type Place } from "./geography.ts";
-import { greatCircleDistance, lonLatToSource, halfHeightForCanonicalFootprint } from "./planet.ts";
+import { greatCircleDistance, lonLatToSource } from "./planet.ts";
 import { criticalSites, nearbyCriticalSites } from "./sites.ts";
 import { finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
@@ -75,9 +75,8 @@ function anchorNames(resident: Resident) {
 // entire 300-metre neighbourhood. Keep this more conservative than true
 // resident close-up and preserve the world's ordinary bounded streaming.
 export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 2.5;
-/** Physically correct 24m vertical field: a 1.6–1.8m resident occupies about
- * 7% of the viewport, without scaling the mesh or inventing an avatar. */
-export const RESIDENT_OBSERVE_HALF_HEIGHT = halfHeightForCanonicalFootprint(24);
+/** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
+export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
 export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {
   return resident.grounded && !resident.indoors
     ? lonLatToSource(resident.position.lon, resident.position.lat) : undefined;
