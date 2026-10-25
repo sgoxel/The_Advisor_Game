@@ -39,7 +39,7 @@ test("resident camera focus reaches actual SEED-owned entrance", () => {
 test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {
   const heroHalfHeight = .8344302680376363;
   assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
-    "a camera-only home lookup cannot force the GPU-losing extreme close-detail view");
+    "the owned front door is framed at building scale instead of a whole neighbourhood");
   assert.equal(popupFocusHalfHeight("place:0", heroHalfHeight), heroHalfHeight,
     "other place previews preserve their existing Hero zoom");
   assert.equal(popupFocusHalfHeight("home:0:37", 14), 14,
