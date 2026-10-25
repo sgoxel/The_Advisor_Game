@@ -1010,7 +1010,21 @@ function processStreaming(material: pc.StandardMaterial) {
     else record.entity.enabled=enabledFine.has(key);
     if(record.entity.enabled)record.used=revision;
   }
-  if(coverageComplete && !ready){ready=true;setLoadingProgress(100);setTimeout(()=>$("loading").classList.add("done"),350);}
+  if (coverageComplete && !ready) {
+    ready = true;
+    setLoadingProgress(100);
+    setTimeout(()=>$("loading").classList.add("done"),350);
+    // The first rendered resident is player-facing state, not optional scenery.
+    // At the exact frame coarse terrain becomes usable, reserve an idle worker
+    // for the authoritative snapshot BEFORE filling it with detail/prefetch.
+    // Otherwise a cold close-up can wait for entire mesh generation batches.
+    const mode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready);
+    if (mode.inspect) {
+      const request = residentRequestForView(simulation.tick, residentQueryLimitForView(mode.actors));
+      if (request) residentQueries.offer(request);
+      dispatchResidentQuery();
+    }
+  }
   {
     // Fill every idle worker: urgent on-screen work first (skipping tiles already being built),
     // then background prefetch around the player.
