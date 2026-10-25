@@ -514,7 +514,7 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
-    def capture_viewport(self, path: Path) -> None:
+    def capture_viewport(self, path: Path, required_frames: int = 2) -> None:
         # The ordinary full-resolution Chromium/Playwright screenshot can block
         # for the entire 840s CI budget while a live software WebGL2/WebGPU
         # canvas renders. Request a *real compositor frame* through Chrome's
@@ -523,6 +523,18 @@ class Session:
         session = self.page.context.new_cdp_session(self.page)
         frames: list[dict[str, Any]] = []
         session.on("Page.screencastFrame", lambda frame: frames.append(frame))
+        def request_real_repaint() -> None:
+            # The static owned-home view sometimes returns *zero* frames.
+            # Invalidate its actual visible marker even before frame one;
+            # this never fabricates a canvas frame or changes world state.
+            session.send("Runtime.evaluate", {
+                "expression": """(() => {
+                    const marker = document.querySelector(
+                        '#selected-home-door-marker:not([hidden]), #selected-resident-marker:not([hidden])');
+                    if (marker) marker.style.opacity =
+                        marker.style.opacity === '0.999' ? '0.998' : '0.999';
+                })()""",
+            })
         started = False
         try:
             session.send("Page.startScreencast", {
@@ -530,6 +542,7 @@ class Session:
                 "maxHeight": self.viewport[1], "everyNthFrame": 1,
             })
             started = True
+            request_real_repaint()
             deadline = time.monotonic() + min(20, self.args.timeout)
             received = 0
             # The initial CDP frame may be a stale compositor snapshot taken
@@ -544,21 +557,12 @@ class Session:
                 frame = frames.pop(0)
                 session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
                 received += 1
-                if received == 1:
-                    # A fully settled static home camera may not deliver a second
-                    # screencast frame by itself. Invalidate a REAL existing DOM
-                    # marker's compositor layer after acknowledging the possibly
-                    # stale initial frame. This changes no game logic, SEED,
-                    # canvas pixels, identity, position or screenshot content.
-                    # A fresh frame is still mandatory; never reuse frame #1.
-                    session.send("Runtime.evaluate", {
-                        "expression": """(() => {
-                            const marker = document.querySelector(
-                                '#selected-home-door-marker:not([hidden]), #selected-resident-marker:not([hidden])');
-                            if (marker) marker.style.opacity =
-                                marker.style.opacity === '0.999' ? '0.998' : '0.999';
-                        })()""",
-                    })
+                if received < required_frames:
+                    # Each acknowledged frame may precede the most recent DOM
+                    # inspector/camera update. Request another real repaint;
+                    # resident shots demand a third independent compositor
+                    # frame to avoid the observed one-shot UI lag.
+                    request_real_repaint()
                     continue
                 pixels = base64.b64decode(frame["data"], validate=True)
                 dimensions = (struct.unpack(">II", pixels[16:24])
@@ -581,11 +585,16 @@ class Session:
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
+        resident_proof = suffix in ("resident-canonical-details", "owned-home-entrance")
+        if resident_proof:
+            # The on-demand inspector/camera update must reach real animation
+            # frames before the compositor begins reading the displayed scene.
+            self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
         state = self.page.evaluate(STATE_JS)
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = self.page.locator("#tile-status").text_content(timeout=5000)
-        self.capture_viewport(path)
+        self.capture_viewport(path, required_frames=3 if resident_proof else 2)
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = self.page.locator("#tile-status").text_content(timeout=5000)
         if not path.is_file() or path.stat().st_size == 0:
