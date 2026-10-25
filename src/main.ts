@@ -817,6 +817,9 @@ function setLayers() {
  * trim threshold so prefetching never forces anything already cached out.
  */
 let prefetchQueue: Tile[] = [], prefetchFingerprint = "", prefetched = 0;
+// Idle-only scene warming must yield to playable current-view rendering.
+// Measured frame cadence is presentation scheduling, never SEED/Simulation truth.
+let measuredStreamingFps = 0;
 function prefetchCandidates(): Tile[] {
   const seen = new Set<string>(), out: { tile: Tile; distance: number }[] = [],
     push = (tile: Tile | undefined, weight = 1) => {
@@ -1046,7 +1049,7 @@ function processStreaming(material: pc.StandardMaterial) {
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
-      else if(ready && !lodTransition)prefetchNext(root);
+      else if (ready && !lodTransition && measuredStreamingFps >= 30) prefetchNext(root);
       if(inFlight===before)break;
     }
   }
@@ -2182,6 +2185,7 @@ async function start() {
     frames++;
     if (statsElapsed >= 1) {
       fps = Math.round(frames / statsElapsed);
+      measuredStreamingFps = fps;
       statsElapsed = 0;
       frames = 0;
     }
