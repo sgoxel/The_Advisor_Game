@@ -1,4 +1,5 @@
 import { compareText } from "./compare-text.ts";
+import { residentActorSearchContinues } from "./resident-query.ts";
 import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
@@ -1710,6 +1711,7 @@ export class LazySimulation {
     radius: number,
     limit = DEFAULT_VISIBLE_LIMIT,
     shard?: { index: number; count: number },
+    prioritizeActors = false,
   ) {
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
     // A zero actor budget must be a zero-work, zero-actor query (never one
@@ -1733,7 +1735,8 @@ export class LazySimulation {
       evaluatedResidents: 0,
       returnedResidents: 0,
     };
-    const visible: Resident[] = [];
+    const visible: Resident[] = [], indoorOrUnresolved: Resident[] = [];
+    let exhausted = false;
     // Do not eagerly build every nearby settlement's entire resident index.
     // The first bounded view can fill its canonical quota in one settlement;
     // later settlements then contribute no residents and need no cold index.
@@ -1743,15 +1746,25 @@ export class LazySimulation {
         .filter(index => !shard || index % shard.count === shard.index);
       query.candidateResidents += candidates.length;
       for (const index of candidates) {
+        if (prioritizeActors && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+          exhausted = true;
+          break;
+        }
         const resident = residentAt(place, index, this.tick);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
-        visible.push(resident);
+        if (prioritizeActors && (!resident.grounded || resident.indoors)) indoorOrUnresolved.push(resident);
+        else visible.push(resident);
         if (visible.length >= limit) break;
       }
-      if (visible.length >= limit) break;
+      if (exhausted || visible.length >= limit ||
+          (prioritizeActors && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit))) break;
     }
+    // Keep indoor residents inspectable, but never let eight indoor-only facts
+    // hide a real legal street actor from the first close-up canvas selection.
+    if (prioritizeActors && visible.length < limit)
+      visible.push(...indoorOrUnresolved.slice(0, limit - visible.length));
     query.returnedResidents = visible.length;
     this.lastQuery = query;
     this.updateInspector(visible, query);

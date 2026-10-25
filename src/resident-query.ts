@@ -2,7 +2,7 @@ import { compareText } from "./compare-text.ts";
 import { wrapSourceX } from "./planet.ts";
 import type { Resident, QueryStats } from "./simulation.ts";
 
-export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number };
+export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number; actors?: boolean };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number } };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
 /** The initially coherent world may supply resident facts during later zoom
@@ -39,6 +39,15 @@ export function residentWorkerShardPlan(
  * The non-actor inspector retains its existing fact budget. */
 export function residentQueryLimitForView(actors: boolean): number {
   return actors ? 8 : 24;
+}
+
+/** After an initial indoor-only result, inspect at most one further eight-person
+ * batch for a real outdoor actor. Stop as soon as the first street actor is
+ * found after the original quota, or when the eight-actor quota is full.
+ * This is a deterministic work bound, not permission to invent actors. */
+export function residentActorSearchContinues(evaluated: number, outdoorCount: number, limit: number): boolean {
+  return limit > 0 && outdoorCount < limit && evaluated < limit * 2 &&
+    (outdoorCount === 0 || evaluated < limit);
 }
 
 /** A small visible resident must still be individually tappable. Screen-space

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, residentActorSearchContinues } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -11,6 +11,18 @@ test("first close-up residents are queried under a finite identical rendered/sta
     "non-actor inspection still uses the existing fact budget");
   assert.equal(residentQueryLimitForView(true), residentQueryLimitForView(true),
     "camera/frame timing must not choose the visible resident limit");
+});
+
+test("first outdoor canvas actor may use one bounded follow-up after an indoor-only eight", () => {
+  assert.equal(residentActorSearchContinues(8, 0, 8), true,
+    "eight indoor residents do not prove the street has no real actors");
+  assert.equal(residentActorSearchContinues(8, 1, 8), false,
+    "once a legal outdoor actor is found, never delay the first click for optional extras");
+  assert.equal(residentActorSearchContinues(15, 0, 8), true);
+  assert.equal(residentActorSearchContinues(16, 0, 8), false,
+    "cold worker scans are strictly capped at two query batches");
+  assert.equal(residentActorSearchContinues(7, 8, 8), false);
+  assert.equal(residentActorSearchContinues(0, 0, 0), false);
 });
 
 test("visible S006 residents retain a 44px CSS touch target without selecting distant actors", () => {
