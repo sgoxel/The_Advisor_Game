@@ -11,7 +11,7 @@
     "test:release": "node --experimental-strip-types --test-isolation=none --test tests/world.test.ts tests/continuity.test.ts tests/resident-query.test.ts && npm run test:s006:focused",
     "test:browser": "playwright test",
     "test:webgpu": "playwright test --config playwright.webgpu.config.js",
-    "test:s006:focused": "node --experimental-strip-types --test-isolation=none --test-name-pattern='resident inspector can resolve facts|zero resident query budget|resident walking path cache|resident streets attach|resident street connectors|continuous walking segments|S006 residents traverse|outdoor journeys can legally detour|unconnected town doors cannot shortcut|settlement walls admit|time-bounded legal paths|a blocked leg never becomes|building occupancy requires|resident inspector preserves the exact|civilian midnight replay is gated|night guards carry their lawful|real guard and fisherman outbound' --test tests/simulation.test.ts"
+    "test:s006:focused": "node --experimental-strip-types --test-isolation=none --test-name-pattern='resident inspector can resolve facts|zero resident query budget|resident walking path cache|resident streets attach|resident street connectors|continuous walking segments|S006 residents traverse|outdoor journeys can legally detour|unconnected town doors cannot shortcut|settlement walls admit|time-bounded legal paths|a blocked leg never becomes|building occupancy requires|resident inspector preserves the exact|civilian midnight replay is gated|night guards carry their lawful|real guard and fisherman outbound|resident camera focus reaches' --test tests/simulation.test.ts tests/popup-go.test.ts"
   },
   "dependencies": {
     "playcanvas": "2.23.0"
