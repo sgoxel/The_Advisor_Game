@@ -1852,7 +1852,10 @@ async function start() {
         characterVisuals.move(actor, .8, b.x-a.x, b.z-a.z);
       }
     }
-    // Keep one screen-space marker attached to the actual enabled 3D actor.
+    // All true on-world 2D illustrated residents face the current camera;
+    // their feet, routes, identities and picker remain Simulation-authoritative.
+    for (const actor of actors) if (actor.enabled) characterVisuals.face(actor, camera);
+    // Keep one screen-space marker attached to the actual enabled 3D-world actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
     // A cached door belongs only to its original selected SEED resident.
