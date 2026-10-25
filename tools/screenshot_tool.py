@@ -617,7 +617,7 @@ class Session:
                     # bright square, remove it, and capture only AFTER its
                     # removal is physically visible in the X11 pixels.
                     # The diagnostic square must never enter an evidence PNG.
-                    before = display_capture.grab(region).pixel((24, 24))
+                    before = display_capture.grab(region).pixel(24, 24)
                     self.page.evaluate("""() => {
                         const marker = document.createElement('div');
                         marker.id = 'advisor-capture-freshness-probe';
@@ -628,7 +628,7 @@ class Session:
                         probe_seen = False
                         for _ in range(12):
                             self.page.wait_for_timeout(250)
-                            pixel = display_capture.grab(region).pixel((24, 24))
+                            pixel = display_capture.grab(region).pixel(24, 24)
                             if pixel == (255, 0, 255) and pixel != before:
                                 probe_seen = True
                                 break
@@ -639,7 +639,7 @@ class Session:
                     for _ in range(12):
                         self.page.wait_for_timeout(250)
                         frame = display_capture.grab(region)
-                        if frame.pixel((24, 24)) != (255, 0, 255):
+                        if frame.pixel(24, 24) != (255, 0, 255):
                             break
                     else:
                         raise CaptureError("X11 compositor is stale: freshness probe did not disappear from live framebuffer")
