@@ -71,11 +71,10 @@ function anchorNames(resident: Resident) {
 }
 
 /** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
-// Camera-only resident entrance inspection needs a legible street/house framing.
-// Deep Hero zoom below this value caused a real software-WebGL2 device loss
- // while mandatory scene detail was still streaming; the player may still zoom
- // manually, but a read-only popup action must not force that unstable state.
-export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 10;
+// Camera-only SEED door inspection should show an actual house, not the
+// entire 300-metre neighbourhood. Keep this more conservative than true
+// resident close-up and preserve the world's ordinary bounded streaming.
+export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 2.5;
 /** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
 export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
 export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {
