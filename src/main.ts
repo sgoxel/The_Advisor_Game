@@ -1807,6 +1807,14 @@ async function start() {
     // Keep one screen-space marker attached to the actual enabled 3D actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
+    // A cached door belongs only to its original selected SEED resident.
+    // Switching inspectors while the new actor is offscreen must never expose
+    // the previous person's entrance as this person's authoritative home.
+    if (inspectedCode !== markedResidentCode) {
+      selectedDoorPoint = undefined;
+      selectedHomeDoorMarker.dataset.homeEntrance = "";
+      selectedHomeDoorMarker.hidden = true;
+    }
     const inspectedActor = inspectedCode && projectionTransition <= 0.001
       ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
       : undefined;
