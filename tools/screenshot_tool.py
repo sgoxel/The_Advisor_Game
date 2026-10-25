@@ -509,31 +509,45 @@ class Session:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
     def capture_viewport(self, path: Path) -> None:
-        # The regular Playwright screenshot waits on browser page stability.
-        # On a streaming 3D cold start this has stalled for 180 seconds without
-        # a PNG, even after the world reports ready. Bound that first attempt,
-        # then ask Chromium directly for the REAL composited viewport pixels.
-        # Neither method fabricates a resident, scene or synthetic image.
-        try:
-            self.page.screenshot(path=str(path), timeout=min(15000, self.args.timeout * 1000),
-                                 animations="disabled")
-            return
-        except PlaywrightTimeoutError:
-            print(f"SCREENSHOT Playwright timeout; trying direct Chromium viewport capture for {path.name}",
-                  flush=True)
+        # The ordinary full-resolution Chromium/Playwright screenshot can block
+        # for the entire 840s CI budget while a live software WebGL2/WebGPU
+        # canvas renders. Request a *real compositor frame* through Chrome's
+        # bounded screencast stream instead. This copies actual browser pixels
+        # (including the 3D canvas), never a mocked or reconstructed scene.
         session = self.page.context.new_cdp_session(self.page)
+        frames: list[dict[str, Any]] = []
+        session.on("Page.screencastFrame", lambda frame: frames.append(frame) if not frames else None)
+        started = False
         try:
-            encoded = session.send("Page.captureScreenshot", {
-                "format": "png", "fromSurface": True, "captureBeyondViewport": False,
-            })["data"]
+            session.send("Page.startScreencast", {
+                "format": "png", "maxWidth": self.viewport[0],
+                "maxHeight": self.viewport[1], "everyNthFrame": 1,
+            })
+            started = True
+            deadline = time.monotonic() + min(20, self.args.timeout)
+            while not frames and time.monotonic() < deadline:
+                self.page.wait_for_timeout(100)
+            if frames:
+                pixels = base64.b64decode(frames[0]["data"], validate=True)
+                dimensions = (struct.unpack(">II", pixels[16:24])
+                              if len(pixels) >= 24 and pixels[:8] == b"\\x89PNG\\r\\n\\x1a\\n"
+                              else None)
+                session.send("Page.screencastFrameAck", {"sessionId": frames[0]["sessionId"]})
+                if dimensions == self.viewport:
+                    path.write_bytes(pixels)
+                    print(f"SCREENCAST actual compositor viewport {dimensions} to {path.name}", flush=True)
+                    return
+                print(f"SCREENCAST rejected non-exact viewport {dimensions}; expected {self.viewport}", flush=True)
+            else:
+                print(f"SCREENCAST no real frame within bounded wait for {path.name}", flush=True)
         finally:
+            if started:
+                session.send("Page.stopScreencast")
             session.detach()
-        pixels = base64.b64decode(encoded, validate=True)
-        dimensions = struct.unpack(">II", pixels[16:24]) if len(pixels) >= 24 and pixels[:8] == b"\x89PNG\r\n\x1a\n" else None
-        if dimensions != self.viewport:
-            raise CaptureError(f"direct Chromium screenshot is not the actual {self.viewport} viewport: {dimensions}")
-        path.write_bytes(pixels)
-
+        # A strictly bounded fallback still requires real Chromium pixels;
+        # no synthetic capture and no unbounded Page.captureScreenshot request.
+        self.page.screenshot(path=str(path), timeout=min(15000, self.args.timeout * 1000),
+                             animations="disabled")
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
