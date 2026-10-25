@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, residentActorSearchContinues } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -206,4 +206,21 @@ test("panning retains fresh world positions while a newer view query is submitte
     "old world positions are not refreshed indefinitely");
   assert.equal(currentResidentSnapshot(undefined, previous, undefined, 101, 48), undefined,
     "leaving actor detail clears any fallback");
+});
+
+test("selected real actor stays visible during nearby population handoff, never when absent or elsewhere", () => {
+  const view = { x: 12, z: 6, radius: .4 },
+    actual = { x: 12.03, z: 5.99, grounded: true, indoors: false };
+  assert.equal(selectedResidentVisibleInView(actual, view), true,
+    "a real selected resident at the close camera remains eligible while a new query arrives");
+  assert.equal(selectedResidentVisibleInView({ ...actual, indoors: true }, view), false);
+  assert.equal(selectedResidentVisibleInView({ ...actual, grounded: false }, view), false);
+  assert.equal(selectedResidentVisibleInView({ ...actual, x: 13 }, view), false,
+    "a long pan never drags the old actor to a new location");
+  assert.equal(selectedResidentVisibleInView(actual, undefined), false);
+  assert.equal(selectedResidentVisibleInView(undefined, view), false,
+    "absent residents never acquire a selected 3D stand-in");
+  assert.equal(selectedResidentVisibleInView({ ...actual, x: -131071.98 },
+    { x: 131071.98, z: 6, radius: .1 }), true,
+    "the real canonical seam is wrapped rather than sending the actual actor to another world");
 });

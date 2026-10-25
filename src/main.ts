@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, selectedResidentVisibleInView, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1687,6 +1687,7 @@ async function start() {
     return best;
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
+  let actorSnapshotTick = -Infinity;
   residentResultReady = () => { lastSimulationRealSecond = -1; };
   let lastResidentDetailVisible = smallDetailsVisible;
   let lastResidentInspectorOpen = !$("travel-panel").hidden;
@@ -1737,12 +1738,46 @@ async function start() {
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
       const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
-      if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
+      const inspectedCode = npcPopupCode();
+      const existingSelected = inspectedCode
+        ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
+        : undefined;
+      const knownSelected = existingSelected ? actorResidents.get(existingSelected) : undefined;
+      // An in-flight view query must not erase a still-grounded selected 3D actor
+      // simply because its old finite result is no longer the desired key.
+      // Never retain stale time/remote scenery; no actor is invented.
+      const selectedFromSnapshot = inspectedCode && snapshot
+        ? snapshot.residents.find(resident => resident.code === inspectedCode) : undefined;
+      const authoritativeSelected = inspectedCode && snapshot &&
+        snapshot.id !== lastResidentSnapshot && !selectedFromSnapshot
+        ? simulation.residentByCode(inspectedCode) : undefined;
+      const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
+      const selectionNearby = residentMode.actors &&
+        selectedResidentVisibleInView(selected, query);
+      const holdSelected = !snapshot && selectionNearby &&
+        simulation.tick >= actorSnapshotTick &&
+        simulation.tick - actorSnapshotTick <= TIME_SCALE * 2;
+      if (holdSelected) {
+        // Keep exactly the real selected actor during a short snapshot handoff.
+        // Other stale actors never become visible occupants of the new view.
+        for (const actor of actors) if (actor !== existingSelected) {
+          actor.enabled = false;
+          actorResidents.delete(actor);
+          actorMotion.delete(actor);
+        }
+      } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
         const residents = snapshot?.residents ?? [];
-        if (snapshot) { lastResidentSnapshot = snapshot.id; simulation.acceptResidentQuery(residents, snapshot.query); }
-        // People sleeping or working indoors are inspectable but not street actors.
+        if (snapshot) {
+          lastResidentSnapshot = snapshot.id;
+          actorSnapshotTick = simulation.tick;
+          simulation.acceptResidentQuery(residents, snapshot.query);
+        }
+        // A fresh snapshot may omit the clicked resident from its first eight.
+        // Append only its actual current Simulation state when still in view.
         const visible = residentMode.actors
           ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
+        if (snapshot && selectionNearby && selected &&
+            !visible.some(resident => resident.code === selected.code)) visible.push(selected);
         for (let i = 0; i < visible.length; i++) {
           if (!actors[i]) {
             const actor = characterVisuals.create();
@@ -1781,7 +1816,8 @@ async function start() {
         const popupCode = npcPopupCode();
         if (popupCode) {
           // Prefer the worker snapshot; only a resident outside it is re-evaluated on this thread.
-          const resident = residents.find((entry) => entry.code === popupCode) ?? simulation.residentByCode(popupCode);
+          const resident = residents.find((entry) => entry.code === popupCode) ??
+            (selected?.code === popupCode ? selected : simulation.residentByCode(popupCode));
           if (resident) showNpcPopup(resident, simulation.tick);
         }
         $("simulation-status").textContent =

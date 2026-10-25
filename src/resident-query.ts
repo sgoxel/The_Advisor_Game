@@ -50,6 +50,18 @@ export function residentActorSearchContinues(evaluated: number, outdoorCount: nu
     (outdoorCount === 0 || evaluated < limit);
 }
 
+/** Keep only the actually inspected, grounded actor visible while a new nearby
+ * population snapshot is pending. It cannot invent a resident or move one
+ * into view; a distant pan, indoor state or blocked ground revokes the hold. */
+export function selectedResidentVisibleInView(
+  resident: Pick<Resident, "x" | "z" | "grounded" | "indoors"> | undefined,
+  view: { x: number; z: number; radius: number } | undefined,
+): boolean {
+  return !!resident && !!view && resident.grounded && !resident.indoors &&
+    Number.isFinite(view.radius) && view.radius >= 0 &&
+    Math.hypot(wrapSourceX(resident.x - view.x), resident.z - view.z) <= view.radius;
+}
+
 /** A small visible resident must still be individually tappable. Screen-space
  * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
  * Return null outside a minimum 44px target; nearest projected actor wins. */
