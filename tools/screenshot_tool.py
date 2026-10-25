@@ -818,28 +818,12 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = state["tileStatusText"]
-        # Only screenshot-tool sessions expose this opt-in engine hook.
-        # Finish one genuine PlayCanvas render of the current scene and
-        # release software-GPU submission pressure while Chromium composites
-        # an actual framebuffer. Never synthesize or alter captured pixels.
-        token = 0
-        try:
-            # Keep genuine WebGL2 animation running while capturing: a single
-            # frozen frame can leave the compositor displaying clearColor despite
-            # submitted World meshes. WebGPU retains its bounded frame handoff.
-            if resident_proof and self.args.renderer == "webgpu":
-                token = self.page.evaluate(
-                    "window.advisorWorld.capturePresentation?.hold() ?? 0")
-                if token:
-                    self.page.wait_for_function(
-                        "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
-                        arg=token, timeout=min(15000, self.args.timeout * 1000))
-                    self.page.wait_for_timeout(350)
-            self.capture_viewport(path, require_fresh_paint=resident_proof)
-        finally:
-            if token:
-                self.page.evaluate(
-                    "window.advisorWorld.capturePresentation.release()")
+        # The prior one-frame PlayCanvas hold caused WebGL2 to show only
+        # clearColor despite visible World meshes; continuous submission
+        # restored both real orientations. Exercise the same genuine compositor
+        # path on WebGPU without replacing pixels or relaxing any strict
+        # CDP/X11 freshness, identity, settled-scene or visual checks.
+        self.capture_viewport(path, require_fresh_paint=resident_proof)
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
