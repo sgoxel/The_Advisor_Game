@@ -1815,8 +1815,6 @@ async function start() {
           const resident = actorResidents.get(inspectedActor)!;
           selectedResidentName.textContent = `Selected · ${resident.name}`;
           selectedResidentMarker.dataset.residentCode = inspectedCode;
-          // Resolve only when the actual selected SEED identity changes, not
-          // every frame. An unresolved house has no invented doorway marker.
           const place = places.find(place => place.id === resident.settlement);
           const door = place ? resolvedSettlementHomeDoorFor(place, resident.index) : null;
           selectedDoorPoint = door
@@ -1831,29 +1829,34 @@ async function start() {
         }
         selectedResidentMarker.hidden = false;
       } else selectedResidentMarker.hidden = true;
-      if (selectedDoorPoint) {
-        const door = renderFrame.sourceToRender(selectedDoorPoint.x, selectedDoorPoint.z, selectedDoorPoint.y);
-        selectedHomeDoorWorld.set(door.x, door.y, door.z);
-        camera.camera!.worldToScreen(selectedHomeDoorWorld, selectedHomeDoorScreen);
-        const dx = Math.round(selectedHomeDoorScreen.x), dy = Math.round(selectedHomeDoorScreen.y);
-        // Avoid drawing a second label directly over the selected resident.
-        const visibleDoor = dx >= 90 && dx <= innerWidth - 90 &&
-          dy >= 100 && dy <= innerHeight - 120 &&
-          Math.hypot(dx - x, dy - y) > 48;
-        if (visibleDoor) {
-          const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -125%)`;
-          if (transform !== markedDoorTransform) {
-            selectedHomeDoorMarker.style.transform = transform;
-            markedDoorTransform = transform;
-          }
-          selectedHomeDoorMarker.hidden = false;
-        } else selectedHomeDoorMarker.hidden = true;
-      } else selectedHomeDoorMarker.hidden = true;
     } else {
       selectedResidentMarker.hidden = true;
-      selectedHomeDoorMarker.hidden = true;
+      if (inspectedCode !== markedResidentCode) selectedDoorPoint = undefined;
+    }
+    // The already-resolved SEED doorway stays visible after camera-only home
+    // focus even when the selected character leaves the actor render query.
+    if (inspectedCode && selectedDoorPoint && projectionTransition <= 0.001) {
+      const door = renderFrame.sourceToRender(selectedDoorPoint.x, selectedDoorPoint.z, selectedDoorPoint.y);
+      selectedHomeDoorWorld.set(door.x, door.y, door.z);
+      camera.camera!.worldToScreen(selectedHomeDoorWorld, selectedHomeDoorScreen);
+      const dx = Math.round(selectedHomeDoorScreen.x), dy = Math.round(selectedHomeDoorScreen.y),
+        visibleDoor = dx >= 90 && dx <= innerWidth - 90 &&
+          dy >= 100 && dy <= innerHeight - 120 &&
+          (selectedResidentMarker.hidden ||
+            Math.hypot(dx - selectedResidentScreen.x, dy - selectedResidentScreen.y) > 48);
+      if (visibleDoor) {
+        const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -125%)`;
+        if (transform !== markedDoorTransform) {
+          selectedHomeDoorMarker.style.transform = transform;
+          markedDoorTransform = transform;
+        }
+        selectedHomeDoorMarker.hidden = false;
+      } else selectedHomeDoorMarker.hidden = true;
+    } else selectedHomeDoorMarker.hidden = true;
+    if (!inspectedCode) {
       markedResidentCode = "";
       selectedDoorPoint = undefined;
+      selectedHomeDoorMarker.dataset.homeEntrance = "";
     }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
