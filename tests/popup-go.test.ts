@@ -6,10 +6,11 @@ import { resolvedSettlementHomeDoorFor } from "../src/world.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
 import { metresToSource } from "../src/physical-scale.ts";
+import { lonLatToSource, sourceToLonLat } from "../src/planet.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
 (globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
-const { resolveGoTarget, popupFocusHalfHeight, HOME_ENTRANCE_FOCUS_HALF_HEIGHT } = await import("../src/npc-popup.ts");
+const { resolveGoTarget, popupFocusHalfHeight, HOME_ENTRANCE_FOCUS_HALF_HEIGHT, RESIDENT_OBSERVE_HALF_HEIGHT, residentObservationPoint } = await import("../src/npc-popup.ts");
 
 test("settlement card place links resolve to their positions only when clicked", () => {
   const home = villages[0], other = places.find((place) => place.id !== home.id)!;
@@ -38,9 +39,25 @@ test("resident camera focus reaches actual SEED-owned entrance", () => {
 test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {
   const heroHalfHeight = .8344302680376363;
   assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
-    "a camera-only home lookup cannot force the GPU-losing extreme close-detail view");
+    "the owned front door is framed at building scale instead of a whole neighbourhood");
   assert.equal(popupFocusHalfHeight("place:0", heroHalfHeight), heroHalfHeight,
     "other place previews preserve their existing Hero zoom");
   assert.equal(popupFocusHalfHeight("home:0:37", 14), 14,
     "a future larger canonical Hero setting is never tightened by this fix");
+});
+
+test("true-scale resident observation uses the real canonical position and cannot invent a missing actor", () => {
+  const place = villages[0], position = sourceToLonLat(place.x, place.z);
+  const real = { grounded: true, indoors: false, position: { ...position, elevation: 153 } };
+  assert.deepEqual(residentObservationPoint(real), lonLatToSource(position.lon, position.lat),
+    "camera-only view uses the Simulation position without changing elevation, identity or path");
+  assert.equal(residentObservationPoint({ ...real, grounded: false }), undefined,
+    "unresolved ground does not qualify for an on-world actor close-up");
+  assert.equal(residentObservationPoint({ ...real, indoors: true }), undefined,
+    "indoor resident may not be teleported outdoors by an inspect action");
+  assert.equal(resolveGoTarget(`resident:${place.id}:37`), undefined,
+    "a constructed resident ref alone cannot manufacture an inspected world actor");
+  assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10), RESIDENT_OBSERVE_HALF_HEIGHT,
+    "an explicit inspect-close action must actually show the physical person rather than a 300m-wide map");
+  assert.ok(RESIDENT_OBSERVE_HALF_HEIGHT > 0.18, "camera stays above the existing minimum zoom");
 });

@@ -8,7 +8,7 @@ import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
  * pure SEED + Fantasy Time functions, so it can be refreshed at any moment.
  */
 import { continents, countries, places, roadConnections, type Place } from "./geography.ts";
-import { greatCircleDistance } from "./planet.ts";
+import { greatCircleDistance, lonLatToSource } from "./planet.ts";
 import { criticalSites, nearbyCriticalSites } from "./sites.ts";
 import { finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
@@ -39,6 +39,7 @@ const bar = (value: number, max: number, hue: string) =>
 
 let root: HTMLElement | undefined;
 let currentCode = "";
+let currentNpcPoint: { code: string; x: number; z: number } | undefined;
 /** What the popup shows: a resident (refreshed with Fantasy Time), a building or a settlement. */
 let currentKind: "npc" | "building" | "settlement" | "wilderness" | "" = "";
 
@@ -70,13 +71,19 @@ function anchorNames(resident: Resident) {
 }
 
 /** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
-// Camera-only resident entrance inspection needs a legible street/house framing.
-// Deep Hero zoom below this value caused a real software-WebGL2 device loss
- // while mandatory scene detail was still streaming; the player may still zoom
- // manually, but a read-only popup action must not force that unstable state.
-export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 10;
+// Camera-only SEED door inspection should show an actual house, not the
+// entire 300-metre neighbourhood. Keep this more conservative than true
+// resident close-up and preserve the world's ordinary bounded streaming.
+export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 2.5;
+/** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
+export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
+export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {
+  return resident.grounded && !resident.indoors
+    ? lonLatToSource(resident.position.lon, resident.position.lat) : undefined;
+}
 export function popupFocusHalfHeight(ref: string, heroHalfHeight: number): number {
-  return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight) : heroHalfHeight;
+  return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight)
+    : ref.startsWith("resident:") ? RESIDENT_OBSERVE_HALF_HEIGHT : heroHalfHeight;
 }
 let goTo: ((x: number, z: number, ref: string) => void) | undefined;
 export function setPopupNavigator(navigator: (x: number, z: number, ref: string) => void) { goTo = navigator; }
@@ -92,6 +99,13 @@ export function resolveGoTarget(ref: string): { x: number; z: number } | undefin
   if (kind === "place") return place(id);
   const settlement = place(id);
   if (!settlement) return;
+  if (kind === "resident") {
+    // Only the actually inspected resident may be framed; a URL-like ref
+    // cannot synthesize an actor, resolve a new schedule or move Simulation.
+    if (!/^(0|[1-9][0-9]*)$/.test(sub ?? "") || !settlement) return;
+    return currentNpcPoint?.code === `${settlement.code}/RESIDENT/${sub}`
+      ? { x: currentNpcPoint.x, z: currentNpcPoint.z } : undefined;
+  }
   if (kind === "home") {
     // Real doorway only, resolved lazily on the player camera-focus action.
     if (!/^(0|[1-9][0-9]*)$/.test(sub ?? "")) return;
@@ -116,7 +130,7 @@ function install() {
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
     if (target) {
       goTo!(target.x, target.z, go!.dataset.go ?? "");
-      if (go?.dataset.go?.startsWith("home:")) {
+      if (go?.dataset.go?.startsWith("home:") || go?.dataset.go?.startsWith("resident:")) {
         // Map inspection should reveal the real entrance, not leave the long
         // optional SEED-ID ledger covering it. The IDs remain in the DOM.
         const technical = root?.querySelector<HTMLDetailsElement>(".npc-technical");
@@ -138,6 +152,7 @@ export function hideNpcPopup() {
   if (root) root.hidden = true;
   currentCode = "";
   currentKind = "";
+  currentNpcPoint = undefined;
 }
 
 /** Open (or refresh) the popup for a resident at a simulation tick. */
@@ -153,9 +168,12 @@ export function showNpcPopup(resident: Resident, tick: number) {
   const focusSelector = active?.matches(".npc-technical summary") ? ".npc-technical summary"
     : active?.matches(".npc-secondary summary") ? ".npc-secondary summary"
     : active?.matches('[data-go^="home:"]') ? '[data-go^="home:"]'
+    : active?.matches('[data-go^="resident:"]') ? '[data-go^="resident:"]'
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
+  const observation = residentObservationPoint(resident);
+  currentNpcPoint = observation ? { code: resident.code, ...observation } : undefined;
   const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
     plan = dailyPlan({ code: resident.code, role: resident.role, ageGroup: resident.ageGroup, guardShift: resident.guardShift }, t, day, weekday),
     { index } = activityAt(plan, second),
@@ -174,6 +192,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </div>
     <div class="npc-now">
       <div><span class="npc-label">Now</span><b id="npc-current-task">${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
+      ${observation ? `<div class="npc-observe">${goRow("Observe resident at true scale · camera only", `resident:${resident.settlement}:${resident.index}`, "physical resident")}</div>` : ""}
       <div><span class="npc-label">Route</span><span id="npc-route">${escape(readableResidentRoute(resident.route))}</span></div>
       ${resident.travelProgress !== undefined
         ? `<div><span class="npc-label">Progress</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`
