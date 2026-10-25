@@ -576,7 +576,7 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
-    def capture_x11_viewport(self, path: Path) -> bool:
+    def capture_x11_viewport(self, path: Path, require_fresh_paint: bool = False) -> bool:
         """Read an actual headed Chromium framebuffer when CDP GPU capture stalls.
 
         This is not a rendered substitute: the pixels are from Xvfb's live
@@ -606,7 +606,7 @@ class Session:
                         struct.unpack(">II", pixels[16:24]) == self.viewport)
 
             ffmpeg = shutil.which("ffmpeg")
-            if ffmpeg:
+            if ffmpeg and not require_fresh_paint:
                 result = subprocess.run(
                     [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
                      "-f", "x11grab", "-video_size", f"{self.viewport[0]}x{self.viewport[1]}",
@@ -624,44 +624,70 @@ class Session:
                 from mss import mss
                 from mss.tools import to_png
                 with mss() as display_capture:
-                    region = {
-                        "left": x, "top": y,
-                        "width": self.viewport[0], "height": self.viewport[1],
-                    }
-                    # A valid PNG alone is not enough: software WebGPU has
-                    # yielded a frozen 100%-loading X11 framebuffer while
-                    # the page's DOM and Simulation continued progressing.
-                    # Probe actual compositor responsiveness with a temporary
-                    # bright square, remove it, and capture only AFTER its
-                    # removal is physically visible in the X11 pixels.
-                    # The diagnostic square must never enter an evidence PNG.
-                    before = display_capture.grab(region).pixel(24, 24)
+                    # X11 window.screenX/outerHeight are not reliable content
+                    # origins without a window manager (as on CI's Xvfb).
+                    # Find a short-lived marker in the REAL full framebuffer;
+                    # its physical top-left is the actual content origin.
+                    monitor = display_capture.monitors[0]
+                    before = display_capture.grab(monitor)
+                    magenta = (255, 0, 255)
+
+                    def marker_origin(frame: Any) -> tuple[int, int] | None:
+                        # mss pixels are BGRA. Search the raw buffer once
+                        # rather than doing millions of Python pixel calls.
+                        raw = frame.bgra
+                        seek = 0
+                        while (at := raw.find(b"\\xff\\x00\\xff", seek)) >= 0:
+                            seek = at + 1
+                            if at % 4:
+                                continue
+                            yy, xx = divmod(at // 4, frame.width)
+                            if xx + 47 >= frame.width or yy + 47 >= frame.height:
+                                continue
+                            if (frame.pixel(xx + 24, yy + 24) == magenta and
+                                    frame.pixel(xx + 47, yy + 47) == magenta):
+                                return xx + monitor["left"], yy + monitor["top"]
+                        return None
+
                     self.page.evaluate("""() => {
+                        document.getElementById('advisor-capture-freshness-probe')?.remove();
                         const marker = document.createElement('div');
                         marker.id = 'advisor-capture-freshness-probe';
                         marker.style.cssText = 'position:fixed;left:0;top:0;width:48px;height:48px;background:#ff00ff;z-index:2147483647;pointer-events:none';
                         document.body.append(marker);
                     }""")
+                    origin = None
                     try:
-                        probe_seen = False
                         for _ in range(12):
                             self.page.wait_for_timeout(250)
-                            pixel = display_capture.grab(region).pixel(24, 24)
-                            if pixel == (255, 0, 255) and pixel != before:
-                                probe_seen = True
+                            observed = display_capture.grab(monitor)
+                            candidate = marker_origin(observed)
+                            if candidate is None:
+                                continue
+                            cx = candidate[0] - monitor["left"]
+                            cy = candidate[1] - monitor["top"]
+                            if before.pixel(cx + 24, cy + 24) == magenta:
+                                continue
+                            if (candidate[0] >= monitor["left"] and candidate[1] >= monitor["top"] and
+                                    candidate[0] + self.viewport[0] <= monitor["left"] + monitor["width"] and
+                                    candidate[1] + self.viewport[1] <= monitor["top"] + monitor["height"]):
+                                origin = candidate
                                 break
                     finally:
                         self.page.evaluate("""() => document.getElementById('advisor-capture-freshness-probe')?.remove()""")
-                    if not probe_seen:
-                        raise CaptureError("X11 compositor is stale: DOM changed but the live framebuffer did not paint the freshness probe")
+                    if origin is None:
+                        raise CaptureError("X11 compositor produced no freshly painted, full-size viewport marker")
+                    region = {"left": origin[0], "top": origin[1],
+                              "width": self.viewport[0], "height": self.viewport[1]}
                     for _ in range(12):
                         self.page.wait_for_timeout(250)
                         frame = display_capture.grab(region)
-                        if frame.pixel(24, 24) != (255, 0, 255):
+                        if frame.pixel(24, 24) != magenta:
                             break
                     else:
-                        raise CaptureError("X11 compositor is stale: freshness probe did not disappear from live framebuffer")
+                        raise CaptureError("X11 compositor did not repaint removal of the real viewport marker")
                     to_png(frame.rgb, frame.size, output=str(path))
+                    x, y = origin
                 if exact_png():
                     print(f"X11 real framebuffer (mss) {self.viewport} at ({x},{y}); INSPECTION REQUIRED", flush=True)
                     return True
@@ -775,7 +801,7 @@ class Session:
                 session.detach()
         # A real Xvfb viewport can still exist even when both Chromium GPU
         # readback APIs stall. Never forge pixels or accept an uninspected frame.
-        if self.capture_x11_viewport(path):
+        if self.capture_x11_viewport(path, require_fresh_paint=require_fresh_paint):
             return
         # Retain the strictly bounded existing genuine-Chromium fallback.
         # A stalled GPU makes this fail honestly without a fake screenshot.
