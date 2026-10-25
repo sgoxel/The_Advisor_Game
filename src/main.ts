@@ -1084,7 +1084,8 @@ function processStreaming(material: pc.StandardMaterial) {
       const common = incoming.has(key) && outgoing.has(key);
       for (const child of record.entity.children as pc.Entity[])
         for (const instance of child.render?.meshInstances ?? [])
-          instance.setParameter("lodCoverage", common ? 1 : incoming.has(key) ? t : -Math.max(1e-7, t));
+          // A finished outgoing mask must not hide a cached patch when later reused.
+          instance.setParameter("lodCoverage", progress === 1 ? 1 : common ? 1 : incoming.has(key) ? t : -Math.max(1e-7, t));
       if (progress === 1) record.entity.enabled = incoming.has(key);
     }
     if (progress === 1) lodTransition = undefined;
