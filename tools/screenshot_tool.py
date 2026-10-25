@@ -363,7 +363,10 @@ def launch(playwright: Playwright, renderer: str, chromium: str | None, channel:
     webgl2_args = ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"] if headed and renderer == "webgl2" else WEBGL2_ARGS
     options: dict[str, Any] = {"headless": not headed, "args": webgl2_args}
     if renderer == "webgpu":
-        options.update(args=WEBGPU_ARGS, ignore_default_args=["--disable-dev-shm-usage"])
+        # Keep Playwright's default --disable-dev-shm-usage. Forcing Chromium
+        # back onto the Xvfb runner's shared-memory-backed path can leave the
+        # live WebGPU world responsive but its compositor unable to paint.
+        options.update(args=WEBGPU_ARGS)
     if channel:
         # Installed Chromium channels can use their native adapter on Windows;
         # Linux SwiftShader/Vulkan flags are reserved for the bundled CI browser.
