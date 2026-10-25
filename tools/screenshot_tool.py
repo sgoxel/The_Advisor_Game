@@ -392,8 +392,10 @@ class Session:
                     print("SETTLE main thread not responding", flush=True)
         else:
             raise CaptureError("world did not become ready within the capture timeout" if ready_only else "world did not settle within the capture timeout")
-        # A stalled renderer must fail the evidence capture rather than hold CI forever.
-        self.page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
+        # Software WebGPU can render coherently but take over 15 seconds for
+        # two initial frames while cold terrain/resident workers contend.
+        # Honour a finite frame cap (at most 60s), never bypass actual frames.
+        self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
 
     def locate(self, selector: str) -> Locator:
         locator = self.page.locator(selector).first
