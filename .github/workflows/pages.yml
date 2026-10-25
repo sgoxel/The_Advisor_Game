@@ -4,18 +4,22 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
-  group: github-pages-${{ github.event_name }}-${{ github.ref }}
+  # Closing a PR cancels its obsolete long checks; main deploys independently.
+  group: github-pages-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   build:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Build <=45m plus deploy <=10m, leaving room before the one-hour ceiling.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,7 +27,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: timeout 45m npm run test:release
+      - run: timeout --signal=TERM --kill-after=10s 30m npm run test:release
         if: github.event_name != 'workflow_dispatch'
       - run: npm test
         if: github.event_name == 'workflow_dispatch'
