@@ -1343,6 +1343,35 @@ body.globe-mode .travel-button {
   background: #f0ce7e;
   border-radius: 50%;
 }
+/* A passive, Simulation-grounded indication of the selected resident's real
+   SEED-resolved entrance. It does not add a door, change ownership or pick. */
+#selected-home-door-marker {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 14;
+  pointer-events: none;
+  max-width: min(180px, 40vw);
+  padding: 5px 8px;
+  background: #192e33f2;
+  border: 1px solid #9dd9db;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px #0009;
+  color: #e3ffff;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+  white-space: nowrap;
+}
+#selected-home-door-marker::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 10px;
+  background: #9dd9db;
+}
 /* Character popup (click a villager). */
 #npc-popup {
   position: absolute;

@@ -26,6 +26,7 @@ import {
   cellSeed,
   heightAt,
   finalSurfaceAt,
+  resolvedSettlementHomeDoorFor,
   finalSurfaceEvidenceAnchors,
   selectTiles,
   featuresFor,
@@ -1657,7 +1658,10 @@ async function start() {
   const selectedResidentMarker = $("selected-resident-marker"),
     selectedResidentName = $("selected-resident-name"),
     selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3();
-  let markedResidentCode = "", markedResidentTransform = "";
+  const selectedHomeDoorMarker = $("selected-home-door-marker"),
+    selectedHomeDoorWorld = new pc.Vec3(), selectedHomeDoorScreen = new pc.Vec3();
+  let markedResidentCode = "", markedResidentTransform = "", markedDoorTransform = "";
+  let selectedDoorPoint: { x: number; z: number; y: number } | undefined;
   // A logical resident without an installed visible 3D mesh is not an on-screen click target.
   // Keep normal pointer picking and the S006 real-click evidence under the same predicate.
   const hasResidentMesh = (actor: pc.Entity) => (actor.findComponents("render") as pc.RenderComponent[])
@@ -1808,8 +1812,17 @@ async function start() {
       if (x >= 80 && x <= innerWidth - 80 && y >= 110 && y <= innerHeight - 120) {
         if (markedResidentCode !== inspectedCode) {
           markedResidentCode = inspectedCode;
-          selectedResidentName.textContent = `Selected · ${actorResidents.get(inspectedActor)!.name}`;
+          const resident = actorResidents.get(inspectedActor)!;
+          selectedResidentName.textContent = `Selected · ${resident.name}`;
           selectedResidentMarker.dataset.residentCode = inspectedCode;
+          // Resolve only when the actual selected SEED identity changes, not
+          // every frame. An unresolved house has no invented doorway marker.
+          const place = places.find(place => place.id === resident.settlement);
+          const door = place ? resolvedSettlementHomeDoorFor(place, resident.index) : null;
+          selectedDoorPoint = door
+            ? { x: door.x, z: door.z, y: finalSurfaceAt(door.x, door.z).surfaceHeight + 0.12 }
+            : undefined;
+          selectedHomeDoorMarker.dataset.homeEntrance = door ? resident.homeEntrance : "";
         }
         const transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -110%)`;
         if (transform !== markedResidentTransform) {
@@ -1818,7 +1831,30 @@ async function start() {
         }
         selectedResidentMarker.hidden = false;
       } else selectedResidentMarker.hidden = true;
-    } else selectedResidentMarker.hidden = true;
+      if (selectedDoorPoint) {
+        const door = renderFrame.sourceToRender(selectedDoorPoint.x, selectedDoorPoint.z, selectedDoorPoint.y);
+        selectedHomeDoorWorld.set(door.x, door.y, door.z);
+        camera.camera!.worldToScreen(selectedHomeDoorWorld, selectedHomeDoorScreen);
+        const dx = Math.round(selectedHomeDoorScreen.x), dy = Math.round(selectedHomeDoorScreen.y);
+        // Avoid drawing a second label directly over the selected resident.
+        const visibleDoor = dx >= 90 && dx <= innerWidth - 90 &&
+          dy >= 100 && dy <= innerHeight - 120 &&
+          Math.hypot(dx - x, dy - y) > 48;
+        if (visibleDoor) {
+          const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -125%)`;
+          if (transform !== markedDoorTransform) {
+            selectedHomeDoorMarker.style.transform = transform;
+            markedDoorTransform = transform;
+          }
+          selectedHomeDoorMarker.hidden = false;
+        } else selectedHomeDoorMarker.hidden = true;
+      } else selectedHomeDoorMarker.hidden = true;
+    } else {
+      selectedResidentMarker.hidden = true;
+      selectedHomeDoorMarker.hidden = true;
+      markedResidentCode = "";
+      selectedDoorPoint = undefined;
+    }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
     applyDaylight(simulationTick,dt);
