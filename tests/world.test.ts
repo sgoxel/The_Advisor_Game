@@ -8,6 +8,7 @@ import {
   regionSeed,
   districtSeed,
   featuresFor,
+  settlementFrontDoorWalkway,
   heightAt,
   selectTiles,
   tileAt,
@@ -47,6 +48,27 @@ import {
 } from "../src/travel.ts";
 import { LazySimulation, summaryAt, residentAt, populationOf } from "../src/simulation.ts";
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
+
+
+test("real front-wall doorstep approaches never enter a house or jump to a side street", () => {
+  const metre = 1 / (2 * Math.PI * 637100 / 262144);
+  const door = { x: 0, z: 0 };
+  const street = (x: number, z: number) => ({ x: x * metre, z: z * metre, width: 2 * metre });
+  const front = settlementFrontDoorWalkway(door, 0, street(0, 8));
+  assert.ok(front, "a genuine street ahead of the painted wall admits an outward walkway");
+  assert.ok(Math.abs(front.x) < 1e-9 && Math.abs(front.z / metre - 3.5) < 1e-6,
+    "walkway is centred between the actual front-wall entrance and road edge");
+  assert.ok(Math.abs(front.length / metre - 7) < 1e-6,
+    "length excludes the road surface, never the width of the house");
+  assert.equal(settlementFrontDoorWalkway(door, 0, street(8, 0)), null,
+    "nearby junction side street may not draw a path through the house");
+  assert.equal(settlementFrontDoorWalkway(door, 0, street(0, -8)), null,
+    "road behind the building cannot become its front-wall approach");
+  assert.ok(settlementFrontDoorWalkway(door, Math.PI / 2, street(8, 0)),
+    "a correctly rotated SEED house keeps a corresponding legal frontage");
+  assert.equal(settlementFrontDoorWalkway(door, 0, street(0, 1)), null,
+    "sub-metre gaps do not add a decorative walkway into a street");
+});
 
 test("reloading cells in reverse order preserves all canonical content", () => {
   const coords = [
