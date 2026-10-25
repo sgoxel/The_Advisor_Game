@@ -1379,7 +1379,11 @@ function nearbyPlaces(x: number, z: number, radius: number) {
         bucket = placeBuckets.get(`${bx}/${centerZ + dz}`);
       if (bucket) for (const place of bucket) found.set(place.code, place);
     }
-  return [...found.values()].sort((a, b) => compareText(a.code, b.code));
+  // A village-view request must not cold-index a large, lexically earlier city
+  // before the village at the actual camera focus. Distance is canonical and
+  // wrap-aware; stable SEED codes break ties without randomness.
+  return [...found.values()].sort((a, b) =>
+    sourceDistance(a.x, a.z, x, z) - sourceDistance(b.x, b.z, x, z) || compareText(a.code, b.code));
 }
 function sourceDistance(ax: number, az: number, bx: number, bz: number) {
   return Math.hypot(wrapSourceX(ax - bx), az - bz);
