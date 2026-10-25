@@ -9,7 +9,7 @@ import { metresToSource } from "../src/physical-scale.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
 (globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
-const { resolveGoTarget } = await import("../src/npc-popup.ts");
+const { resolveGoTarget, popupFocusHalfHeight, HOME_ENTRANCE_FOCUS_HALF_HEIGHT } = await import("../src/npc-popup.ts");
 
 test("settlement card place links resolve to their positions only when clicked", () => {
   const home = villages[0], other = places.find((place) => place.id !== home.id)!;
@@ -33,4 +33,14 @@ test("resident camera focus reaches actual SEED-owned entrance", () => {
   assert.equal(resolveGoTarget(`home:${place.id}:-1`), undefined);
   assert.equal(resolveGoTarget(`home:${place.id}:999999`), undefined);
   assert.equal(resolveGoTarget(`home:${place.id}:2.5`), undefined);
+});
+
+test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {
+  const heroHalfHeight = .8344302680376363;
+  assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
+    "a camera-only home lookup cannot force the GPU-losing extreme close-detail view");
+  assert.equal(popupFocusHalfHeight("place:0", heroHalfHeight), heroHalfHeight,
+    "other place previews preserve their existing Hero zoom");
+  assert.equal(popupFocusHalfHeight("home:0:37", 14), 14,
+    "a future larger canonical Hero setting is never tightened by this fix");
 });
