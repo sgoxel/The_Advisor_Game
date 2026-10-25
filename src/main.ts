@@ -242,6 +242,9 @@ let poleLimit: "north" | "south" | null = null,
   poleLimitUntil = 0;
 const previousWantedKeys = new Set<string>();
 const pending = new Set<string>();
+// Screenshot-tool-only: keep game/Simulation rendering live while deferring
+// background GPU buffer churn during a bounded real WebGPU readback.
+let captureStreamingQuiesced = false;
 const uploads: {
   kind: TileJobKind;
   jobKey: string;
@@ -939,6 +942,7 @@ function processStreaming(material: pc.StandardMaterial) {
   const relevant = (key: string) => key === tileAt(0,0,0).key || coverageTiles.some(tile=>coverageKey(tile)===key) || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
   const uploadStarted = performance.now();
   for (;;) {
+  if (captureStreamingQuiesced) break;
   if (uploadsThisFrame >= streamingBudget.maxUploadsPerFrame || (uploadsThisFrame > 0 && performance.now() - uploadStarted > UPLOAD_FRAME_BUDGET_MS)) break;
   let next = uploads.shift();
   while(next && next.kind === "coverage" && !relevant(next.jobKey)) {
@@ -1038,7 +1042,7 @@ function processStreaming(material: pc.StandardMaterial) {
     // Fill every idle worker: urgent on-screen work first (skipping tiles already being built),
     // then background prefetch around the player.
     const cachedOrPending={has:(key:string)=>cachedKeys.has(key)||pending.has(key)};
-    while(idleWorkers.length && inFlight+uploads.length<generationLimit()){
+    while(!captureStreamingQuiesced && idleWorkers.length && inFlight+uploads.length<generationLimit()){
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
@@ -1054,7 +1058,7 @@ function processStreaming(material: pc.StandardMaterial) {
     const overCacheBudget = () =>
       shouldTrimStreamingCache(cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes(),
         cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3),streamingBudget,reservationBytes);
-    if (overCacheBudget()) {
+    if (!captureStreamingQuiesced && overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
         ...(lodTransition?.oldKeys ?? []),
@@ -2179,29 +2183,14 @@ async function start() {
       frames = 0;
     }
   });
-  // Only the real screenshot-tool browser may request a one-frame GPU
-  // submission handoff. Gameplay never pauses: render/update/Simulation
-  // authority are unaffected outside a bounded evidence capture. The tool
-  // restores continuous presentation in a finally block even on failures.
+  // Only the genuine screenshot-tool session can briefly quiesce geometry
+  // uploads and worker prefetch while continuing normal GPU frames, actor
+  // animation, clock advancement, resident queries and Simulation validation.
   const capturePresentation = (window as Window & { __advisorCaptureMode?: boolean }).__advisorCaptureMode
-    ? (() => {
-        let token = 0, paintedToken = 0;
-        return {
-          hold() {
-            if (!app.autoRender) return 0;
-            const current = ++token;
-            app.once("postrender", () => { paintedToken = current; });
-            // PlayCanvas submits the actual current camera/actor/geometry
-            // frame once, then relinquishes the software-GPU queue long enough
-            // for Chromium's real compositor to present and be photographed.
-            app.autoRender = false;
-            app.renderNextFrame = true;
-            return current;
-          },
-          get paintedToken() { return paintedToken; },
-          release() { app.autoRender = true; },
-        };
-      })()
+    ? {
+        quiesceStreaming() { captureStreamingQuiesced = true; },
+        resumeStreaming() { captureStreamingQuiesced = false; },
+      }
     : undefined;
   // Read-only diagnostic interface for deterministic generation and browser verification.
   Object.defineProperty(window, "advisorWorld", {
