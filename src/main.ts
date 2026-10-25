@@ -1657,10 +1657,12 @@ async function start() {
   const actors: pc.Entity[] = [];
   const selectedResidentMarker = $("selected-resident-marker"),
     selectedResidentName = $("selected-resident-name"),
-    selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3();
+    selectedResidentGroundMarker = $("selected-resident-ground-marker"),
+    selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3(),
+    selectedResidentGround = new pc.Vec3(), selectedResidentGroundScreen = new pc.Vec3();
   const selectedHomeDoorMarker = $("selected-home-door-marker"),
     selectedHomeDoorWorld = new pc.Vec3(), selectedHomeDoorScreen = new pc.Vec3();
-  let markedResidentCode = "", markedResidentTransform = "", markedDoorTransform = "";
+  let markedResidentCode = "", markedResidentTransform = "", markedGroundTransform = "", markedDoorTransform = "";
   let selectedDoorPoint: { x: number; z: number; y: number } | undefined;
   // A logical resident without an installed visible 3D mesh is not an on-screen click target.
   // Keep normal pointer picking and the S006 real-click evidence under the same predicate.
@@ -1806,6 +1808,18 @@ async function start() {
       : undefined;
     if (inspectedActor) {
       const foot = inspectedActor.getPosition();
+      // Ground indicator uses the rendered actor root, never an invented scheduled location.
+      selectedResidentGround.set(foot.x, foot.y + .02, foot.z);
+      camera.camera!.worldToScreen(selectedResidentGround, selectedResidentGroundScreen);
+      const gx = Math.round(selectedResidentGroundScreen.x), gy = Math.round(selectedResidentGroundScreen.y);
+      if (gx >= 16 && gx <= innerWidth - 16 && gy >= 90 && gy <= innerHeight - 120) {
+        const groundTransform = `translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`;
+        if (groundTransform !== markedGroundTransform) {
+          selectedResidentGroundMarker.style.transform = groundTransform;
+          markedGroundTransform = groundTransform;
+        }
+        selectedResidentGroundMarker.hidden = false;
+      } else selectedResidentGroundMarker.hidden = true;
       selectedResidentWorld.set(foot.x, foot.y + inspectedActor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M + .04, foot.z);
       camera.camera!.worldToScreen(selectedResidentWorld, selectedResidentScreen);
       const x = Math.round(selectedResidentScreen.x), y = Math.round(selectedResidentScreen.y);
@@ -1822,7 +1836,9 @@ async function start() {
             : undefined;
           selectedHomeDoorMarker.dataset.homeEntrance = door ? resident.homeEntrance : "";
         }
-        const transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -110%)`;
+        // Displace the name to reveal the actual small on-scene character.
+        const right = x < innerWidth - 260;
+        const transform = `translate3d(${x + (right ? 14 : -14)}px, ${y}px, 0) translate(${right ? "0" : "-100%"}, -110%)`;
         if (transform !== markedResidentTransform) {
           selectedResidentMarker.style.transform = transform;
           markedResidentTransform = transform;
@@ -1831,6 +1847,7 @@ async function start() {
       } else selectedResidentMarker.hidden = true;
     } else {
       selectedResidentMarker.hidden = true;
+      selectedResidentGroundMarker.hidden = true;
       if (inspectedCode !== markedResidentCode) selectedDoorPoint = undefined;
     }
     // The already-resolved SEED doorway stays visible after camera-only home
