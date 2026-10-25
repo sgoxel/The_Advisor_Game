@@ -69,7 +69,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        renderer: ${{ fromJSON(github.event_name == 'pull_request' && '["webgl2"]' || '["webgl2","webgpu"]') }}
+        # The named AGENT #1 Vulkan-only correction needs one genuine WebGPU
+        # PR capture rather than repeating an unchanged WebGL2 browser job.
+        # Every main push still checks the full four-case acceptance matrix.
+        renderer: ${{ fromJSON(github.event_name == 'pull_request' && (startsWith(github.head_ref, 'agent1/s006-webgpu-minimal-flags-') && '["webgpu"]' || '["webgl2"]') || '["webgl2","webgpu"]') }}
         profile: ${{ fromJSON(github.event_name == 'pull_request' && '["fullhd-landscape"]' || '["fullhd-landscape","fullhd-portrait"]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
