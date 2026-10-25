@@ -811,28 +811,43 @@ class Session:
                 SETTLED_FRAMES_JS, polling=250,
                 timeout=min(60000, self.args.timeout * 1000),
             )
-        state = self.page.evaluate(STATE_JS)
-        # Capture real game state and the painted HUD on both sides of the
-        # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
-        tile_status_before = state["tileStatusText"]
-        # Keep normal PlayCanvas rendering/Simulation live. Only when a real
-        # WebGPU resident scene is settled, defer optional tile GPU uploads and
-        # new worker prefetch during the bounded compositor readback; always
-        # resume, including on a genuine screenshot failure. WebGL2's already
-        # passing live capture path is unchanged.
+        # The renderer can begin optional prefetch between a settled probe
+        # and the screenshot. Acquire a genuinely settled frame and block
+        # ONLY new streaming work atomically in the real page; neither actor
+        # Simulation nor resident queries stop. WebGL2 keeps rendering live;
+        # WebGPU submits a verified real frame before draining its GPU queue.
         quiesced = False
         try:
-            if resident_proof and self.args.renderer == "webgpu" and state["settled"]:
-                self.page.evaluate(
-                    "window.advisorWorld.capturePresentation?.quiesceStreaming()")
-                quiesced = True
+            if resident_proof:
+                token = 0
+                for _ in range(24):
+                    token = self.page.evaluate(
+                        "(freeze) => window.advisorWorld.capturePresentation?.quiesceStreaming(freeze) ?? 0",
+                        self.args.renderer == "webgpu",
+                    )
+                    if token:
+                        quiesced = True
+                        break
+                    self.page.wait_for_timeout(250)
+                if not quiesced:
+                    raise CaptureError("no genuinely settled frame for atomic resident/door capture")
+                if self.args.renderer == "webgpu":
+                    self.page.wait_for_function(
+                        "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
+                        arg=token, timeout=min(30000, self.args.timeout * 1000),
+                    )
+            # Pre/post HUD and canonical world state are sampled WHILE the
+            # same genuine current-view geometry remains held, not after
+            # release when optional prefetch could legitimately resume.
+            state = self.page.evaluate(STATE_JS)
+            tile_status_before = state["tileStatusText"]
             self.capture_viewport(path, require_fresh_paint=resident_proof)
+            post_capture_state = self.page.evaluate(STATE_JS)
+            tile_status_after = post_capture_state["tileStatusText"]
         finally:
             if quiesced:
                 self.page.evaluate(
                     "window.advisorWorld.capturePresentation?.resumeStreaming()")
-        post_capture_state = self.page.evaluate(STATE_JS)
-        tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
             raise CaptureError(f"screenshot was not written: {path}")
         self.shots += 1
