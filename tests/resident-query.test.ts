@@ -5,8 +5,8 @@ const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town",
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
 test("first close-up residents are queried under a finite identical rendered/state budget", () => {
-  assert.equal(residentQueryLimitForView(true), 32,
-    "first street characters must not wait for 160 complete path evaluations");
+  assert.equal(residentQueryLimitForView(true), 8,
+    "first street characters must not wait for 32 complete cold door-and-path evaluations");
   assert.equal(residentQueryLimitForView(false), 24,
     "non-actor inspection still uses the existing fact budget");
   assert.equal(residentQueryLimitForView(true), residentQueryLimitForView(true),

@@ -32,12 +32,13 @@ export function residentWorkerShardPlan(
   return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
 }
 
-/** A first close-up answer must not evaluate 160 full legal journeys before
- * any real character becomes clickable. The same deterministic first-N spatial
- * order is used; widening the search can follow only after it proves useful.
- * Inspection without street actors keeps its already bounded fact budget. */
+/** Initial actor queries must return authoritative SEED facts before a cold
+ * worker evaluates dozens of individually resolved doors and street routes.
+ * Keep the first eight in the same deterministic spatial order; no resident
+ * gets a synthetic position or bypasses legal path/surface validation.
+ * The non-actor inspector retains its existing fact budget. */
 export function residentQueryLimitForView(actors: boolean): number {
-  return actors ? 32 : 24;
+  return actors ? 8 : 24;
 }
 
 /** A small visible resident must still be individually tappable. Screen-space
