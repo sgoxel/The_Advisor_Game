@@ -1748,7 +1748,8 @@ async function start() {
       // Never retain stale time/remote scenery; no actor is invented.
       const selectedFromSnapshot = inspectedCode && snapshot
         ? snapshot.residents.find(resident => resident.code === inspectedCode) : undefined;
-      const authoritativeSelected = inspectedCode && snapshot && !selectedFromSnapshot
+      const authoritativeSelected = inspectedCode && snapshot &&
+        snapshot.id !== lastResidentSnapshot && !selectedFromSnapshot
         ? simulation.residentByCode(inspectedCode) : undefined;
       const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
       const selectionNearby = residentMode.actors &&
@@ -1815,7 +1816,8 @@ async function start() {
         const popupCode = npcPopupCode();
         if (popupCode) {
           // Prefer the worker snapshot; only a resident outside it is re-evaluated on this thread.
-          const resident = residents.find((entry) => entry.code === popupCode) ?? simulation.residentByCode(popupCode);
+          const resident = residents.find((entry) => entry.code === popupCode) ??
+            (selected?.code === popupCode ? selected : simulation.residentByCode(popupCode));
           if (resident) showNpcPopup(resident, simulation.tick);
         }
         $("simulation-status").textContent =
