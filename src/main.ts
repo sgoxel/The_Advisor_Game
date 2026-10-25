@@ -624,12 +624,12 @@ function applyPresentation() {
     // camera distance and generous terrain/model clearance; globe owns its lens.
     camera.camera!.farClip = Math.max(512, distance +
       2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
-    // The sun's shadow map covers the camera frustum from the near plane to shadowDistance. The
-    // orthographic camera stands ~200 units back, so with the default range one shadow texel was ~6 m.
-    // Fit both tightly around the visible ground (plus room for buildings and trees) so close-up
-    // shadows are sharp (~10 cm per texel at Hero zoom).
-    const above = 4 + view.halfHeight * 6, below = 2 + view.halfHeight * 4;
-    camera.camera!.nearClip = Math.max(0.1, distance - above);
+    // The ~200-unit orthographic camera can look across steep settlement pads,
+    // roofs and river decks. A near plane just 4–19 units before its focus
+    // can clip every world mesh even while real tiles are ready and clickable.
+    // Orthographic depth precision is linear; use a full foreground range.
+    const below = 2 + view.halfHeight * 4;
+    camera.camera!.nearClip = 0.1;
     if (sunLight) sunLight.shadowDistance = Math.min(420, distance + below);
   }
   for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial, nightGlowMaterial, lampPoolMaterial]) if (material) {
