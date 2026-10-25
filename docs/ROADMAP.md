@@ -38,27 +38,27 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible map→inspect UX: semantic labels, ≥44px touch, seven layouts, focus return & visible selection
+- WP-S008-001-001 — Keyboard/touch map→inspect UX: ≥44px targets, seven layouts, safe areas & focus return
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Bounded streaming & first-use latency: ≤1 upload/frame, ≤4/6/8 queue, authoritative first answer & p95
-- WP-S009-002-001 — Exact canonical picking & idle UI: bounded final-surface ray hits, zero unchanged-frame layout reads
-- WP-S009-003-001 — Mobile resource & renderer resilience: 256MB cache trim, 1GB CPU+GPU cap, DPR/shadow tiers & device recovery
-- WP-S009-004-001 — README truth audit: Advisor-vs-atlas, campaign time/save/age, 2D characters, daylight & honest UX
-- WP-S009-005-001 — Truthful loading & pure zoom: coherent terrain→authoritative interaction→settled 3D, fixed focus
+- WP-S009-001-001 — Bounded streaming & first interaction: ≤4/6/8 queue, ≤1 upload/frame, exact-SHA p95
+- WP-S009-002-001 — Bounded canonical picking & idle UI: exact final-surface hits, zero redundant layout reads
+- WP-S009-003-001 — Mobile renderer/resource enforcement: 256MB cache trim, ≤1GB combined cap, DPR & recovery
+- WP-S009-004-001 — README capability conformance audit: Advisor autonomy, campaign time, 2D actors & honest copy
+- WP-S009-005-001 — Pure zoom & truthful readiness: fixed focus, no blank terrain, inspect-before-settled milestones
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Tools & Same-World Interiors
 
-- WP-S010-001-001 — Hero/Close root UX research: 2D billboard identity, legal rooms/doors, Advisor boundary & mobile budgets
-- WP-S010-002-001 — SEED-owned Hero/Close GLB kits: legal collision-safe placement, instancing, zoom & resource bounds
-- WP-S010-003-001 — Accessible Hero/Close selection: exact touch/keyboard hits, 2D sprites, safe areas & focus return
-- WP-S010-003-002 — Advisor inspect/follow/measure: camera-only tracking, legal route truth & first-answer latency
-- WP-S010-004-001 — Lawful workstations & 2D resident actions: Simulation-backed tasks, owned tools & reusable kits
-- WP-S010-004-002 — SEED-owned home/yard detail: legal doors, grounded props, visual clarity & mobile bounds
-- WP-S010-004-003 — Canonical resident inventory: SEED ownership, validated item deltas & honest held-item UI
-- WP-S010-005-001 — Same-world home entry: separate camera preview & lawful character entry, staged 3D readiness
-- WP-S010-005-002 — Same-world service interiors: connected doors/rooms, lawful occupancy & reusable 3D kits
-- WP-S010-005-003 — Indoor 2D residents: lawful portal crossings, stable identity, true occupancy & occlusion
-- WP-S010-005-004 — Interior persistence & recovery: Simulation-validated deltas, deterministic revisits & safe exits
-- WP-S010-006-001 — Hero/Close exact-SHA performance proof: p95/30–60 FPS, 256MB/1GB, phone & dual-backend visuals
+- WP-S010-001-001 — Research Hero/Close UX architecture: lawful 3D spaces, 2D residents, Advisor-only control & mobile limits
+- WP-S010-002-001 — SEED-owned 3D prop/GLB kits: collision-safe Hero/Close placement, instancing & reuse
+- WP-S010-003-001 — Hero/Close 2D resident selection: accurate keyboard/touch hits, occlusion & focus return
+- WP-S010-003-002 — Read-only Advisor inspect/follow/measure: camera-only tracking, legal distances & bounded answers
+- WP-S010-004-001 — Simulation-truthful workstations: legal tasks, owned tools & 2D resident action sprites
+- WP-S010-004-002 — Deterministic homes/yards: grounded 3D props, traversable doors & mobile reuse
+- WP-S010-004-003 — Canonical resident inventory: SEED item IDs, validated transfers & truthful UI
+- WP-S010-005-001 — Enterable same-world homes: camera-only previews, legal portals & staged room readiness
+- WP-S010-005-002 — Enterable service interiors: legal doors, connected rooms, actual occupants & 3D kits
+- WP-S010-005-003 — 2D residents indoors: Simulation-validated door crossings, occupancy & roof occlusion
+- WP-S010-005-004 — Interior continuity: validated item/occupant changes, stable revisits & safe exit/recovery
+- WP-S010-006-001 — Hero/Close performance acceptance: exact-SHA p95, ≥30 FPS, 256MB/1GB & renderer parity
