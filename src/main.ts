@@ -1715,7 +1715,11 @@ async function start() {
     if(ready)updateWilderness(view.x,view.z,view.halfHeight,scaleValueForHalfHeight(view.halfHeight),projectionTransition,projectTransportGround);
     const residentInspectorOpen = !$("travel-panel").hidden;
     if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible ||
-        residentInspectorOpen !== lastResidentInspectorOpen) {
+        residentInspectorOpen !== lastResidentInspectorOpen || selectionDirty) {
+      // A camera-only focus/zoom changes the authoritative resident query key.
+      // Dispatch its new view even when Fantasy Time is fixed (e.g. on-demand
+      // evidence/replay). Otherwise "settled" can remain false indefinitely
+      // with an idle resident worker and the previous view's snapshot.
       lastResidentDetailVisible = smallDetailsVisible;
       lastResidentInspectorOpen = residentInspectorOpen;
       if (view.halfHeight < 900)
