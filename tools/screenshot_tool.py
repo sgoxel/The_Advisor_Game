@@ -530,7 +530,7 @@ class Session:
             if frames:
                 pixels = base64.b64decode(frames[0]["data"], validate=True)
                 dimensions = (struct.unpack(">II", pixels[16:24])
-                              if len(pixels) >= 24 and pixels[:8] == b"\\x89PNG\\r\\n\\x1a\\n"
+                              if len(pixels) >= 24 and pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
                               else None)
                 session.send("Page.screencastFrameAck", {"sessionId": frames[0]["sessionId"]})
                 if dimensions == self.viewport:
