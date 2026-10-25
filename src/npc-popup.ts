@@ -88,7 +88,13 @@ export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewpo
   // screen-space person size, never change Simulation/SEED or move the actor.
   const observeHalfHeight = Math.max(.36, Math.min(RESIDENT_OBSERVE_HALF_HEIGHT,
     RESIDENT_OBSERVE_HALF_HEIGHT * viewportHeight / 1920));
-  return ref.startsWith("home:") ? Math.max(HOME_ENTRANCE_FOCUS_HALF_HEIGHT, heroHalfHeight)
+  // Landscape has fewer vertical pixels for the same house: tighten only the
+  // camera footprint so the owned front door, physical facade and connected
+  // street remain legible. Preserve the wider proven portrait composition and
+  // never zoom out an already closer Hero view or move the resident.
+  const homeHalfHeight = Math.max(.95, Math.min(HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
+    HOME_ENTRANCE_FOCUS_HALF_HEIGHT * viewportHeight / 1920));
+  return ref.startsWith("home:") ? Math.max(homeHalfHeight, heroHalfHeight)
     : ref.startsWith("resident:") ? observeHalfHeight : heroHalfHeight;
 }
 /** Camera-facing-only view of the real front wall; never rotates a resident. */

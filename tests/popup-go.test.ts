@@ -66,6 +66,12 @@ test("owned-door inspection stays at readable building zoom and preserves ordina
     "the owned front door is framed at building scale instead of a whole neighbourhood");
   assert.equal(popupFocusHalfHeight("place:0", heroHalfHeight), heroHalfHeight,
     "other place previews preserve their existing Hero zoom");
+  assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight, 1080), .95,
+    "landscape must bring the real facade and attached street into readable view");
+  assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight, 390), .95,
+    "short landscape stays at a finite building-wide camera footprint");
+  assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight, 1920), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
+    "portrait keeps the already-inspected connected home view");
   assert.equal(popupFocusHalfHeight("home:0:37", 14), 14,
     "a future larger canonical Hero setting is never tightened by this fix");
 });
