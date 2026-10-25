@@ -514,7 +514,7 @@ class Session:
         if restore_minimized:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
-    def capture_viewport(self, path: Path, required_frames: int = 2) -> None:
+    def capture_viewport(self, path: Path) -> None:
         # The ordinary full-resolution Chromium/Playwright screenshot can block
         # for the entire 840s CI budget while a live software WebGL2/WebGPU
         # canvas renders. Request a *real compositor frame* through Chrome's
@@ -557,11 +557,10 @@ class Session:
                 frame = frames.pop(0)
                 session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
                 received += 1
-                if received < required_frames:
-                    # Each acknowledged frame may precede the most recent DOM
-                    # inspector/camera update. Request another real repaint;
-                    # resident shots demand a third independent compositor
-                    # frame to avoid the observed one-shot UI lag.
+                if received == 1:
+                    # Frame one can predate the latest inspector/camera update.
+                    # Ask for a fresh real compositor frame; a static scene
+                    # may legitimately stop at two after the repaint.
                     request_real_repaint()
                     continue
                 pixels = base64.b64decode(frame["data"], validate=True)
@@ -594,7 +593,7 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = self.page.locator("#tile-status").text_content(timeout=5000)
-        self.capture_viewport(path, required_frames=3 if resident_proof else 2)
+        self.capture_viewport(path)
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = self.page.locator("#tile-status").text_content(timeout=5000)
         if not path.is_file() or path.stat().st_size == 0:
