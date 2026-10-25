@@ -17,42 +17,12 @@ on:
       - 'src/resident-query.ts'
       - 'tools/screenshot_tool.py'
       - '.github/workflows/agent1-s006-resident-evidence.yml'
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, closed]
-    paths:
-      - 'src/clock.ts'
-      - 'src/main.ts'
-      - 'src/render-resolution.ts'
-      - 'src/npc-popup.ts'
-      - 'src/political-settlement-access.ts'
-      - 'src/resident-inspector.*'
-      - 'src/settlement-exterior*.ts'
-      - 'src/simulation.ts'
-      - 'src/world.ts'
-      - 'src/transport-walking-route.ts'
-      - 'tests/simulation.test.ts'
-      - 'tools/screenshot_tool.py'
-      - '.github/workflows/agent1-s006-resident-evidence.yml'
 concurrency:
-  group: s006-resident-${{ github.event.pull_request.number || github.ref }}
+  group: s006-resident-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
 jobs:
-  resident-invariants:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Validate resident release invariants (bounded PR gate)
-        run: npm run test:s006:focused
   resident-diagnostics:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -67,14 +37,13 @@ jobs:
       - name: Full resident authority diagnostics (on demand)
         run: node --experimental-strip-types --test tests/simulation.test.ts
   resident-evidence:
-    # One real, live-game browser frame on PRs tests the capture failure,
-    # not just compilation; deploy pushes retain the full four-view matrix.
-    if: github.event_name != 'pull_request' || github.event.action != 'closed'
+    # Release invariants/build are already mandatory in pages.yml for PRs.
+    # Keep four genuine screenshot_tool.py views on main or explicit dispatch.
     strategy:
       fail-fast: false
       matrix:
-        renderer: ${{ fromJSON(github.event_name == 'pull_request' && '["webgl2"]' || '["webgl2","webgpu"]') }}
-        profile: ${{ fromJSON(github.event_name == 'pull_request' && '["fullhd-landscape"]' || '["fullhd-landscape","fullhd-portrait"]') }}
+        renderer: [webgl2, webgpu]
+        profile: [fullhd-landscape, fullhd-portrait]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
