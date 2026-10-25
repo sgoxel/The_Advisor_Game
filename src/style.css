@@ -1372,6 +1372,12 @@ body.globe-mode .travel-button {
   height: 10px;
   background: #9dd9db;
 }
+/* Exact SEED-owned door camera focus; never commands a resident. */
+#npc-popup [data-go^="home:"] {
+  min-height: 44px;
+  padding: 7px 10px;
+  margin: 4px 0 0 7px;
+}
 /* Character popup (click a villager). */
 #npc-popup {
   position: absolute;
