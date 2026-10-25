@@ -54,12 +54,14 @@ jobs:
       - name: Full resident authority diagnostics (on demand)
         run: node --experimental-strip-types --test tests/simulation.test.ts
   resident-evidence:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    # One real, live-game browser frame on PRs tests the capture failure,
+    # not just compilation; deploy pushes retain the full four-view matrix.
+    if: github.event_name != 'pull_request' || github.event.action != 'closed'
     strategy:
       fail-fast: false
       matrix:
-        renderer: [webgl2, webgpu]
-        profile: [fullhd-landscape, fullhd-portrait]
+        renderer: ${{ fromJSON(github.event_name == 'pull_request' && '["webgl2"]' || '["webgl2","webgpu"]') }}
+        profile: ${{ fromJSON(github.event_name == 'pull_request' && '["fullhd-landscape"]' || '["fullhd-landscape","fullhd-portrait"]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -73,7 +75,6 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: python -m pip install playwright==1.63.0
       - name: Capture resident inspector evidence
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
@@ -85,7 +86,7 @@ jobs:
           # Freeze the same legitimate, seeded Fantasy tick for every viewport and renderer.
           # This does not freeze browser timers/animation or change game code/SEED.
           FIXED_TIME_MS=1792874335750 # Fantasy tick 36274242 (same proven daylight evidence tick)
-          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:(()=>{const r=window.__s006Resident\;const p=window.advisorWorld.navigation.surfaceAtScreen(r.clientX,r.clientY)\;if(!p)throw Error("S006 selected actor has no real ground anchor")\;window.advisorWorld.navigation.setFocus(p.lon,p.lat)\;window.advisorWorld.setHalfHeight(3)})();wait:1500;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:window.advisorWorld.state.settlementPresentation==="buildings"||(()=>{throw Error("S006 captured icon zoom instead of resident-building detail")})();eval:window.__s006Focus=JSON.stringify(window.advisorWorld.state.focus);tap:resident;visible:#npc-popup:not([hidden]);eval:window.__s006Focus===JSON.stringify(window.advisorWorld.state.focus)||(()=>{throw Error("S006 resident inspection changed geographic focus")})();eval:(()=>{const r=window.__s006Resident\;const get=id=>document.getElementById(id)?.textContent\;for(const [id,expected] of [["npc-seed-code",r.code],["npc-home-entrance",r.homeEntrance],["npc-workplace-code",r.workplace],["npc-current-task",r.task],["npc-route-code",r.route]])if(get(id)!==expected)throw new Error("S006 actual browser click mismatch: "+id+" expected "+expected+" found "+get(id))\;return true})();visible:#selected-resident-marker:not([hidden]);eval:document.getElementById("selected-resident-marker").dataset.residentCode===window.__s006Resident.code||(()=>{throw Error("S006 on-scene selected marker identity mismatch")})();eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details;click:#npc-popup [data-go^="home:"];until:!document.getElementById("selected-home-door-marker").hidden;eval:document.getElementById("selected-home-door-marker").dataset.homeEntrance===window.__s006Resident.homeEntrance||Promise.reject(new Error("S006 owned doorway identity mismatch"));eval:document.getElementById("npc-seed-code").textContent===window.__s006Resident.code||Promise.reject(new Error("S006 lost original SEED resident identity"));shot:owned-home-entrance'
+          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:1500;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:(()=>{const r=window.__s006Resident\;const p=window.advisorWorld.navigation.surfaceAtScreen(r.clientX,r.clientY)\;if(!p)throw Error("S006 selected actor has no real ground anchor")\;window.advisorWorld.navigation.setFocus(p.lon,p.lat)\;window.advisorWorld.setHalfHeight(10)})();wait:1500;until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());eval:window.advisorWorld.state.settlementPresentation==="buildings"||(()=>{throw Error("S006 captured icon zoom instead of resident-building detail")})();eval:window.__s006Focus=JSON.stringify(window.advisorWorld.state.focus);tap:resident;visible:#npc-popup:not([hidden]);eval:window.__s006Focus===JSON.stringify(window.advisorWorld.state.focus)||(()=>{throw Error("S006 resident inspection changed geographic focus")})();eval:(()=>{const r=window.__s006Resident\;const get=id=>document.getElementById(id)?.textContent\;for(const [id,expected] of [["npc-seed-code",r.code],["npc-home-entrance",r.homeEntrance],["npc-workplace-code",r.workplace],["npc-current-task",r.task],["npc-route-code",r.route]])if(get(id)!==expected)throw new Error("S006 actual browser click mismatch: "+id+" expected "+expected+" found "+get(id))\;return true})();visible:#selected-resident-marker:not([hidden]);eval:document.getElementById("selected-resident-marker").dataset.residentCode===window.__s006Resident.code||(()=>{throw Error("S006 on-scene selected marker identity mismatch")})();eval:document.querySelector("#npc-popup .npc-technical").open=true;shot:resident-canonical-details;click:#npc-popup [data-go^="home:"];until:!document.getElementById("selected-home-door-marker").hidden;eval:document.getElementById("selected-home-door-marker").dataset.homeEntrance===window.__s006Resident.homeEntrance||Promise.reject(new Error("S006 owned doorway identity mismatch"));eval:document.getElementById("npc-seed-code").textContent===window.__s006Resident.code||Promise.reject(new Error("S006 lost original SEED resident identity"));shot:owned-home-entrance'
           # Prove the real rendered actor/pointer/authoritative five-field click before
           # the first GPU readback. Historical pre-click screenshots consumed >10m
           # and were canceled before testing a single click; time-bound each job.
@@ -94,7 +95,7 @@ jobs:
           # no screencast frames after a successful canvas click (4/4 zero PNG).
           # One consolidated real-click/details tool PNG per job avoids a second very slow GPU readback. A failed WebGPU or portrait
           # cannot withhold already-produced PNGs for another backend/viewport.
-          xvfb-run -a timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

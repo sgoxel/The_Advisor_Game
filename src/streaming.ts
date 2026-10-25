@@ -27,7 +27,7 @@ export const STREAMING_BUDGETS: Readonly<
   phone: Object.freeze({
     deviceClass: "phone",
     generationReady: 4,
-    maxUploadsPerFrame: 3,
+    maxUploadsPerFrame: 1,
     activePatches: 89,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
@@ -36,7 +36,7 @@ export const STREAMING_BUDGETS: Readonly<
   tablet: Object.freeze({
     deviceClass: "tablet",
     generationReady: 6,
-    maxUploadsPerFrame: 4,
+    maxUploadsPerFrame: 1,
     activePatches: 119,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
@@ -45,7 +45,7 @@ export const STREAMING_BUDGETS: Readonly<
   desktop: Object.freeze({
     deviceClass: "desktop",
     generationReady: 8,
-    maxUploadsPerFrame: 8,
+    maxUploadsPerFrame: 1,
     activePatches: 159,
     ...STREAMING_MEMORY_POLICY,
     cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
