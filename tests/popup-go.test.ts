@@ -93,7 +93,10 @@ test("true-scale resident observation uses the real canonical position and canno
   assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10, 1080), .421875,
     "landscape narrows only the camera to retain portrait physical actor readability");
   assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10, 1920), RESIDENT_OBSERVE_HALF_HEIGHT,
-    "portrait keeps the already-proven actual actor size");
+    "portrait brings the real rendered character close enough to read");
+  assert.equal(RESIDENT_OBSERVE_HALF_HEIGHT, .52, "portrait observation is closer than the previously undersized .75 view");
+  assert.equal(popupFocusHalfHeight(`resident:${place.id}:37`, 10, 1440), .52,
+    "tall screens retain the readable resident footprint without moving the actor");
   assert.equal(popupFocusHalfHeight(`home:${place.id}:37`, 10, 1080), 10,
     "owned-door and ordinary navigation do not change with viewport height");
 });
