@@ -2170,10 +2170,35 @@ async function start() {
       frames = 0;
     }
   });
+  // Only the real screenshot-tool browser may request a one-frame GPU
+  // submission handoff. Gameplay never pauses: render/update/Simulation
+  // authority are unaffected outside a bounded evidence capture. The tool
+  // restores continuous presentation in a finally block even on failures.
+  const capturePresentation = (window as Window & { __advisorCaptureMode?: boolean }).__advisorCaptureMode
+    ? (() => {
+        let token = 0, paintedToken = 0;
+        return {
+          hold() {
+            if (!app.autoRender) return 0;
+            const current = ++token;
+            app.once("postrender", () => { paintedToken = current; });
+            // PlayCanvas submits the actual current camera/actor/geometry
+            // frame once, then relinquishes the software-GPU queue long enough
+            // for Chromium's real compositor to present and be photographed.
+            app.autoRender = false;
+            app.renderNextFrame = true;
+            return current;
+          },
+          get paintedToken() { return paintedToken; },
+          release() { app.autoRender = true; },
+        };
+      })()
+    : undefined;
   // Read-only diagnostic interface for deterministic generation and browser verification.
   Object.defineProperty(window, "advisorWorld", {
     value: {
       seed: WORLD_SEED,
+      capturePresentation,
       cellAt,
       cellSeed,
       lightingEvidenceAtSource(x:number,z:number) { return featuresFor(tileForPosition(x,z,15)).filter(f => f.kind === "street-lamp"); },
