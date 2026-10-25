@@ -356,6 +356,27 @@ export function settlementFrontWallDoor(
   };
 }
 
+/** Draw a house's approach only OUTSIDE its actual rendered front wall.
+ * A closer junction side-street must not create a fake walkway through a
+ * building. Returning null is safer than depicting an impossible connector. */
+export function settlementFrontDoorWalkway(
+  door: { x: number; z: number }, yawRad: number,
+  street?: { x: number; z: number; width: number },
+): { x: number; z: number; yawRad: number; length: number } | null {
+  if (!street) return null;
+  const dx = wrapSourceX(street.x - door.x), dz = street.z - door.z,
+    distance = Math.hypot(dx, dz);
+  if (distance < 1e-9) return null;
+  const ux = dx / distance, uz = dz / distance;
+  // Only a street on the SEED-assigned outward-facing side of this wall
+  // can receive the walkway. This also prevents diagonals through the house.
+  if (ux * Math.sin(yawRad) + uz * Math.cos(yawRad) < .65) return null;
+  const length = distance - street.width * .5;
+  if (length <= metresToSource(1.2) || length >= metresToSource(40)) return null;
+  return { x: wrapSourceX(door.x + ux * length * .5), z: door.z + uz * length * .5,
+    yawRad: Math.atan2(ux, uz), length };
+}
+
 /** Resolve one canonical home against the same legal lot and street frontage as
  * the rendered building. Unlike candidate[0], this may be absent or shifted. */
 export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x: number; z: number } | undefined {
@@ -410,12 +431,21 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       name = buildingName(shop ?? buildingKind, plot.id, place.name, place.continent, owner, place.kind === "city"),
       label = shop ? (shop === "cafe" ? "Café" : "Restaurant") : plot.service || plot.park || plot.house?.houseType || plot.kind;
     add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { name, shop, service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, widthM: plot.widthM, depthM: plot.depthM, parkShape: plot.parkShape, house: plot.house, fieldForm: plot.fieldForm, urban: place.kind === "city" && kind === "residence" });
-    // A short walkway from the door to the street edge (never across the road itself).
+    // The home path starts at the real front-wall door, not a nearest-road
+    // ray from the house centre. Reject perpendicular/rear streets at junctions.
+    const houseApproach = kind === "residence"
+      ? settlementFrontDoorWalkway(door, plot.yawRad, settlementStreetAt(plan, door.x, door.z)) : null;
     const pathLength = street ? distance - edgeOffset - street.width * .5 : 0;
-    if ((kind === "residence" || kind === "service" || kind === "keep") && street && pathLength > metresToSource(1.2) && pathLength < metresToSource(40)) {
-      const ux = dx / distance, uz = dz / distance;
-      add("path", wrapSourceX(door.x + ux * pathLength * .5), door.z + uz * pathLength * .5, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`, { ownerId: plot.ownerId, label: "Access path", yawRad: Math.atan2(ux, uz), footprintWidth: metresToSource(1.2), footprintDepth: pathLength, length: pathLength });
-    }
+    const ordinaryApproach = kind !== "residence" && street && distance > 0 &&
+      pathLength > metresToSource(1.2) && pathLength < metresToSource(40)
+      ? { x: wrapSourceX(door.x + dx / distance * pathLength * .5),
+        z: door.z + dz / distance * pathLength * .5,
+        yawRad: Math.atan2(dx, dz), length: pathLength } : null;
+    const approach = houseApproach ?? ordinaryApproach;
+    if ((kind === "residence" || kind === "service" || kind === "keep") && approach)
+      add("path", approach.x, approach.z, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`,
+        { ownerId: plot.ownerId, label: "Access path", yawRad: approach.yawRad,
+          footprintWidth: metresToSource(1.2), footprintDepth: approach.length, length: approach.length });
   };
   for (const place of localPlaces) {
     const extent = place.kind === "city" ? 76 : 36;
