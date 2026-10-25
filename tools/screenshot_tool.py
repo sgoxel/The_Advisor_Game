@@ -444,7 +444,25 @@ class Session:
                 toggle.click()
                 restore_minimized = True
         if name == "click":
-            self.locate(arg).click()
+            if arg.startswith('#npc-popup [data-go^="'):
+                # Chromium software WebGPU can keep animating the popup while
+                # locator.click() waits forever for Playwright's stable-layout
+                # heuristic. Find the genuinely visible, unobstructed button,
+                # then send a real CDP mouse click at its centre. The following
+                # S006 steps still verify the actual camera/SEED result.
+                point = page.locator(arg).first.evaluate("""element => {
+                    const r = element.getBoundingClientRect();
+                    if (!r.width || !r.height || r.top >= innerHeight || r.bottom <= 0) return null;
+                    const x = Math.round((Math.max(0, r.left) + Math.min(innerWidth, r.right)) / 2);
+                    const y = Math.round((Math.max(0, r.top) + Math.min(innerHeight, r.bottom)) / 2);
+                    const hit = document.elementFromPoint(x, y);
+                    return hit && (hit === element || element.contains(hit)) ? [x, y] : null;
+                }""", timeout=min(15000, self.args.timeout * 1000))
+                if point is None:
+                    raise CaptureError(f"resident popup control not genuinely clickable: {arg}")
+                page.mouse.click(*point)
+            else:
+                self.locate(arg).click()
         elif name in ("check", "uncheck"):
             self.locate(arg).set_checked(name == "check")
         elif name == "select":
