@@ -332,7 +332,12 @@ class CaptureError(Exception):
 
 def launch(playwright: Playwright, renderer: str, chromium: str | None, channel: str | None = None,
            headed: bool = False) -> Browser:
-    # Headed Xvfb captures use Mesa/OpenGL rather than Chromium SwiftShader:\n    # the original software ANGLE path repeatedly lost WebGL2 under real\n    # close-scene streaming, even at <250MB and one upload/frame. Headless\n    # default and WebGPU backend setup retain their existing proven flags.\n    webgl2_args = ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"] if headed and renderer == "webgl2" else WEBGL2_ARGS\n    options: dict[str, Any] = {"headless": not headed, "args": webgl2_args}
+    # Headed Xvfb captures use Mesa/OpenGL rather than Chromium SwiftShader:
+    # the original software ANGLE path repeatedly lost WebGL2 under real
+    # close-scene streaming, even at <250MB and one upload/frame. Headless
+    # default and WebGPU backend setup retain their existing proven flags.
+    webgl2_args = ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"] if headed and renderer == "webgl2" else WEBGL2_ARGS
+    options: dict[str, Any] = {"headless": not headed, "args": webgl2_args}
     if renderer == "webgpu":
         options.update(args=WEBGPU_ARGS, ignore_default_args=["--disable-dev-shm-usage"])
     if channel:
