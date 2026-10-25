@@ -9,6 +9,7 @@ on:
       # Acceptance needs screenshots of deployed gameplay, not only edits to this workflow.
       - 'src/main.ts'
       - 'src/render-resolution.ts'
+      - 'src/npc-popup.ts'
       - 'src/simulation.ts'
       - 'src/world.ts'
       - 'src/resident-inspector.css'
@@ -23,6 +24,7 @@ on:
       - 'src/clock.ts'
       - 'src/main.ts'
       - 'src/render-resolution.ts'
+      - 'src/npc-popup.ts'
       - 'src/political-settlement-access.ts'
       - 'src/resident-inspector.*'
       - 'src/settlement-exterior*.ts'

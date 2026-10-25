@@ -37,6 +37,10 @@ test("resident camera focus reaches actual SEED-owned entrance", () => {
 });
 
 test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {
+  // The real owned house, front door and street must fit together; a sub-house
+  // tight crop previously showed only the marker against an empty background.
+  assert.ok(HOME_ENTRANCE_FOCUS_HALF_HEIGHT >= 6,
+    "camera-only home inspection must not crop the full 3D building to its doorway");
   const heroHalfHeight = .8344302680376363;
   assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
     "the owned front door is framed at building scale instead of a whole neighbourhood");
