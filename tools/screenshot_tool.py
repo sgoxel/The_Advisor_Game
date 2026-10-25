@@ -824,7 +824,10 @@ class Session:
         # an actual framebuffer. Never synthesize or alter captured pixels.
         token = 0
         try:
-            if resident_proof:
+            # Keep genuine WebGL2 animation running while capturing: a single
+            # frozen frame can leave the compositor displaying clearColor despite
+            # submitted World meshes. WebGPU retains its bounded frame handoff.
+            if resident_proof and self.args.renderer == "webgpu":
                 token = self.page.evaluate(
                     "window.advisorWorld.capturePresentation?.hold() ?? 0")
                 if token:
