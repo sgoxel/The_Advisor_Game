@@ -1327,7 +1327,7 @@ function setupControls() {
   );
   // Place rows in the settlement card (notable places, nearby sites, neighbours) centre the camera on
   // the place at Hero zoom; the card stays open so the next place can be picked.
-  setPopupNavigator((x, z, ref) => navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT)));
+  setPopupNavigator((x, z, ref) => navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT, innerHeight)));
   $("home").onclick = () => {
     view.yaw = -0.22;
     navigate(villages[0].x, villages[0].z + metresToSource(6), HERO_HALF_HEIGHT);
