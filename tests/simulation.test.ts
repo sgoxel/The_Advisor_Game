@@ -723,35 +723,56 @@ test("ordinary civilian identity and real ground persist across local midnight",
   }
 });
 
-test("a real ordinary civilian's blocked earlier work leg cannot teleport across local midnight", () => {
-  // Use only real SEED roles, front doors and final-surface routes. A failed
-  // work trip is an actual residentAt() obstacle verdict, not a synthetic
-  // rejected predicate; the same named civilian must survive the date change.
-  let witness: { place: (typeof villages)[number]; index: number; day: number } | undefined;
+test("a blocked leg never becomes a fabricated civilian work origin across local midnight", () => {
+  // Find an actual SEED resident whose first work departure is physically
+  // blocked. Observe the last reached point immediately BEFORE that failed
+  // leg, then verify that no scheduled work destination replaces it.
+  let witness: { place: (typeof villages)[number]; index: number; day: number; departureTick: number } | undefined;
   for (const place of villages.slice(0, 12)) {
-    const day = [1, 2, 3, 4, 5, 6, 7].find(d =>
-      localWeekday(tickAtLocalTime(d, 12 * HOUR, place.canonicalPosition.lon), place.canonicalPosition.lon) !== 6)!;
+    const lon = place.canonicalPosition.lon,
+      day = [1, 2, 3, 4, 5, 6, 7].find(d =>
+        localWeekday(tickAtLocalTime(d, 12 * HOUR, lon), lon) !== 6)!;
     for (let index = 6; index < Math.min(populationOf(place), 80); index++) {
       const foundation = residentFoundationAt(place, index);
       if (foundation.role === "guard" || foundation.workplace === foundation.homeEntrance) continue;
-      const blocked = residentAt(place, index, tickAtLocalTime(day, 9 * HOUR, place.canonicalPosition.lon));
-      if (blocked.grounded && blocked.route.startsWith("BLOCKED:") &&
-          blocked.route.includes(" → ") && blocked.route.includes(foundation.workplace)) {
-        witness = { place, index, day };
-        break;
-      }
+      const blocked = residentAt(place, index, tickAtLocalTime(day, 9 * HOUR, lon));
+      if (!(blocked.grounded && blocked.route.startsWith("BLOCKED:") &&
+          blocked.route.includes(" → ") && blocked.route.includes(foundation.workplace))) continue;
+      const plan = dailyPlan({ code: foundation.code, role: foundation.role,
+        ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, foundation.traits,
+        localDayIndex(tickAtLocalTime(day, 9 * HOUR, lon), lon),
+        localWeekday(tickAtLocalTime(day, 9 * HOUR, lon), lon));
+      const departure = plan.find((step, i) => i > 0 && step.anchor === "work" &&
+        step.anchor !== plan[i - 1].anchor && step.start <= 9 * HOUR);
+      if (!departure) continue;
+      const departureTick = tickAtLocalTime(day, departure.start, lon),
+        reached = residentAt(place, index, departureTick - 1),
+        failed = residentAt(place, index, departureTick);
+      if (!failed.grounded || !failed.route.startsWith("BLOCKED:") ||
+          greatCircleDistance(reached.position, failed.position) >= .1) continue;
+      witness = { place, index, day, departureTick };
+      break;
     }
     if (witness) break;
   }
-  assert.ok(witness, "SEED must exhibit an ordinary grounded civilian with a physically blocked earlier work journey");
-  const { place, index, day } = witness, lon = place.canonicalPosition.lon,
+  assert.ok(witness, "SEED must exhibit a grounded ordinary civilian with a failed physical work departure");
+  const { place, index, day, departureTick } = witness, lon = place.canonicalPosition.lon,
+    foundation = residentFoundationAt(place, index),
+    reached = residentAt(place, index, departureTick - 1),
+    blockedStart = residentAt(place, index, departureTick),
     morning = residentAt(place, index, tickAtLocalTime(day, 9 * HOUR, lon)),
     midnightTick = tickAtLocalTime(day + 1, 0, lon),
     before = residentAt(place, index, midnightTick - 1),
     midnight = residentAt(place, index, midnightTick),
     after = residentAt(place, index, midnightTick + 1);
+  assert.equal(blockedStart.route, `BLOCKED: ${reached.route} → ${foundation.workplace}`,
+    "blocked work departure records the actual last reached site, not an assumed work origin");
+  assert.ok(greatCircleDistance(blockedStart.position, reached.position) < .1,
+    "Simulation leaves the physical resident at their last legally reached position");
   assert.ok(morning.grounded && morning.route.startsWith("BLOCKED:") &&
     morning.task.startsWith("Blocked:"), `${morning.name}: earlier worksite physically unreachable`);
+  assert.ok(greatCircleDistance(morning.position, reached.position) < .1,
+    "a blocked morning never fabricates a position at the unreachable worksite");
   assert.equal(morning.travelProgress, undefined, "blocked commute cannot report completed travel");
   assert.equal(before.code, morning.code, "earlier failed leg must belong to the same named civilian");
   assert.equal(midnight.name, morning.name);
@@ -760,6 +781,9 @@ test("a real ordinary civilian's blocked earlier work leg cannot teleport across
   assert.equal(midnight.workplace, morning.workplace);
   assert.ok(greatCircleDistance(before.position, midnight.position) < 3,
     `${morning.name} (${morning.code}): local midnight invented movement after blocked work approach`);
+  if (before.route.startsWith("BLOCKED:"))
+    assert.ok(greatCircleDistance(before.position, midnight.position) < .1,
+      "a physically blocked overnight leg preserves the exact last reached point");
   assert.ok(greatCircleDistance(midnight.position, after.position) < 3,
     `${morning.name} (${morning.code}): next-second physical continuity violated`);
   assert.deepEqual(residentAt(place, index, midnightTick), midnight,
