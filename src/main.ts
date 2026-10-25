@@ -2211,10 +2211,16 @@ async function start() {
               // stop new GPU submissions during browser compositor readback.
               // WebGL2 must keep presenting while only streaming is held.
               app.once("postrender", () => {
-                if (captureStreamingQuiesced && token === captureRenderToken) {
-                  paintedToken = token;
-                  app.autoRender = false;
-                }
+                // postrender fires before WebGPU submits the current frame.
+                // Do not stop submissions until the following browser frame,
+                // after the real rendered canvas had a chance to reach Chrome's
+                // compositor. An earlier stop stranded 0-frame PNG evidence.
+                requestAnimationFrame(() => {
+                  if (captureStreamingQuiesced && token === captureRenderToken) {
+                    paintedToken = token;
+                    app.autoRender = false;
+                  }
+                });
               });
               app.renderNextFrame = true;
             }
