@@ -95,7 +95,7 @@ jobs:
           # no screencast frames after a successful canvas click (4/4 zero PNG).
           # One consolidated real-click/details tool PNG per job avoids a second very slow GPU readback. A failed WebGPU or portrait
           # cannot withhold already-produced PNGs for another backend/viewport.
-          xvfb-run -a timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
