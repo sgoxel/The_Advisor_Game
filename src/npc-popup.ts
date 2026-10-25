@@ -71,11 +71,12 @@ function anchorNames(resident: Resident) {
 }
 
 /** Camera jump used by clickable place rows (registered by main: centre on the place at Hero zoom). */
-// The camera-only owned-door preview must frame the actual house and its
-// street, not crop a multi-metre building to an isolated entrance marker.
-// Widen the visible footprint without changing the canonical doorway or
-// commanding/moving the resident. World detail still streams normally.
-export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 8;
+// Frame the SEED-owned house, doorway and connected street at a physical
+// neighbourhood scale. A half-height of 8 previously displayed ~244 m vertically
+// in the real 1920x1080 resident screenshot: each house became an unreadable dot.
+// 2.5 keeps ~76 m of canonical ground in that same scene without changing
+// the resident, Simulation route, SEED home ID or pure-zoom behavior.
+export const HOME_ENTRANCE_FOCUS_HALF_HEIGHT = 2.5;
 /** Show the actual 1.5–1.8m person at readable on-world scale (~20m field of view). */
 export const RESIDENT_OBSERVE_HALF_HEIGHT = 0.75;
 export function residentObservationPoint(resident: Pick<Resident, "grounded" | "indoors" | "position">) {

@@ -5,7 +5,7 @@ import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { resolvedSettlementHomeDoorFor, resolvedSettlementHomeFacingFor } from "../src/world.ts";
 import { criticalSites } from "../src/sites.ts";
 import { nearbyWilderness } from "../src/wilderness.ts";
-import { metresToSource } from "../src/physical-scale.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
 import { lonLatToSource, sourceToLonLat } from "../src/planet.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
@@ -53,10 +53,14 @@ test("owned home inspection faces the resolved physical front wall without inven
 });
 
 test("owned-door inspection stays at readable building zoom and preserves ordinary place zoom", () => {
-  // The real owned house, front door and street must fit together; a sub-house
-  // tight crop previously showed only the marker against an empty background.
-  assert.ok(HOME_ENTRANCE_FOCUS_HALF_HEIGHT >= 6,
-    "camera-only home inspection must not crop the full 3D building to its doorway");
+  // Same canonical metric as screenshot telemetry: the former halfHeight=8
+  // displayed ~244 m vertically and made a one-house inspection tiny.
+  // A small neighbourhood footprint must still show the real door and street;
+  // no microscopic marker-only crop is accepted as a successful house view.
+  const physicalFootprintM = 2 * HOME_ENTRANCE_FOCUS_HALF_HEIGHT /
+    sourceUnitsPerMetreAt(villages[0].z).z;
+  assert.ok(physicalFootprintM >= 40 && physicalFootprintM <= 100,
+    "camera-only home inspection needs a physically readable house/street footprint");
   const heroHalfHeight = .8344302680376363;
   assert.equal(popupFocusHalfHeight("home:0:37", heroHalfHeight), HOME_ENTRANCE_FOCUS_HALF_HEIGHT,
     "the owned front door is framed at building scale instead of a whole neighbourhood");
