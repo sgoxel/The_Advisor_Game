@@ -785,7 +785,7 @@ function uploadGeometry(
     layers: coverage ? [coverageTerrainLayer.id] : material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
     // Close-up props (yard objects, Blender models, furniture) cast shadows too: they only exist at
     // Hero/Close zoom, where the shadow range is fitted tightly around the view (updateCamera).
-    castShadows: name !== "terrain" && !["canopy", "nightGlow", "lampPools"].includes(name),
+    castShadows: name !== "terrain" && !["nightGlow", "lampPools"].includes(name),
     receiveShadows: true,
   });
   parent.addChild(entity);
@@ -795,7 +795,6 @@ function uploadGeometry(
 function tileLayerVisible(name:string):boolean {
   if (name === "terrain") return true;
   if (name === "nature") return layers.nature && forestBodiesVisible;
-  if (name === "canopy") return layers.nature && !forestBodiesVisible;
   if (name === "streetTrees") return layers.nature && layers.structures && settlementDetailVisible && smallDetailsVisible && forestBodiesVisible;
   if (name === "detail") return layers.structures && layers.nature && settlementDetailVisible && smallDetailsVisible;
   if (["closeDetail", "nightGlow", "lampPools"].includes(name))
@@ -2430,7 +2429,7 @@ async function start() {
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
           visibleGeometryTriangles: Object.fromEntries(
-            ["terrain", "structures", "nature", "canopy", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map(name => [name,
+            ["terrain", "structures", "nature", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map(name => [name,
               [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>
                 sum + (record.entity.children as pc.Entity[]).filter(child => child.name === name && child.enabled)
                   .reduce((count,child) => count + (child.render?.meshInstances ?? []).reduce((n,instance) =>
@@ -2438,7 +2437,7 @@ async function start() {
             ]),
           ),
           visibleMeshes: Object.fromEntries(
-            ["terrain", "structures", "nature", "canopy", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map((name) => [
+            ["terrain", "structures", "nature", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map((name) => [
               name,
               [...tileCache.values()].filter(
                 (r) =>

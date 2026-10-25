@@ -6,6 +6,7 @@ import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
 import { roads as geographyRoads } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
+import { forestTextureFor } from "./forest-texture.ts";
 const roads = [...geographyRoads, ...siteAccessRoads];
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { naturalElevationAt, naturalSurfaceAt, freshwaterCrossingSpanMAt } from "./hydrology.ts";
@@ -29,7 +30,6 @@ export type TileGeometry = {
   terrain: Geometry;
   structures: Geometry;
   nature: Geometry;
-  canopy?: Geometry;
   streetTrees?: Geometry;
   detail: Geometry;
   closeDetail?: Geometry;
@@ -316,12 +316,16 @@ export function terrainTint(
   // A village reservation clears vegetation but does not paint a bare dirt disc.
   // Its soil retains the natural palette; actual streets are painted separately.
   let result=tint;
-  // The same canopy density colours local ground, coarse coverage and the globe albedo.
-  // Prepared inhabited land and road/water exclusions reduce the forest coverage.
+  // The forest is terrain texture at every zoom: dark where forestTextureFor says tree stand,
+  // plain grass where it says open (the 3D trees later pop up only out of the dark areas).
+  // Prepared inhabited land and road/water exclusions fade the texture out through its density input.
   if(sample.forestFamily&&surface.water.kind==='none'&&surface.groundMaterial!=='Road'&&!protectedSurface){
-    const forest=sample.forestFamily==='conifer-boreal'?color(43,79,58):sample.forestFamily==='warm-dry-woodland'?color(104,117,69):color(69,116,63),
-      density=smoothstep(.35,.9,surface.vegetationDensityScale);
-    result=blendColor(result,forest,density*(sample.forestFamily==='warm-dry-woodland'?.48:.74));
+    const stand=forestTextureFor(position,sample.forestFamily,surface.vegetationDensityScale),
+      presence=smoothstep(.35,.9,surface.vegetationDensityScale),
+      forest=sample.forestFamily==='conifer-boreal'?color(38,72,52):sample.forestFamily==='warm-dry-woodland'?color(92,106,60):color(54,98,52),
+      open=varyColor(sample.forestFamily==='warm-dry-woodland'?TERRAIN_PALETTE.grassland:TERRAIN_PALETTE.meadow,variation);
+    // Light areas fall back to grass instead of the forest-tinted climate base colour.
+    result=blendColor(blendColor(result,open,(1-stand)*presence*.85),forest,stand*.9);
   }
   if(surface.groundMaterial==='Riverbank'){
     const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));

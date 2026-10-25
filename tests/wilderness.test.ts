@@ -16,7 +16,7 @@ const tile=(x:number,z:number,size:number):Tile=>({minX:x,minZ:z,size,key:`fores
 function forestFixture() {
   for(const place of villages.slice(0,20))for(const [dx,dz]of [[60,50],[-70,40],[140,-50]]) {
     const t=tile(place.x+dx,place.z+dz,8);
-    if(forestCoverForTile(t).patches.length>80)return t;
+    if(forestCoverForTile(t).patches.length>40)return t;
   }
   throw Error("No dense seeded forest fixture");
 }
@@ -39,17 +39,20 @@ test("countryside sites are diverse, stable across visits and bounded by focus",
 test("forest interiors contain dense metre-scaled trees and subdivide without rerolling",()=>{
   const t=forestFixture(),forest=forestCoverForTile(t),children=[];
   for(const dx of [0,4])for(const dz of [0,4])children.push(...forestCoverForTile(tile(t.minX+dx,t.minZ+dz,4)).patches);
-  assert.ok(forest.fine && forest.patches.length>80);
+  assert.ok(forest.fine && forest.patches.length>40);
   assert.deepEqual(children.map(p=>p.code).sort(),forest.patches.map(p=>p.code).sort());
   for(const tree of forest.patches){assert.ok(tree.heightM>=9&&tree.heightM<16);assert.ok(tree.radiusM<5);assert.equal(finalSurfaceAt(tree.x,tree.z).water.kind,"none");}
-  const mesh=buildVegetationGeometry(t);assert.ok(mesh.geometry.indices.length/3<=8192);assert.equal(mesh.telemetry.forestRepresentation,"trees");
-  assert.ok(mesh.canopyGeometry.indices.length>0&&mesh.canopyGeometry.indices.length<mesh.geometry.indices.length);
-  assert.ok(mesh.canopyGeometry.positions.every(Number.isFinite));
+  const mesh=buildVegetationGeometry(t);assert.ok(mesh.geometry.indices.length/3<=8192);
+  assert.ok(!("canopyGeometry" in mesh),"no secondary 2D canopy layer");
+  assert.ok(mesh.geometry.positions.every(Number.isFinite));
 });
-test("forest canopy stays batched and bounded at overview LOD",()=>{
-  const t=forestFixture(),mesh=buildVegetationGeometry(tile(t.minX,t.minZ,128));
-  assert.equal(mesh.telemetry.forestRepresentation,"canopy");assert.ok(mesh.telemetry.visibleInstances>0);
-  assert.ok(mesh.telemetry.drawCalls<=1 && mesh.geometry.indices.length/3<=8192);
+test("overview tiles carry no forest bodies: the forest there is only terrain colour",()=>{
+  const t=forestFixture();
+  for(const size of [16,32,128,256]){
+    const mesh=buildVegetationGeometry(tile(t.minX,t.minZ,size));
+    assert.equal(forestCoverForTile(tile(t.minX,t.minZ,size)).patches.length,0);
+    assert.ok(mesh.telemetry.drawCalls<=1 && mesh.geometry.indices.length/3<=8192);
+  }
 });
 test("inhabited clearing no longer erases kilometres of countryside",()=>{
   const p=villages[0],x=p.x+900/CANONICAL_METRES_PER_SOURCE_UNIT/Math.cos(p.canonicalPosition.lat),z=p.z,

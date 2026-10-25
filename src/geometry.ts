@@ -1152,7 +1152,7 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
   } else addPlanter(f, -1.6, front + .22, 0, variant * 5 + 3, 1, .36, .45);
 }
 
-type LayerBuilders = { structures: Builder; nature: Builder; detail: Builder; closeDetail: Builder; nightGlow: Builder; lampPools: Builder; streetTrees: Builder; canopy: Builder };
+type LayerBuilders = { structures: Builder; nature: Builder; detail: Builder; closeDetail: Builder; nightGlow: Builder; lampPools: Builder; streetTrees: Builder };
 
 /** Draws one feature into the builders (already placed at the feature origin). */
 function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
@@ -1300,7 +1300,6 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     layers.streetTrees.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
     layers.streetTrees.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
     if (tileSize <= 32) layers.streetTrees.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
-    layers.canopy.cone(x, y + .045, z, radius, .001, color(72, 111, 63), 8);
   }
 }
 
@@ -1309,11 +1308,11 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
  * come back in local metres (x/z centred on the feature, y = 0 at its ground).
  */
 export function buildPropForTest(feature: any, tileSize = 8): Record<keyof LayerBuilders, Geometry> {
-  const layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder(), canopy: new Builder() };
+  const layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder() };
   drawFeature(feature, tileSize, layers);
   return {
     structures: layers.structures.finish(), nature: layers.nature.finish(), detail: layers.detail.finish(),
-    closeDetail: layers.closeDetail.finish(), nightGlow: layers.nightGlow.finish(), lampPools: layers.lampPools.finish(), streetTrees: layers.streetTrees.finish(), canopy: layers.canopy.finish(),
+    closeDetail: layers.closeDetail.finish(), nightGlow: layers.nightGlow.finish(), lampPools: layers.lampPools.finish(), streetTrees: layers.streetTrees.finish(),
   };
 }
 
@@ -1321,7 +1320,7 @@ export function buildPropForTest(feature: any, tileSize = 8): Record<keyof Layer
 export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
   if (options.terrainOnly) return buildTerrainOnly(tile);
   const result = coreBuildTile(tile),
-    layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder(), canopy: new Builder() },
+    layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder() },
     all = Object.values(layers), originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
     const physical = feature.widthM !== undefined || feature.kind === "roadside-tree";
@@ -1332,7 +1331,7 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
     terrain: result.terrain,
     structures: mergeGeometry(result.structures, layers.structures.finish()),
     nature: mergeGeometry(result.nature, layers.nature.finish()),
-    streetTrees: layers.streetTrees.finish(), canopy: layers.canopy.finish(),
+    streetTrees: layers.streetTrees.finish(),
     detail: mergeGeometry(result.detail, layers.detail.finish()),
     ...(tile.size<=8?{closeDetail:layers.closeDetail.finish(),nightGlow:layers.nightGlow.finish(),lampPools:layers.lampPools.finish()}:{}),
   };

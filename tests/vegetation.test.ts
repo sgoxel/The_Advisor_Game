@@ -151,6 +151,5 @@ test("merged runtime vegetation geometry stays inside the tile budget", () => {
   assert.ok(built.telemetry.materialCount <= 1);
   assert.ok(built.telemetry.estimatedBytes < 1024 * 1024);
   assert.ok(built.telemetry.visibleInstances <= built.telemetry.maxInstances);
-  assert.equal(built.telemetry.forestRepresentation,"canopy");
   assert.equal(built.telemetry.triangles, triangles);
 });
