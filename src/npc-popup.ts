@@ -94,8 +94,10 @@ export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewpo
 /** Camera-facing-only view of the real front wall; never rotates a resident. */
 export function popupOwnedHomeFacing(ref: string): number | undefined {
   const [kind, id, sub] = ref.split(":");
-  if (kind !== "home" || !/^(0|[1-9][0-9]*)$/.test(id ?? "") ||
-      !/^(0|[1-9][0-9]*)$/.test(sub ?? "")) return undefined;
+  // Place IDs are SEED identities, not numeric array indexes. Match the
+  // canonical resolver: validate only the resident index, then look up the
+  // exact settlement identifier rather than rejecting non-numeric IDs.
+  if (kind !== "home" || !/^(0|[1-9][0-9]*)$/.test(sub ?? "")) return undefined;
   const place = places.find(entry => String(entry.id) === id), index = Number(sub);
   if (!place || !Number.isSafeInteger(index) || index >= populationOf(place)) return undefined;
   return resolvedSettlementHomeFacingFor(place, index);
