@@ -673,7 +673,7 @@ class Session:
         path.unlink(missing_ok=True)
         return False
 
-    def capture_viewport(self, path: Path) -> None:
+    def capture_viewport(self, path: Path, require_fresh_paint: bool = False) -> None:
         # Live software WebGL2/WebGPU rendering can make Playwright's ordinary
         # full-resolution screenshot hang. Only actual exact-size compositor
         # PNGs count: do not substitute DOM state or manufacture a frame.
@@ -682,6 +682,16 @@ class Session:
         # stale) screencast frame. Once, within a separate finite budget, close
         # and re-open the CDP stream to solicit a new real compositor frame.
         # Both attempts must independently discard their first frame.
+        # The browser's DOM/camera may be newer than its GPU compositor.
+        # For required resident evidence, accept a genuine PNG only after CDP
+        # has *painted* a temporary magenta probe and then visibly removed it.
+        # The probe never appears in an accepted screenshot.
+        def probe_visible(pixels: bytes) -> bool:
+            from io import BytesIO
+            from PIL import Image
+            with Image.open(BytesIO(pixels)) as image:
+                return image.convert("RGB").getpixel((24, 24)) == (255, 0, 255)
+
         deadline = time.monotonic() + min(30, self.args.timeout)
         for attempt, budget in ((1, 20), (2, 10)):
             session = self.page.context.new_cdp_session(self.page)
@@ -690,11 +700,20 @@ class Session:
             started = False
             received = 0
             try:
+                if require_fresh_paint:
+                    session.send("Runtime.evaluate", {"expression": """(() => {
+                        document.getElementById('advisor-capture-freshness-probe')?.remove();
+                        const marker = document.createElement('div');
+                        marker.id = 'advisor-capture-freshness-probe';
+                        marker.style.cssText = 'position:fixed;left:0;top:0;width:48px;height:48px;background:#ff00ff;z-index:2147483647;pointer-events:none';
+                        document.body.append(marker);
+                    })()"""})
                 session.send("Page.startScreencast", {
                     "format": "png", "maxWidth": self.viewport[0],
                     "maxHeight": self.viewport[1], "everyNthFrame": 1,
                 })
                 started = True
+                marker_seen = False
 
                 def request_real_repaint() -> None:
                     # Invalidate the genuine DOM overlay and HUD so Chrome can
@@ -729,14 +748,28 @@ class Session:
                                   if len(pixels) >= 24 and pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
                                   else None)
                     if dimensions == self.viewport:
+                        if require_fresh_paint:
+                            painted = probe_visible(pixels)
+                            if not marker_seen:
+                                if painted:
+                                    marker_seen = True
+                                    session.send("Runtime.evaluate", {"expression":
+                                        "document.getElementById('advisor-capture-freshness-probe')?.remove()"})
+                                    request_real_repaint()
+                                continue
+                            if painted:
+                                continue  # Await a real compositor frame AFTER removal.
                         path.write_bytes(pixels)
-                        print(f"SCREENCAST fresh compositor attempt {attempt} frame #{received} {dimensions} to {path.name}", flush=True)
+                        print(f"SCREENCAST attested compositor attempt {attempt} frame #{received} {dimensions} to {path.name}", flush=True)
                         return
                     print(f"SCREENCAST rejected non-exact viewport {dimensions}; expected {self.viewport}", flush=True)
                 print(f"SCREENCAST attempt {attempt}: only {received} real compositor frame(s); retrying only with another real CDP stream" if attempt == 1
                       else f"SCREENCAST attempt {attempt}: only {received} real compositor frame(s); no valid image",
                       flush=True)
             finally:
+                if require_fresh_paint:
+                    session.send("Runtime.evaluate", {"expression":
+                        "document.getElementById('advisor-capture-freshness-probe')?.remove()"})
                 if started:
                     session.send("Page.stopScreencast")
                 session.detach()
@@ -770,7 +803,7 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = state["tileStatusText"]
-        self.capture_viewport(path)
+        self.capture_viewport(path, require_fresh_paint=resident_proof)
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
