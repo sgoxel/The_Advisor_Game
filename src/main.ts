@@ -1662,7 +1662,7 @@ async function start() {
     selectedResidentGround = new pc.Vec3(), selectedResidentGroundScreen = new pc.Vec3();
   const selectedHomeDoorMarker = $("selected-home-door-marker"),
     selectedHomeDoorWorld = new pc.Vec3(), selectedHomeDoorScreen = new pc.Vec3();
-  let markedResidentCode = "", markedResidentTransform = "", markedGroundTransform = "", markedDoorTransform = "";
+  let markedResidentCode = "", markedResidentTransform = "", markedGroundTransform = "", markedDoorTransform = "", markedActorHeight = "";
   let selectedDoorPoint: { x: number; z: number; y: number } | undefined;
   // A logical resident without an installed visible 3D mesh is not an on-screen click target.
   // Keep normal pointer picking and the S006 real-click evidence under the same predicate.
@@ -1835,6 +1835,15 @@ async function start() {
       selectedResidentWorld.set(foot.x, foot.y + inspectedActor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M + .04, foot.z);
       camera.camera!.worldToScreen(selectedResidentWorld, selectedResidentScreen);
       const x = Math.round(selectedResidentScreen.x), y = Math.round(selectedResidentScreen.y);
+      // Physical-size bracket beside the *rendered* model. Its height is the
+      // current camera's actual projected head-to-foot distance, never a
+      // synthetic 2D character or an independent Simulation coordinate.
+      const projectedHeight = Math.max(0, gy - y);
+      const nextActorHeight = `${Math.round(Math.min(projectedHeight, innerHeight * .45))}px`;
+      if (projectedHeight > 1 && nextActorHeight !== markedActorHeight) {
+        selectedResidentGroundMarker.style.setProperty("--actor-projected-height", nextActorHeight);
+        markedActorHeight = nextActorHeight;
+      }
       if (x >= 80 && x <= innerWidth - 80 && y >= 110 && y <= innerHeight - 120) {
         if (markedResidentCode !== inspectedCode) {
           markedResidentCode = inspectedCode;
