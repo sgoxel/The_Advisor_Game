@@ -800,20 +800,17 @@ class Session:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
         resident_proof = suffix in ("resident-canonical-details", "owned-home-entrance")
-        if suffix == "owned-home-entrance":
-            # The previous `until:state.settled` can be a transient state while
-            # streaming replaces coverage. Validate the fully settled world again
-            # here, with two real animation frames of stable state AND HUD.
-            # Bounded by the existing per-wait timeout, with no fake pixels.
+        if resident_proof:
+            # A transient `until:state.settled` can precede more terrain uploads.
+            # Both the actual resident and owned doorway must be captured only
+            # after fully settled geometry, two rendered frames and ready HUD;
+            # the canonical on-canvas actor and identity checks remain required.
+            # This never creates pixels or changes Simulation/rendering authority.
             self.settle()
             self.page.wait_for_function(
                 SETTLED_FRAMES_JS, polling=250,
                 timeout=min(60000, self.args.timeout * 1000),
             )
-        elif resident_proof:
-            # Resident selection still captures a truly rendered active actor,
-            # even before optional terrain details have finished refining.
-            self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
         state = self.page.evaluate(STATE_JS)
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
@@ -883,9 +880,9 @@ class Session:
             raise CaptureError(f"real PNG appears to contain no rendered 3D world: "
                                f"{scene_flat_fraction:.1%} of pixels share one 8-bit RGB bin; "
                                "retain PNG for required manual inspection")
-        if suffix == "owned-home-entrance" and not frame_settled_consistent:
+        if resident_proof and not frame_settled_consistent:
             raise CaptureError(
-                "owned-home PNG cannot prove fully settled geometry: "
+                f"{suffix} PNG cannot prove fully settled geometry: "
                 f"pre={state['ready']}/{state['settled']}/{state['pending']} "
                 f"post={post_capture_state['ready']}/{post_capture_state['settled']}/{post_capture_state['pending']} "
                 f"HUD={tile_status_before!r} -> {tile_status_after!r}"
