@@ -529,70 +529,74 @@ class Session:
             page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
     def capture_viewport(self, path: Path) -> None:
-        # The ordinary full-resolution Chromium/Playwright screenshot can block
-        # for the entire 840s CI budget while a live software WebGL2/WebGPU
-        # canvas renders. Request a *real compositor frame* through Chrome's
-        # bounded screencast stream instead. This copies actual browser pixels
-        # (including the 3D canvas), never a mocked or reconstructed scene.
-        session = self.page.context.new_cdp_session(self.page)
-        frames: list[dict[str, Any]] = []
-        session.on("Page.screencastFrame", lambda frame: frames.append(frame))
-        def request_real_repaint() -> None:
-            # The static owned-home view sometimes returns *zero* frames.
-            # Invalidate its actual visible marker even before frame one;
-            # this never fabricates a canvas frame or changes world state.
-            session.send("Runtime.evaluate", {
-                "expression": """(() => {
-                    const marker = document.querySelector(
-                        '#selected-home-door-marker:not([hidden]), #selected-resident-marker:not([hidden])');
-                    if (marker) marker.style.opacity =
-                        marker.style.opacity === '0.999' ? '0.998' : '0.999';
-                })()""",
-            })
-        started = False
-        try:
-            session.send("Page.startScreencast", {
-                "format": "png", "maxWidth": self.viewport[0],
-                "maxHeight": self.viewport[1], "everyNthFrame": 1,
-            })
-            started = True
-            request_real_repaint()
-            deadline = time.monotonic() + min(20, self.args.timeout)
+        # Live software WebGL2/WebGPU rendering can make Playwright's ordinary
+        # full-resolution screenshot hang. Only actual exact-size compositor
+        # PNGs count: do not substitute DOM state or manufacture a frame.
+        #
+        # A static owned-door camera can yield just the initial (possibly
+        # stale) screencast frame. Once, within a separate finite budget, close
+        # and re-open the CDP stream to solicit a new real compositor frame.
+        # Both attempts must independently discard their first frame.
+        deadline = time.monotonic() + min(30, self.args.timeout)
+        for attempt, budget in ((1, 20), (2, 10)):
+            session = self.page.context.new_cdp_session(self.page)
+            frames: list[dict[str, Any]] = []
+            session.on("Page.screencastFrame", lambda frame: frames.append(frame))
+            started = False
             received = 0
-            # The initial CDP frame may be a stale compositor snapshot taken
-            # before the validated DOM click/selection update. Acknowledge and
-            # discard it so Chrome must produce a subsequent REAL rendered
-            # compositor frame. Never accept a stale first frame as proof of
-            # a visible selected character or owned doorway.
-            while time.monotonic() < deadline:
-                if not frames:
-                    self.page.wait_for_timeout(100)
-                    continue
-                frame = frames.pop(0)
-                session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
-                received += 1
-                if received == 1:
-                    # Frame one can predate the latest inspector/camera update.
-                    # Ask for a fresh real compositor frame; a static scene
-                    # may legitimately stop at two after the repaint.
-                    request_real_repaint()
-                    continue
-                pixels = base64.b64decode(frame["data"], validate=True)
-                dimensions = (struct.unpack(">II", pixels[16:24])
-                              if len(pixels) >= 24 and pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
-                              else None)
-                if dimensions == self.viewport:
-                    path.write_bytes(pixels)
-                    print(f"SCREENCAST fresh compositor frame #{received} {dimensions} to {path.name}", flush=True)
-                    return
-                print(f"SCREENCAST rejected non-exact viewport {dimensions}; expected {self.viewport}", flush=True)
-            print(f"SCREENCAST only {received} real compositor frame(s); no fresh exact-size frame within the bounded wait for {path.name}", flush=True)
-        finally:
-            if started:
-                session.send("Page.stopScreencast")
-            session.detach()
-        # A strictly bounded fallback still requires real Chromium pixels;
-        # no synthetic capture and no unbounded Page.captureScreenshot request.
+            try:
+                session.send("Page.startScreencast", {
+                    "format": "png", "maxWidth": self.viewport[0],
+                    "maxHeight": self.viewport[1], "everyNthFrame": 1,
+                })
+                started = True
+
+                def request_real_repaint() -> None:
+                    # Invalidate the genuine DOM overlay and HUD so Chrome can
+                    # paint a new actual canvas composition. Opacity changes
+                    # neither ground/door geometry nor Simulation authority.
+                    session.send("Runtime.evaluate", {
+                        "expression": """(() => {
+                            for (const marker of [
+                                document.querySelector('#selected-home-door-marker:not([hidden]), #selected-resident-marker:not([hidden])'),
+                                document.querySelector('#tile-status')
+                            ]) if (marker) marker.style.opacity =
+                                marker.style.opacity === '0.999' ? '0.998' : '0.999';
+                        })()""",
+                    })
+
+                request_real_repaint()
+                attempt_deadline = min(deadline, time.monotonic() + budget)
+                while time.monotonic() < attempt_deadline:
+                    if not frames:
+                        self.page.wait_for_timeout(100)
+                        continue
+                    frame = frames.pop(0)
+                    session.send("Page.screencastFrameAck", {"sessionId": frame["sessionId"]})
+                    received += 1
+                    if received == 1:
+                        # An initial CDP snapshot can predate the latest
+                        # selected actor, camera focus or settled HUD.
+                        request_real_repaint()
+                        continue
+                    pixels = base64.b64decode(frame["data"], validate=True)
+                    dimensions = (struct.unpack(">II", pixels[16:24])
+                                  if len(pixels) >= 24 and pixels[:8] == bytes((137, 80, 78, 71, 13, 10, 26, 10))
+                                  else None)
+                    if dimensions == self.viewport:
+                        path.write_bytes(pixels)
+                        print(f"SCREENCAST fresh compositor attempt {attempt} frame #{received} {dimensions} to {path.name}", flush=True)
+                        return
+                    print(f"SCREENCAST rejected non-exact viewport {dimensions}; expected {self.viewport}", flush=True)
+                print(f"SCREENCAST attempt {attempt}: only {received} real compositor frame(s); retrying only with another real CDP stream" if attempt == 1
+                      else f"SCREENCAST attempt {attempt}: only {received} real compositor frame(s); no valid image",
+                      flush=True)
+            finally:
+                if started:
+                    session.send("Page.stopScreencast")
+                session.detach()
+        # Retain the strictly bounded existing genuine-Chromium fallback.
+        # A stalled GPU makes this fail honestly without a fake screenshot.
         self.page.screenshot(path=str(path), timeout=min(15000, self.args.timeout * 1000),
                              animations="disabled")
     def shot(self, suffix: str = "") -> None:
