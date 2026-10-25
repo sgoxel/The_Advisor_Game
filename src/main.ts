@@ -854,11 +854,18 @@ function prefetchNext(root: Tile) {
 /** Pre-build settlement plans, lots and street data for nearby towns in idle main-thread time. */
 let warmedPlaces = new Set<string>();
 function warmSettlements() {
+  // Building up to four other town plans synchronously on this UI thread can
+  // starve the first real resident canvas click. Keep optional cache warming
+  // for wider views, but never compete with a close-up authority query.
+  if (residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect || residentQueries.busy) return;
   const idle = (globalThis as { requestIdleCallback?: (callback: () => void) => number }).requestIdleCallback ?? ((callback: () => void) => setTimeout(callback, 50));
   const near = (x: number, z: number) => Math.hypot(wrapSourceX(x - view.x), z - view.z),
     targets = places.filter((place) => !warmedPlaces.has(place.code) && near(place.x, place.z) < metresToSource(20_000)).sort((a, b) => near(a.x, a.z) - near(b.x, b.z)).slice(0, 4);
   for (const place of targets) idle(() => {
-    if (warmedPlaces.has(place.code)) return;
+    // A player may zoom into the settlement before the idle callback executes.
+    // Deferred prewarming must not lock their newly interactive resident view.
+    if (residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect || residentQueries.busy ||
+        warmedPlaces.has(place.code)) return;
     warmedPlaces.add(place.code);
     if (warmedPlaces.size > 32) warmedPlaces = new Set([...warmedPlaces].slice(-16));
     settlementHomeFor(place, 0);
