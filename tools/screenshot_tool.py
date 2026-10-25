@@ -818,12 +818,22 @@ class Session:
         # Capture real game state and the painted HUD on both sides of the
         # compositor frame. Pre-shot 'settled' is not proof of a settled PNG.
         tile_status_before = state["tileStatusText"]
-        # The prior one-frame PlayCanvas hold caused WebGL2 to show only
-        # clearColor despite visible World meshes; continuous submission
-        # restored both real orientations. Exercise the same genuine compositor
-        # path on WebGPU without replacing pixels or relaxing any strict
-        # CDP/X11 freshness, identity, settled-scene or visual checks.
-        self.capture_viewport(path, require_fresh_paint=resident_proof)
+        # Keep normal PlayCanvas rendering/Simulation live. Only when a real
+        # WebGPU resident scene is settled, defer optional tile GPU uploads and
+        # new worker prefetch during the bounded compositor readback; always
+        # resume, including on a genuine screenshot failure. WebGL2's already
+        # passing live capture path is unchanged.
+        quiesced = False
+        try:
+            if resident_proof and self.args.renderer == "webgpu" and state["settled"]:
+                self.page.evaluate(
+                    "window.advisorWorld.capturePresentation?.quiesceStreaming()")
+                quiesced = True
+            self.capture_viewport(path, require_fresh_paint=resident_proof)
+        finally:
+            if quiesced:
+                self.page.evaluate(
+                    "window.advisorWorld.capturePresentation?.resumeStreaming()")
         post_capture_state = self.page.evaluate(STATE_JS)
         tile_status_after = post_capture_state["tileStatusText"]
         if not path.is_file() or path.stat().st_size == 0:
