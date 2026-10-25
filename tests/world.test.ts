@@ -66,6 +66,12 @@ test("real front-wall doorstep approaches never enter a house or jump to a side 
     "road behind the building cannot become its front-wall approach");
   assert.ok(settlementFrontDoorWalkway(door, Math.PI / 2, street(8, 0)),
     "a correctly rotated SEED house keeps a corresponding legal frontage");
+  const highLat = { x: 120, z: 24000 }, cosLat = Math.cos(24000 / 262144 * 2 * Math.PI),
+    eastEightMetres = 8 * metre / cosLat;
+  const polarFront = settlementFrontDoorWalkway(highLat, Math.PI / 2,
+    { x: highLat.x + eastEightMetres, z: highLat.z, width: 2 * metre });
+  assert.ok(polarFront && Math.abs(polarFront.length / metre - 7) < .001,
+    "high-latitude doorway remains seven physical metres from the road edge");
   assert.equal(settlementFrontDoorWalkway(door, 0, street(0, 1)), null,
     "sub-metre gaps do not add a decorative walkway into a street");
 });
