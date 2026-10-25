@@ -223,6 +223,24 @@ test("S006 residents traverse only authoritative bridge decks and stand at deck 
   assert.ok(resident.grounded, "a resident can stand on the real bridge top");
   assert.equal(resident.position.elevation, finalSurfaceAt(resident.x, resident.z).surfaceHeight,
     "Simulation elevation must follow the composed bridge deck, not submerged terrain");
+
+  // Exercise the SAME continuous resident segment validator against this
+  // actual Campaign-SEED road/river crossing, rather than a mocked bridge.
+  // Convert the canonical tangent to a physically measured four-metre walk.
+  const tangent = finalSurfaceEvidenceAnchors().bridgeTangent,
+    scale = sourceUnitsPerMetreAt(bridge.z),
+    sourcePerMetre = 1 / Math.hypot(tangent.x / scale.x, tangent.z / scale.z),
+    pointSurface = (metres: number) => finalSurfaceAt(
+      wrapSourceX(bridge.x + tangent.x * sourcePerMetre * metres),
+      bridge.z + tangent.z * sourcePerMetre * metres),
+    from = { eastM: -2, northM: 0 }, to = { eastM: 2, northM: 0 };
+  assert.ok(continuousWalkableOffsetSegment(from, to,
+    point => residentWalkableSurface(pointSurface(point.eastM))),
+    "the actual bridge deck admits a continuous physical resident walking segment");
+  assert.equal(continuousWalkableOffsetSegment(from, to,
+    point => residentWalkableSurface(Math.abs(point.eastM) < .51
+      ? { ...pointSurface(point.eastM), deckHeight: null } : pointSurface(point.eastM))), false,
+    "the identical river segment cannot be traversed after removing its real deck");
 });
 
 test("outdoor journeys can legally detour around small barriers without crossing water or walls", () => {
