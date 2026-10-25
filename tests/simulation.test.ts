@@ -185,7 +185,7 @@ test("resident street connectors choose a nearby legal vertex, never an unverifi
     "no street network cannot create a connection");
 });
 
-test("dense SEED street connectors find a later valid local approach without a wall shortcut", () => {
+test("resident street connectors at dense SEED junctions find later legal nodes without wall shortcuts", () => {
   const cell = 12, from = { eastM: 0, northM: 0 };
   // The nine nearest approaches terminate across a blocked wall or water
   // strip; a tenth node is still within the existing nearest + 24m radius.
