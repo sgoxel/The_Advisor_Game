@@ -2195,21 +2195,32 @@ async function start() {
   // animation, clock advancement, resident queries and Simulation validation.
   const capturePresentation = (window as Window & { __advisorCaptureMode?: boolean }).__advisorCaptureMode
     ? (() => {
-        let captureRenderToken = 0;
+        let captureRenderToken = 0, paintedToken = 0;
         return {
-          quiesceStreaming() {
+          // Acquire actual ready geometry and the optional-streaming hold in
+          // the SAME JS turn, not across a browser screenshot round-trip.
+          quiesceStreaming(freezeAfterFrame = false) {
+            const state = (window as Window & {
+              advisorWorld?: { state: { ready: boolean; settled: boolean; pending: number } };
+            }).advisorWorld?.state;
+            if (!state?.ready || !state.settled || state.pending !== 0) return 0;
             captureStreamingQuiesced = true;
             const token = ++captureRenderToken;
-            // A settled software-WebGPU scene can still submit frames faster
-            // than Chromium's compositor can read them. Finish one REAL
-            // PlayCanvas frame before allowing the GPU queue to drain.
-            // The normal update/clock/Simulation loop continues untouched.
-            app.once("postrender", () => {
-              if (captureStreamingQuiesced && token === captureRenderToken)
-                app.autoRender = false;
-            });
-            app.renderNextFrame = true;
+            if (freezeAfterFrame) {
+              // Software WebGPU: finish ONE genuine PlayCanvas frame, then
+              // stop new GPU submissions during browser compositor readback.
+              // WebGL2 must keep presenting while only streaming is held.
+              app.once("postrender", () => {
+                if (captureStreamingQuiesced && token === captureRenderToken) {
+                  paintedToken = token;
+                  app.autoRender = false;
+                }
+              });
+              app.renderNextFrame = true;
+            }
+            return token;
           },
+          get paintedToken() { return paintedToken; },
           resumeStreaming() {
             // Invalidate a delayed one-shot callback before restoring normal
             // streaming and real-time rendering, including after capture errors.
