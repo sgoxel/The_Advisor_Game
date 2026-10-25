@@ -6,6 +6,13 @@ on:
   push:
     branches: [main]
     paths:
+      # Acceptance needs screenshots of deployed gameplay, not only edits to this workflow.
+      - 'src/main.ts'
+      - 'src/simulation.ts'
+      - 'src/resident-inspector.css'
+      - 'src/default-character.ts'
+      - 'src/resident-query.ts'
+      - 'tools/screenshot_tool.py'
       - '.github/workflows/agent1-s006-resident-evidence.yml'
   pull_request:
     branches: [main]
