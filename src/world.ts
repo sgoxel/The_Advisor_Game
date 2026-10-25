@@ -341,6 +341,21 @@ function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: Res
   resolution.homes.set(plot.id, chosen);
   return plot;
 }
+/** Front-wall centre in the same physical local frame used by geometry.ts
+ * for the house's painted door (local +Z after yaw). Nearest-street rays can
+ * choose a crossing side street instead of the lot's assigned frontage; that
+ * made the Simulation entrance disagree with the rendered wall. */
+export function settlementFrontWallDoor(
+  point: { x: number; z: number }, plot: Pick<SettlementPlotPlan, "depthM" | "depth" | "yawRad">,
+): { x: number; z: number } {
+  const halfDepthM = (plot.depthM ?? plot.depth / metresToSource(1)) * .5;
+  const metric = sourceUnitsPerMetreAt(point.z);
+  return {
+    x: wrapSourceX(point.x + Math.sin(plot.yawRad) * metric.x * halfDepthM),
+    z: point.z + Math.cos(plot.yawRad) * metric.z * halfDepthM,
+  };
+}
+
 /** Resolve one canonical home against the same legal lot and street frontage as
  * the rendered building. Unlike candidate[0], this may be absent or shifted. */
 export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x: number; z: number } | undefined {
@@ -349,13 +364,7 @@ export function resolvedSettlementHomeDoorFor(place: Place, index: number): { x:
     plot = resolveHome(place, plan, resolution, index),
     point = resolution.homes.get(plot.id);
   if (!point) return undefined;
-  const street = settlementStreetAt(plan, point.x, point.z);
-  if (!street) return point;
-  const dx = wrapSourceX(street.x - point.x), dz = street.z - point.z,
-    distance = Math.hypot(dx, dz);
-  if (!distance) return point;
-  const edgeOffset = Math.min(distance * .9, plot.depth * .5);
-  return { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset };
+  return settlementFrontWallDoor(point, plot);
 }
 
 export function settlementPresentationCacheState() {
@@ -394,7 +403,8 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       distance = Math.hypot(dx, dz),
       // The door sits on the front wall (half the depth towards the street), never inside the footprint.
       edgeOffset = Math.min(distance * .9, plot.kind === "field" ? Math.max(metresToSource(2), Math.min(plot.width, plot.depth) * .42) : plot.depth * .5),
-      door = street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
+      door = plot.kind === "house" ? settlementFrontWallDoor(point, plot)
+        : street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
     const owner = plot.ownerId ? familyName(plot.ownerId, place.continent) : undefined,
       buildingKind = (plot.kind === "service" ? plot.service : plot.kind === "park" ? plot.park : plot.kind) as BuildingKind,
       name = buildingName(shop ?? buildingKind, plot.id, place.name, place.continent, owner, place.kind === "city"),
