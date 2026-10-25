@@ -9,6 +9,7 @@ on:
       # Acceptance needs screenshots of deployed gameplay, not only edits to this workflow.
       - 'src/main.ts'
       - 'src/simulation.ts'
+      - 'src/world.ts'
       - 'src/resident-inspector.css'
       - 'src/default-character.ts'
       - 'src/resident-query.ts'
@@ -24,6 +25,7 @@ on:
       - 'src/resident-inspector.*'
       - 'src/settlement-exterior*.ts'
       - 'src/simulation.ts'
+      - 'src/world.ts'
       - 'src/transport-walking-route.ts'
       - 'tests/simulation.test.ts'
       - 'tools/screenshot_tool.py'
