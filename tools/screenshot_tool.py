@@ -599,10 +599,43 @@ class Session:
                 from mss import mss
                 from mss.tools import to_png
                 with mss() as display_capture:
-                    frame = display_capture.grab({
+                    region = {
                         "left": x, "top": y,
                         "width": self.viewport[0], "height": self.viewport[1],
-                    })
+                    }
+                    # A valid PNG alone is not enough: software WebGPU has
+                    # yielded a frozen 100%-loading X11 framebuffer while
+                    # the page's DOM and Simulation continued progressing.
+                    # Probe actual compositor responsiveness with a temporary
+                    # bright square, remove it, and capture only AFTER its
+                    # removal is physically visible in the X11 pixels.
+                    # The diagnostic square must never enter an evidence PNG.
+                    before = display_capture.grab(region).pixel((24, 24))
+                    self.page.evaluate("""() => {
+                        const marker = document.createElement('div');
+                        marker.id = 'advisor-capture-freshness-probe';
+                        marker.style.cssText = 'position:fixed;left:0;top:0;width:48px;height:48px;background:#ff00ff;z-index:2147483647;pointer-events:none';
+                        document.body.append(marker);
+                    }""")
+                    try:
+                        probe_seen = False
+                        for _ in range(12):
+                            self.page.wait_for_timeout(250)
+                            pixel = display_capture.grab(region).pixel((24, 24))
+                            if pixel == (255, 0, 255) and pixel != before:
+                                probe_seen = True
+                                break
+                    finally:
+                        self.page.evaluate("""() => document.getElementById('advisor-capture-freshness-probe')?.remove()""")
+                    if not probe_seen:
+                        raise CaptureError("X11 compositor is stale: DOM changed but the live framebuffer did not paint the freshness probe")
+                    for _ in range(12):
+                        self.page.wait_for_timeout(250)
+                        frame = display_capture.grab(region)
+                        if frame.pixel((24, 24)) != (255, 0, 255):
+                            break
+                    else:
+                        raise CaptureError("X11 compositor is stale: freshness probe did not disappear from live framebuffer")
                     to_png(frame.rgb, frame.size, output=str(path))
                 if exact_png():
                     print(f"X11 real framebuffer (mss) {self.viewport} at ({x},{y}); INSPECTION REQUIRED", flush=True)
