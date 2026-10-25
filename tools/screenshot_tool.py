@@ -277,6 +277,20 @@ SETTLED_JS = """() => {
 }"""
 READY_JS = SETTLED_JS.replace("world.state.ready && world.state.settled", "world.state.ready")
 TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))"
+# An owned-home PNG is admissible only after both the authoritative state
+# and the *painted* tile-status element remain settled over two genuine
+# animation frames. A transient one-poll settled flag previously reverted to
+# refining before screenshot-tool captured the portrait image.
+SETTLED_FRAMES_JS = """() => new Promise(done => {
+  const ready = () => {
+    const state = window.advisorWorld?.state;
+    const label = document.getElementById('tile-status')?.textContent?.toLowerCase() ?? '';
+    return !!state?.ready && !!state?.settled && state.pending === 0 &&
+      label.includes('ready') && !label.includes('refining');
+  };
+  if (!ready()) return done(false);
+  requestAnimationFrame(() => requestAnimationFrame(() => done(ready())));
+})"""
 # The keys below are written to capture.json unchanged.
 STATE_JS = """() => {
   const world = window.advisorWorld, state = world ? world.state : {};
@@ -585,9 +599,19 @@ class Session:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
         resident_proof = suffix in ("resident-canonical-details", "owned-home-entrance")
-        if resident_proof:
-            # The on-demand inspector/camera update must reach real animation
-            # frames before the compositor begins reading the displayed scene.
+        if suffix == "owned-home-entrance":
+            # The previous `until:state.settled` can be a transient state while
+            # streaming replaces coverage. Validate the fully settled world again
+            # here, with two real animation frames of stable state AND HUD.
+            # Bounded by the existing per-wait timeout, with no fake pixels.
+            self.settle()
+            self.page.wait_for_function(
+                SETTLED_FRAMES_JS, polling=250,
+                timeout=min(60000, self.args.timeout * 1000),
+            )
+        elif resident_proof:
+            # Resident selection still captures a truly rendered active actor,
+            # even before optional terrain details have finished refining.
             self.page.wait_for_function(TWO_FRAMES_JS, timeout=min(60000, self.args.timeout * 1000))
         state = self.page.evaluate(STATE_JS)
         # Capture real game state and the painted HUD on both sides of the
