@@ -601,8 +601,27 @@ function renderCorridorProbe() {
         : "Selected-route physical access: UNAVAILABLE — no canonical walking route selected. No traversal or character movement certified.";
     return;
   }
-  target.textContent =
+  const detailedEvidence =
     `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}${detour}${bridgeConstraint}. Map preview only; no uninterrupted passage or character travel certified.`;
+  const pending = corridorProbeStatus === "checking final surface in bounded frame batches";
+  const fullSampled = corridorProbeStatus.startsWith("sampled centerline passes at every planned station");
+  const shortVerdict = corridorProbeFirstUnsafeCause
+    ? `NOT TRAVERSABLE · Station ${corridorProbeFirstUnsafeStation ?? "?"}/${corridorProbePlannedStations}: ${corridorProbeFirstUnsafeCause}`
+    : pending ? `CHECKING · ${corridorProbeStations}/${corridorProbePlannedStations} stations sampled; not certified`
+    : fullSampled ? `SAMPLED CENTERLINE PASS · ${corridorProbeStations}/${corridorProbePlannedStations}; between-station and character passage unverified`
+    : "NOT CERTIFIED · Selected route has incomplete or invalid physical evidence";
+  const verdict = document.createElement("p");
+  verdict.className = "transport-route-verdict";
+  verdict.textContent = `${shortVerdict}. Graph preview only; character has not moved.`;
+  const details = document.createElement("details");
+  details.className = "transport-route-provenance";
+  const summary = document.createElement("summary");
+  summary.textContent = "View exact SEED roads, grades and detour evidence";
+  const evidence = document.createElement("p");
+  evidence.className = "transport-route-evidence";
+  evidence.textContent = detailedEvidence;
+  details.append(summary, evidence);
+  target.replaceChildren(verdict, details);
 }
 
 function resetCorridorProbe() {
