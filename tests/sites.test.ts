@@ -380,6 +380,18 @@ test("focused ruin and shrine meshes have deterministic visible silhouettes with
       }
       assert.ok(largestHighRoofTriangleM2 < 2.5,
         `solid high ruin roof blocks the lawful original actor: ${largestHighRoofTriangleM2} m²`);
+      // The site-centered visitor must also be visible through the front
+      // approach. The previous solid masonry slabs crossed this line of sight
+      // despite the tower roof having already been removed.
+      for (let i = 0; i < v.length; i += 9) {
+        const xs = [v[i], v[i + 3], v[i + 6]],
+          zs = [v[i + 2], v[i + 5], v[i + 8]],
+          ys = [v[i + 1], v[i + 4], v[i + 7]];
+        const crossesArrival = Math.min(...xs) <= 1.1 && Math.max(...xs) >= -1.1 &&
+          Math.min(...zs) <= 7 && Math.max(...zs) >= 1.5;
+        assert.ok(!crossesArrival || Math.max(...ys) <= minY + 1.5,
+          `high masonry blocks site-centred arrival corridor at triangle ${i / 9}`);
+      }
     }
     assert.ok([...first.colors].some((value, index) => index % 4 === 0 && value >= 170),
       `${kind} lacks readable contrasting stone`);
