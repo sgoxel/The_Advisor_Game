@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentLabelRightOfActor, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -46,6 +46,17 @@ test("visible S006 residents retain a 44px CSS touch target without selecting di
   const tallHead = { x: 100, y: -20 };
   assert.notEqual(residentActorPickDistance(100, -18, feet, tallHead), null,
     "full-height nearby 3D characters remain selectable near their visible heads");
+});
+
+test("selected S006 resident caption stays clear of portrait inspector without changing actor", () => {
+  assert.equal(residentLabelRightOfActor(460, 1080, 1920), false,
+    "selected resident at the portrait inspector edge is labeled to the left");
+  assert.equal(residentLabelRightOfActor(190, 1080, 1920), true,
+    "far-left resident retains the short right-facing leader");
+  assert.equal(residentLabelRightOfActor(820, 1920, 1080), true,
+    "landscape selected resident keeps its previously accepted location");
+  assert.equal(residentLabelRightOfActor(1790, 1920, 1080), false,
+    "right-edge labels never extend outside the screen");
 });
 
 test("resident facts dispatch after initial ready without waiting for later zoom refinement", () => {

@@ -50,6 +50,13 @@ export function residentActorSearchContinues(evaluated: number, outdoorCount: nu
     (outdoorCount === 0 || evaluated < limit);
 }
 
+/** Place the world-anchored selected-resident caption away from the inspector
+ * in tall viewports. Positioning alone changes; actor and identity stay fixed.
+ * No per-frame DOM geometry reads or camera-dependent Simulation behavior. */
+export function residentLabelRightOfActor(x: number, width: number, height: number): boolean {
+  return x < width - 260 && !(height > width && x >= width * .36);
+}
+
 /** Keep only the actually inspected, grounded actor visible while a new nearby
  * population snapshot is pending. It cannot invent a resident or move one
  * into view; a distant pan, indoor state or blocked ground revokes the hold. */
