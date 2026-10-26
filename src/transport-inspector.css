@@ -102,9 +102,10 @@
 /* Keep canonical IDs available without pushing physical safety and timing below the fold. */
 .transport-route-provenance { margin-top: .6rem; border-top: 1px solid rgba(217, 184, 116, .24); }
 .transport-route-provenance summary {
-  display: flex;
+  display: list-item;
   min-height: 44px;
-  align-items: center;
+  padding: .7rem 0;
+  line-height: 1.25rem;
   cursor: pointer;
   color: #ead39d;
   font-size: .82rem;
