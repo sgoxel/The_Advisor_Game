@@ -497,6 +497,81 @@ test("actual Greyfield SEED actor supplies only his own verified local street or
   assert.equal(residentLocalTransportApproach(place!, { ...actor!, indoors: true }, samePlace), null);
 });
 
+
+/** Full original-Campaign-SEED acceptance — unlike synthetic route witnesses,
+ * the actor independently chooses the trip at a fixed rest-day Fantasy tick.
+ * Only a handful of original residents and two outdoor dayparts are examined,
+ * with no population sweep or invented positions. */
+test("a real independently deciding SEED resident reaches a legal bridge site and reloads the same travel", async () => {
+  const originCode = "ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/PLACE/0/11/1/2",
+    siteCode = "ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/SITE/ADVISOR-0126-ALDERWICK/v4/CONT/0/COUNTRY/11/SITE/0",
+    bridgeCode = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19",
+    origin = siteTransportNetwork.nodes.find(node => node.code === originCode),
+    place = villages.find(v => v.id === origin?.sourceId),
+    ownedBridge = transportBridgeByCode(bridgeCode);
+  assert.ok(origin && place && ownedBridge);
+  const walking = createTransportWalkingIndex(siteTransportNetwork),
+    requiredEdge = siteTransportNetwork.roadEdges.find(e => e.code === ownedBridge!.roadCode);
+  assert.ok(requiredEdge);
+  const corridor = transportWalkingRouteViaRequiredEdge(walking, originCode, siteCode, requiredEdge!);
+  assert.ok(corridor && corridor.edgeCodes.length === 5,
+    "real SEED gate-to-site must cross the actual owned wet bridge");
+  const day = [1,2,3,4,5,6,7,8].find(d =>
+    localWeekday(tickAtLocalTime(d, 14*3600, place!.canonicalPosition.lon),
+      place!.canonicalPosition.lon) === 6);
+  assert.ok(day !== undefined, "a stable original SEED rest day exists");
+  let accepted: Awaited<ReturnType<LazySimulation["tryBeginSelfDirectedSiteVisit"]>> = null;
+  let selected: LazySimulation | undefined, decidedTick = 0, chosenCode = "";
+  // Intentionally narrow fixed SEED actors with independently favourable
+  // personality scores; actual schedules and street/bridge proofs may refuse.
+  outer: for (const index of [3,4,6,8,9,10,11,14,16,21,26]) {
+    for (const hour of [11,14,15]) {
+      const tick = tickAtLocalTime(day!, hour*3600, place!.canonicalPosition.lon),
+        actor = residentAt(place!, index, tick);
+      if (!residentChoosesSiteVisit(actor, originCode, siteCode, tick)) continue;
+      const sim = new LazySimulation();
+      sim.setFocus(place!);
+      sim.advance(tick);
+      const event = await sim.tryBeginSelfDirectedSiteVisit(actor.code, corridor!);
+      if (!event) continue;
+      accepted = event; selected = sim; decidedTick = tick; chosenCode = actor.code;
+      break outer;
+    }
+  }
+  assert.ok(accepted && selected,
+    "one actual autonomous SEED resident must lawfully decide and traverse the preverified owned-bridge itinerary");
+  const destinationTick = decidedTick + 30*86400;
+  selected!.advance(destinationTick);
+  const arrived = selected!.projectedResidentByCode(chosenCode);
+  assert.ok(arrived);
+  assert.equal(arrived!.code, chosenCode);
+  assert.equal(arrived!.route, `ARRIVED: ${siteCode}`);
+  assert.ok(Math.abs(arrived!.x - siteTransportNetwork.nodes.find(n => n.code === siteCode)!.x) < 1e-6);
+  const replay = new LazySimulation();
+  replay.advance(destinationTick);
+  assert.equal(await replay.restoreSiteVisitHistory(selected!.savedSiteVisitHistory()), true,
+    "saved canonical event must recompute the same physical original-person visit");
+  assert.deepEqual(replay.projectedResidentByCode(chosenCode), arrived,
+    "Fantasy Time replay restores the original site arrival without trusting saved coordinates");
+  const home = await selected!.considerAdvisorHomeReturn(chosenCode);
+  assert.equal(typeof home.started, "boolean");
+  if (home.started) {
+    const next = destinationTick + 30*86400;
+    selected!.advance(next);
+    const atHome = selected!.projectedResidentByCode(chosenCode);
+    assert.equal(atHome?.route, "HOME: owned doorway reached",
+      "when the original actor chooses home, the final station is the actual owned door");
+    const loaded = new LazySimulation();
+    loaded.advance(next);
+    assert.equal(await loaded.restoreSiteVisitHistory(selected!.savedSiteVisitHistory()), true,
+      "accepted home return must also revalidate on durable replay");
+    assert.deepEqual(loaded.projectedResidentByCode(chosenCode), atHome);
+  } else {
+    assert.match(home.message, /declined|door|street|deck|grade|unlawful/,
+      "a blocked return must be an explicit truthful refusal, not a teleported success");
+  }
+});
+
 /** Exact Campaign-SEED village→owned-wet-bridge→critical-site candidate;
  * this proves an existing actor CAN receive a validated itinerary, not that
  * a caller's acceptedByResident flag is a genuine independent NPC decision.
