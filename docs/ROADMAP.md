@@ -29,7 +29,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Physical transport acceptance: SEED roads, lawful bridge/ferry routes & first-route UX
+- WP-S005-001-001 — Traversable SEED transport: grade-safe roads, connected bridges/ferries & honest route preview
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -40,15 +40,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible inspect UX: semantic selection, 44px touch targets, seven safe-area layouts & focus return
+- WP-S008-001-001 — Accessible world inspection: semantic SEED targets, ≥44px controls, safe-area layouts & focus return
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Aggregate streaming budgets & first-use latency: 4/6/8 admission, ≤1 upload/frame
-- WP-S009-002-001 — Bounded final-surface picking & idle UI: canonical hits, zero layout reads when stable
-- WP-S009-003-001 — Mobile resource/renderer safety: >256MB trim, ≤1GB combined, DPR/shadow limits & recovery
-- WP-S009-004-001 — README conformance audit: Advisor loop, campaign clock/save, day/night, 2D truth & honest UX
-- WP-S009-005-001 — Truthful visible-scene readiness & pure zoom: fixed focus, no blank homes or false 100%
+- WP-S009-001-001 — Bounded streaming and first-use response: aggregate 4/6/8 admission & ≤1 upload/frame
+- WP-S009-002-001 — Responsive world picking: bounded final-surface hits & no redundant idle layout work
+- WP-S009-003-001 — Mobile/browser resource safety: >256MB unused-cache trim, ≤1GB total, DPR caps & WebGL2 recovery
+- WP-S009-004-001 — README gameplay conformance audit: Advisor autonomy, campaign time/save, 2D characters & truthful UX
+- WP-S009-005-001 — Honest first-visible 3D readiness & pure zoom: stable focus, no blank homes or false 100%
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Tools & Same-World Interiors
 
@@ -63,4 +63,4 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-002 — Enterable service interiors: legal connected rooms, real workstations & lawful occupants
 - WP-S010-005-003 — Same resident indoors: validated door traversal, 2D occlusion & truthful occupancy
 - WP-S010-005-004 — Persistent interiors: validated item/occupant events, stable revisits & safe exit/recovery
-- WP-S010-006-001 — Hero/Close measured performance: physical p95 ≤33.3ms, 256MB/1GB & renderer parity
+- WP-S010-006-001 — Hero/Close device acceptance: 30 FPS floor, first-response latency, 1GB cap & renderer parity
