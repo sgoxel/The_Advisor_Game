@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, selectedResidentVisibleInView, residentLabelRightOfActor, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -308,7 +308,7 @@ const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
 /** Walking actors: positions at this and the next simulation second, animated per frame. */
-const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startMs: number }>();
+const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
 let navigationFingerprint = "";
@@ -1868,7 +1868,7 @@ async function start() {
               points.push({ x: points[k - 1].x + dx, z: walk[k].z });
               lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
             }
-            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startMs: performance.now() });
+            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startTick: snapshot?.tick ?? simulation.tick });
           } else actorMotion.delete(actors[i]);
           positionActor(actors[i], visible[i].x, visible[i].z);
         }
@@ -1891,10 +1891,13 @@ async function start() {
     }
     // Per-frame walking: interpolate along the street route between Fantasy Time samples.
     if (actorMotion.size) {
-      const nowMs = performance.now();
+      // Derive both position and animation from the SAME absolute Fantasy Time
+      // as the original Simulation snapshot. A frozen clock cannot carry an
+      // original SEED actor into an unvalidated future 3D position.
       for (const [actor, motion] of actorMotion) {
         if (!actor.enabled) continue;
-        const { points, lengths } = motion, target = Math.min(1, (nowMs - motion.startMs) / 1000) * motion.total;
+        const { points, lengths } = motion,
+          target = residentMotionFraction(simulationTick, motion.startTick, TIME_SCALE) * motion.total;
         let k = 1;
         while (k < lengths.length - 1 && lengths[k] < target) k++;
         const a = points[k - 1], b = points[k], span = lengths[k] - lengths[k - 1],
