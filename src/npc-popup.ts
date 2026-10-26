@@ -251,8 +251,15 @@ export function showNpcPopup(resident: Resident, tick: number) {
       ${observation ? `<div class="npc-observe">${goRow("Observe resident at true scale · camera only", `resident:${resident.settlement}:${resident.index}`, "physical resident")}</div>` : ""}
       <div class="npc-observe">
         <button type="button" class="info-go" data-advice-site
-          ${!resident.grounded || resident.indoors || advicePendingCode === resident.code ? "disabled" : ""}>
-          Suggest a site visit · resident decides
+          ${!resident.grounded || resident.indoors || resident.route.startsWith("HOME:") ||
+            advicePendingCode === resident.code ? "disabled" : ""}>
+          ${resident.route.startsWith("ARRIVED:")
+            ? "Suggest returning to owned home · resident decides"
+            : resident.route.startsWith("HOME RETURN:")
+              ? "Returning to owned home on verified streets"
+              : resident.route.startsWith("HOME:")
+                ? "Resident reached their owned home"
+                : "Suggest a site visit · resident decides"}
         </button>
         <div id="npc-advice-result" class="npc-muted" role="status" aria-live="polite">
           ${escape(adviceFeedback.code === resident.code ? adviceFeedback.message : "")}
