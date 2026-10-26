@@ -13,6 +13,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { transportNetwork } from "../src/transport-network.ts";
 import { composeSiteTransportNetwork, siteTransportAcceptanceSummary, siteTransportNetwork, siteAccessRoadsNear } from "../src/site-transport-network.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
+import { sourceUnitsPerMetreAt, metresToSource } from "../src/physical-scale.ts";
 import {
   criticalSites,
   nearbyCriticalSites,
@@ -362,20 +363,29 @@ test("focused ruin and shrine meshes have deterministic visible silhouettes with
     assert.ok(first.summary.codes.includes(site.code), `${kind} mesh missing`);
     assert.ok(first.triangles > 0 && first.triangles < 600, `${kind} exceeds close-detail budget`);
     const y = [...first.positions].filter((_, index) => index % 3 === 1);
-    assert.ok(Math.max(...y) - Math.min(...y) > 5, `${kind} silhouette is too flat`);
+    const elevationSpanM = (Math.max(...y) - Math.min(...y)) * CANONICAL_METRES_PER_SOURCE_UNIT;
+    assert.ok(elevationSpanM > 5 && elevationSpanM < 12,
+      `${kind} must preserve a physical 5–12m silhouette, not 100m source-unit walls: ${elevationSpanM}m`);
+    const metric = sourceUnitsPerMetreAt(site.z);
+    let maxRadiusM = 0;
+    for (let index = 0; index < first.positions.length; index += 3)
+      maxRadiusM = Math.max(maxRadiusM,
+        Math.hypot(first.positions[index] / metric.x, first.positions[index + 2] / metric.z));
+    assert.ok(maxRadiusM < 16,
+      `${kind} mesh exceeds its small legal site footprint: ${maxRadiusM}m`);
     if (kind === "ruin") {
       // The original 4.8×4.5 m roof obscured the actual SEED visitor at
       // the nearby site arrival. Keep high walls, not a solid high roof.
       let largestHighRoofTriangleM2 = 0;
       const v = first.positions, minY = Math.min(...y);
       for (let i = 0; i < v.length; i += 9) {
-        if (v[i + 1] < minY + 5 ||
+        if (v[i + 1] < minY + metresToSource(5) ||
             Math.max(v[i + 1], v[i + 4], v[i + 7]) -
             Math.min(v[i + 1], v[i + 4], v[i + 7]) > .0001) continue;
         const area = Math.abs(
           (v[i + 3] - v[i]) * (v[i + 8] - v[i + 2]) -
           (v[i + 6] - v[i]) * (v[i + 5] - v[i + 2]),
-        ) / 2;
+        ) * CANONICAL_METRES_PER_SOURCE_UNIT ** 2 / 2;
         largestHighRoofTriangleM2 = Math.max(largestHighRoofTriangleM2, area);
       }
       assert.ok(largestHighRoofTriangleM2 < 2.5,
