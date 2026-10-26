@@ -540,6 +540,31 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
   }
   assert.ok(accepted && selected,
     "one actual autonomous SEED resident must lawfully decide and traverse the preverified owned-bridge itinerary");
+  const options = siteVisitCorridors(siteTransportNetwork, place!.id);
+  assert.deepEqual(options[0], { from: originCode, to: siteCode, edgeCodes: [...corridor!.edgeCodes] },
+    "on-screen Advisor suggestion must surface this truly lawful original Campaign-SEED route first");
+  const advised = new LazySimulation();
+  advised.setFocus(place!);
+  advised.advance(decidedTick);
+  const response = await advised.considerAdvisorSiteVisit(chosenCode);
+  assert.equal(response.started, true,
+    "the actual player Advisor path must preserve the original resident's independent acceptance");
+  assert.deepEqual(advised.preparedSiteVisitFor(chosenCode)?.journey.edgeCodes,
+    accepted!.journey.edgeCodes, "UI advice cannot substitute a different route or fabricated destination");
+  const originalEvent = advised.preparedSiteVisitFor(chosenCode);
+  const exported = advised.savedSiteVisitHistory();
+  const failedImport = advised.restoreSiteVisitHistory({
+    ...exported,
+    visits: [...exported.visits, { residentCode: "INVENTED/PERSON",
+      decidedTick, from: originCode, to: siteCode,
+      edgeCodes: [...corridor!.edgeCodes] }],
+  });
+  assert.strictEqual(advised.preparedSiteVisitFor(chosenCode), originalEvent,
+    "slow historical revalidation must not erase or expose half-restored live actor");
+  assert.equal(await failedImport, false,
+    "one fictitious later event makes the entire saved ledger refuse atomically");
+  assert.strictEqual(advised.preparedSiteVisitFor(chosenCode), originalEvent,
+    "failed import preserves the previously accepted original resident object");
   const destinationTick = decidedTick + 30*86400;
   selected!.advance(destinationTick);
   const arrived = selected!.projectedResidentByCode(chosenCode);
