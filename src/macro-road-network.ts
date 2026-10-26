@@ -174,31 +174,6 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     }
    }return cost;
   };
-  // Only the selected real SEED edge opts into this bounded natural-source
-  // penalty. Coarse relief can miss a steep transverse dry-bank cliff between
-  // corridor lane nodes; sampling three arc points steers away without creating
-  // a second road/Simulation authority or relaxing the 8% final-surface gate.
-  const dryCrossfallCost=(a:RoadPoint,b:RoadPoint)=>{
-   if(!avoidSteepRiverBanks)return 0;
-   const dx=wrapSourceX(b.x-a.x),dz=b.z-a.z;
-   if(!Number.isFinite(dx)||!Number.isFinite(dz)||Math.hypot(dx,dz)<1e-6)return Infinity;
-   const metreSource=1/CANONICAL_METRES_PER_SOURCE_UNIT;
-   let penalty=0;
-   for(const fraction of [.25,.5,.75]){
-    const x=wrapSourceX(a.x+dx*fraction),z=a.z+dz*fraction,
-     latitudeScale=Math.max(.1,Math.abs(Math.cos(sourceToLonLat(x,z).lat))),
-     east=dx*latitudeScale,metricLength=Math.hypot(east,dz),
-     normalX=-dz/metricLength*metreSource/latitudeScale,
-     normalZ=east/metricLength*metreSource,
-     left=naturalSurfaceAt(wrapSourceX(x+normalX),z+normalZ),
-     right=naturalSurfaceAt(wrapSourceX(x-normalX),z-normalZ);
-    if(left.water.kind!=='none'||right.water.kind!=='none')continue;
-    const crossfall=Math.abs(left.groundHeight-right.groundHeight)/2;
-    if(!Number.isFinite(crossfall))return Infinity;
-    penalty+=1000*Math.pow(Math.max(0,(crossfall-.12)/.12),2);
-   }
-   return penalty;
-  };
   type State={lane:number;previousLane:number;cost:number;node:typeof rows[number][number];previous?:State};
   let states:State[]=[{lane:0,previousLane:0,cost:0,node:rows[0][0]}];
   for(let stage=1;stage<=stages;stage++){
@@ -210,7 +185,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     if(cost===undefined){
      const distance=greatCircleDistance(state.node.point.position,node.point.position),mid=sourceToLonLat((state.node.point.x+node.point.x)/2,(state.node.point.z+node.point.z)/2),m=terrain(mid),
       grade=Math.max(Math.abs(node.height-state.node.height),Math.abs(m.reliefM-state.node.height)*2,Math.abs(node.height-m.reliefM)*2)/Math.max(1,distance);
-     cost=!m.land||m.domain==='Lake'||ownerAt(mid)!==key?Infinity:distance*(1+m.mountainIntensity*3+Math.max(0,m.reliefM-25)*.006+Math.pow(grade/.06,2)*5)+crossingCost(state.node.point,node.point)+dryCrossfallCost(state.node.point,node.point);
+     cost=!m.land||m.domain==='Lake'||ownerAt(mid)!==key?Infinity:distance*(1+m.mountainIntensity*3+Math.max(0,m.reliefM-25)*.006+Math.pow(grade/.06,2)*5)+crossingCost(state.node.point,node.point);
      edgeCosts.set(edgeKey,cost);
     }
     if(!Number.isFinite(cost))continue;

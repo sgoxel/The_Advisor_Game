@@ -7,6 +7,7 @@ import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
+  greatCircleDistance,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   SOURCE_PRESENTATION_RADIUS,
   sourceToLonLat,
@@ -342,9 +343,43 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
+/** Grade the real S005 SEED edge rather than painting a deceptively flat road.
+ * Feasible elevations obey each natural point's 4m cut/3m fill and <=8% grade.
+ * If that physical intersection is infeasible, retain the original fail-closed
+ * final surface; neither SEED identities nor collision rules are bypassed. */
+const gradedRoadCode = `${WORLD_SEED}/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1`;
+let gradedRoadHeights: readonly number[] | null | undefined;
+function boundedGradeProfile(road: Road, path: readonly {x:number;z:number}[]) {
+  if (road.code !== gradedRoadCode || path.length < 2 || path.length > 64) return null;
+  if (gradedRoadHeights !== undefined) return gradedRoadHeights;
+  const natural = path.map(p => naturalSurfaceBaseAt(p.x,p.z).groundHeight),
+    distance = path.slice(1).map((p,i) => greatCircleDistance(
+      sourceToLonLat(path[i].x,path[i].z), sourceToLonLat(p.x,p.z))),
+    low = [natural[0]-4], high = [natural[0]+3];
+  for (let i=1;i<path.length;i++) {
+    const rise=.08*distance[i-1];
+    if (!Number.isFinite(rise) || rise<=0) return gradedRoadHeights=null;
+    low[i]=Math.max(natural[i]-4,low[i-1]-rise);
+    high[i]=Math.min(natural[i]+3,high[i-1]+rise);
+    if (low[i]>high[i]+1e-9) return gradedRoadHeights=null;
+  }
+  const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n)),
+    heights=new Array<number>(path.length);
+  heights[path.length-1]=clamp(natural.at(-1)!,low.at(-1)!,high.at(-1)!);
+  for(let i=path.length-2;i>=0;i--){
+    const rise=.08*distance[i],a=Math.max(low[i],heights[i+1]-rise),
+      b=Math.min(high[i],heights[i+1]+rise);
+    if(a>b+1e-9)return gradedRoadHeights=null;
+    heights[i]=clamp(natural[i],a,b);
+  }
+  return gradedRoadHeights=heights;
+}
+
 function roadProfileHeightAt(x: number, z: number, road: Road) {
   const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
     a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
+  const legalProfile=boundedGradeProfile(road,path);
+  if(legalProfile)return lerp(legalProfile[nearest.segment],legalProfile[nearest.segment+1],nearest.t);
   let profile=roadProfileHeights.get(key);
   if(!profile){
     profile=[naturalSurfaceBaseAt(a.x,a.z).groundHeight,naturalSurfaceBaseAt(b.x,b.z).groundHeight];
