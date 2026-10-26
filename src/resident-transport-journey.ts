@@ -175,7 +175,8 @@ export function prepareResidentTransportJourneyWithApproach(
         ? slopeAt(current.x, current.z) : undefined;
     if (!residentWalkableSurface(currentSurface) ||
         !Number.isFinite(currentSurface.surfaceHeight) ||
-        (localSlope !== undefined && (!Number.isFinite(localSlope) || localSlope > .08))) return null;
+        (localSlope !== undefined &&
+          (!Number.isFinite(localSlope) || localSlope < 0 || localSlope > .08))) return null;
     if (!i) continue;
     const previous = approach[i - 1], previousSurface = surfaceAt(previous.x, previous.z),
       metres = distance(previous, current),
@@ -187,9 +188,9 @@ export function prepareResidentTransportJourneyWithApproach(
       firstHalf = distance(previous, mid), secondHalf = distance(mid, current);
     if (!(metres > 0) || metres > 1_200 || approachMetres + metres > 6_500 ||
         !Number.isFinite(metres) || !localSegmentLegal(previous, current) ||
-        !residentWalkableSurface(middle) ||
+        !residentWalkableSurface(middle) || !Number.isFinite(middle.surfaceHeight) ||
         (midpointSlope !== undefined &&
-          (!Number.isFinite(midpointSlope) || midpointSlope > .08)) ||
+          (!Number.isFinite(midpointSlope) || midpointSlope < 0 || midpointSlope > .08)) ||
         !(firstHalf > 0 && secondHalf > 0) ||
         Math.abs(middle.surfaceHeight - previousSurface.surfaceHeight) / firstHalf > .08 ||
         Math.abs(currentSurface.surfaceHeight - middle.surfaceHeight) / secondHalf > .08 ||
