@@ -572,10 +572,12 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
     "the actual site traveller's screenshot tick must coincide with the existing wet deck");
   const home = await selected!.considerAdvisorHomeReturn(chosenCode);
   assert.equal(typeof home.started, "boolean");
+  let ownedDoorPoint: { x: number; z: number } | undefined;
   if (home.started) {
     const next = destinationTick + 30*86400;
     selected!.advance(next);
     const atHome = selected!.projectedResidentByCode(chosenCode);
+    ownedDoorPoint = atHome && { x: atHome.x, z: atHome.z };
     assert.equal(atHome?.route, "HOME: owned doorway reached",
       "when the original actor chooses home, the final station is the actual owned door");
     const loaded = new LazySimulation();
@@ -602,6 +604,7 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       originCode, siteCode, bridgeCode,
       site: { x: arrived!.x, z: arrived!.z },
       bridge: { x: bridgePoint.x, z: bridgePoint.z },
+      ownedDoorPoint,
       bridgeFixedMs: fixedMs(lowTick),
       siteFixedMs: fixedMs(destinationTick),
       homeFixedMs: fixedMs(destinationTick + 30*86400),
