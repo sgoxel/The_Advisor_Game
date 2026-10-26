@@ -2385,7 +2385,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
           const lower=endpoint?surfaces[0].groundHeight:min,
             upper=endpoint?surfaces[0].groundHeight:max;
           if(lower<min||upper>max)return {reason:"shared endpoint earthwork",distanceM:metres};
-          const rise=started?.065*(nextLength-progress):Infinity;
+          const rise=started ? .065*(nextLength-progress) : Infinity;
           rangeLow=Math.max(lower,rangeLow-rise);
           rangeHigh=Math.min(upper,rangeHigh+rise);
           if(rangeLow>rangeHigh+1e-8)
