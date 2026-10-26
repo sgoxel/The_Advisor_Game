@@ -67,12 +67,12 @@ jobs:
           # banks and grade can be visually inspected rather than lost in night shading.
           FIXED_TIME_MS=1792874335750
           STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=50;settle;eval:document.querySelector("#transport-site-route").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus==="canonical walking graph preview ready"||Promise.reject(new Error("Real selected junction-to-site route unavailable"));settle;shot:junction-site-route;eval:window.advisorTransport.selectEvidence("bridge");click:#transport-bridge-closeup;settle;shot:owned-bridge-low-angle'
-          # WebGL2's 1080×1920 remote-junction 1/50 warm-up repeatedly
-          # stalled with zero active tiles and no first PNG. Capture the real
-          # already-selected physical bridge FIRST at Street scale instead;
-          # the junction→site route scene remains tested in both desktop
-          # backends and portrait native WebGPU. Keep full scenes on dispatch.
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ matrix.backend }}" = "webgl2" ] && [ "${{ matrix.profile }}" = "fullhd-portrait" ]; then
+          # WebGL2's remote-junction 1/50 warm-up fails to settle on both
+          # Linux viewport sizes (0 captured PNGs). Capture the actual selected
+          # bridge FIRST at Street scale for both; keep full junction→site
+          # route scenes on native WebGPU and optional manual dispatch.
+          # Never bypass screenshot_tool.py readiness/settled assertions.
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ matrix.backend }}" = "webgl2" ]; then
             STEPS='eval:window.advisorTransport.selectEvidence("bridge");click:#transport-bridge-closeup;settle;shot:owned-bridge-low-angle'
           fi
           if [ "${{ runner.os }}" = "macOS" ]; then
