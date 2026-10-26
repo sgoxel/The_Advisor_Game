@@ -43,6 +43,7 @@ import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZon
 import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
 import { sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
+import { transportBridgeByCode } from "../src/transport-network.ts";
 
 const HOUR = 3600;
 /** Tick at which villages[0]'s local clock shows this time on calendar day `day` (routines follow local time). */
@@ -1419,6 +1420,98 @@ test("real guard and fisherman outbound: Falconham full gated workday reaches th
   assert.ok(walkedLegs >= 2, "the canonical working day contains an outward and a returning physical journey");
   assert.ok(gateCrossings >= 2,
     "the real outlying fisherman's trip must cross the SEED gate both ways; a route without gates cannot substitute");
+});
+
+test("one real Greyfield worker crosses its SEED gate and wet bridge to work and returns to the owned door", () => {
+  // Proven by actual one-ID residentAt/workday witness; this is no made-up
+  // position, fixture bridge, alternate worker or graph-only route preview.
+  const place = villages.find(place => place.name === "Greyfield");
+  assert.ok(place, "retain the existing canonical bridge-work village");
+  const index = 15, seed = residentFoundationAt(place, index),
+    door = resolvedSettlementHomeDoorFor(place, index),
+    bridgeCode = seed.workplace.split("/MAINTENANCE/")[0],
+    bridge = transportBridgeByCode(bridgeCode);
+  assert.equal(seed.role, "laborer");
+  assert.ok(door && bridge && seed.workplace.includes("/MAINTENANCE/BANK/"),
+    "ordinary seeded worker's assigned job must be on the original real bridge far bank");
+  const lon = place.canonicalPosition.lon, lat = place.canonicalPosition.lat,
+    day = [1,2,3,4,5,6,7].find(d =>
+      localWeekday(tickAtLocalTime(d,12*HOUR,lon),lon) !== 6)!,
+    noon = tickAtLocalTime(day,12*HOUR,lon),
+    plan = dailyPlan({
+      code:seed.code, role:seed.role, ageGroup:seed.ageGroup,
+      guardShift:seed.guardShift,
+    },seed.traits,localDayIndex(noon,lon),localWeekday(noon,lon)),
+    departures = plan.filter((step,i)=>i>0&&step.anchor!==plan[i-1].anchor &&
+      (step.anchor==="work"||step.anchor==="home")),
+    exterior = settlementExteriorFor(place),
+    offset = (point:{x:number;z:number})=>{
+      const ll=sourceToLonLat(point.x,point.z);
+      return {eastM:normalizeLongitude(ll.lon-lon)*CANONICAL_PLANET_RADIUS *
+        Math.max(1e-9,Math.abs(Math.cos(lat))),
+        northM:(ll.lat-lat)*CANONICAL_PLANET_RADIUS};
+    },
+    border = exterior.border.map(offset), gates = exterior.gates.map(offset);
+  let wetDeckSteps = 0, gateCrossings = 0,
+    missingDeckRejected = false, missingGateRejected = false;
+  for(const departure of departures){
+    const first=residentAt(place,index,tickAtLocalTime(day,departure.start,lon));
+    assert.equal(first.code,seed.code);
+    assert.equal(first.activity,"commute","the real bridge workday must begin as a physical journey");
+    assert.ok(first.travelDistanceM && first.walkAhead);
+    for(let sample=0;sample<Math.min(300,Math.ceil(first.travelDistanceM/24)+2);sample++){
+      const state=residentAt(place,index,tickAtLocalTime(day,departure.start+sample*24,lon));
+      if(state.activity!=="commute")break;
+      assert.equal(state.code,seed.code);
+      assert.ok(state.grounded && state.walkAhead && state.walkAhead.length>=2);
+      for(let j=1;j<state.walkAhead.length;j++){
+        const p=state.walkAhead[j-1],q=state.walkAhead[j],
+          from=offset(p),to=offset(q);
+        assert.ok(legalEnclosureSegment(from,to,border,gates),
+          "all real resident segments cross the town enclosure only at SEED gates");
+        if(!legalEnclosureSegment(from,to,border,[])){
+          missingGateRejected = true;gateCrossings++;
+        }
+        const distance=greatCircleDistance(sourceToLonLat(p.x,p.z),sourceToLonLat(q.x,q.z)),
+          steps=Math.max(1,Math.ceil(distance));
+        assert.ok(steps<=24.1,"the resident cannot skip an impassable cut in one render window");
+        let segmentHasBridge=false;
+        for(let k=0;k<=steps;k++){
+          const t=k/steps, x=p.x+wrapSourceX(q.x-p.x)*t, z=p.z+(q.z-p.z)*t,
+            surface=finalSurfaceAt(x,z);
+          assert.ok(residentWalkableSurface(surface),"every real walking sample has canonical legal ground");
+          if(surface.traversal==="bridge"&&surface.water.kind!=="none"&&
+            greatCircleDistance(sourceToLonLat(x,z),bridge.position)<=Math.max(bridge.spanM,30)){
+            wetDeckSteps++;segmentHasBridge=true;
+            assert.equal(residentWalkableSurface({...surface,deckHeight:null}),false,
+              "the same occupied actual wet bridge point becomes illegal if its deck is removed");
+          }
+        }
+        if(segmentHasBridge&&!missingDeckRejected){
+          // Replay this exact SEED resident path with its real bridge deck
+          // removed from the surface verdict; an untouched dry segment remains legal.
+          const blocked = continuousWalkableOffsetSegment(from,to,point=>{
+            const pos={
+              lon:normalizeLongitude(lon+point.eastM/(CANONICAL_PLANET_RADIUS*Math.max(1e-9,Math.abs(Math.cos(lat))))),
+              lat:lat+point.northM/CANONICAL_PLANET_RADIUS,
+            },src=lonLatToSource(pos.lon,pos.lat),surface=finalSurfaceAt(src.x,src.z);
+            return residentWalkableSurface(surface.traversal==="bridge"&&surface.water.kind!=="none"
+              ? {...surface,deckHeight:null} : surface);
+          });
+          assert.equal(blocked,false,"the actual resident route cannot continue with missing bridge deck");
+          missingDeckRejected = true;
+        }
+      }
+    }
+  }
+  const work=residentAt(place,index,tickAtLocalTime(day,15*HOUR,lon)),
+    home=residentAt(place,index,tickAtLocalTime(day,23.9*HOUR,lon));
+  assert.ok(work.grounded&&work.activity==="work"&&work.code===seed.code&&
+    home.grounded&&home.indoors&&home.code===seed.code&&home.route===seed.homeEntrance,
+    "one real ordinary resident must work and return to its own exact SEED home");
+  assert.ok(greatCircleDistance(home.position,sourceToLonLat(door.x,door.z))<.05);
+  assert.ok(wetDeckSteps>=2&&gateCrossings>=2&&missingDeckRejected&&missingGateRejected,
+    "real workday crosses an occupied bridge and legal gates; either physical removal rejects it");
 });
 
 test("outlying woodland workers use real habitat and remain queryable away from town", async () => {
