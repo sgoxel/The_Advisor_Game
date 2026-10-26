@@ -49,3 +49,51 @@ test("S008 canonical keyboard inspect and seven viewport hit areas", async ({ pa
   await expect(page.locator(focusTarget)).toBeFocused();
   expect(errors).toEqual([]);
 });
+
+
+test("S008 real touch-dispatched settlement inspection and accessible close", async ({ browser }) => {
+  test.setTimeout(240000);
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 2,
+    reducedMotion: "reduce",
+  });
+  try {
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true });
+      window.__s008Touch = [];
+      document.addEventListener("pointerdown", event => {
+        if (event.pointerType === "touch")
+          window.__s008Touch.push(event.target?.id || event.target?.closest?.("button")?.id || "");
+      }, { capture: true });
+    });
+    await page.goto("http://127.0.0.1:4180/");
+    await page.waitForFunction(() => window.advisorWorld?.state.ready);
+    const regionToggle = page.locator("#toggle-region-panel");
+    if (!(await page.locator("#open-travel").isVisible())) await regionToggle.tap();
+    await page.locator("#open-travel").tap();
+    await expect(page.locator("#travel-panel")).toBeVisible();
+    const selectedId = await page.locator("#village-select").inputValue();
+    const selectedName = await page.locator("#village-select option:checked").textContent();
+    expect(selectedId).toBeTruthy();
+    await page.locator("#inspect-village").tap();
+    const popup = page.locator("#npc-popup");
+    await expect(popup).toBeVisible();
+    await expect(popup).toHaveAttribute("data-canonical-id", selectedId);
+    await expect(popup.locator("h2")).toHaveText(selectedName.trim());
+    await page.locator("#npc-popup [data-close]").tap();
+    await expect(popup).toBeHidden();
+    await expect(regionToggle).toBeFocused();
+    expect(await page.evaluate(() => window.__s008Touch)).toEqual(
+      expect.arrayContaining(["open-travel", "inspect-village"]),
+    );
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
