@@ -308,9 +308,26 @@ function natureSites(place: Place) {
   const reachable = (point: Offset) => {
     const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
     if (!start) return false;
-    const steps = Math.ceil(Math.hypot(start.eastM-point.eastM,start.northM-point.northM) / 20);
-    for (let i = 1; i <= steps; i++) if (!outdoorSiteLegal(place, { eastM: start.eastM + (point.eastM-start.eastM)*i/steps, northM: start.northM + (point.northM-start.northM)*i/steps })) return false;
-    return true;
+    // Most real field/shore work is directly accessible outside a SEED gate.
+    // Validate those corridors against continuous metre-spaced final-surface
+    // ground/decks first, without running a whole-graph A* for every candidate.
+    for (const gate of plan.gates) {
+      const g = offsetForSource(place, gate.x, gate.z);
+      if (legalStreetSegment(place, g, point)) return true;
+    }
+    // If a dry-looking chord is blocked by an actual enclosure/street edge,
+    // retain the existing bounded graph/gate detour search. The old 20 m
+    // probe is only a cheap negative hint, never permission to walk: the
+    // eventual chosen route must still pass the full one-metre validator.
+    const distance = Math.hypot(start.eastM - point.eastM, start.northM - point.northM),
+      probes = Math.max(1, Math.ceil(distance / 20));
+    for (let i = 1; i <= probes; i++) {
+      if (!outdoorSiteLegal(place, {
+        eastM: start.eastM + (point.eastM - start.eastM) * i / probes,
+        northM: start.northM + (point.northM - start.northM) * i / probes,
+      })) return false;
+    }
+    return streetPath(place, start, point) !== null;
   };
   for (let i = 0; i < 48; i++) {
     const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
