@@ -1669,6 +1669,20 @@ async function start() {
   updateCamera();
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
+  // Saved history consists only of SEED identities, absolute ticks and edges.
+  // Never hydrate a serialized actor position or validated boolean. Replay
+  // runs full character/route/surface decisions; corrupted history is ignored.
+  const visitSaveKey = "advisor-game:s005:ALDERWICK:v5:site-visits";
+  let pendingSiteVisitHistory: unknown;
+  try {
+    const stored = localStorage.getItem(visitSaveKey);
+    if (stored && stored.length <= 24_576) pendingSiteVisitHistory = JSON.parse(stored);
+  } catch { /* storage may be disabled; live game remains playable */ }
+  const saveSiteVisits = () => {
+    try { localStorage.setItem(visitSaveKey,
+      JSON.stringify(simulation.savedSiteVisitHistory())); }
+    catch { /* no false claim of durable save when storage unavailable */ }
+  };
   const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
   const actors: pc.Entity[] = [];
   const selectedResidentMarker = $("selected-resident-marker"),
@@ -1705,12 +1719,21 @@ async function start() {
   let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
   let actorSnapshotTick = -Infinity;
   residentResultReady = () => { lastSimulationRealSecond = -1; };
+  if (pendingSiteVisitHistory !== undefined) {
+    void simulation.restoreSiteVisitHistory(pendingSiteVisitHistory).then(restored => {
+      if (restored) {
+        residentQueries.clear();
+        lastSimulationRealSecond = -1;
+      }
+    });
+  }
   // A suggestion originates only from an actually inspected NPC. The player
   // cannot set acceptance or create route stations; Simulation asks the
   // original resident and strictly validates each canonical walking leg.
   setSiteVisitAdvisor(async code => {
     const result = await simulation.considerAdvisorSiteVisit(code);
     if (result.started) {
+      saveSiteVisits();
       residentQueries.clear();
       lastSimulationRealSecond = -1;
     }

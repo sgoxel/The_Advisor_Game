@@ -8,7 +8,7 @@ import { transportBridgeByCode } from "../src/transport-network.ts";
 import { createTransportWalkingIndex, transportWalkingRouteViaRequiredEdge } from "../src/transport-walking-route.ts";
 import { residentAt, residentLocalTransportApproach, residentLocalTransportSegmentLegal } from "../src/simulation.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
-import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
+import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, appendResidentReturnToOwnedDoor, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
 import { siteVisitCorridors } from "../src/site-visit-advice.ts";
@@ -265,6 +265,16 @@ test("unverified gate approach, blocked streets and steep local slopes refuse wi
 test("Simulation site-departure entry refuses invented residents without an event", async () => {
   const sim = new LazySimulation();
   sim.advance(departure);
+  assert.equal(await sim.restoreSiteVisitHistory({
+    version: 1, seed: "ADVISOR-0126-ALDERWICK", foundation: "v5",
+    visits: [{ residentCode: "invented", decidedTick: 1,
+      from: route.from, to: route.to, edgeCodes: codes }],
+  }), false, "stored event may not manufacture a SEED person or validated travel");
+  assert.deepEqual(sim.savedSiteVisitHistory().visits, [],
+    "failed restore is atomic; no partial accepted journey leaks");
+  assert.equal(await sim.restoreSiteVisitHistory({
+    version: 1, seed: "wrong-world", foundation: "v5", visits: [],
+  }), false, "different SEED versions cannot overwrite character history");
   assert.equal(await sim.tryBeginSelfDirectedSiteVisit("invented-resident", route), null);
   const advice = await sim.considerAdvisorSiteVisit("invented-resident");
   assert.equal(advice.started, false, "an Advisor click cannot create a fabricated actor");
@@ -414,6 +424,54 @@ test("Simulation-owned site-visit decision refuses orders and journals only a fu
   assert.deepEqual(events.visible([original], departure - 1, {
     x: original.x, z: original.z, radius: 1, limit: 8,
   }), [original], "events may not change a pre-departure worker routine snapshot");
+
+  // Decisive home acceptance: a real site arrival is required; the full
+  // five-edge wet bridge is checked again and the final owned-house step is
+  // independently verified, not an implied teleport from the old street stop.
+  const returnTick = departure + 10000, atDestination = events.at(actor.code, returnTick);
+  assert.equal(atDestination?.status, "arrived");
+  const returnDecision = { acceptedByResident: true as const,
+    residentCode: actor.code, fromNode: route.to, siteNode: route.from,
+    decidedTick: returnTick };
+  const reverse = prepareResidentTransportReturnJourney(
+    { ...actor, x: atDestination!.x, z: atDestination!.z },
+    returnDecision, accepted!.journey, route.from,
+    roads, nodes, adjacency, bridges, (x,z)=>surfaceAt(x,z),
+    () => 0, (from,to) => from.z === 0 && to.z === 0 && to.x < from.x);
+  assert.ok(reverse, "full return must reprove the bridge and original local gate");
+  assert.equal(reverse!.stations.at(-1)!.x, original.x);
+  const ownedDoor = { x: -3, z: 0 },
+    street = [{ x: original.x, z: original.z }, ownedDoor],
+    homeward = appendResidentReturnToOwnedDoor(reverse!, street,
+      (from,to) => from.z === 0 && to.z === 0 && to.x < from.x,
+      (x,z) => surfaceAt(x,z), () => 0);
+  assert.ok(homeward, "owned door has a separate real lawful town-street leg");
+  assert.ok(homeward!.distanceM > reverse!.distanceM);
+  assert.equal(homeward!.stations.at(-1)!.x, ownedDoor.x);
+  assert.equal(appendResidentReturnToOwnedDoor(reverse!, street, () => false,
+    (x,z) => surfaceAt(x,z)), null,
+    "a blocked owned-home street refuses, even if the river bridge remains valid");
+  assert.equal(appendResidentReturnToOwnedDoor(reverse!, street, () => true,
+    (x,z) => ({ ...surfaceAt(x,z), surfaceHeight: x < -2.4 ? 100 : 1 }),
+    () => 0), null, "steep doorstep approach cannot be bypassed");
+  assert.equal(events.tryRecordHomeReturn(actor.code, departure + 1, homeward!, ownedDoor), null,
+    "an Advisor cannot start a return before the site is physically reached");
+  assert.ok(events.tryRecordHomeReturn(actor.code, returnTick, homeward!, ownedDoor),
+    "post-arrival autonomous return may begin only after lawful owned-door verification");
+  assert.equal(events.tryRecordHomeReturn(actor.code, returnTick, homeward!, ownedDoor), null,
+    "duplicate homeward journeys cannot start");
+  const homeArrived = events.at(actor.code, returnTick + 10000);
+  assert.equal(homeArrived?.status, "arrived");
+  assert.ok(Math.abs(homeArrived!.x - ownedDoor.x) < 1e-6);
+  const atOwnedDoor = events.project(original, returnTick + 10000, () => 1);
+  assert.equal(atOwnedDoor.code, original.code);
+  assert.equal(atOwnedDoor.route, "HOME: owned doorway reached");
+  assert.equal(atOwnedDoor.homeBuilding, original.homeBuilding);
+  assert.deepEqual(events.savedVisits(), [{
+    residentCode: actor.code, decidedTick: departure,
+    from: route.from, to: route.to, edgeCodes: [...codes],
+    homeReturnTick: returnTick,
+  }], "durable journal exports route IDs and timestamps only, never untrusted positions");
 
 });
 

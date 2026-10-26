@@ -2054,7 +2054,18 @@ export class LazySimulation {
     residentCode: string,
     route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
   ) {
-    const tick = this.tick, actor = this.residentByCode(residentCode, tick);
+    return this.verifySiteVisitAt(residentCode, route, this.tick);
+  }
+
+  /** Same strict physical and character decision replay at the SAVED Fantasy
+   * tick. Never accept a serialized journey, decision flag or position. */
+  private async verifySiteVisitAt(
+    residentCode: string,
+    route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
+    tick: number,
+  ) {
+    const currentTick = this.tick, actor = this.residentByCode(residentCode, tick);
+    if (!Number.isSafeInteger(tick) || tick < 0 || tick > currentTick) return null;
     if (!actor || !actor.grounded || actor.indoors ||
         route.edgeCodes.length < 2 || route.edgeCodes.length > 12) return null;
     const place = places.find(entry => entry.id === actor.settlement);
@@ -2066,7 +2077,7 @@ export class LazySimulation {
       import("./resident-transport-events.ts"),
     ]);
     // A stale async candidate never starts a journey at a superseded tick.
-    if (this.tick !== tick) return null;
+    if (this.tick !== currentTick) return null;
     const nodes = new Map(siteTransportNetwork.nodes.map(node => [node.code, node])),
       origin = nodes.get(route.from), destination = nodes.get(route.to);
     if (!origin || origin.sourceId !== place.id ||
@@ -2099,7 +2110,7 @@ export class LazySimulation {
     if (!actor || actor.code !== residentCode)
       return { started: false, message: "No canonical resident is available to consider this advice." };
     if (this.siteVisitJournal?.eventFor(residentCode))
-      return { started: false, message: "The resident already has an accepted site journey." };
+      return this.considerAdvisorHomeReturn(residentCode);
     if (!actor.grounded || actor.indoors || actor.route.startsWith("BLOCKED:"))
       return { started: false, message: "The resident cannot leave a legally grounded outdoor position." };
     if (!["stroll", "errand", "socialise"].includes(actor.activity))
@@ -2125,6 +2136,117 @@ export class LazySimulation {
     }
     return { started: false,
       message: "The resident did not begin this visit; an independent choice or lawful physical route was unavailable." };
+  }
+
+  /**
+   * Actual site-to-owned-home return. A citizen who has not yet walked all
+   * outbound stations cannot reverse, and advice cannot force their homeward
+   * choice. Freshly prove reverse bank/bridge, town gate, original departure
+   * AND the legally resolved house door on the current final surface.
+   */
+  private async verifyHomeReturnAt(residentCode: string, tick: number) {
+    const accepted = this.siteVisitJournal?.eventFor(residentCode),
+      previous = this.siteVisitJournal?.returnFor(residentCode),
+      currentTick = this.tick;
+    if (!accepted || previous || !Number.isSafeInteger(tick) ||
+        tick <= accepted.decidedTick || tick > currentTick) return null;
+    const status = this.siteVisitJournal!.at(residentCode, tick);
+    if (!status || status.status !== "arrived") return null;
+    const resident = this.residentByCode(residentCode, tick),
+      place = places.find(p => p.id === resident?.settlement);
+    if (!resident || !place || !resident.grounded) return null;
+    const door = resolvedSettlementHomeDoorFor(place, resident.index);
+    if (!door) return null;
+    const [{ siteTransportNetwork }, { createTransportWalkingIndex }, {
+      prepareResidentTransportReturnJourney, appendResidentReturnToOwnedDoor,
+    }] = await Promise.all([
+      import("./site-transport-network.ts"),
+      import("./transport-walking-route.ts"),
+      import("./resident-transport-journey.ts"),
+    ]);
+    if (this.tick !== currentTick) return null;
+    const roads = new Map(siteTransportNetwork.roadEdges.map(edge => [edge.code, edge])),
+      nodes = new Map(siteTransportNetwork.nodes.map(node => [node.code, node])),
+      index = createTransportWalkingIndex(siteTransportNetwork),
+      siteActor = { ...resident, x: status.x, z: status.z,
+        position: { ...sourceToLonLat(status.x, status.z), elevation: finalSurfaceAt(status.x, status.z).surfaceHeight },
+        indoors: false, grounded: true, route: "SITE VISIT: reached" },
+      decision = { acceptedByResident: true as const, residentCode,
+        fromNode: accepted.siteNode, siteNode: accepted.fromNode, decidedTick: tick },
+      reversed = prepareResidentTransportReturnJourney(
+        siteActor, decision, accepted.journey, accepted.fromNode,
+        roads, nodes, index.adjacency, siteTransportNetwork.bridges,
+        undefined, undefined, (a, b) => residentLocalTransportSegmentLegal(place, a, b));
+    if (!reversed) return null;
+    const departure = reversed.stations[reversed.stations.length - 1],
+      fromDeparture = { ...resident, x: departure.x, z: departure.z,
+        indoors: false, grounded: true, route: "HOME RETURN: local streets" },
+      homePath = residentLocalTransportApproach(place, fromDeparture, door);
+    if (!homePath) return null;
+    const complete = appendResidentReturnToOwnedDoor(reversed, homePath,
+      (a, b) => residentLocalTransportSegmentLegal(place, a, b));
+    if (!complete) return null;
+    return this.siteVisitJournal?.tryRecordHomeReturn(residentCode, tick, complete, door) ?? null;
+  }
+
+  async considerAdvisorHomeReturn(residentCode: string) {
+    const saved = this.siteVisitJournal?.eventFor(residentCode);
+    if (!saved)
+      return { started: false, message: "No accepted site journey exists for this resident." };
+    if (this.siteVisitJournal?.returnFor(residentCode))
+      return { started: false, message: "This resident already chose a verified homeward journey." };
+    if (this.siteVisitJournal?.at(residentCode, this.tick)?.status !== "arrived")
+      return { started: false, message: "The resident must physically reach the site before returning." };
+    const returned = await this.verifyHomeReturnAt(residentCode, this.tick);
+    return returned
+      ? { started: true, message: "The resident chose a proven route to their own house door." }
+      : { started: false, message: "The resident declined or a real door, street, deck or grade made the return unlawful." };
+  }
+
+  /** Canonical versioned event history: rebuild original decisions AND physical
+   * journeys at saved Fantasy ticks before any restored actor can move. */
+  savedSiteVisitHistory() {
+    return { version: 1, seed: "ADVISOR-0126-ALDERWICK",
+      foundation: "v5", visits: this.siteVisitJournal?.savedVisits() ?? [] };
+  }
+
+  async restoreSiteVisitHistory(saved: unknown): Promise<boolean> {
+    if (!saved || typeof saved !== "object") return false;
+    const input = saved as Record<string, unknown>;
+    if (input.version !== 1 || input.seed !== "ADVISOR-0126-ALDERWICK" ||
+        input.foundation !== "v5" || !Array.isArray(input.visits) ||
+        input.visits.length > 16) return false;
+    const original = this.siteVisitJournal, replayTick = this.tick;
+    this.siteVisitJournal = undefined;
+    const reject = () => { this.siteVisitJournal = original; return false; };
+    try {
+      const seen = new Set<string>();
+      for (const raw of input.visits) {
+        if (!raw || typeof raw !== "object") return reject();
+        const record = raw as Record<string, unknown>;
+        if (typeof record.residentCode !== "string" || seen.has(record.residentCode) ||
+            typeof record.from !== "string" || typeof record.to !== "string" ||
+            !Number.isSafeInteger(record.decidedTick) || (record.decidedTick as number) < 0 ||
+            (record.decidedTick as number) > replayTick || !Array.isArray(record.edgeCodes) ||
+            record.edgeCodes.length < 2 || record.edgeCodes.length > 12 ||
+            !record.edgeCodes.every(code => typeof code === "string" && code.length < 256))
+          return reject();
+        seen.add(record.residentCode);
+        const accepted = await this.verifySiteVisitAt(record.residentCode,
+          { from: record.from, to: record.to, edgeCodes: record.edgeCodes },
+          record.decidedTick as number);
+        if (!accepted || this.tick !== replayTick) return reject();
+        if (record.homeReturnTick !== undefined) {
+          if (!Number.isSafeInteger(record.homeReturnTick) ||
+              (record.homeReturnTick as number) > replayTick ||
+              !await this.verifyHomeReturnAt(record.residentCode, record.homeReturnTick as number))
+            return reject();
+        }
+      }
+      return true;
+    } catch {
+      return reject();
+    }
   }
 
   /** Read-only validated departure event; not yet an applied worker-visible trip. */

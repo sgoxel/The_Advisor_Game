@@ -45,6 +45,30 @@ export type ResidentSiteVisitEvent = Readonly<{
   journey: ValidatedResidentJourney;
 }>;
 
+/** Only an actual post-arrival character can choose to head for their owned
+ * doorway. The Advisor cannot make a resident depart through this predicate. */
+export function residentChoosesHomeReturn(
+  actor: Pick<Resident, "grounded" | "traits" | "mood">,
+) {
+  const { diligence, curiosity } = actor.traits.personality;
+  return actor.grounded && [diligence, curiosity, actor.mood.value].every(Number.isFinite) &&
+    actor.mood.value >= -.65 && diligence * .65 + (1 - curiosity) * .35 >= .28;
+}
+export type ResidentHomeReturnEvent = Readonly<{
+  residentCode: string;
+  decidedTick: number;
+  journey: ValidatedResidentJourney;
+}>;
+export type SavedResidentVisit = Readonly<{
+  residentCode: string;
+  decidedTick: number;
+  from: string;
+  to: string;
+  edgeCodes: readonly string[];
+  homeReturnTick?: number;
+}>;
+
+
 
 /**
  * Read-only projection of a previously Simulation-validated event onto its
@@ -115,6 +139,7 @@ export function projectResidentSiteVisit(
  * journeys instead of silently teleporting an existing actor. */
 export class ResidentSiteVisitJournal {
   private readonly visits = new Map<string, ResidentSiteVisitEvent>();
+  private readonly returns = new Map<string, ResidentHomeReturnEvent>();
   private readonly resolveResident: (code: string, tick: number) => Resident | undefined;
   constructor(resolveResident: (code: string, tick: number) => Resident | undefined) {
     this.resolveResident = resolveResident;
@@ -154,10 +179,66 @@ export class ResidentSiteVisitJournal {
   }
 
   eventFor(residentCode: string) { return this.visits.get(residentCode); }
+  returnFor(residentCode: string) { return this.returns.get(residentCode); }
+  /** Append ONLY a Simulation-validated return after actual site arrival and
+   * original SEED actor's independent homeward choice. Refuse duplicate events. */
+  tryRecordHomeReturn(
+    residentCode: string, tick: number, journey: ValidatedResidentJourney,
+    ownedDoor: Source,
+  ): ResidentHomeReturnEvent | null {
+    const original = this.visits.get(residentCode);
+    if (!original || this.returns.has(residentCode) ||
+        !Number.isSafeInteger(tick) || tick <= original.decidedTick ||
+        !Number.isFinite(ownedDoor.x) || !Number.isFinite(ownedDoor.z) ||
+        journey.residentCode !== residentCode || journey.departedTick !== tick ||
+        journey.siteNode !== original.fromNode ||
+        residentTransportJourneyAt(original.journey, tick).status !== "arrived" ||
+        !journey.stations.length ||
+        Math.hypot(wrapSourceX(journey.stations[0].x -
+          original.journey.stations[original.journey.stations.length - 1].x),
+          journey.stations[0].z -
+          original.journey.stations[original.journey.stations.length - 1].z) > .0001 ||
+        Math.hypot(wrapSourceX(journey.stations[journey.stations.length - 1].x - ownedDoor.x),
+          journey.stations[journey.stations.length - 1].z - ownedDoor.z) > .0001)
+      return null;
+    const actor = this.resolveResident(residentCode, tick);
+    if (!actor || actor.code !== residentCode || !residentChoosesHomeReturn(actor))
+      return null;
+    const event = Object.freeze({ residentCode, decidedTick: tick, journey });
+    this.returns.set(residentCode, event);
+    return event;
+  }
+
+  /** Persist only canonical identities, timestamps and original road codes.
+   * Never accept serialized x/z path samples, height, acceptedByResident,
+   * character position or arrival as trusted Simulation data. */
+  savedVisits(): SavedResidentVisit[] {
+    return [...this.visits.values()].map(event => Object.freeze({
+      residentCode: event.residentCode,
+      decidedTick: event.decidedTick,
+      from: event.fromNode, to: event.siteNode,
+      edgeCodes: Object.freeze([...event.journey.edgeCodes]),
+      ...(this.returns.has(event.residentCode)
+        ? { homeReturnTick: this.returns.get(event.residentCode)!.decidedTick } : {}),
+    }));
+  }
+
   /** Never invent a second actor: overlay by exact original identity only. */
   project(resident: Resident, tick: number, elevationAt?: (x: number, z: number) => number) {
-    const event = this.visits.get(resident.code);
-    return event ? projectResidentSiteVisit(resident, event, tick, elevationAt) : resident;
+    const event = this.visits.get(resident.code), home = this.returns.get(resident.code);
+    if (!event) return resident;
+    if (home && tick >= home.decidedTick) {
+      const projected = projectResidentSiteVisit(resident, {
+        ...event, decidedTick: home.decidedTick, siteNode: event.fromNode,
+        journey: home.journey,
+      }, tick, elevationAt);
+      const arrived = residentTransportJourneyAt(home.journey, tick).status === "arrived";
+      return { ...projected,
+        route: arrived ? "HOME: owned doorway reached" : "HOME RETURN: verified streets",
+        task: arrived ? "Returned to owned home door" : "Returning home on verified roads",
+      };
+    }
+    return projectResidentSiteVisit(resident, event, tick, elevationAt);
   }
 
   /**
@@ -205,9 +286,12 @@ export class ResidentSiteVisitJournal {
   }
 
   at(residentCode: string, tick: number) {
-    const event = this.visits.get(residentCode);
-    return event && Number.isSafeInteger(tick) && tick >= 0
-      ? residentTransportJourneyAt(event.journey, tick) : undefined;
+    const event = this.visits.get(residentCode), home = this.returns.get(residentCode);
+    return Number.isSafeInteger(tick) && tick >= 0
+      ? home && tick >= home.decidedTick
+        ? residentTransportJourneyAt(home.journey, tick)
+        : event ? residentTransportJourneyAt(event.journey, tick) : undefined
+      : undefined;
   }
   get count() { return this.visits.size; }
 }

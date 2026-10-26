@@ -321,6 +321,59 @@ export function prepareResidentTransportReturnJourney(
   });
 }
 
+/**
+ * Finish a freshly revalidated return at the actual owned home door, not merely
+ * at the previous departure spot or settlement gate. Simulation supplies the
+ * *existing* legal town-street path from its return endpoint to that resolved
+ * door. This cannot create a shortcut, virtual home or bridge permission.
+ * Every segment, midpoint and ≤8% grade must independently pass again.
+ */
+export function appendResidentReturnToOwnedDoor(
+  journey: ValidatedResidentJourney,
+  localPath: readonly Source[],
+  localSegmentLegal: (a: Source, b: Source) => boolean,
+  surfaceAt: Sample = finalSurfaceAt,
+  slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
+): ValidatedResidentJourney | null {
+  if (localPath.length < 2 || localPath.length > 256 ||
+      journey.stations.length + localPath.length - 1 > MAX_STATIONS ||
+      localPath.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.z)) ||
+      distance(journey.stations[journey.stations.length - 1], localPath[0]) > .01) return null;
+  const stations: Source[] = [...journey.stations],
+    cumulative = [...journey.cumulativeMetres];
+  let length = journey.distanceM, localLength = 0;
+  for (let i = 1; i < localPath.length; i++) {
+    const a = localPath[i - 1], b = localPath[i],
+      metres = distance(a, b),
+      midpoint = { x: wrapSourceX(a.x + wrapSourceX(b.x - a.x) / 2), z: (a.z + b.z) / 2 },
+      firstHalf = distance(a, midpoint), secondHalf = distance(midpoint, b),
+      samples = [a, midpoint, b].map(p => surfaceAt(p.x, p.z));
+    if (!(metres > 0) || !Number.isFinite(metres) || metres > 1_200 ||
+        localLength + metres > 6_500 || !(firstHalf > 0 && secondHalf > 0) ||
+        !localSegmentLegal(a, b) ||
+        samples.some(s => !residentWalkableSurface(s) || !Number.isFinite(s.surfaceHeight)))
+      return null;
+    const grades = [Math.abs(samples[1].surfaceHeight - samples[0].surfaceHeight) / firstHalf,
+      Math.abs(samples[2].surfaceHeight - samples[1].surfaceHeight) / secondHalf,
+      Math.abs(samples[2].surfaceHeight - samples[0].surfaceHeight) / metres];
+    for (let k = 0; k < 3; k++) {
+      const surface = samples[k], point = [a, midpoint, b][k];
+      if (surface.deckHeight === null && surface.traversal === "open")
+        grades.push(slopeAt(point.x, point.z));
+    }
+    if (grades.some(grade => !Number.isFinite(grade) || grade < 0 || grade > .08)) return null;
+    localLength += metres;
+    length += metres;
+    stations.push(Object.freeze({ x: b.x, z: b.z }));
+    cumulative.push(length);
+  }
+  if (!(localLength > 0)) return null;
+  return Object.freeze({
+    ...journey, stations: Object.freeze(stations),
+    cumulativeMetres: Object.freeze(cumulative), distanceM: length,
+  });
+}
+
 /** Accumulated legal daylight walking time, with a deterministic 22:00–06:00
  * overnight rest (no all-night/multi-day teleport or elapsed wall clock).
  * Uses Fantasy Time and the origin gate's stable local time zone. */
