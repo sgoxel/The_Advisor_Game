@@ -5,6 +5,7 @@ import { transportBridgeByCode } from "../src/transport-network.ts";
 import { createTransportWalkingIndex, transportWalkingRouteViaRequiredEdge } from "../src/transport-walking-route.ts";
 import { planTransportRouteCorridorByLeg, sampledCorridorStationFailure } from "../src/transport-route-corridor.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { residentWalkableSurface } from "../src/simulation.ts";
 import { villages, roads, roadDistanceAt } from "../src/geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
@@ -72,6 +73,7 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
       const localSlope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
         ? finalSurfaceLocalSlopeAt(station.x,station.z) : undefined;
       reason = sampledCorridorStationFailure(station,surface,localSlope);
+      if (!reason && !residentWalkableSurface(surface)) reason = "Simulation resident cannot walk on sampled final surface";
       if (!reason && previous) {
         const metres = greatCircleDistance(sourceToLonLat(previous.x,previous.z),sourceToLonLat(station.x,station.z));
         const grade = metres>0 ? Math.abs(surface.surfaceHeight-previous.height)/metres : Infinity;
@@ -96,6 +98,7 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
         slope=surface.deckHeight===null&&surface.traversal==="open"&&surface.walkable
           ? finalSurfaceLocalSlopeAt(mid.x,mid.z) : undefined;
       reason=sampledCorridorStationFailure(mid,surface,slope);
+      if (!reason && !residentWalkableSurface(surface)) reason = "Simulation resident cannot walk on interval midpoint";
       if (!reason) {
         const l=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(mid.x,mid.z)),
           rr=greatCircleDistance(sourceToLonLat(mid.x,mid.z),sourceToLonLat(b.x,b.z)),
@@ -128,6 +131,8 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
             traversal:"blocked" as const,surfaceHeight:surface.groundHeight};
           assert.equal(sampledCorridorStationFailure(at,missingDeck),
             "water without owned bridge deck");
+          assert.equal(residentWalkableSurface(missingDeck),false,
+            "Simulation also rejects exactly this missing canonical river deck");
         }
       }
     }
