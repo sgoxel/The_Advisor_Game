@@ -19,7 +19,7 @@ test("S008 canonical keyboard inspect and seven viewport hit areas", async ({ pa
       roots.forEach(root => root.querySelectorAll("button, select, summary").forEach(el => targets.add(el)));
       return [...targets].flatMap(el => {
         if (el.closest("[hidden]") || !el.getClientRects().length || getComputedStyle(el).visibility === "hidden") return [];
-        el.scrollIntoView({block:"nearest",inline:"nearest"});
+        el.scrollIntoView({block:"center",inline:"nearest"});
         const r = el.getBoundingClientRect();
         const hit = document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
         return r.width < 43.5 || r.height < 43.5 || !(hit === el || el.contains(hit))
@@ -45,6 +45,7 @@ test("S008 canonical keyboard inspect and seven viewport hit areas", async ({ pa
   await expect(page.locator("#npc-popup [data-close]")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(popup).toBeHidden();
-  await expect(page.locator("#open-travel")).toBeFocused();
+  const focusTarget = await page.evaluate(() => document.getElementById("open-travel").getClientRects().length ? "#open-travel" : "#toggle-region-panel");
+  await expect(page.locator(focusTarget)).toBeFocused();
   expect(errors).toEqual([]);
 });

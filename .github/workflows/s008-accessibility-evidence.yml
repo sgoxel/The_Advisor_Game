@@ -45,7 +45,7 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          STEPS='click:#open-travel;visible:#travel-panel;settle;shot:travel-menu;click:#inspect-village;visible:#npc-popup;eval:document.getElementById("npc-popup").dataset.canonicalId===document.getElementById("village-select").value||Promise.reject(new Error("S008 canonical identity mismatch"));settle;shot:settlement-inspection;click:#npc-popup [data-close];eval:document.activeElement.id==="open-travel"||Promise.reject(new Error("S008 popup did not restore opener focus"))'
+          STEPS='click:#open-travel;visible:#travel-panel;settle;shot:travel-menu;click:#inspect-village;visible:#npc-popup;eval:document.getElementById("npc-popup").dataset.canonicalId===document.getElementById("village-select").value||Promise.reject(new Error("S008 canonical identity mismatch"));settle;shot:settlement-inspection;click:#npc-popup [data-close];eval:document.activeElement.id===(document.getElementById("open-travel").getClientRects().length?"open-travel":"toggle-region-panel")||Promise.reject(new Error("S008 popup did not restore visible opener focus"))'
           if [ "${{ runner.os }}" = "macOS" ]; then
             python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --browser-channel chrome --out test-results/s008-${{ matrix.renderer }}-${{ matrix.profile }} --name accessible-atlas --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --initial-ready-only --timeout 180 --steps "$STEPS"
           else

@@ -61,3 +61,6 @@ body .panel .popup-heading button {
   font-size: 26px;
 }
 .panel select { min-height: 44px; }
+
+/* Keep scrollTo/keyboard-focus targets clear of the 44px sticky heading. */
+.panel:not(:where(#region-panel)) { scroll-padding-top: 56px; }

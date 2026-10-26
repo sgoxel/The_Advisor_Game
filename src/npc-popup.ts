@@ -219,7 +219,14 @@ export function hideNpcPopup() {
   currentNpcPoint = undefined;
   const opener = popupReturnFocus;
   popupReturnFocus = null;
-  if (opener?.isConnected && !opener.closest("[hidden]")) opener.focus({ preventScroll: true });
+  // Opening the travel menu may collapse its parent information panel; do
+  // not send the keyboard to a CSS-hidden opener. Return to the visible
+  // information-panel toggle so the user can reopen Explore without a mouse.
+  const visible = opener?.isConnected && !opener.closest("[hidden]") &&
+    !!opener.getClientRects().length && getComputedStyle(opener).visibility !== "hidden";
+  const target = visible ? opener : opener?.id === "open-travel"
+    ? document.getElementById("toggle-region-panel") : document.getElementById("world");
+  target?.focus({ preventScroll: true });
 }
 
 /** Open (or refresh) the popup for a resident at a simulation tick. */
