@@ -7,7 +7,7 @@ import { planTransportRouteCorridorByLeg, sampledCorridorStationFailure } from "
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { villages, roads, roadDistanceAt } from "../src/geography.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
-import { greatCircleDistance, sourceToLonLat } from "../src/planet.ts";
+import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 
 /** Bounded source-only candidate search; no road, SEED, character or world mutation.
  * Only a complete strict final-surface PASS could become a future game witness. */
@@ -50,7 +50,7 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
     return !!(place && road && settlementExteriorFor(place).gates.some(g => roadDistanceAt(g.x,g.z,road) <= 1e-4));
   };
   const started = performance.now();
-  let examined = 0, graphCandidates = 0, firstLegal: {from:string;to:string;roads:number;stations:number}|null = null;
+  let examined = 0, graphCandidates = 0, firstLegal: {from:string;to:string;roads:number;stations:number;midpointStations:number;edges:readonly string[]}|null = null;
   // Limit independent graph candidates, sampled stations and wall-clock work.
   outer: for (const from of gateNodes) for (const to of sites) {
     if (examined >= 16 || performance.now()-started > 120_000) break outer;
@@ -83,11 +83,51 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
       }
       previous={x:station.x,z:station.z,height:surface.surfaceHeight};
     }
+    // Do not stop at source-unit stations: a 7–15m interval can conceal
+    // a water/grade failure. Sample the actual middle of EVERY interval as
+    // a distinct final-surface point, with the same strict adjacent-grade gate.
+    let midpointCount = 0;
+    if (!reason) for (let i=1; i<planned.stations.length; i++) {
+      if (performance.now()-started > 120_000) { reason="bounded dense witness time budget"; break; }
+      const a=planned.stations[i-1], b=planned.stations[i], dx=wrapSourceX(b.x-a.x),
+        mid={x:wrapSourceX(a.x+dx/2),z:(a.z+b.z)/2,edgeCode:b.edgeCode};
+      const left=finalSurfaceAt(a.x,a.z),right=finalSurfaceAt(b.x,b.z),
+        surface=finalSurfaceAt(mid.x,mid.z),
+        slope=surface.deckHeight===null&&surface.traversal==="open"&&surface.walkable
+          ? finalSurfaceLocalSlopeAt(mid.x,mid.z) : undefined;
+      reason=sampledCorridorStationFailure(mid,surface,slope);
+      if (!reason) {
+        const l=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(mid.x,mid.z)),
+          rr=greatCircleDistance(sourceToLonLat(mid.x,mid.z),sourceToLonLat(b.x,b.z)),
+          gradeA=l>0?Math.abs(surface.surfaceHeight-left.surfaceHeight)/l:Infinity,
+          gradeB=rr>0?Math.abs(surface.surfaceHeight-right.surfaceHeight)/rr:Infinity;
+        if (!Number.isFinite(gradeA)||!Number.isFinite(gradeB)||gradeA>.08||gradeB>.08)
+          reason="unsafe half-interval grade";
+      }
+      if (reason) {reason=`midpoint after station ${i}/${planned.stations.length}: ${reason}`; break;}
+      midpointCount++;
+    }
+    // Selected owned deck must truly cover wet samples and have dry sampled
+    // road stations on both banks; no painted-over water or separate bridge.
+    if (!reason) {
+      const selected=planned.stations.filter(s=>s.edgeCode===crossing!.code),
+        kinds=selected.map(s=>finalSurfaceAt(s.x,s.z).water.kind),
+        firstWet=kinds.indexOf("river"), lastWet=kinds.lastIndexOf("river");
+      if(firstWet<1||lastWet>=kinds.length-1||
+          !kinds.slice(0,firstWet).includes("none")||
+          !kinds.slice(lastWet+1).includes("none"))
+        reason="selected source bridge lacks sampled wet deck with two dry banks";
+      else {
+        const at=selected[firstWet], surface=finalSurfaceAt(at.x,at.z);
+        if(surface.deckHeight===null||surface.traversal!=="bridge")
+          reason="selected wet bridge has no traversed deck";
+      }
+    }
     verdicts.push({from:from.code,to:to.code,roads:route.edgeCodes.length,
-      stations:planned.stations.length,rejected:reason??"FULL sampled surface PASS; actor still unverified"});
+      stations:planned.stations.length,rejected:reason??`FULL half-interval PASS (${midpointCount}); actor still unverified`});
     if (!reason) {
       firstLegal={from:from.code,to:to.code,roads:route.edgeCodes.length,
-        stations:planned.stations.length};
+        stations:planned.stations.length,midpointStations:midpointCount,edges:route.edgeCodes};
       break outer;
     }
   }
