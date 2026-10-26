@@ -247,6 +247,7 @@ export function prepareResidentTransportReturnJourney(
   bridges: readonly Pick<TransportBridge, "roadCode">[],
   surfaceAt: Sample = finalSurfaceAt,
   slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
+  localSegmentLegal?: (from: Source, to: Source) => boolean,
 ): ValidatedResidentJourney | null {
   const outwardStart = outward.macroStart ?? outward.stations[0],
     outwardEnd = outward.stations[outward.stations.length - 1],
@@ -266,9 +267,57 @@ export function prepareResidentTransportReturnJourney(
     return null;
   const reverse: Route = { from: outward.siteNode, to: originNode,
     edgeCodes: [...outward.edgeCodes].reverse() };
-  return prepareResidentTransportJourney(
+  const macro = prepareResidentTransportJourney(
     resident, decision, reverse, roads, nodes, adjacency, bridges, surfaceAt, slopeAt,
   );
+  if (!macro || !outward.macroStart) return macro;
+
+  // A return to the macro gate is not a return to the original resident.
+  // Recheck the actual outward street path in reverse, including the SAME
+  // Simulation enclosure/gate authority, on the CURRENT final surface.
+  const gateIndex = outward.stations.findIndex(point => distance(point, outward.macroStart!) <= .01);
+  if (gateIndex < 0 || gateIndex > 255 || !localSegmentLegal ||
+      macro.stations.length + gateIndex > MAX_STATIONS) return null;
+  if (gateIndex === 0) return macro;
+  const street = outward.stations.slice(0, gateIndex + 1).reverse();
+  if (distance(street[0], macro.stations[macro.stations.length - 1]) > .01) return null;
+  const stations: Source[] = [...macro.stations],
+    cumulative = [...macro.cumulativeMetres];
+  let walked = macro.distanceM, streetMetres = 0;
+  for (let i = 1; i < street.length; i++) {
+    const a = street[i - 1], b = street[i],
+      metres = distance(a, b),
+      midpoint = { x: wrapSourceX(a.x + wrapSourceX(b.x - a.x) / 2),
+        z: (a.z + b.z) / 2 },
+      firstHalf = distance(a, midpoint), secondHalf = distance(midpoint, b),
+      sa = surfaceAt(a.x, a.z), sm = surfaceAt(midpoint.x, midpoint.z),
+      sb = surfaceAt(b.x, b.z),
+      slope = [a, midpoint, b].map(point => {
+        const surface = surfaceAt(point.x, point.z);
+        return surface.deckHeight === null && surface.traversal === "open"
+          ? slopeAt(point.x, point.z) : 0;
+      });
+    if (!(metres > 0) || !Number.isFinite(metres) || metres > 1_200 ||
+        streetMetres + metres > 6_500 ||
+        !(firstHalf > 0 && secondHalf > 0) ||
+        !localSegmentLegal(a, b) ||
+        ![sa, sm, sb].every(residentWalkableSurface) ||
+        slope.some(value => !Number.isFinite(value) || value < 0 || value > .08) ||
+        ![sa.surfaceHeight, sm.surfaceHeight, sb.surfaceHeight].every(Number.isFinite) ||
+        Math.abs(sm.surfaceHeight - sa.surfaceHeight) / firstHalf > .08 ||
+        Math.abs(sb.surfaceHeight - sm.surfaceHeight) / secondHalf > .08 ||
+        Math.abs(sb.surfaceHeight - sa.surfaceHeight) / metres > .08) return null;
+    streetMetres += metres;
+    walked += metres;
+    stations.push(Object.freeze({ x: b.x, z: b.z }));
+    cumulative.push(walked);
+  }
+  return Object.freeze({
+    ...macro,
+    stations: Object.freeze(stations),
+    cumulativeMetres: Object.freeze(cumulative),
+    distanceM: walked,
+  });
 }
 
 /** Accumulated legal daylight walking time, with a deterministic 22:00–06:00
