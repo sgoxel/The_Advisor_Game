@@ -231,10 +231,11 @@ export function prepareResidentTransportJourneyWithApproach(
  * a return lawful after a collapsed deck or other world change: build a FRESH
  * fully validated reverse corridor using the same surface and grade limits.
  *
- * This only prepares a possible return, and does not decide for the resident,
- * install a Simulation event, or teleport them from the site to their home.
- * In particular, the caller must provide their actual arrived position; a
- * preview, stale departure position, or an early return is refused.
+ * This only prepares a possible return, not a resident decision or a
+ * persisted Simulation event. If departure used a local street connector,
+ * a fresh Simulation street/gate check is required to return all the way to
+ * that original departure position (which is not necessarily the home door).
+ * The actor must genuinely have reached the site before reversal.
  */
 export function prepareResidentTransportReturnJourney(
   resident: ResidentStart,
@@ -276,9 +277,10 @@ export function prepareResidentTransportReturnJourney(
   // Recheck the actual outward street path in reverse, including the SAME
   // Simulation enclosure/gate authority, on the CURRENT final surface.
   const gateIndex = outward.stations.findIndex(point => distance(point, outward.macroStart!) <= .01);
-  if (gateIndex < 0 || gateIndex > 255 || !localSegmentLegal ||
+  if (gateIndex < 0 || gateIndex > 255 ||
       macro.stations.length + gateIndex > MAX_STATIONS) return null;
   if (gateIndex === 0) return macro;
+  if (!localSegmentLegal) return null;
   const street = outward.stations.slice(0, gateIndex + 1).reverse();
   if (distance(street[0], macro.stations[macro.stations.length - 1]) > .01) return null;
   const stations: Source[] = [...macro.stations],
@@ -292,11 +294,10 @@ export function prepareResidentTransportReturnJourney(
       firstHalf = distance(a, midpoint), secondHalf = distance(midpoint, b),
       sa = surfaceAt(a.x, a.z), sm = surfaceAt(midpoint.x, midpoint.z),
       sb = surfaceAt(b.x, b.z),
-      slope = [a, midpoint, b].map(point => {
-        const surface = surfaceAt(point.x, point.z);
-        return surface.deckHeight === null && surface.traversal === "open"
-          ? slopeAt(point.x, point.z) : 0;
-      });
+      slope = [[a, sa], [midpoint, sm], [b, sb]].map(([point, surface]) =>
+        (surface as FinalSurface).deckHeight === null &&
+        (surface as FinalSurface).traversal === "open"
+          ? slopeAt((point as Source).x, (point as Source).z) : 0);
     if (!(metres > 0) || !Number.isFinite(metres) || metres > 1_200 ||
         streetMetres + metres > 6_500 ||
         !(firstHalf > 0 && secondHalf > 0) ||
