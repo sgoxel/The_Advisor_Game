@@ -3,7 +3,7 @@ import test from "node:test";
 import { tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
-import { prepareResidentTransportJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
+import { prepareResidentTransportJourney, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
 
@@ -120,4 +120,56 @@ test("long accepted journey stops for overnight Fantasy Time instead of teleport
     "same resident is stationary through overnight rest");
   const later = residentTransportJourneyAt(scaled, atNight + 12 * 3600);
   assert.ok(later.progress > overnight.progress, "walking resumes after legal local dawn");
+});
+
+test("already-arrived actor can prepare and traverse a freshly validated reverse five-road trip", () => {
+  const outward = prepareResidentTransportJourney(resident, decision, route,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
+  assert.ok(outward);
+  const returnTick = departure + 10_000,
+    arrived = residentTransportJourneyAt(outward!, returnTick),
+    actor = { ...resident, x: arrived.x, z: arrived.z },
+    chooseReturn = { ...decision, fromNode: route.to, siteNode: route.from,
+      decidedTick: returnTick };
+  assert.equal(arrived.status, "arrived", "return must follow actual outward arrival");
+  const back = prepareResidentTransportReturnJourney(actor, chooseReturn,
+    outward!, route.from, roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
+  assert.ok(back, "fresh opposite direction must prove the same physical bridge and both banks");
+  assert.deepEqual(back!.edgeCodes, [...codes].reverse());
+  assert.ok(Math.abs(back!.stations[0].x - arrived.x) < 1e-6, "no jump at return departure");
+  assert.equal(residentTransportJourneyAt(back!, returnTick - 1).status, "not-departed");
+  assert.equal(residentTransportJourneyAt(back!, returnTick).progress, 0);
+  const moving = residentTransportJourneyAt(back!, returnTick + 5);
+  assert.equal(moving.residentCode, resident.code);
+  assert.ok(moving.progress > 0 && moving.progress < 1);
+  const homeward = residentTransportJourneyAt(back!, returnTick + 10_000);
+  assert.equal(homeward.status, "arrived");
+  assert.ok(Math.abs(homeward.x - resident.x) < 1e-6,
+    "reached actual departure node only after time-resolved return");
+});
+
+test("return refuses before actual arrival, different resident, lost wet deck, and wrong destination", () => {
+  const outward = prepareResidentTransportJourney(resident, decision, route,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
+  assert.ok(outward);
+  const returnTick = departure + 10_000,
+    arrived = residentTransportJourneyAt(outward!, returnTick),
+    actor = { ...resident, x: arrived.x, z: arrived.z },
+    chooseReturn = { ...decision, fromNode: route.to, siteNode: route.from,
+      decidedTick: returnTick },
+    run = (
+      candidate = actor, choice = chooseReturn,
+      surface = (x: number, z: number) => surfaceAt(x,z),
+      origin = route.from,
+    ) => prepareResidentTransportReturnJourney(candidate, choice, outward!, origin,
+      roads, nodes, adjacency, bridges, surface);
+  assert.equal(run(actor, { ...chooseReturn, decidedTick: departure + 1 }), null,
+    "a site position is not a completed outward journey before elapsed time");
+  assert.equal(run({ ...actor, code: "other-resident" }), null);
+  assert.equal(run({ ...actor, x: 0 }), null,
+    "no teleport from a source position instead of the physical site");
+  assert.equal(run(actor, chooseReturn, (x,z) => surfaceAt(x,z,true)), null,
+    "a removed deck blocks an otherwise proven reverse crossing");
+  assert.equal(run(actor, { ...chooseReturn, siteNode: "unrelated-node" }), null);
+  assert.equal(run(actor, chooseReturn, (x,z) => surfaceAt(x,z), "unrelated-node"), null);
 });

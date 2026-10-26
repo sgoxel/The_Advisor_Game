@@ -132,6 +132,52 @@ export function prepareResidentTransportJourney(
   });
 }
 
+/**
+ * A resident who actually reached the canonical site may independently choose
+ * to return along the same owned SEED edges. The previous proof does not make
+ * a return lawful after a collapsed deck or other world change: build a FRESH
+ * fully validated reverse corridor using the same surface and grade limits.
+ *
+ * This only prepares a possible return, and does not decide for the resident,
+ * install a Simulation event, or teleport them from the site to their home.
+ * In particular, the caller must provide their actual arrived position; a
+ * preview, stale departure position, or an early return is refused.
+ */
+export function prepareResidentTransportReturnJourney(
+  resident: ResidentStart,
+  decision: ResidentTravelDecision,
+  outward: ValidatedResidentJourney,
+  originNode: string,
+  roads: ReadonlyMap<string, Edge>,
+  nodes: ReadonlyMap<string, Node>,
+  adjacency: ReadonlyMap<string, readonly { edge: Edge }[]>,
+  bridges: readonly Pick<TransportBridge, "roadCode">[],
+  surfaceAt: Sample = finalSurfaceAt,
+  slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
+): ValidatedResidentJourney | null {
+  const outwardStart = outward.stations[0],
+    outwardEnd = outward.stations[outward.stations.length - 1],
+    canonicalOrigin = nodes.get(originNode);
+  if (!outwardStart || !outwardEnd || !canonicalOrigin ||
+      resident.code !== outward.residentCode ||
+      decision.residentCode !== resident.code ||
+      decision.fromNode !== outward.siteNode ||
+      decision.siteNode !== originNode ||
+      !Number.isSafeInteger(decision.decidedTick) ||
+      decision.decidedTick <= outward.departedTick ||
+      !Number.isFinite(outward.distanceM) || outward.distanceM <= 0 ||
+      outward.edgeCodes.length < 2 ||
+      distance(outwardStart, canonicalOrigin) > 1 ||
+      distance(resident, outwardEnd) > 1 ||
+      residentTransportJourneyAt(outward, decision.decidedTick).status !== "arrived")
+    return null;
+  const reverse: Route = { from: outward.siteNode, to: originNode,
+    edgeCodes: [...outward.edgeCodes].reverse() };
+  return prepareResidentTransportJourney(
+    resident, decision, reverse, roads, nodes, adjacency, bridges, surfaceAt, slopeAt,
+  );
+}
+
 /** Accumulated legal daylight walking time, with a deterministic 22:00–06:00
  * overnight rest (no all-night/multi-day teleport or elapsed wall clock).
  * Uses Fantasy Time and the origin gate's stable local time zone. */
