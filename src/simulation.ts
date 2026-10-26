@@ -321,22 +321,25 @@ function natureSites(place: Place) {
     // ground/decks first, without running a whole-graph A* for every candidate.
     for (const gate of connectedGates)
       if (legalStreetSegment(place, gate, point)) return true;
-    // A valid habitat across a river must not be rejected because its direct
-    // gate-to-site chord is wet: only a genuine SEED bridge-road corridor with
-    // metre-validated bank approaches can make that bank reachable.
-    for (const gate of connectedGates)
-      if (residentTransportBridgePath(place, gate, point)) return true;
-    // If a dry-looking chord is blocked by an actual enclosure/street edge,
-    // retain the existing bounded graph/gate detour search. The old 20 m
-    // probe is only a cheap negative hint, never permission to walk: the
-    // eventual chosen route must still pass the full one-metre validator.
+    // Cheap coarse negative only: a wet direct chord is not proof that the
+    // same SEED site is unreachable via a real road bridge. Do not run the
+    // expensive bridge-road query at every ordinarily dry candidate.
     const distance = Math.hypot(start.eastM - point.eastM, start.northM - point.northM),
       probes = Math.max(1, Math.ceil(distance / 20));
+    let directGroundHint = true;
     for (let i = 1; i <= probes; i++) {
       if (!outdoorSiteLegal(place, {
         eastM: start.eastM + (point.eastM - start.eastM) * i / probes,
         northM: start.northM + (point.northM - start.northM) * i / probes,
-      })) return false;
+      })) { directGroundHint = false; break; }
+    }
+    if (!directGroundHint) {
+      // A candidate across water may be reached only from the inhabited
+      // town's actual connected gate along an existing, metrically proven
+      // SEED bridge. No second graph or imaginary bank crossing is accepted.
+      for (const gate of connectedGates)
+        if (residentTransportBridgePath(place, gate, point)) return true;
+      return false;
     }
     // A route from a nearby orphaned street to the bank is not proof that
     // anyone can get there from the inhabited settlement's connected streets.
