@@ -332,7 +332,10 @@ function natureSites(place: Place) {
         northM: start.northM + (point.northM - start.northM) * i / probes,
       })) return false;
     }
-    return streetPath(place, start, point) !== null;
+    // A route from a nearby orphaned street to the bank is not proof that
+    // anyone can get there from the inhabited settlement's connected streets.
+    return streetPath(place, start, point) !== null &&
+      streetPath(place, anchors.plaza, start, false) !== null;
   };
   for (let i = 0; i < 48; i++) {
     const angle = i * 2.399963229728653 + (digest(`${place.code}/HABITAT`) % 360) * Math.PI / 180,
