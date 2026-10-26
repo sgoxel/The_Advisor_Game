@@ -1,4 +1,4 @@
-import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
+import { roadWidthM, roadNormalSource, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { wildernessTerrainAt, wildernessTerrainCacheState } from './wilderness-terrain.ts';
 import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
@@ -7,6 +7,7 @@ import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
+  greatCircleDistance,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   SOURCE_PRESENTATION_RADIUS,
   sourceToLonLat,
@@ -342,9 +343,76 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
+// The first demonstrated unsafe real SEED road is near the meeting of segments
+// 6 and 7. A short, deterministic station profile can reduce that actual
+// carriageway grade ONLY if the existing natural earthwork envelope permits it.
+// Do not alter graph nodes, bridge law, water, grade thresholds or other roads.
+const selectedGradeRoad = `${WORLD_SEED}/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1`;
+type LocalGrade = { metres: number[]; elevations: number[] };
+const selectedLocalGrades = new Map<number, LocalGrade | null>();
+export const selectedLocalGradeEvidence: {segment: number; status: string; stations: number}[] = [];
+function selectedLocalGrade(road: Road, path: readonly {x:number;z:number}[], segment: number): LocalGrade | null {
+  if (road.code !== selectedGradeRoad || path.length !== 11 || (segment !== 6 && segment !== 7))
+    return null;
+  if (selectedLocalGrades.has(segment)) return selectedLocalGrades.get(segment)!;
+  const record = (status:string, stations=0, profile:LocalGrade|null=null) => {
+    selectedLocalGradeEvidence.push({segment,status,stations});
+    selectedLocalGrades.set(segment,profile);return profile;
+  };
+  const start=path[segment],end=path[segment+1],dx=wrapSourceX(end.x-start.x),dz=end.z-start.z,
+    metres=greatCircleDistance(sourceToLonLat(start.x,start.z),sourceToLonLat(end.x,end.z)),
+    pieces=Math.ceil(metres/5);
+  if (!Number.isFinite(metres)||pieces<2||pieces>800)
+    return record("invalid bounded segment");
+  const min:number[]=[],max:number[]=[],ground:number[]=[],progress:number[]=[];
+  const transverse=roadNormalSource(dx,dz,start.z,roadWidthM(road)/2);
+  for(let i=0;i<=pieces;i++){
+    const t=i/pieces,x=wrapSourceX(start.x+dx*t),z=start.z+dz*t;
+    const surfaces=[naturalSurfaceBaseAt(x,z),
+      naturalSurfaceBaseAt(x+transverse.x,z+transverse.z),
+      naturalSurfaceBaseAt(x-transverse.x,z-transverse.z)];
+    if(surfaces.some(s=>!Number.isFinite(s.groundHeight)))
+      return record("nonfinite cross-section",i);
+    const lower=Math.max(...surfaces.map(s=>s.groundHeight-4)),
+      upper=Math.min(...surfaces.map(s=>s.groundHeight+3));
+    if(lower>upper) return record("carriageway cut/fill infeasible",i);
+    const height=surfaces[0].groundHeight;
+    ground.push(height);progress.push(metres*t);
+    min.push(i===0||i===pieces?height:lower);
+    max.push(i===0||i===pieces?height:upper);
+  }
+  // Work from exact natural SEED endpoints (unchanged shared segment joints).
+  // The 6.5% construction target reserves margin below the strict 8% final
+  // surface station test. Failure preserves the original road and verdict.
+  for(let i=1;i<=pieces;i++){
+    const rise=.065*(progress[i]-progress[i-1]);
+    min[i]=Math.max(min[i],min[i-1]-rise);
+    max[i]=Math.min(max[i],max[i-1]+rise);
+    if(min[i]>max[i]+1e-8) return record("infeasible forward earthwork grade",i);
+  }
+  const elevations=new Array<number>(pieces+1);
+  elevations[pieces]=ground[pieces];
+  for(let i=pieces-1;i>=0;i--){
+    const rise=.065*(progress[i+1]-progress[i]),
+      lo=Math.max(min[i],elevations[i+1]-rise),
+      hi=Math.min(max[i],elevations[i+1]+rise);
+    if(lo>hi+1e-8)return record("infeasible backward earthwork grade",i);
+    elevations[i]=Math.max(lo,Math.min(hi,ground[i]));
+  }
+  return record("feasible cross-section grade",pieces+1,{metres:progress,elevations});
+}
 function roadProfileHeightAt(x: number, z: number, road: Road) {
   const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
     a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
+  const graded=selectedLocalGrade(road,path,nearest.segment);
+  if(graded){
+    const metres=graded.metres.at(-1)!*nearest.t;
+    let low=0,high=graded.metres.length-1;
+    while(low+1<high){const mid=(low+high)>>1;
+      if(graded.metres[mid]<=metres)low=mid;else high=mid;}
+    return lerp(graded.elevations[low],graded.elevations[high],
+      clamp01((metres-graded.metres[low])/(graded.metres[high]-graded.metres[low]||1)));
+  }
   let profile=roadProfileHeights.get(key);
   if(!profile){
     profile=[naturalSurfaceBaseAt(a.x,a.z).groundHeight,naturalSurfaceBaseAt(b.x,b.z).groundHeight];
