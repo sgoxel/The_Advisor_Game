@@ -3,7 +3,7 @@ import test from "node:test";
 import { tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
-import { prepareResidentTransportJourney, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
+import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
 
@@ -172,4 +172,65 @@ test("return refuses before actual arrival, different resident, lost wet deck, a
     "a removed deck blocks an otherwise proven reverse crossing");
   assert.equal(run(actor, { ...chooseReturn, siteNode: "unrelated-node" }), null);
   assert.equal(run(actor, chooseReturn, (x,z) => surfaceAt(x,z), "unrelated-node"), null);
+});
+
+test("a real start position moves along a legal local approach before the same five SEED roads", () => {
+  const actor = { ...resident, x: -2 },
+    approach = [{ x: -2, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 0 }],
+    legalStreet = (a: {x:number;z:number}, b: {x:number;z:number}) =>
+      a.z === 0 && b.z === 0 && b.x > a.x;
+  assert.equal(prepareResidentTransportJourney(actor, decision, route,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z)), null,
+    "a remote actor never receives a free teleport to the macro node");
+  const journey = prepareResidentTransportJourneyWithApproach(actor, decision, route,
+    roads, nodes, adjacency, bridges, approach, legalStreet, (x,z) => surfaceAt(x,z));
+  assert.ok(journey);
+  assert.equal(journey!.residentCode, actor.code);
+  assert.deepEqual(journey!.edgeCodes, [...codes]);
+  assert.equal(journey!.macroStart?.x, 0, "the actual road origin remains canonical");
+  assert.equal(journey!.stations[0].x, actor.x);
+  assert.ok(journey!.distanceM > 0);
+  assert.equal(residentTransportJourneyAt(journey!, departure).x, actor.x);
+  const onApproach = residentTransportJourneyAt(journey!, departure + 5);
+  assert.ok(onApproach.x > actor.x && onApproach.x < 0,
+    "local movement happens before macro-road movement");
+  const atSite = residentTransportJourneyAt(journey!, departure + 10_000);
+  assert.equal(atSite.status, "arrived");
+  assert.ok(Math.abs(atSite.x - nodes.get(route.to)!.x) < 1e-6);
+  const returnDecision = { ...decision, fromNode: route.to, siteNode: route.from,
+    decidedTick: departure + 10_000 };
+  const reverse = prepareResidentTransportReturnJourney(
+    { ...actor, x: atSite.x, z: atSite.z }, returnDecision, journey!, route.from,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
+  assert.ok(reverse, "completed actor may revalidate a reverse road trip to the canonical gate");
+  assert.equal(reverse!.stations.at(-1)?.x, 0,
+    "arrival at the macro gate does not falsely claim the separate home connector");
+});
+
+test("unverified gate approach, blocked streets and steep local slopes refuse without moving the actor", () => {
+  const actor = { ...resident, x: -2 },
+    approach = [{ x: -2, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 0 }],
+    legal = () => true,
+    run = (
+      person = actor,
+      path: readonly { x: number; z: number }[] = approach,
+      segmentLegal: (a: {x:number;z:number}, b:{x:number;z:number})=>boolean = legal,
+      surface = (x: number, z: number) => surfaceAt(x,z),
+    ) => prepareResidentTransportJourneyWithApproach(person, decision, route,
+      roads, nodes, adjacency, bridges, path, segmentLegal, surface);
+  assert.equal(run(actor, approach, () => false), null,
+    "the town's enclosure/street validator owns legal gate passage");
+  assert.equal(run(actor, [{x:-2,z:0}, {x:-1,z:0}, {x:1,z:0}]), null,
+    "the street path cannot miss the exact canonical macro origin");
+  assert.equal(run({ ...actor, x: -1.9 }), null, "no invented approach departure");
+  assert.equal(run({ ...actor, indoors: true }), null);
+  assert.equal(run(actor, approach, legal, (x,z) => Math.abs(x + 1) < .01
+    ? { ...surfaceAt(x,z), water: { kind: "river", level: .5 },
+        walkable: false, traversal: "blocked" } as FinalSurface
+    : surfaceAt(x,z)), null, "a flooded local street is not a gate");
+  assert.equal(run(actor, approach, legal, (x,z) => Math.abs(x + 1) < .01
+    ? { ...surfaceAt(x,z), surfaceHeight: 10 } as FinalSurface
+    : surfaceAt(x,z)), null, "a steep interval cannot be hidden before the macro road");
+  assert.equal(run(actor, approach, legal, (x,z) => surfaceAt(x,z,true)), null,
+    "the same owned bridge still has to exist beyond the legal approach");
 });
