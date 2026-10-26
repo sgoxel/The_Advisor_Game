@@ -175,8 +175,10 @@ panel.innerHTML = `
     <button type="button" id="transport-bridge-clearview" hidden>View bridge without inspector</button>
   </div>
   <div class="divider"></div>
-  <section id="transport-selection" aria-live="polite"></section>
+  <!-- Put the requested first route answer before verbose SEED selection
+       details; both regions retain all canonical facts and live semantics. -->
   <section id="transport-site-answer" aria-live="polite"></section>
+  <section id="transport-selection" aria-live="polite"></section>
   <section id="transport-site-surface" aria-live="polite"></section>
   <section id="transport-corridor-result" aria-live="polite"></section>
   <div class="divider"></div>
