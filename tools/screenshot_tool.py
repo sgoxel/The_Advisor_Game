@@ -822,9 +822,9 @@ class Session:
                 token = 0
                 for _ in range(24):
                     token = self.page.evaluate(
-                        // Real Chromium compositor readback (especially SwiftShader
-                        // WebGPU) needs continuing frames. Hold only new geometry
-                        // streaming, exactly as the proven WebGL2 captures do.
+                        # Real Chromium compositor readback (especially SwiftShader
+                        # WebGPU) needs continuing frames. Hold only new geometry
+                        # streaming, exactly as the proven WebGL2 captures do.
                         "() => window.advisorWorld.capturePresentation?.quiesceStreaming(false) ?? 0",
                     )
                     if token:
