@@ -305,16 +305,21 @@ function natureSites(place: Place) {
   if (anchors.nature) return anchors.nature;
   const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place),
     streetPoints = plan.streets.flatMap(street => street.points.map(point => offsetForSource(place, point.x, point.z)));
+  // An exterior bank is not a reachable workplace merely because it is dry
+  // from a gate. First prove that the actual internal SEED streets can reach
+  // that gate from the town square. Resolve at most two approaches, once per
+  // lazy settlement, then reuse them for all bounded habitat candidates.
+  const connectedGates = plan.gates
+    .map(gate => offsetForSource(place, gate.x, gate.z))
+    .filter(gate => streetPath(place, anchors.plaza, gate, false) !== null);
   const reachable = (point: Offset) => {
     const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
     if (!start) return false;
     // Most real field/shore work is directly accessible outside a SEED gate.
     // Validate those corridors against continuous metre-spaced final-surface
     // ground/decks first, without running a whole-graph A* for every candidate.
-    for (const gate of plan.gates) {
-      const g = offsetForSource(place, gate.x, gate.z);
-      if (legalStreetSegment(place, g, point)) return true;
-    }
+    for (const gate of connectedGates)
+      if (legalStreetSegment(place, gate, point)) return true;
     // If a dry-looking chord is blocked by an actual enclosure/street edge,
     // retain the existing bounded graph/gate detour search. The old 20 m
     // probe is only a cheap negative hint, never permission to walk: the
