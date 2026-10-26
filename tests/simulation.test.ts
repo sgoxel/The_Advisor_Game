@@ -19,6 +19,7 @@ import {
   legalPosition,
   continuousWalkableOffsetSegment,
   residentWalkableSurface,
+  residentTransportIntervalGradePass,
   legalEnclosureSegment,
   timedWalkOnPath,
   unfinishedOrBlockedOvernightReturn,
@@ -51,6 +52,29 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("S005 resident bridge-road segments refuse the actual unsafe SEED dry-bank grade", () => {
+  assert.equal(residentTransportIntervalGradePass(10, 10.08, 1), true);
+  assert.equal(residentTransportIntervalGradePass(10, 10.0801, 1), false);
+  assert.equal(residentTransportIntervalGradePass(10, 10, 0), true);
+  assert.equal(residentTransportIntervalGradePass(10, 11, 0), false);
+  assert.equal(residentTransportIntervalGradePass(NaN, 10, 1), false);
+  // Same source-owned stations 435→436 in the S005 full 5,315-station
+  // gate→Y→river bridge→site route; not a synthetic or smoothed hill.
+  const first = { x: -47614.69646854173, z: 10362.362023296531 },
+    second = { x: -47615.397419418114, z: 10363.07304797275 },
+    before = finalSurfaceAt(first.x, first.z),
+    after = finalSurfaceAt(second.x, second.z),
+    metres = greatCircleDistance(sourceToLonLat(first.x, first.z),
+      sourceToLonLat(second.x, second.z));
+  assert.equal(before.water.kind, "none");
+  assert.equal(after.water.kind, "none");
+  assert.equal(before.deckHeight, null);
+  assert.equal(after.deckHeight, null);
+  assert.ok(metres > 0);
+  assert.equal(residentTransportIntervalGradePass(before.surfaceHeight, after.surfaceHeight, metres), false,
+    "a transport worker must not cross the same >8% physical interval that the route inspector rejects");
+});
 
 test("the roster and seeded population exclude child characters and deleted sprites", () => {
   for (const type of Object.values(CHARACTER_TYPES)) {
