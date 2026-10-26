@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { tickAtLocalTime } from "../src/clock.ts";
+import { localWeekday, tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
 import { residentAt, residentLocalTransportApproach, residentLocalTransportSegmentLegal } from "../src/simulation.ts";
@@ -240,18 +240,21 @@ test("unverified gate approach, blocked streets and steep local slopes refuse wi
 test("actual Greyfield SEED actor supplies only his own verified local street origin", () => {
   const place = villages.find(village => village.name === "Greyfield");
   assert.ok(place);
-  const noon = tickAtLocalTime(1, 12 * 3_600, place!.canonicalPosition.lon),
-    actor = residentAt(place!, 15, noon);
-  assert.equal(actor.code, `${place!.code}/RESIDENT/15`);
-  assert.ok(actor.grounded && !actor.indoors,
-    "existing independently scheduled far-bank maintenance worker must be outdoors");
-  const samePlace = { x: actor.x, z: actor.z },
-    local = residentLocalTransportApproach(place!, actor, samePlace);
+  const longitude = place!.canonicalPosition.lon,
+    day = [1, 2, 3, 4, 5, 6, 7].find(d =>
+      localWeekday(tickAtLocalTime(d, 12 * 3_600, longitude), longitude) !== 6)!,
+    samples = [6, 8, 10, 12, 14, 16, 18].map(hour =>
+      residentAt(place!, 15, tickAtLocalTime(day, hour * 3_600, longitude))),
+    actor = samples.find(r => r.grounded && !r.indoors);
+  assert.ok(actor, "the real worker has an outdoor position on the fixed SEED workday");
+  assert.equal(actor!.code, `${place!.code}/RESIDENT/15`);
+  const samePlace = { x: actor!.x, z: actor!.z },
+    local = residentLocalTransportApproach(place!, actor!, samePlace);
   assert.ok(local && local.length >= 2, "actual SEED resident's current physical position must resolve");
-  assert.ok(Math.abs(local![0].x - actor.x) < 1e-6);
-  assert.ok(Math.abs(local!.at(-1)!.z - actor.z) < 1e-6);
+  assert.ok(Math.abs(local![0].x - actor!.x) < 1e-6);
+  assert.ok(Math.abs(local!.at(-1)!.z - actor!.z) < 1e-6);
   assert.equal(residentLocalTransportSegmentLegal(place!, local![0], local![1]), true);
-  assert.equal(residentLocalTransportApproach(place!, { ...actor, code: "impostor" }, samePlace), null);
-  assert.equal(residentLocalTransportApproach(place!, { ...actor, grounded: false }, samePlace), null);
-  assert.equal(residentLocalTransportApproach(place!, { ...actor, indoors: true }, samePlace), null);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor!, code: "impostor" }, samePlace), null);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor!, grounded: false }, samePlace), null);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor!, indoors: true }, samePlace), null);
 });
