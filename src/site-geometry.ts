@@ -1,5 +1,6 @@
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { elevationToRenderY } from "./render-frame.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "./planet.ts";
 import { heightAt, type Tile } from "./world.ts";
@@ -14,6 +15,15 @@ export class SiteBuilder {
   private readonly n: number[] = [];
   private readonly c: number[] = [];
   private readonly i: number[] = [];
+  private physicalFrame?: { x: number; y: number; z: number; east: number; south: number };
+
+  /** Site layouts are authored in physical metres; patch anchors use source units.
+   * Apply latitude-correct horizontal metres and the same vertical metres-to-
+   * source conversion as terrain and resident feet before emitting GPU vertices. */
+  setPhysicalSiteFrame(x: number, y: number, z: number, sourceZ: number) {
+    const metric = sourceUnitsPerMetreAt(sourceZ);
+    this.physicalFrame = { x, y, z, east: metric.x, south: metric.z };
+  }
 
   private triangle(a: Point, b: Point, c: Point, tint: Tint) {
     const start = this.p.length / 3;
@@ -34,6 +44,18 @@ export class SiteBuilder {
   }
 
   box(x: number, y: number, z: number, w: number, h: number, d: number, tint: Tint) {
+    const frame = this.physicalFrame;
+    if (frame) {
+      // Offsets and dimensions at a site are metres, never world-source
+      // units. Old raw 4.4-width boxes became ~67m walls and hid the original
+      // 1.8m SEED resident even when the site roof was removed.
+      x = frame.x + (x - frame.x) * frame.east;
+      y = frame.y + metresToSource(y - frame.y);
+      z = frame.z + (z - frame.z) * frame.south;
+      w *= frame.east;
+      h = metresToSource(h);
+      d *= frame.south;
+    }
     const ax = x - w / 2,
       bx = x + w / 2,
       az = z - d / 2,
@@ -113,6 +135,10 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
       stone: Tint = [171 + (variant % 12), 184 + (variant % 10), 181 + (variant % 9)],
       darkStone: Tint = [77, 87, 87],
       accent: Tint = [221, 191, 115];
+    // Physical metre-to-source metric changes with latitude and is never
+    // derived from render LOD, camera location, tile allocation or timing.
+    structures.setPhysicalSiteFrame(localX, y, localZ, site.z);
+    detail.setPhysicalSiteFrame(localX, y, localZ, site.z);
     codes.push(site.code);
 
     if (site.kind === "ruin") {
