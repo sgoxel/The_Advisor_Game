@@ -23,7 +23,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceDebugAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2340,6 +2340,31 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     // the interactive diagnostic. A deliberate full-route check is opt-in.
     const full = process.env.S005_ROUTE_FULL_PROBE === "1";
     const limit = full ? segmented.stations.length : Math.min(32, segmented.stations.length);
+    // Explicit, bounded station-local evidence around the historical 436/452
+    // failure. This is diagnostic only; the unchanged full-route rejection
+    // below is still authoritative, and no sample is marked legal by tracing.
+    if (full && process.env.S005_ROUTE_GRADE_TRACE === "1") {
+      const first = 428, last = Math.min(470, segmented.stations.length);
+      for (let i = first; i < last; i++) {
+        const station = segmented.stations[i], previous = segmented.stations[i - 1],
+          debug = finalSurfaceDebugAt(station.x, station.z),
+          prior = finalSurfaceAt(previous.x, previous.z),
+          distance = greatCircleDistance(sourceToLonLat(previous.x, previous.z),
+            sourceToLonLat(station.x, station.z)),
+          localSlope = finalSurfaceLocalSlopeAt(station.x, station.z),
+          modifier = debug.modifiers.find(m => m.id === station.edgeCode);
+        console.log("S005_GRADE_TRACE", JSON.stringify({
+          station: i + 1, road: station.edgeCode, x: station.x, z: station.z,
+          natural: debug.base.groundHeight, finalHeight: debug.final.surfaceHeight,
+          localSlope, intervalGrade: distance > 0
+            ? Math.abs(debug.final.surfaceHeight - prior.surfaceHeight) / distance : null,
+          roadWeight: modifier?.weight ?? null, roadTarget: modifier?.targetGroundHeight ?? null,
+          roadOwner: debug.final.groundMaterialOwnerId, traversal: debug.final.traversal,
+          water: debug.final.water.kind, deck: debug.final.deckHeight,
+          contributing: debug.final.contributingModifierIds.length,
+        }));
+      }
+    }
     let previousHeight: number | null = null, maximumIntervalGrade = 0,
       firstUnsafe: { station: number; road: string; cause: string; x: number; z: number; grade?: number } | null = null;
     const started = performance.now();
