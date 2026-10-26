@@ -64,7 +64,7 @@ test("synthetic five-road actor fixture preserves lawful shared-bank and arrival
   assert.ok(journey, "real signed-off source stations and owned wet bridge must admit journey");
   assert.deepEqual(journey!.edgeCodes, codes);
   assert.equal(journey!.stations[0].x, resident.x);
-  assert.equal(journey!.stations.at(-1)?.x, nodes.get(route.to)?.x);
+  assert.ok(Math.abs((journey!.stations.at(-1)?.x ?? Infinity) - nodes.get(route.to)!.x) < 1e-6);
   const departureState = residentTransportJourneyAt(journey!, departure);
   assert.equal(departureState.x, resident.x);
   assert.equal(departureState.progress, 0);
@@ -76,7 +76,8 @@ test("synthetic five-road actor fixture preserves lawful shared-bank and arrival
   const after = residentTransportJourneyAt(journey!, departure + 10000);
   assert.equal(after.residentCode, resident.code);
   assert.equal(after.status, "arrived");
-  assert.equal(after.x, nodes.get(route.to)?.x);
+  assert.ok(Math.abs(after.x - nodes.get(route.to)!.x) < 1e-6,
+    "arrival has the canonical site coordinate within source projection precision");
   assert.equal(after.progress, 1);
   assert.deepEqual(residentTransportJourneyAt(journey!, departure + 5), moving,
     "absolute Fantasy Time replay is deterministic");
