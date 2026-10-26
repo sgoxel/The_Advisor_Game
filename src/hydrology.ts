@@ -526,7 +526,7 @@ export function freshwaterCrossingSpanMAt(x: number, z: number) {
 /** Exact line/capsule union span, including confluences, in canonical metres. */
 /** The optional dry-bank reach is owned by the same sampled natural river crossing.
  * It cannot create water, a bridge, or a synthetic graph connection. */
-export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number,dryApproachM=0) {
+export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number,dryApproachM=0): Readonly<{spanM:number;waterLevel:number;code:string;lo:number;hi:number;metresPerUnit:number;ux:number;uz:number}> | null {
   if(!Number.isFinite(dryApproachM)||dryApproachM<0||dryApproachM>80)return null;
   const hit=nearestRiver(wrapSourceX(x),z);
   if(!hit)return null;
