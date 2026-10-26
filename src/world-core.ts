@@ -352,10 +352,13 @@ const gradeRoadCode = `${WORLD_SEED}/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1`;
 type GradeStation = {metres:number;ground:number;min:number;max:number;height:number};
 let gradeStations: readonly GradeStation[] | null | undefined;
 let gradeVertices: readonly number[] | undefined;
+export const selectedRoadGradeEvidence:{status:string;station:number;count:number} = {status:"not requested",station:-1,count:0};
 function boundedSelectedRoadGrade(road: Road, path: readonly {x:number;z:number}[]) {
   if (road.code !== gradeRoadCode) return null;
   if (gradeStations !== undefined) return gradeStations;
-  if (path.length<2 || path.length>64) return gradeStations=null;
+  const refuse=(reason:string,index:number)=>{selectedRoadGradeEvidence.status=reason;
+    selectedRoadGradeEvidence.station=index;selectedRoadGradeEvidence.count=0;return gradeStations=null;};
+  if (path.length<2 || path.length>64) return refuse("path limit",path.length);
   const stations:GradeStation[]=[],vertices=[0];
   let total=0;
   for(let i=1;i<path.length;i++){
@@ -363,37 +366,39 @@ function boundedSelectedRoadGrade(road: Road, path: readonly {x:number;z:number}
       distance=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(b.x,b.z)),
       pieces=Math.ceil(distance/10);
     if(!Number.isFinite(distance)||pieces<1||stations.length+pieces>4096)
-      return gradeStations=null;
+      return refuse("finite station budget",i);
     for(let j=0;j<pieces;j++){
       const t=j/pieces,x=wrapSourceX(a.x+wrapSourceX(b.x-a.x)*t),z=a.z+(b.z-a.z)*t,
         natural=naturalSurfaceBaseAt(x,z);
-      if(!Number.isFinite(natural.groundHeight)) return gradeStations=null;
+      if(!Number.isFinite(natural.groundHeight)) return refuse("nonfinite natural",stations.length);
       stations.push({metres:total+distance*t,ground:natural.groundHeight,
         min:natural.groundHeight-4,max:natural.groundHeight+3,height:natural.groundHeight});
     }
     total+=distance;vertices.push(total);
   }
   const end=path.at(-1)!,ground=naturalSurfaceBaseAt(end.x,end.z).groundHeight;
-  if(!Number.isFinite(ground))return gradeStations=null;
+  if(!Number.isFinite(ground))return refuse("nonfinite terminal",stations.length);
   stations.push({metres:total,ground,min:ground-4,max:ground+3,height:ground});
   // Propagate reachable elevation bounds forward; solve the selected legal
   // profile backwards. Never emit an unsupported cliff-cut or bridge ramp.
   for(let i=1;i<stations.length;i++){
     const previous=stations[i-1],current=stations[i],rise=.065*(current.metres-previous.metres);
-    if(!Number.isFinite(rise)||rise<=0) return gradeStations=null;
+    if(!Number.isFinite(rise)||rise<=0) return refuse("invalid segment",i);
     current.min=Math.max(current.min,previous.min-rise);
     current.max=Math.min(current.max,previous.max+rise);
-    if(current.min>current.max) return gradeStations=null;
+    if(current.min>current.max) return refuse("infeasible cut/fill along grade",i);
   }
   const clamp=(v:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,v));
   stations.at(-1)!.height=clamp(stations.at(-1)!.ground,stations.at(-1)!.min,stations.at(-1)!.max);
   for(let i=stations.length-2;i>=0;i--){
     const current=stations[i],next=stations[i+1],rise=.065*(next.metres-current.metres),
       lower=Math.max(current.min,next.height-rise),upper=Math.min(current.max,next.height+rise);
-    if(lower>upper+1e-8)return gradeStations=null;
+    if(lower>upper+1e-8)return refuse("infeasible backward profile",i);
     current.height=clamp(current.ground,lower,upper);
   }
   gradeVertices=vertices;
+  selectedRoadGradeEvidence.status="feasible";
+  selectedRoadGradeEvidence.count=stations.length;
   return gradeStations=stations;
 }
 

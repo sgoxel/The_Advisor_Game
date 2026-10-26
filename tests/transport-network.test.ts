@@ -24,7 +24,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt, selectedRoadGradeEvidence } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2408,6 +2408,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     if (!full)
       assert.equal(firstUnsafe, null, "first 32 stations of the real source route must retain legal top-surface passage");
     else {
+      console.log("S005_GRADE_PROFILE_VERDICT", JSON.stringify(selectedRoadGradeEvidence));
       console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
         canonicalRoads: chain.length, stationCount: segmented.stations.length,
         checked: firstUnsafe?.station ?? limit, firstUnsafe,
