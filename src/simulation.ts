@@ -1678,6 +1678,8 @@ export class LazySimulation {
   private residentIndexes = new Map<string, ResidentSpatialIndex>();
   private selectedResidentCode = "";
   private siteVisitJournal?: ResidentSiteVisitJournal;
+  /** Validating a saved ledger must never publish partially restored actors. */
+  private replaySiteVisitJournal?: ResidentSiteVisitJournal;
   private restoringSiteVisits = false;
   private inspector?: HTMLElement;
 
@@ -2091,10 +2093,11 @@ export class LazySimulation {
       return null;
     const roads = new Map(siteTransportNetwork.roadEdges.map(edge => [edge.code, edge])),
       index = createTransportWalkingIndex(siteTransportNetwork);
-    this.siteVisitJournal ??= new ResidentSiteVisitJournal(
-      (code, atTick) => this.residentByCode(code, atTick),
-    );
-    return this.siteVisitJournal.tryStart(residentCode, tick, route, roads, nodes,
+    const journal = this.replaySiteVisitJournal ??
+      (this.siteVisitJournal ??= new ResidentSiteVisitJournal(
+        (code, atTick) => this.residentByCode(code, atTick),
+      ));
+    return journal.tryStart(residentCode, tick, route, roads, nodes,
       index.adjacency, siteTransportNetwork.bridges,
       (resident, gate) => residentLocalTransportApproach(place, resident, gate),
       (from, to) => residentLocalTransportSegmentLegal(place, from, to));
@@ -2151,12 +2154,13 @@ export class LazySimulation {
    * AND the legally resolved house door on the current final surface.
    */
   private async verifyHomeReturnAt(residentCode: string, tick: number) {
-    const accepted = this.siteVisitJournal?.eventFor(residentCode),
-      previous = this.siteVisitJournal?.returnFor(residentCode),
+    const journal = this.replaySiteVisitJournal ?? this.siteVisitJournal,
+      accepted = journal?.eventFor(residentCode),
+      previous = journal?.returnFor(residentCode),
       currentTick = this.tick;
     if (!accepted || previous || !Number.isSafeInteger(tick) ||
         tick <= accepted.decidedTick || tick > currentTick) return null;
-    const status = this.siteVisitJournal!.at(residentCode, tick);
+    const status = journal!.at(residentCode, tick);
     if (!status || status.status !== "arrived") return null;
     const resident = this.residentByCode(residentCode, tick),
       place = places.find(p => p.id === resident?.settlement);
@@ -2192,7 +2196,7 @@ export class LazySimulation {
     const complete = appendResidentReturnToOwnedDoor(reversed, homePath,
       (a, b) => residentLocalTransportSegmentLegal(place, a, b));
     if (!complete) return null;
-    return this.siteVisitJournal?.tryRecordHomeReturn(residentCode, tick, complete, door) ?? null;
+    return journal?.tryRecordHomeReturn(residentCode, tick, complete, door) ?? null;
   }
 
   async considerAdvisorHomeReturn(residentCode: string) {
@@ -2223,14 +2227,15 @@ export class LazySimulation {
         input.foundation !== "v5" || !Array.isArray(input.visits) ||
         input.visits.length > 16) return false;
     if (this.restoringSiteVisits) return false;
-    const original = this.siteVisitJournal, replayTick = this.tick;
+    const replayTick = this.tick;
     this.restoringSiteVisits = true;
-    this.siteVisitJournal = undefined;
-    const reject = () => { this.siteVisitJournal = original; return false; };
     try {
+      const { ResidentSiteVisitJournal } = await import("./resident-transport-events.ts");
+      this.replaySiteVisitJournal = new ResidentSiteVisitJournal(
+        (code, atTick) => this.residentByCode(code, atTick));
       const seen = new Set<string>();
       for (const raw of input.visits) {
-        if (!raw || typeof raw !== "object") return reject();
+        if (!raw || typeof raw !== "object") return false;
         const record = raw as Record<string, unknown>;
         if (typeof record.residentCode !== "string" || seen.has(record.residentCode) ||
             typeof record.from !== "string" || typeof record.to !== "string" ||
@@ -2238,23 +2243,28 @@ export class LazySimulation {
             (record.decidedTick as number) > replayTick || !Array.isArray(record.edgeCodes) ||
             record.edgeCodes.length < 2 || record.edgeCodes.length > 12 ||
             !record.edgeCodes.every(code => typeof code === "string" && code.length < 256))
-          return reject();
+          return false;
         seen.add(record.residentCode);
         const accepted = await this.verifySiteVisitAt(record.residentCode,
           { from: record.from, to: record.to, edgeCodes: record.edgeCodes },
           record.decidedTick as number);
-        if (!accepted) return reject();
+        if (!accepted) return false;
         if (record.homeReturnTick !== undefined) {
           if (!Number.isSafeInteger(record.homeReturnTick) ||
               (record.homeReturnTick as number) > replayTick ||
               !await this.verifyHomeReturnAt(record.residentCode, record.homeReturnTick as number))
-            return reject();
+            return false;
         }
       }
+      // Publish once all sixteen-or-fewer original decisions and every
+      // homeward segment have been freshly revalidated. Readers, inspectors
+      // and workers never see a partially accepted imported journey.
+      this.siteVisitJournal = this.replaySiteVisitJournal;
       return true;
     } catch {
-      return reject();
+      return false;
     } finally {
+      this.replaySiteVisitJournal = undefined;
       this.restoringSiteVisits = false;
     }
   }

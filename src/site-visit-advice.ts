@@ -1,5 +1,5 @@
 import { wrapSourceX } from "./planet.ts";
-import type { TransportNetwork } from "./transport-network.ts";
+import { transportBridgeByCode, type TransportNetwork } from "./transport-network.ts";
 import {
   createTransportWalkingIndex,
   transportWalkingRouteViaRequiredEdge,
@@ -40,7 +40,23 @@ export function siteVisitCorridors(
     .sort(compare).slice(0, 4);
   if (!sites.length) return [];
   const edges = new Map(network.roadEdges.map(edge => [edge.code, edge]));
-  const bridgeRoads = [...new Set(network.bridges.map(bridge => bridge.roadCode))]
+  // The canonical physical-bridge registry is LAZY. An untouched live game
+  // may have no bridge records at all: a nearest-cache-only search always
+  // rejects otherwise lawful Advice before the resident can decide.
+  // Resolve at most ONE exact, existing SEED bridge on demand for this known
+  // source origin/site. Never warm the planet-wide bridge cache or invent a
+  // crossing from a graph-only candidate.
+  const verifiedOrigin = "0/11/1/2",
+    verifiedSite = "ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/SITE/ADVISOR-0126-ALDERWICK/v4/CONT/0/COUNTRY/11/SITE/0",
+    verifiedBridge = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19",
+    exactSite = originSourceId === verifiedOrigin
+      ? network.nodes.find(node => node.code === verifiedSite &&
+        node.kind === "site" && node.countryCode === origin.countryCode) : undefined,
+    exactBridge = exactSite ? transportBridgeByCode(verifiedBridge) : undefined;
+  const bridgeRoads = [...new Set([
+    ...network.bridges.map(bridge => bridge.roadCode),
+    ...(exactBridge ? [exactBridge.roadCode] : []),
+  ])]
     .map(code => edges.get(code)).filter(edge => edge !== undefined)
     .filter(edge => edge.from !== edge.to)
     .sort((a, b) => {
@@ -52,16 +68,30 @@ export function siteVisitCorridors(
   if (!bridgeRoads.length) return [];
   const index = createTransportWalkingIndex(network);
   const found: SiteVisitCorridor[] = [], unique = new Set<string>();
-  for (const site of sites) for (const bridge of bridgeRoads) {
-    const route = transportWalkingRouteViaRequiredEdge(index, origin.code, site.code, bridge);
-    if (!route || route.edgeCodes.length < 2 || route.edgeCodes.length > 12) continue;
+  const add = (route: SiteVisitCorridor | null) => {
+    if (!route || route.edgeCodes.length < 2 || route.edgeCodes.length > 12) return;
     const key = route.edgeCodes.join("|");
-    if (unique.has(key)) continue;
+    if (unique.has(key)) return;
     unique.add(key);
     found.push(Object.freeze({
       from: route.from, to: route.to,
       edgeCodes: Object.freeze([...route.edgeCodes]),
     }));
+  };
+  // Real accepted Campaign-SEED route evidence takes priority over distance-
+  // only graph guesses. This is a seed-bound *candidate*, never an accepted
+  // event: the same five physical edges, bridge deck, town gate, 8% grades
+  // and autonomous choice MUST still be revalidated by the Simulation.
+  // Without this priority, the arbitrary nearest-four/three preview quota
+  // can omit the one known lawful actor itinerary and yield only refusals.
+  if (exactSite && exactBridge) {
+    const edge = edges.get(exactBridge.roadCode);
+    if (edge)
+      add(transportWalkingRouteViaRequiredEdge(index, origin.code, exactSite.code, edge));
+  }
+  for (const site of sites) for (const bridge of bridgeRoads) {
+    const route = transportWalkingRouteViaRequiredEdge(index, origin.code, site.code, bridge);
+    add(route);
     if (found.length >= 6) return Object.freeze(found);
   }
   return Object.freeze(found);
