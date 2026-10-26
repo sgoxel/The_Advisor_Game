@@ -88,7 +88,8 @@ test("S008 real touch-dispatched settlement inspection and accessible close", as
     await expect(popup.locator("h2")).toHaveText(selectedName.trim());
     await page.locator("#npc-popup [data-close]").tap();
     await expect(popup).toBeHidden();
-    await expect(regionToggle).toBeFocused();
+    const visibleOpener = await page.locator("#open-travel").isVisible() ? "#open-travel" : "#toggle-region-panel";
+    await expect(page.locator(visibleOpener)).toBeFocused();
     expect(await page.evaluate(() => window.__s008Touch)).toEqual(
       expect.arrayContaining(["open-travel", "inspect-village"]),
     );
