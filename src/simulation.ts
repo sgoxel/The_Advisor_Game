@@ -826,7 +826,7 @@ export function residentTransportIntervalGradePass(fromHeight: number, toHeight:
   return Number.isFinite(fromHeight) && Number.isFinite(toHeight) &&
     Number.isFinite(distanceM) && distanceM >= 0 &&
     (distanceM === 0 ? fromHeight === toHeight :
-      Math.abs(toHeight - fromHeight) / distanceM <= .08);
+      Math.abs(toHeight - fromHeight) / distanceM <= .08 + 1e-9);
 }
 function legalStreetSegment(place: Place, from: Offset, to: Offset, transportGrade = false): boolean {
   const { border, gates } = streetGraphFor(place);
