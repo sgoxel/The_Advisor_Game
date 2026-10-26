@@ -1754,6 +1754,12 @@ async function start() {
       if (query) residentQueries.offer(query);
       else residentQueries.clear();
       const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
+      // The terrain worker returns immutable routine facts. Reconcile any
+      // independently accepted visit here with the main Simulation event
+      // before selection, inspector or pooled sprite allocation. No copies.
+      const projectedResidents = snapshot
+        ? simulation.projectResidentView(snapshot.residents, snapshot.tick, snapshot)
+        : [];
       const inspectedCode = npcPopupCode();
       const existingSelected = inspectedCode
         ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
@@ -1763,10 +1769,10 @@ async function start() {
       // simply because its old finite result is no longer the desired key.
       // Never retain stale time/remote scenery; no actor is invented.
       const selectedFromSnapshot = inspectedCode && snapshot
-        ? snapshot.residents.find(resident => resident.code === inspectedCode) : undefined;
+        ? projectedResidents.find(resident => resident.code === inspectedCode) : undefined;
       const authoritativeSelected = inspectedCode && snapshot &&
         snapshot.id !== lastResidentSnapshot && !selectedFromSnapshot
-        ? simulation.residentByCode(inspectedCode) : undefined;
+        ? simulation.projectedResidentByCode(inspectedCode) : undefined;
       const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
       const selectionNearby = residentMode.actors &&
         selectedResidentVisibleInView(selected, query);
@@ -1782,7 +1788,7 @@ async function start() {
           actorMotion.delete(actor);
         }
       } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
-        const residents = snapshot?.residents ?? [];
+        const residents = projectedResidents;
         if (snapshot) {
           lastResidentSnapshot = snapshot.id;
           actorSnapshotTick = simulation.tick;
@@ -1833,7 +1839,7 @@ async function start() {
         if (popupCode) {
           // Prefer the worker snapshot; only a resident outside it is re-evaluated on this thread.
           const resident = residents.find((entry) => entry.code === popupCode) ??
-            (selected?.code === popupCode ? selected : simulation.residentByCode(popupCode));
+            (selected?.code === popupCode ? selected : simulation.projectedResidentByCode(popupCode));
           if (resident) showNpcPopup(resident, simulation.tick);
         }
         $("simulation-status").textContent =

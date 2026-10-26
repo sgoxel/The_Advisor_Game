@@ -2019,6 +2019,25 @@ export class LazySimulation {
     return residentAt(place, index, tick);
   }
 
+  /** Project only an event already admitted by this Simulation journal, never
+   * by a worker or a player-supplied route preview. Ordinary identity and
+   * schedule reconstruction are unchanged for everyone else. */
+  projectedResidentByCode(code: string, tick = this.tick) {
+    const resident = this.residentByCode(code, tick);
+    return resident && this.siteVisitJournal
+      ? this.siteVisitJournal.project(resident, tick) : resident;
+  }
+
+  /** Reconcile a routine worker query with this main Simulation's accepted
+   * journeys before drawing sprites, picking an actor, or updating inspectors.
+   * The worker cannot independently authorize or invent a journey. */
+  projectResidentView(
+    residents: Resident[], tick: number,
+    view: Readonly<{ x: number; z: number; radius: number; limit: number }>,
+  ) {
+    return this.siteVisitJournal?.visible(residents, tick, view) ?? residents;
+  }
+
   /**
    * On-demand Simulation authority for a proposed canonical site itinerary:
    * character decides independently from SEED personality, mood and current
