@@ -12,9 +12,11 @@ permissions:
   contents: read
 jobs:
   transport-evidence:
-    # Native Chrome/Metal is required for actual WebGPU PNG readback; the
-    # old Linux SwiftShader runner is not valid dual-backend visual evidence.
-    runs-on: ${{ matrix.backend == 'webgpu' && 'macos-26' || 'ubuntu-latest' }}
+    # Use native Chrome/Metal for both actual renderer backends: Linux software
+    # WebGL2 kept unfinished tiles at the 180s settled bound even bridge-first,
+    # yielding zero inspectable PNGs. Keep renderer=webgl2 (no WebGPU fallback)
+    # and screenshot_tool.py's unchanged real readiness/settled requirements.
+    runs-on: macos-26
     timeout-minutes: 20
     strategy:
       fail-fast: false
