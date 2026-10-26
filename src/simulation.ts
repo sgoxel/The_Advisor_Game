@@ -321,6 +321,11 @@ function natureSites(place: Place) {
     // ground/decks first, without running a whole-graph A* for every candidate.
     for (const gate of connectedGates)
       if (legalStreetSegment(place, gate, point)) return true;
+    // A valid habitat across a river must not be rejected because its direct
+    // gate-to-site chord is wet: only a genuine SEED bridge-road corridor with
+    // metre-validated bank approaches can make that bank reachable.
+    for (const gate of connectedGates)
+      if (residentTransportBridgePath(place, gate, point)) return true;
     // If a dry-looking chord is blocked by an actual enclosure/street edge,
     // retain the existing bounded graph/gate detour search. The old 20 m
     // probe is only a cheap negative hint, never permission to walk: the
