@@ -347,6 +347,37 @@ test("Simulation-owned site-visit decision refuses orders and journals only a fu
   assert.strictEqual(events.project(otherResident, departure + 5, () => 1), otherResident,
     "a visit may not spawn or displace another canonical SEED identity");
 
+  const queryAtWalking = {
+    x: walking!.x, z: walking!.z, radius: .05, limit: 8,
+  };
+  const projectedQuery = events.visible([original], departure + 5, queryAtWalking);
+  assert.equal(projectedQuery.length, 1);
+  assert.equal(projectedQuery[0].code, original.code);
+  assert.ok(Math.abs(projectedQuery[0].x - walking!.x) < 1e-7,
+    "worker routine record must be replaced by the validated physical location");
+  const oldHomeQuery = events.visible([original], departure + 5, {
+    x: original.x, z: original.z, radius: .05, limit: 8,
+  });
+  assert.deepEqual(oldHomeQuery, [],
+    "the same actor may not remain as a routine ghost at the original home");
+  const nearSite = events.visible([], departure + 10000, {
+    x: nodes.get(route.to)!.x, z: 0, radius: .05, limit: 8,
+  });
+  assert.equal(nearSite.length, 1);
+  assert.equal(nearSite[0].code, original.code);
+  assert.equal(nearSite[0].activity, "stroll",
+    "visitor remains the original actor when worker routine spatial index misses the site");
+  const unrelated = { ...otherResident, x: walking!.x } as Resident;
+  const together = events.visible([original, unrelated], departure + 5, { ...queryAtWalking, limit: 2 });
+  assert.deepEqual(together.map(r => r.code), [original.code, unrelated.code],
+    "projected traveller takes exactly one slot; unrelated SEED actor remains");
+  assert.deepEqual(events.visible([original, unrelated], departure + 5,
+    { ...queryAtWalking, limit: 1 }).map(r => r.code), [original.code],
+    "projection respects the existing strict visible resident budget");
+  assert.deepEqual(events.visible([original], departure - 1, {
+    x: original.x, z: original.z, radius: 1, limit: 8,
+  }), [original], "events may not change a pre-departure worker routine snapshot");
+
 });
 
 test("actual Greyfield SEED actor supplies only his own verified local street origin", () => {
