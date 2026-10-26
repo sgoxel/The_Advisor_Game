@@ -441,7 +441,9 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         3,
       ),
       tangent = roadTangentAt(x,z,road),
-      crossing = freshwaterCrossingAt(tangent.cx,tangent.cz,tangent.x,tangent.z),
+      // Keep the existing owned crossing available throughout its dry 80 m approach.
+      // Without this reach the earthwork transition was disabled past the river bank.
+      crossing = freshwaterCrossingAt(tangent.cx,tangent.cz,tangent.x,tangent.z,80),
       pierM = crossing ? Math.min(5,(RURAL_BRIDGE_MAX_LENGTH_M-crossing.spanM)/2) : 0;
     let roadHeight=initialRoadHeight,deckHeight:number|undefined;
     if(crossing&&distance<=5){

@@ -524,14 +524,40 @@ export function freshwaterCrossingSpanMAt(x: number, z: number) {
 }
 
 /** Exact line/capsule union span, including confluences, in canonical metres. */
-export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number) {
+/** The optional dry-bank reach is owned by the same sampled natural river crossing.
+ * It cannot create water, a bridge, or a synthetic graph connection. */
+export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number,dryApproachM=0): Readonly<{spanM:number;waterLevel:number;code:string;lo:number;hi:number;metresPerUnit:number;ux:number;uz:number}> | null {
+  if(!Number.isFinite(dryApproachM)||dryApproachM<0||dryApproachM>80)return null;
   const hit=nearestRiver(wrapSourceX(x),z);
-  if(!hit||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
+  if(!hit)return null;
+  if(hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE){
+    if(dryApproachM===0)return null;
+    // Rebase the dry approach onto the same physical road/riversegment
+    // intersection. Recomputing a river union from a different dry bucket
+    // can silently change the deck span at the approach station.
+    const roadLength=Math.hypot(roadX,roadZ);
+    if(!roadLength)return null;
+    const ux=roadX/roadLength,uz=roadZ/roadLength,
+      vx=wrapSourceX(hit.segment.bx-hit.segment.ax),vz=hit.segment.bz-hit.segment.az,
+      determinant=ux*vz-uz*vx,
+      px=wrapSourceX(hit.segment.ax-x),pz=hit.segment.az-z;
+    if(Math.abs(determinant)<1e-9)return null;
+    const offset=(px*vz-pz*vx)/determinant,
+      segmentT=((wrapSourceX(x+ux*offset-hit.segment.ax))*vx+(z+uz*offset-hit.segment.az)*vz)/(vx*vx+vz*vz),
+      metresPerUnit=CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(ux*Math.cos(sourceToLonLat(x,z).lat),uz);
+    if(!Number.isFinite(offset)||!Number.isFinite(segmentT)||segmentT<0||segmentT>1||
+      metresPerUnit<.1||
+      Math.abs(offset)*metresPerUnit>dryApproachM+(hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)*metresPerUnit)
+      return null;
+    const centred=freshwaterCrossingAt(wrapSourceX(x+ux*offset),z+uz*offset,roadX,roadZ);
+    if(!centred||centred.code!==hit.segment.code)return null;
+    return Object.freeze({...centred,lo:centred.lo+offset,hi:centred.hi+offset});
+  }
   const roadLength=Math.hypot(roadX,roadZ);if(!roadLength)return null;
   const ux=roadX/roadLength,uz=roadZ/roadLength,dx=wrapSourceX(hit.segment.bx-hit.segment.ax),dz=hit.segment.bz-hit.segment.az;
   if(Math.abs(ux*dz-uz*dx)/(Math.hypot(dx,dz)||1)<.1)return null;
   const metresPerUnit=CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(ux*Math.cos(sourceToLonLat(x,z).lat),uz);
-  if(metresPerUnit<.1)return null;
+  if(metresPerUnit<.1||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE+dryApproachM/metresPerUnit)return null;
   type Interval={lo:number;hi:number;segment:DrainageSegment};
   const intervals:Interval[]=[];
   const range=(value:number,rate:number,low:number,high:number):[number,number]|null=>Math.abs(rate)<1e-12?(value>=low&&value<=high?[-Infinity,Infinity]:null):[Math.min((low-value)/rate,(high-value)/rate),Math.max((low-value)/rate,(high-value)/rate)];
