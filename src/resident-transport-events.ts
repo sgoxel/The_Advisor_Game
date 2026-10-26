@@ -1,4 +1,7 @@
 import type { Resident } from "./simulation.ts";
+import { TIME_SCALE } from "./clock.ts";
+import { sourceToLonLat } from "./planet.ts";
+import { finalSurfaceAt } from "./world-core.ts";
 import type { TransportBridge, TransportNode, TransportRoadEdge } from "./transport-network.ts";
 import {
   prepareResidentTransportJourneyWithApproach,
@@ -41,6 +44,65 @@ export type ResidentSiteVisitEvent = Readonly<{
   siteNode: string;
   journey: ValidatedResidentJourney;
 }>;
+
+
+/**
+ * Read-only projection of a previously Simulation-validated event onto its
+ * ORIGINAL SEED resident. This must replace that actor's routine snapshot,
+ * never be appended as a second character or accepted from a route preview.
+ * The journey's own cumulative physical stations remain the only movement
+ * authority; if more than 32 path corners lie in a render window, omit
+ * animation rather than draw a shortcut through unverified ground.
+ */
+export function projectResidentSiteVisit(
+  resident: Resident,
+  event: ResidentSiteVisitEvent,
+  tick: number,
+  elevationAt: (x: number, z: number) => number =
+    (x, z) => finalSurfaceAt(x, z).surfaceHeight,
+): Resident {
+  if (resident.code !== event.residentCode ||
+      event.journey.residentCode !== resident.code ||
+      event.decidedTick !== event.journey.departedTick ||
+      !Number.isSafeInteger(tick) || tick < event.decidedTick) return resident;
+  const step = residentTransportJourneyAt(event.journey, tick),
+    elevation = elevationAt(step.x, step.z);
+  if (!Number.isFinite(elevation)) return resident;
+  const ahead = residentTransportJourneyAt(event.journey, tick + TIME_SCALE);
+  let walkAhead: Source[] | undefined;
+  if (step.status === "walking" && ahead.distanceM > step.distanceM) {
+    const cumulative = event.journey.cumulativeMetres,
+      points = event.journey.stations;
+    let low = 0, high = cumulative.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (cumulative[mid] <= step.distanceM) low = mid + 1;
+      else high = mid;
+    }
+    const window: Source[] = [{ x: step.x, z: step.z }];
+    for (let i = low; i < cumulative.length && cumulative[i] < ahead.distanceM; i++) {
+      if (window.length > 32) break;
+      window.push(points[i]);
+    }
+    if (window.length <= 32) {
+      window.push({ x: ahead.x, z: ahead.z });
+      walkAhead = window;
+    }
+  }
+  const resting = step.status === "resting", arrived = step.status === "arrived";
+  return {
+    ...resident, x: step.x, z: step.z,
+    position: { ...sourceToLonLat(step.x, step.z), elevation },
+    grounded: true, indoors: false,
+    route: arrived ? `ARRIVED: ${event.siteNode}` : `SITE VISIT: ${event.siteNode}`,
+    task: arrived ? "Arrived at verified site" :
+      resting ? "Resting during verified journey" : "Travelling on verified SEED roads",
+    activity: arrived ? "stroll" : resting ? "rest" : "commute",
+    activityProgress: step.progress,
+    travelProgress: step.progress, travelDistanceM: event.journey.distanceM,
+    walkAhead,
+  };
+}
 
 /** Simulation-owned event journal for one on-demand, independently decided
  * site departure. The resolver must use the original Simulation residentAt
@@ -92,6 +154,11 @@ export class ResidentSiteVisitJournal {
   }
 
   eventFor(residentCode: string) { return this.visits.get(residentCode); }
+  /** Never invent a second actor: overlay by exact original identity only. */
+  project(resident: Resident, tick: number, elevationAt?: (x: number, z: number) => number) {
+    const event = this.visits.get(resident.code);
+    return event ? projectResidentSiteVisit(resident, event, tick, elevationAt) : resident;
+  }
   at(residentCode: string, tick: number) {
     const event = this.visits.get(residentCode);
     return event && Number.isSafeInteger(tick) && tick >= 0
