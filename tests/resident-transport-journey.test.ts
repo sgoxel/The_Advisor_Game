@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
+import { villages } from "../src/geography.ts";
+import { residentAt, residentLocalTransportApproach, residentLocalTransportSegmentLegal } from "../src/simulation.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
@@ -233,4 +235,23 @@ test("unverified gate approach, blocked streets and steep local slopes refuse wi
     : surfaceAt(x,z)), null, "a steep interval cannot be hidden before the macro road");
   assert.equal(run(actor, approach, legal, (x,z) => surfaceAt(x,z,true)), null,
     "the same owned bridge still has to exist beyond the legal approach");
+});
+
+test("actual Greyfield SEED actor supplies only his own verified local street origin", () => {
+  const place = villages.find(village => village.name === "Greyfield");
+  assert.ok(place);
+  const noon = tickAtLocalTime(1, 12 * 3_600, place!.canonicalPosition.lon),
+    actor = residentAt(place!, 15, noon);
+  assert.equal(actor.code, `${place!.code}/RESIDENT/15`);
+  assert.ok(actor.grounded && !actor.indoors,
+    "existing independently scheduled far-bank maintenance worker must be outdoors");
+  const samePlace = { x: actor.x, z: actor.z },
+    local = residentLocalTransportApproach(place!, actor, samePlace);
+  assert.ok(local && local.length >= 2, "actual SEED resident's current physical position must resolve");
+  assert.ok(Math.abs(local![0].x - actor.x) < 1e-6);
+  assert.ok(Math.abs(local!.at(-1)!.z - actor.z) < 1e-6);
+  assert.equal(residentLocalTransportSegmentLegal(place!, local![0], local![1]), true);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor, code: "impostor" }, samePlace), null);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor, grounded: false }, samePlace), null);
+  assert.equal(residentLocalTransportApproach(place!, { ...actor, indoors: true }, samePlace), null);
 });
