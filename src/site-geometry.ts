@@ -117,8 +117,15 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
 
     if (site.kind === "ruin") {
       const towerHeight = 7.2 + (variant % 4) * 0.7;
-      structures.box(localX - 3.4, y - 0.2, localZ - 2.8, 4.4, towerHeight, 4.2, stone);
-      structures.box(localX - 3.4, y + towerHeight - 0.75, localZ - 2.8, 4.8, 0.6, 4.5, darkStone);
+      // A ruin must not have a solid overhead roof across the lawful site
+      // arrival. Its tall silhouette remains, but broken masonry walls leave
+      // the 3D world and original SEED resident visible at Hero distance.
+      // All positions are presentation-only; site/road/Simulation stay fixed.
+      const towerX = localX - 3.4, towerZ = localZ - 2.8;
+      structures.box(towerX - 2, y - .2, towerZ, .4, towerHeight, 4.2, stone);
+      structures.box(towerX + 2, y - .2, towerZ, .4, towerHeight * .72, 4.2, stone);
+      structures.box(towerX, y - .2, towerZ - 1.9, 4.4, towerHeight * .8, .4, stone);
+      structures.box(towerX - 1.3, y - .2, towerZ + 1.9, 1.8, towerHeight * .65, .4, darkStone);
       structures.box(localX + 2.8, y - 0.15, localZ + 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
       structures.box(localX + 5.7, y - 0.15, localZ - 0.6, 1.15, 3.2, 6.8, darkStone);
       structures.box(localX - 0.2, y - 0.1, localZ + 5.4, 5.2, 1.55, 1.0, darkStone);

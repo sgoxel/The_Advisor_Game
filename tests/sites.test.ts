@@ -363,6 +363,24 @@ test("focused ruin and shrine meshes have deterministic visible silhouettes with
     assert.ok(first.triangles > 0 && first.triangles < 600, `${kind} exceeds close-detail budget`);
     const y = [...first.positions].filter((_, index) => index % 3 === 1);
     assert.ok(Math.max(...y) - Math.min(...y) > 5, `${kind} silhouette is too flat`);
+    if (kind === "ruin") {
+      // The original 4.8×4.5 m roof obscured the actual SEED visitor at
+      // the nearby site arrival. Keep high walls, not a solid high roof.
+      let largestHighRoofTriangleM2 = 0;
+      const v = first.positions, minY = Math.min(...y);
+      for (let i = 0; i < v.length; i += 9) {
+        if (v[i + 1] < minY + 5 ||
+            Math.max(v[i + 1], v[i + 4], v[i + 7]) -
+            Math.min(v[i + 1], v[i + 4], v[i + 7]) > .0001) continue;
+        const area = Math.abs(
+          (v[i + 3] - v[i]) * (v[i + 8] - v[i + 2]) -
+          (v[i + 6] - v[i]) * (v[i + 5] - v[i + 2]),
+        ) / 2;
+        largestHighRoofTriangleM2 = Math.max(largestHighRoofTriangleM2, area);
+      }
+      assert.ok(largestHighRoofTriangleM2 < 2.5,
+        `solid high ruin roof blocks the lawful original actor: ${largestHighRoofTriangleM2} m²`);
+    }
     assert.ok([...first.colors].some((value, index) => index % 4 === 0 && value >= 170),
       `${kind} lacks readable contrasting stone`);
     assert.deepEqual(first.summary.codes, again.summary.codes);
