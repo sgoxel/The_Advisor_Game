@@ -2170,7 +2170,7 @@ export class LazySimulation {
       import("./transport-walking-route.ts"),
       import("./resident-transport-journey.ts"),
     ]);
-    if (this.tick !== currentTick) return null;
+    if (!this.restoringSiteVisits && this.tick !== currentTick) return null;
     const roads = new Map(siteTransportNetwork.roadEdges.map(edge => [edge.code, edge])),
       nodes = new Map(siteTransportNetwork.nodes.map(node => [node.code, node])),
       index = createTransportWalkingIndex(siteTransportNetwork),
