@@ -2,7 +2,7 @@ name: S005 transport visual evidence
 on:
   workflow_dispatch:
   push:
-    branches: [main, "agent1/wp-s005-001-001-native-evidence-*"]
+    branches: [main, "agent1/wp-s005-001-001-native-evidence-*", "agent1/wp-s005-001-001-canonical-bridge-evidence-*"]
     paths:
       - ".github/workflows/wp-s005-001-001-transport-evidence.yml"
       - "src/transport-inspector.ts"
