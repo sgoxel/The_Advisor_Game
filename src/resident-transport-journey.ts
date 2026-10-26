@@ -76,7 +76,7 @@ export function prepareResidentTransportJourney(
 
   const cumulative: number[] = [0];
   let previousSurface: FinalSurface | undefined, previous = start;
-  let wetDeck = false;
+  const selectedWet: number[] = [];
   for (let i = 0; i < source.stations.length; i++) {
     const station = source.stations[i], surface = surfaceAt(station.x, station.z),
       slope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
@@ -84,7 +84,7 @@ export function prepareResidentTransportJourney(
     if (sampledCorridorStationFailure(station, surface, slope) ||
         !residentWalkableSurface(surface)) return null;
     if (surface.water.kind === "river" && surface.deckHeight !== null &&
-        bridges.some(bridge => bridge.roadCode === station.edgeCode)) wetDeck = true;
+        bridges.some(bridge => bridge.roadCode === station.edgeCode)) selectedWet.push(i);
     if (i) {
       const metres = distance(previous, station);
       if (!(metres > 0) || !Number.isFinite(metres)) return null;
@@ -106,7 +106,16 @@ export function prepareResidentTransportJourney(
     previous = station;
     previousSurface = surface;
   }
-  if (!wetDeck || !(cumulative[cumulative.length - 1] > 0)) return null;
+  // Require the selected actual wet deck to be flanked by dry road samples,
+  // not merely a floating isolated bridge or a water-only endpoint.
+  if (!selectedWet.length || !(cumulative[cumulative.length - 1] > 0)) return null;
+  for (const index of selectedWet) {
+    const first = source.stations.findIndex(s => s.edgeCode === source.stations[index].edgeCode),
+      last = source.stations.findLastIndex(s => s.edgeCode === source.stations[index].edgeCode);
+    if (first < 0 || last <= first || first === index || last === index ||
+        surfaceAt(source.stations[first].x, source.stations[first].z).water.kind !== "none" ||
+        surfaceAt(source.stations[last].x, source.stations[last].z).water.kind !== "none") return null;
+  }
   return Object.freeze({
     residentCode: resident.code, siteNode: route.to, departedTick: decision.decidedTick,
     edgeCodes: Object.freeze([...route.edgeCodes]),
