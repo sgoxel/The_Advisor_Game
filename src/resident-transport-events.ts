@@ -1,6 +1,6 @@
 import type { Resident } from "./simulation.ts";
 import { TIME_SCALE } from "./clock.ts";
-import { sourceToLonLat } from "./planet.ts";
+import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 import type { TransportBridge, TransportNode, TransportRoadEdge } from "./transport-network.ts";
 import {
@@ -131,7 +131,7 @@ export class ResidentSiteVisitJournal {
     surfaceAt?: Parameters<typeof prepareResidentTransportJourneyWithApproach>[9],
     slopeAt?: Parameters<typeof prepareResidentTransportJourneyWithApproach>[10],
   ): ResidentSiteVisitEvent | null {
-    if (this.visits.has(residentCode) || !Number.isSafeInteger(tick) || tick < 0 ||
+    if (this.visits.size >= 16 || this.visits.has(residentCode) || !Number.isSafeInteger(tick) || tick < 0 ||
         !nodes.has(corridor.from) || !nodes.has(corridor.to)) return null;
     const actor = this.resolveResident(residentCode, tick);
     if (!actor || actor.code !== residentCode ||
@@ -159,6 +159,51 @@ export class ResidentSiteVisitJournal {
     const event = this.visits.get(resident.code);
     return event ? projectResidentSiteVisit(resident, event, tick, elevationAt) : resident;
   }
+
+  /**
+   * Worker population remains a bounded SEED routine snapshot. Main Simulation
+   * overlays only its OWN previously-accepted events by original code and
+   * physical projected location. A visitor leaving their home is removed from
+   * the home view; near the site the SAME identity takes a visible slot even
+   * if the worker's routine spatial index could not discover them there.
+   *
+   * At most sixteen prepared journeys may be held in this temporary in-memory
+   * journal; each read examines those only once per resident snapshot (never
+   * a frame), does not write worker state, and refuses oversized/new events.
+   */
+  visible(
+    residents: Resident[], tick: number,
+    view: Readonly<{ x: number; z: number; radius: number; limit: number }>,
+  ): Resident[] {
+    const limit = Math.max(0, Math.floor(view.limit));
+    if (!Number.isFinite(limit) || !limit) return [];
+    if (!this.visits.size || !Number.isSafeInteger(tick) || tick < 0 ||
+        ![view.x, view.z, view.radius].every(Number.isFinite) || view.radius < 0)
+      return residents.slice(0, limit);
+    const inView = (actor: Resident) =>
+      Math.hypot(wrapSourceX(actor.x - view.x), actor.z - view.z) <= view.radius;
+    const routine = residents.flatMap(actor => {
+      const projected = this.project(actor, tick);
+      // Workers may still include the traveller near their original house.
+      // Refuse that stale routine location rather than double-spawning them.
+      return this.visits.has(actor.code) && tick >= this.visits.get(actor.code)!.decidedTick &&
+        !inView(projected) ? [] : [projected];
+    });
+    const travelling: Resident[] = [];
+    for (const event of this.visits.values()) {
+      if (tick < event.decidedTick) continue;
+      const original = this.resolveResident(event.residentCode, tick);
+      if (!original || original.code !== event.residentCode) continue;
+      const projected = this.project(original, tick);
+      if (projected.grounded && !projected.indoors && inView(projected))
+        travelling.push(projected);
+    }
+    // Deterministic accepted-event priority, with one single instance per code.
+    // Worker routine residents keep their existing order and quota otherwise.
+    const used = new Set(travelling.map(actor => actor.code));
+    return [...travelling, ...routine.filter(actor => !used.has(actor.code))].slice(0, limit);
+  }
+
   at(residentCode: string, tick: number) {
     const event = this.visits.get(residentCode);
     return event && Number.isSafeInteger(tick) && tick >= 0
