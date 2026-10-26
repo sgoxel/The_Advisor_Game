@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { localWeekday, tickAtLocalTime } from "../src/clock.ts";
+import { REAL_EPOCH_MS, TIME_SCALE, localWeekday, tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -553,6 +553,23 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
     "saved canonical event must recompute the same physical original-person visit");
   assert.deepEqual(replay.projectedResidentByCode(chosenCode), arrived,
     "Fantasy Time replay restores the original site arrival without trusting saved coordinates");
+  const outboundHistory = selected!.savedSiteVisitHistory();
+  const targetStations = accepted!.journey.stations;
+  const bridgeIndex = targetStations.reduce((best, point, i) => {
+    const distance = (p: typeof point) => Math.hypot(p.x - ownedBridge!.x, p.z - ownedBridge!.z);
+    return distance(point) < distance(targetStations[best]) ? i : best;
+  }, 0);
+  const bridgeMetres = accepted!.journey.cumulativeMetres[bridgeIndex];
+  let lowTick = decidedTick, highTick = destinationTick;
+  while (lowTick < highTick) {
+    const middle = Math.floor((lowTick + highTick) / 2);
+    if (residentTransportJourneyAt(accepted!.journey, middle).distanceM < bridgeMetres)
+      lowTick = middle + 1;
+    else highTick = middle;
+  }
+  const bridgePoint = residentTransportJourneyAt(accepted!.journey, lowTick);
+  assert.ok(Math.hypot(bridgePoint.x - ownedBridge!.x, bridgePoint.z - ownedBridge!.z) < 2,
+    "the actual site traveller's screenshot tick must coincide with the existing wet deck");
   const home = await selected!.considerAdvisorHomeReturn(chosenCode);
   assert.equal(typeof home.started, "boolean");
   if (home.started) {
@@ -569,6 +586,28 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
   } else {
     assert.match(home.message, /declined|door|street|deck|grade|unlawful/,
       "a blocked return must be an explicit truthful refusal, not a teleported success");
+  }
+  // Only an explicit screenshot-tool CI fixture request writes a small proof
+  // envelope. It contains the exact independently validated original SEED
+  // decisions and is NEVER imported into game state without full revalidation.
+  if (process.env.S005_VISUAL_WITNESS) {
+    const { mkdirSync, writeFileSync } = await import("node:fs"),
+      { dirname } = await import("node:path"),
+      file = process.env.S005_VISUAL_WITNESS,
+      fixedMs = (tick: number) => REAL_EPOCH_MS + Math.ceil(tick / TIME_SCALE) * 1000,
+      door = selected!.residentByCode(chosenCode)!.homeEntrance;
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({
+      residentCode: chosenCode, ownedDoorCode: door,
+      originCode, siteCode, bridgeCode,
+      site: { x: arrived!.x, z: arrived!.z },
+      bridge: { x: bridgePoint.x, z: bridgePoint.z },
+      bridgeFixedMs: fixedMs(lowTick),
+      siteFixedMs: fixedMs(destinationTick),
+      homeFixedMs: fixedMs(destinationTick + 30*86400),
+      homeStarted: home.started, homeMessage: home.message,
+      outboundHistory, homeHistory: selected!.savedSiteVisitHistory(),
+    }, null, 2));
   }
 });
 
