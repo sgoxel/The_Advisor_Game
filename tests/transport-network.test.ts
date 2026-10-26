@@ -17,6 +17,7 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
+import { freshwaterCrossingAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "../src/hydrology.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
@@ -215,6 +216,33 @@ test("S005 site preview chooses nearest physical graph endpoint at high latitude
     { lon: 0, lat: 0 })?.code, "N", "the map preview must not originate at a site endpoint");
   assert.equal(nearestWalkingRoadEndpoint({ from: "SITE", to: "MISSING" }, tied,
     { lon: 0, lat: 0 }), undefined, "no legal endpoint means no invented route");
+});
+
+test("S005 dry-bank road approach keeps its existing river owner beyond the wet-bank lookup", () => {
+  const witness = finalSurfaceEvidenceAnchors();
+  const { bridge, bridgeTangent } = witness;
+  const wet = freshwaterCrossingAt(bridge.x, bridge.z, bridgeTangent.x, bridgeTangent.z);
+  assert.ok(wet, "real SEED river and road must intersect");
+  let supportedDryBank = false;
+  for (const side of [-1, 1]) {
+    const t = (side < 0 ? wet!.lo : wet!.hi) + side * (RIVER_BANK_HALF_WIDTH_SOURCE + 1.5),
+      x = wrapSourceX(bridge.x + bridgeTangent.x * t),
+      z = bridge.z + bridgeTangent.z * t;
+    // Do not reinterpret a distant river as a crossing. Only the matching
+    // real segment inside the exact finite approach allowance is usable.
+    const withoutApproach = freshwaterCrossingAt(x, z, bridgeTangent.x, bridgeTangent.z),
+      withApproach = freshwaterCrossingAt(x, z, bridgeTangent.x, bridgeTangent.z, 80);
+    if (!withoutApproach && withApproach?.code === wet!.code) {
+      assert.ok(Math.abs(withApproach.spanM - wet!.spanM) < 1e-5,
+        "the extended dry bank cannot change the bridge's physical river span");
+      supportedDryBank = true;
+      break;
+    }
+  }
+  assert.equal(supportedDryBank, true,
+    "at least one real bank must retain the same owned crossing when beyond the old water-only reach");
+  assert.equal(freshwaterCrossingAt(bridge.x, bridge.z, bridgeTangent.x, bridgeTangent.z, Infinity), null,
+    "unbounded approach reach fails closed");
 });
 
 test("S005 bank approach measures true geodesic grade on the traversed bridge-deck surface", () => {

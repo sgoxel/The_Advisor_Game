@@ -524,14 +524,18 @@ export function freshwaterCrossingSpanMAt(x: number, z: number) {
 }
 
 /** Exact line/capsule union span, including confluences, in canonical metres. */
-export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number) {
+/** The optional dry-bank reach is owned by the same sampled natural river crossing.
+ * It cannot create water, a bridge, or a synthetic graph connection. */
+export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number,dryApproachM=0) {
+  if(!Number.isFinite(dryApproachM)||dryApproachM<0||dryApproachM>80)return null;
   const hit=nearestRiver(wrapSourceX(x),z);
-  if(!hit||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
+  if(!hit)return null;
+  if(dryApproachM===0&&hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
   const roadLength=Math.hypot(roadX,roadZ);if(!roadLength)return null;
   const ux=roadX/roadLength,uz=roadZ/roadLength,dx=wrapSourceX(hit.segment.bx-hit.segment.ax),dz=hit.segment.bz-hit.segment.az;
   if(Math.abs(ux*dz-uz*dx)/(Math.hypot(dx,dz)||1)<.1)return null;
   const metresPerUnit=CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(ux*Math.cos(sourceToLonLat(x,z).lat),uz);
-  if(metresPerUnit<.1)return null;
+  if(metresPerUnit<.1||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE+dryApproachM/metresPerUnit)return null;
   type Interval={lo:number;hi:number;segment:DrainageSegment};
   const intervals:Interval[]=[];
   const range=(value:number,rate:number,low:number,high:number):[number,number]|null=>Math.abs(rate)<1e-12?(value>=low&&value<=high?[-Infinity,Infinity]:null):[Math.min((low-value)/rate,(high-value)/rate),Math.max((low-value)/rate,(high-value)/rate)];
