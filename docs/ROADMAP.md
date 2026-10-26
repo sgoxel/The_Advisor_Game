@@ -29,6 +29,8 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
+- WP-S005-001-001 — Canonical connected transport roads, bridges, ferries & legal traversability
+
 ## STAGE S006 — Living World & Usable Buildings
 
 - WP-S006-001-001 — Resident journeys & rendered-home proof: owned door/gate/bridge/work replay, real picking, dual-backend PNGs
