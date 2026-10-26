@@ -53,7 +53,7 @@ const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
 
-test("S005 resident bridge-road segments refuse the actual unsafe SEED dry-bank grade", () => {
+test("continuous walking segments reject the S005 real unsafe bridge-road grade", () => {
   assert.equal(residentTransportIntervalGradePass(10, 10.08, 1), true);
   assert.equal(residentTransportIntervalGradePass(10, 10.0801, 1), false);
   assert.equal(residentTransportIntervalGradePass(10, 10, 0), true);
