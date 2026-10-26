@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
+import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
 import { prepareResidentTransportJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
@@ -50,7 +51,14 @@ function surfaceAt(x: number, _z: number, deckRemoved = false) {
   } as unknown as FinalSurface;
 }
 
-test("committed SEED resident uses all five legal roads without a position jump or invented arrival", () => {
+test("synthetic five-road actor fixture preserves lawful shared-bank and arrival semantics", () => {
+  const planned = planTransportRouteCorridorByLeg(route, roads, nodes, adjacency);
+  assert.equal(planned.status, "ready");
+  if (planned.status !== "ready") return;
+  assert.equal(planned.stations.find(s => s.joinedEdgeCode === "d")?.edgeCode, "c",
+    "verified incoming Y station is the dry bank of outgoing bridge road");
+  assert.equal(planned.stations.find(s => s.edgeCode === "d")?.x, 7,
+    "the first outgoing-road sample is already over the river deck");
   const journey = prepareResidentTransportJourney(resident, decision, route,
     roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
   assert.ok(journey, "real signed-off source stations and owned wet bridge must admit journey");
@@ -78,6 +86,11 @@ test("missing actual wet deck, wrong actor, denied decision and remote origin al
   const args = [route, roads, nodes, adjacency, bridges] as const;
   assert.equal(prepareResidentTransportJourney(resident, decision, ...args,
     (x,z) => surfaceAt(x,z,true)), null);
+  assert.equal(prepareResidentTransportJourney(resident, decision, ...args,
+    (x,z) => Math.abs(x - 6) < .25
+      ? { ...surfaceAt(x,z), water: { kind: "river", level: .5 },
+          traversal: "bridge", deckHeight: 1, surfaceHeight: 1, deckOwnerIds: ["d"] } as FinalSurface
+      : surfaceAt(x,z)), null, "a wet junction cannot stand in for the required dry bank");
   assert.equal(prepareResidentTransportJourney({ ...resident, code: "different" }, decision, ...args,
     (x,z) => surfaceAt(x,z)), null);
   assert.equal(prepareResidentTransportJourney({ ...resident, x: 50 }, decision, ...args,
