@@ -31,6 +31,8 @@
 .transport-marker-border { fill: #f3d86a; stroke: #692f2f; stroke-width: 2.5; }
 .transport-marker-junction { fill: #f3e7c3; stroke: #42321f; stroke-width: 2; }
 .transport-marker-harbor { fill: #7fa9ad; stroke: #243c3d; stroke-width: 2; }
+/* First rejected physical route sample, not a legal destination or bridge. */
+.transport-marker-unsafe { fill: #b5302c; stroke: #fff4dc; stroke-width: 2.5; }
 .transport-marker.selected { stroke: #fff4c8; stroke-width: 3; }
 .transport-open-button {
   width: 100%;

@@ -170,6 +170,7 @@ panel.innerHTML = `
     <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
     <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
     <button type="button" id="transport-route-corridor" disabled>Probe walking route surface</button>
+    <button type="button" id="transport-focus-unsafe" hidden>Show first unsafe station on map</button>
     <button type="button" id="transport-focus">Focus selection</button>
     <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge from low 3D angle</button>
     <button type="button" id="transport-bridge-clearview" hidden>View bridge without inspector</button>
@@ -280,7 +281,7 @@ function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selec
   return true;
 }
 
-function appendMarker(kind: "bridge" | "border" | "junction" | "harbor", x: number, z: number, state: AdvisorWorld["state"], code: string, active: boolean) {
+function appendMarker(kind: "bridge" | "border" | "junction" | "harbor" | "unsafe", x: number, z: number, state: AdvisorWorld["state"], code: string, active: boolean) {
   const point = projectSource(x, z);
   if (!inViewport(point, 24)) return false;
   const marker = document.createElementNS(SVG_NS, kind === "harbor" ? "rect" : "circle");
@@ -293,7 +294,7 @@ function appendMarker(kind: "bridge" | "border" | "junction" | "harbor", x: numb
   } else {
     marker.setAttribute("cx", String(point.x));
     marker.setAttribute("cy", String(point.y));
-    marker.setAttribute("r", kind === "junction" ? "4" : kind === "border" ? "4.5" : "3.5");
+    marker.setAttribute("r", kind === "unsafe" ? "7" : kind === "junction" ? "4" : kind === "border" ? "4.5" : "3.5");
   }
   marker.classList.add("transport-marker", `transport-marker-${kind}`);
   if (active) marker.classList.add("selected");
@@ -331,6 +332,19 @@ function focusSelection() {
   if (!position || !runtime) return;
   runtime.navigation.setFocus(position.lon, position.lat);
   if (selection?.kind !== "ferry") setScale(100);
+}
+
+function focusFirstUnsafeStation() {
+  const point = corridorProbeFirstUnsafeSource, runtime = world();
+  // Never navigate to an old/stale failed route or invent a physical waypoint.
+  if (!point || !siteRoute || !runtime || ![point.x, point.z].every(Number.isFinite)) return false;
+  const position = sourceToLonLat(point.x, point.z);
+  runtime.setBridgeInspectionAngle(false);
+  runtime.navigation.setFocus(position.lon, position.lat);
+  // Ordinary route overlay is visible only at 1/100 and closer.
+  if (scaleDenominator(runtime.state.scaleLabel) > ROAD_SCALE_LIMIT) setScale(100);
+  refreshOverlay(true);
+  return true;
 }
 
 function codeText(code: string) {
@@ -545,6 +559,9 @@ function renderSiteAccessProbe() {
 }
 
 function renderCorridorProbe() {
+  // A sampled failure is actionable only while its exact SEED route is selected.
+  panel.querySelector<HTMLButtonElement>("#transport-focus-unsafe")!.hidden =
+    corridorProbeFirstUnsafeSource === null || !siteRoute;
   const target = panel.querySelector<HTMLElement>("#transport-corridor-result")!;
   const route = siteRoute ? `${siteRoute.from} → ${siteRoute.to} (${siteRoute.edgeCodes.length} canonical roads)` : "no selected walking route";
   const progress = corridorStationEvidenceProgress(
@@ -1050,6 +1067,11 @@ function refreshOverlay(force = false) {
     }
     for (const harbor of transportNetwork.harbors)
       if (localCodes.has(harbor.roadCode)) appendMarker("harbor", harbor.x, harbor.z, state, harbor.code, selection?.kind === "harbor" && selection.code === harbor.code);
+    // A red pin denotes only the sampled first unsafe source coordinate,
+    // never an invented destination or certified route. Always draw above roads.
+    if (siteRoute && corridorProbeFirstUnsafeSource && corridorProbeFirstUnsafeStation !== null)
+      appendMarker("unsafe", corridorProbeFirstUnsafeSource.x, corridorProbeFirstUnsafeSource.z,
+        state, `unsafe station ${corridorProbeFirstUnsafeStation}`, true);
   } else lastLocalRoads = 0;
   if (!panel.hidden) {
     renderSummary(state);
@@ -1197,6 +1219,7 @@ panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = () =>
 };
 panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
 panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.onclick = probeRouteCorridor;
+panel.querySelector<HTMLButtonElement>("#transport-focus-unsafe")!.onclick = focusFirstUnsafeStation;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
 function inspectBridgeIn3D() {
   if (selection?.kind !== "bridge") return false;
