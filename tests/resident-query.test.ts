@@ -1,8 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentLabelRightOfActor, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("a fixed Fantasy tick cannot move an original resident off the legal route", () => {
+  const absoluteTick = 268295, scale = 24;
+  assert.equal(residentMotionFraction(absoluteTick, absoluteTick, scale), 0,
+    "frozen Fantasy Time must keep the original actor on its canonical exact-tick station");
+  assert.equal(residentMotionFraction(absoluteTick + 12, absoluteTick, scale), .5,
+    "live clock advances halfway along the next verified Simulation second");
+  assert.equal(residentMotionFraction(absoluteTick + 24, absoluteTick, scale), 1);
+  assert.equal(residentMotionFraction(absoluteTick + 96, absoluteTick, scale), 1,
+    "delayed rendering must never extrapolate off the verified legal walking path");
+  assert.equal(residentMotionFraction(absoluteTick - 12, absoluteTick, scale), 0);
+  assert.equal(residentMotionFraction(Number.NaN, absoluteTick, scale), 0);
+  assert.equal(residentMotionFraction(absoluteTick, absoluteTick, 0), 0);
+});
 
 test("first close-up residents are queried under a finite identical rendered/state budget", () => {
   assert.equal(residentQueryLimitForView(true), 8,
