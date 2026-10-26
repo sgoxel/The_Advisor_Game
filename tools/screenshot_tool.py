@@ -822,8 +822,10 @@ class Session:
                 token = 0
                 for _ in range(24):
                     token = self.page.evaluate(
-                        "(freeze) => window.advisorWorld.capturePresentation?.quiesceStreaming(freeze) ?? 0",
-                        self.args.renderer == "webgpu",
+                        # Real Chromium compositor readback (especially SwiftShader
+                        # WebGPU) needs continuing frames. Hold only new geometry
+                        # streaming, exactly as the proven WebGL2 captures do.
+                        "() => window.advisorWorld.capturePresentation?.quiesceStreaming(false) ?? 0",
                     )
                     if token:
                         quiesced = True
@@ -831,11 +833,7 @@ class Session:
                     self.page.wait_for_timeout(250)
                 if not quiesced:
                     raise CaptureError("no genuinely settled frame for atomic resident/door capture")
-                if self.args.renderer == "webgpu":
-                    self.page.wait_for_function(
-                        "(token) => window.advisorWorld.capturePresentation?.paintedToken >= token",
-                        arg=token, timeout=min(30000, self.args.timeout * 1000),
-                    )
+
             # Pre/post HUD and canonical world state are sampled WHILE the
             # same genuine current-view geometry remains held, not after
             # release when optional prefetch could legitimately resume.
