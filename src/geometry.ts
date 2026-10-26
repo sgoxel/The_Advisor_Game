@@ -1147,8 +1147,8 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
     // central SEED home entrance and its line of sight free of overhead
     // parasols; tables remain on the terrace, while wide façades retain two
     // smaller umbrellas at the sides. No ownership/layout decisions change.
-    const parasol = pick(r, CLOTHS)[0], spots = wide ? [-2.6, 2.6] : [];
-    for (const x of spots) addUmbrella(f, x, z, .65, [parasol, parasol]);
+    const parasol = pick(r, CLOTHS)[0], spots = wide ? [-2.6, 2.6] : xs;
+    for (const x of spots) addUmbrella(f, x, z, wide ? .65 : .48, [parasol, parasol]);
   }
   if (restaurant) {
     const board = sub(f, 1.1, front + 1.9);
