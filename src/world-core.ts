@@ -377,6 +377,8 @@ function selectedLocalGrade(road: Road, path: readonly {x:number;z:number}[], se
       upper=Math.min(...surfaces.map(s=>s.groundHeight+3));
     if(lower>upper) return record("carriageway cut/fill infeasible",i);
     const height=surfaces[0].groundHeight;
+    if ((i===0||i===pieces) && (height<lower||height>upper))
+      return record("shared endpoint crossfall infeasible",i);
     ground.push(height);progress.push(metres*t);
     min.push(i===0||i===pieces?height:lower);
     max.push(i===0||i===pieces?height:upper);
