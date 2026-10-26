@@ -42,6 +42,15 @@ let currentCode = "";
 let currentNpcPoint: { code: string; x: number; z: number } | undefined;
 /** What the popup shows: a resident (refreshed with Fantasy Time), a building or a settlement. */
 let currentKind: "npc" | "building" | "settlement" | "wilderness" | "" = "";
+/** A UI suggestion never mutates a resident. Main Simulation alone responds
+ * after evaluating autonomous choice and lawful SEED site/route constraints. */
+let siteVisitAdvisor: ((residentCode: string) => Promise<{ started: boolean; message: string }>) | undefined;
+let advicePendingCode = "";
+let adviceFeedback: { code: string; message: string } = { code: "", message: "" };
+export function setSiteVisitAdvisor(callback: typeof siteVisitAdvisor) {
+  siteVisitAdvisor = callback;
+}
+
 
 function placeOf(resident: Resident) {
   return places.find((place) => place.id === resident.settlement);
@@ -151,6 +160,28 @@ function install() {
   root.hidden = true;
   root.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
+    const advice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-advice-site]");
+    if (advice && currentKind === "npc" && currentCode && siteVisitAdvisor && !advicePendingCode) {
+      const code = currentCode;
+      advicePendingCode = code;
+      adviceFeedback = { code, message: "The resident is considering your advice…" };
+      advice.disabled = true;
+      const status = root?.querySelector<HTMLElement>("#npc-advice-result");
+      if (status) status.textContent = adviceFeedback.message;
+      void siteVisitAdvisor(code).then(result => {
+        adviceFeedback = { code, message: result.message };
+      }).catch(() => {
+        adviceFeedback = { code, message: "The suggestion could not be checked; no journey was started." };
+      }).finally(() => {
+        advicePendingCode = "";
+        if (currentKind === "npc" && currentCode === code) {
+          const button = root?.querySelector<HTMLButtonElement>("[data-advice-site]");
+          if (button) button.disabled = false;
+          const feedback = root?.querySelector<HTMLElement>("#npc-advice-result");
+          if (feedback) feedback.textContent = adviceFeedback.message;
+        }
+      });
+    }
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
     if (target) {
       goTo!(target.x, target.z, go!.dataset.go ?? "");
@@ -193,6 +224,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
     : active?.matches(".npc-secondary summary") ? ".npc-secondary summary"
     : active?.matches('[data-go^="home:"]') ? '[data-go^="home:"]'
     : active?.matches('[data-go^="resident:"]') ? '[data-go^="resident:"]'
+    : active?.matches("[data-advice-site]") ? "[data-advice-site]"
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
@@ -217,6 +249,15 @@ export function showNpcPopup(resident: Resident, tick: number) {
     <div class="npc-now">
       <div><span class="npc-label">Now</span><b id="npc-current-task">${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
       ${observation ? `<div class="npc-observe">${goRow("Observe resident at true scale · camera only", `resident:${resident.settlement}:${resident.index}`, "physical resident")}</div>` : ""}
+      <div class="npc-observe">
+        <button type="button" class="info-go" data-advice-site
+          ${!resident.grounded || resident.indoors || advicePendingCode === resident.code ? "disabled" : ""}>
+          Suggest a site visit · resident decides
+        </button>
+        <div id="npc-advice-result" class="npc-muted" role="status" aria-live="polite">
+          ${escape(adviceFeedback.code === resident.code ? adviceFeedback.message : "")}
+        </div>
+      </div>
       <div><span class="npc-label">Route</span><span id="npc-route">${escape(readableResidentRoute(resident.route))}</span></div>
       ${resident.travelProgress !== undefined
         ? `<div><span class="npc-label">Progress</span>${bar(resident.travelProgress, 1, "#8fd18a")} <b>${Math.round(resident.travelProgress * 100)}%</b> <span class="npc-muted">of ${Math.round(resident.travelDistanceM ?? 0)} m along the streets</span></div>`

@@ -15,7 +15,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
-import { hideNpcPopup, npcPopupCode, setPopupNavigator, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -1705,6 +1705,17 @@ async function start() {
   let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
   let actorSnapshotTick = -Infinity;
   residentResultReady = () => { lastSimulationRealSecond = -1; };
+  // A suggestion originates only from an actually inspected NPC. The player
+  // cannot set acceptance or create route stations; Simulation asks the
+  // original resident and strictly validates each canonical walking leg.
+  setSiteVisitAdvisor(async code => {
+    const result = await simulation.considerAdvisorSiteVisit(code);
+    if (result.started) {
+      residentQueries.clear();
+      lastSimulationRealSecond = -1;
+    }
+    return result;
+  });
   let lastResidentDetailVisible = smallDetailsVisible;
   let lastResidentInspectorOpen = !$("travel-panel").hidden;
   const labelNodes = new Map<string, HTMLElement>();

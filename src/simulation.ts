@@ -2085,6 +2085,48 @@ export class LazySimulation {
       (from, to) => residentLocalTransportSegmentLegal(place, from, to));
   }
 
+  /**
+   * Player advice is a REQUEST, never a travel command. On demand only, ask
+   * the existing SEED character whether they will visit one of a few real
+   * road-connected sites via an owned bridge, and accept movement only after
+   * tryBeginSelfDirectedSiteVisit has independently checked the actor, local
+   * gate, full surface, grades and bridge. No background population sweep.
+   */
+  async considerAdvisorSiteVisit(residentCode: string): Promise<{
+    started: boolean; message: string;
+  }> {
+    const tick = this.tick, actor = this.residentByCode(residentCode, tick);
+    if (!actor || actor.code !== residentCode)
+      return { started: false, message: "No canonical resident is available to consider this advice." };
+    if (this.siteVisitJournal?.eventFor(residentCode))
+      return { started: false, message: "The resident already has an accepted site journey." };
+    if (!actor.grounded || actor.indoors || actor.route.startsWith("BLOCKED:"))
+      return { started: false, message: "The resident cannot leave a legally grounded outdoor position." };
+    if (!["stroll", "errand", "socialise"].includes(actor.activity))
+      return { started: false, message: "The resident has chosen to keep their current routine." };
+    const [{ siteTransportNetwork }, { siteVisitCorridors }] = await Promise.all([
+      import("./site-transport-network.ts"),
+      import("./site-visit-advice.ts"),
+    ]);
+    if (tick !== this.tick)
+      return { started: false, message: "The resident's situation changed before the advice was evaluated." };
+    const candidates = siteVisitCorridors(siteTransportNetwork, actor.settlement);
+    if (!candidates.length)
+      return { started: false, message: "No bounded SEED road-and-bridge visit could be proposed from this settlement." };
+    // A graph is only a proposal. Every trial must still pass the resident's
+    // actual decision AND all Simulation final-surface evidence, or fail closed.
+    for (const corridor of candidates.slice(0, 4)) {
+      if (this.tick !== tick) break;
+      const event = await this.tryBeginSelfDirectedSiteVisit(residentCode, corridor);
+      if (event) return {
+        started: true,
+        message: "The resident chose to set out on a fully verified road-and-bridge journey.",
+      };
+    }
+    return { started: false,
+      message: "The resident did not begin this visit; an independent choice or lawful physical route was unavailable." };
+  }
+
   /** Read-only validated departure event; not yet an applied worker-visible trip. */
   preparedSiteVisitFor(residentCode: string) {
     return this.siteVisitJournal?.eventFor(residentCode);

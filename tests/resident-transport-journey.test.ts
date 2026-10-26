@@ -11,6 +11,8 @@ import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
+import { siteVisitCorridors } from "../src/site-visit-advice.ts";
+import type { TransportNetwork } from "../src/transport-network.ts";
 import { LazySimulation, type Resident } from "../src/simulation.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
 
@@ -264,11 +266,46 @@ test("Simulation site-departure entry refuses invented residents without an even
   const sim = new LazySimulation();
   sim.advance(departure);
   assert.equal(await sim.tryBeginSelfDirectedSiteVisit("invented-resident", route), null);
+  const advice = await sim.considerAdvisorSiteVisit("invented-resident");
+  assert.equal(advice.started, false, "an Advisor click cannot create a fabricated actor");
   assert.equal(sim.preparedSiteVisitFor("invented-resident"), undefined);
   assert.equal(await sim.tryBeginSelfDirectedSiteVisit(resident.code,
     { ...route, edgeCodes: [] }), null,
     "no empty route can create an accepted Simulation event");
   assert.equal(sim.preparedSiteVisitFor(resident.code), undefined);
+});
+
+
+test("Advisor visit candidates are bounded SEED graph hypotheses, not fabricated actor movement", () => {
+  const networkNodes = [...nodes.entries()].map(([code, source], i) => ({
+    code, sourceId: i === 0 ? "real-original-settlement" : code,
+    kind: i === 0 ? "village" : i === 5 ? "site" : "junction",
+    countryCode: "same-real-country", continent: 0,
+    x: source.x, z: source.z,
+    position: { ...sourceToLonLat(source.x, source.z), elevation: 1 },
+  }));
+  const network = {
+    nodes: networkNodes,
+    roadEdges: [...roads.values()].map(edge => ({
+      ...edge, surfaceLengthM: 100, fantasyWalkSeconds: 100,
+    })),
+    bridges: [{ roadCode: "d", code: "original-wet-crossing", x: 7, z: 0 }],
+  } as unknown as TransportNetwork;
+  const corridors = siteVisitCorridors(network, "real-original-settlement");
+  assert.equal(corridors.length, 1);
+  assert.deepEqual(corridors[0], route,
+    "use the actual five-edge topology including the owned wet bridge, not a shortcut");
+  assert.deepEqual(siteVisitCorridors(network, "real-original-settlement"), corridors,
+    "SEED candidate ordering never depends on random or rendering state");
+  assert.deepEqual(siteVisitCorridors(network, "invented-settlement"), []);
+  assert.deepEqual(siteVisitCorridors({ ...network, bridges: [] }, "real-original-settlement"), [],
+    "no owned wet bridge means no bridge-site itinerary proposal");
+  const otherCountry = {
+    ...network, nodes: networkNodes.map(node =>
+      node.kind === "site" ? { ...node, countryCode: "another-country" } : node),
+  } as TransportNetwork;
+  assert.deepEqual(siteVisitCorridors(otherCountry, "real-original-settlement"), [],
+    "same-country site candidates never invent a cross-border permission");
 });
 
 /** Independent choice/event ledger under a controlled source-surface fixture:
