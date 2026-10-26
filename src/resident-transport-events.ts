@@ -53,7 +53,10 @@ export type ResidentSiteVisitEvent = Readonly<{
  * journeys instead of silently teleporting an existing actor. */
 export class ResidentSiteVisitJournal {
   private readonly visits = new Map<string, ResidentSiteVisitEvent>();
-  constructor(private readonly resolveResident: (code: string, tick: number) => Resident | undefined) {}
+  private readonly resolveResident: (code: string, tick: number) => Resident | undefined;
+  constructor(resolveResident: (code: string, tick: number) => Resident | undefined) {
+    this.resolveResident = resolveResident;
+  }
 
   tryStart(
     residentCode: string, tick: number, corridor: Corridor,
