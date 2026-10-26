@@ -170,24 +170,26 @@ export function prepareResidentTransportJourneyWithApproach(
   let approachMetres = 0;
   const cumulative = [0];
   for (let i = 0; i < approach.length; i++) {
-    const current = approach[i], currentSurface = surfaceAt(current.x, current.z);
+    const current = approach[i], currentSurface = surfaceAt(current.x, current.z),
+      localSlope = currentSurface.deckHeight === null && currentSurface.traversal === "open"
+        ? slopeAt(current.x, current.z) : undefined;
     if (!residentWalkableSurface(currentSurface) ||
         !Number.isFinite(currentSurface.surfaceHeight) ||
-        (currentSurface.deckHeight === null && currentSurface.traversal === "open" &&
-          (!Number.isFinite(slopeAt(current.x, current.z)) ||
-            slopeAt(current.x, current.z) > .08))) return null;
+        (localSlope !== undefined && (!Number.isFinite(localSlope) || localSlope > .08))) return null;
     if (!i) continue;
     const previous = approach[i - 1], previousSurface = surfaceAt(previous.x, previous.z),
       metres = distance(previous, current),
       mid = { x: wrapSourceX(previous.x + wrapSourceX(current.x - previous.x) / 2),
         z: (previous.z + current.z) / 2 },
       middle = surfaceAt(mid.x, mid.z),
+      midpointSlope = middle.deckHeight === null && middle.traversal === "open"
+        ? slopeAt(mid.x, mid.z) : undefined,
       firstHalf = distance(previous, mid), secondHalf = distance(mid, current);
     if (!(metres > 0) || metres > 1_200 || approachMetres + metres > 6_500 ||
         !Number.isFinite(metres) || !localSegmentLegal(previous, current) ||
         !residentWalkableSurface(middle) ||
-        (middle.deckHeight === null && middle.traversal === "open" &&
-          (!Number.isFinite(slopeAt(mid.x, mid.z)) || slopeAt(mid.x, mid.z) > .08)) ||
+        (midpointSlope !== undefined &&
+          (!Number.isFinite(midpointSlope) || midpointSlope > .08)) ||
         !(firstHalf > 0 && secondHalf > 0) ||
         Math.abs(middle.surfaceHeight - previousSurface.surfaceHeight) / firstHalf > .08 ||
         Math.abs(currentSurface.surfaceHeight - middle.surfaceHeight) / secondHalf > .08 ||
