@@ -743,9 +743,13 @@ export function legalEnclosureSegment(
 /** Final-surface bridge decks, not submerged ground, authorize a crossing.
  * Dry paths retain the existing positive-ground requirement; unbridged water
  * is never traversable, even if a presentation material says otherwise. */
-export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" | "water" | "groundHeight" | "deckHeight">) {
+export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" | "water" | "groundHeight" | "deckHeight" | "surfaceHeight" | "traversal">) {
+  // A height alone is not a legal crossing: the composed SEED-owned surface
+  // must certify both the bridge traversal and the actual walking grade.
   return surface.walkable &&
-    (surface.deckHeight !== null || (surface.water.kind === "none" && surface.groundHeight > 0.1));
+    ((surface.water.kind === "none" && surface.groundHeight > 0.1) ||
+      (surface.deckHeight !== null && surface.traversal === "bridge" &&
+        surface.surfaceHeight === surface.deckHeight));
 }
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const { border, gates } = streetGraphFor(place);
