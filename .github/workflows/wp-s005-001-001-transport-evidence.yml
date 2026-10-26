@@ -2,7 +2,7 @@ name: S005 transport visual evidence
 on:
   workflow_dispatch:
   push:
-    branches: [main, "agent1/wp-s005-001-001-native-evidence-*", "agent1/wp-s005-001-001-canonical-bridge-evidence-*", "agent1/wp-s005-001-001-route-answer-clearview-*", "agent1/wp-s005-001-001-first-answer-summary-*"]
+    branches: [main, "agent1/wp-s005-001-001-native-evidence-*", "agent1/wp-s005-001-001-canonical-bridge-evidence-*", "agent1/wp-s005-001-001-route-answer-clearview-*", "agent1/wp-s005-001-001-first-answer-summary-*", "agent1/wp-s005-001-001-scale-counter-evidence-*"]
     paths:
       - ".github/workflows/wp-s005-001-001-transport-evidence.yml"
       - "src/transport-inspector.ts"
@@ -12,6 +12,8 @@ permissions:
   contents: read
 jobs:
   transport-evidence:
+    # Single-backend branch-only counter trace; normal main remains 4/4.
+    if: github.ref != 'refs/heads/agent1/wp-s005-001-001-scale-counter-evidence-20261026' || matrix.backend == 'webgpu'
     # Use native Chrome/Metal for both actual renderer backends: Linux software
     # WebGL2 kept unfinished tiles at the 180s settled bound even bridge-first,
     # yielding zero inspectable PNGs. Keep renderer=webgl2 (no WebGPU fallback)
@@ -78,7 +80,7 @@ jobs:
             for SCALE in 20 50 100 250; do
               STEPS="$STEPS;select:#map-scale=$SCALE;until:window.advisorWorld?.state?.scaleLabel===\"1/$SCALE\";eval:window.advisorTransport.selectEvidence(\"junction\");eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
             done
-            STEPS="$STEPS;eval:Object.values(window.advisorTransport.telemetry().fourScaleSiteRouteTimings).every(v=>v.samples>0&&v.ready>0&&Number.isFinite(v.calculationP95Ms))||Promise.reject(new Error(\"First-answer scale unmeasured\"))"
+            STEPS="$STEPS;eval:Object.values(window.advisorTransport.telemetry().fourScaleSiteRouteTimings).every(v=>v.samples>0&&v.ready>0&&Number.isFinite(v.calculationP95Ms))||Promise.reject(new Error(\"First-answer scale unmeasured: \"+JSON.stringify(window.advisorTransport.telemetry().fourScaleSiteRouteTimings)))"
           fi
           # WebGL2's remote-junction 1/50 warm-up fails to settle on both
           # Linux viewport sizes (0 captured PNGs). Capture the actual selected
