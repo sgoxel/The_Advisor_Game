@@ -1868,7 +1868,7 @@ async function start() {
               points.push({ x: points[k - 1].x + dx, z: walk[k].z });
               lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
             }
-            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startTick: snapshot.tick });
+            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startTick: snapshot?.tick ?? simulation.tick });
           } else actorMotion.delete(actors[i]);
           positionActor(actors[i], visible[i].x, visible[i].z);
         }
