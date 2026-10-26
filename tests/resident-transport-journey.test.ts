@@ -3,6 +3,9 @@ import test from "node:test";
 import { localWeekday, tickAtLocalTime } from "../src/clock.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
+import { siteTransportNetwork } from "../src/site-transport-network.ts";
+import { transportBridgeByCode } from "../src/transport-network.ts";
+import { createTransportWalkingIndex, transportWalkingRouteViaRequiredEdge } from "../src/transport-walking-route.ts";
 import { residentAt, residentLocalTransportApproach, residentLocalTransportSegmentLegal } from "../src/simulation.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
@@ -258,4 +261,88 @@ test("actual Greyfield SEED actor supplies only his own verified local street or
   assert.equal(residentLocalTransportApproach(place!, { ...actor!, code: "impostor" }, samePlace), null);
   assert.equal(residentLocalTransportApproach(place!, { ...actor!, grounded: false }, samePlace), null);
   assert.equal(residentLocalTransportApproach(place!, { ...actor!, indoors: true }, samePlace), null);
+});
+
+/** Exact Campaign-SEED village→owned-wet-bridge→critical-site candidate;
+ * this proves an existing actor CAN receive a validated itinerary, not that
+ * a caller's acceptedByResident flag is a genuine independent NPC decision.
+ * All actor starts are reconstructed from normal Simulation routines. */
+test("actual SEED village resident can join the fixed legal five-road wet-bridge source route", () => {
+  const originCode = "ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/PLACE/0/11/1/2",
+    siteCode = "ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/SITE/ADVISOR-0126-ALDERWICK/v4/CONT/0/COUNTRY/11/SITE/0",
+    crossingCode = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19",
+    transport = siteTransportNetwork,
+    origin = transport.nodes.find(node => node.code === originCode),
+    place = villages.find(village => village.id === origin?.sourceId),
+    ownedBridge = transportBridgeByCode(crossingCode);
+  assert.ok(origin && place && ownedBridge, "fixed existing village/bridge source identities remain canonical");
+  const edges = new Map(transport.roadEdges.map(edge => [edge.code, edge])),
+    nodesByCode = new Map(transport.nodes.map(node => [node.code, node])),
+    bridgeRoad = edges.get(ownedBridge!.roadCode),
+    index = createTransportWalkingIndex(transport);
+  assert.ok(bridgeRoad);
+  const route = transportWalkingRouteViaRequiredEdge(index, originCode, siteCode, bridgeRoad!);
+  assert.ok(route && route.edgeCodes.length === 5 && route.edgeCodes[3] === bridgeRoad!.code,
+    "same independently proven five-road route must still lead to the actual critical site");
+
+  const longitude = place!.canonicalPosition.lon,
+    day = [1, 2, 3, 4, 5, 6, 7].find(d =>
+      localWeekday(tickAtLocalTime(d, 12 * 3600, longitude), longitude) !== 6)!,
+    attempts: string[] = [];
+  let witness: ReturnType<typeof prepareResidentTransportJourneyWithApproach> = null,
+    chosen: ReturnType<typeof residentAt> | undefined;
+  // Bounded, fixed actor order: never create an actor at the requested node,
+  // choose a different site, bypass a blocked gate, or search a population.
+  for (const residentIndex of [1, 6, 7, 15]) {
+    for (const hour of [10, 12, 16]) {
+      const tick = tickAtLocalTime(day, hour * 3600, longitude),
+        actor = residentAt(place!, residentIndex, tick);
+      if (!actor.grounded || actor.indoors || actor.route.startsWith("BLOCKED:")) {
+        attempts.push(`${residentIndex}@${hour}: normal routine not outdoor/grounded`);
+        continue;
+      }
+      const approach = residentLocalTransportApproach(place!, actor, origin!);
+      if (!approach) {
+        attempts.push(`${residentIndex}@${hour}: no existing legal street-to-node path`);
+        continue;
+      }
+      const decision = {
+        acceptedByResident: true as const, residentCode: actor.code,
+        fromNode: originCode, siteNode: siteCode, decidedTick: tick,
+      };
+      witness = prepareResidentTransportJourneyWithApproach(actor, decision, route!,
+        edges, nodesByCode, index.adjacency, transport.bridges, approach,
+        (from, to) => residentLocalTransportSegmentLegal(place!, from, to));
+      if (!witness) {
+        attempts.push(`${residentIndex}@${hour}: strict current final-surface proof refused`);
+        continue;
+      }
+      chosen = actor;
+      break;
+    }
+    if (witness) break;
+  }
+  assert.ok(witness && chosen,
+    `no original scheduled SEED actor can lawfully join fixed gate→bridge→site route: ${attempts.join("; ")}`);
+  assert.equal(witness!.residentCode, chosen!.code);
+  assert.equal(witness!.edgeCodes.length, 5);
+  assert.ok(witness!.macroStart);
+  assert.ok(witness!.distanceM > 0);
+  const atStart = residentTransportJourneyAt(witness!, witness!.departedTick),
+    atEnd = residentTransportJourneyAt(witness!, witness!.departedTick + 30 * 86400);
+  assert.ok(Math.abs(atStart.x - chosen!.x) < 1e-6);
+  assert.equal(atEnd.status, "arrived",
+    "projected site arrival must follow positive finite walking time, not a teleport");
+  assert.ok(Math.abs(atEnd.x - nodesByCode.get(siteCode)!.x) < 1e-6);
+  assert.ok(Math.abs(atEnd.z - nodesByCode.get(siteCode)!.z) < 1e-6);
+  // A fresh reverse proof returns only to the exact canonical macro-road
+  // origin; walking all the way back to the resident's home is still separate.
+  const later = witness!.departedTick + 30 * 86400,
+    returnDecision = { acceptedByResident: true as const, residentCode: chosen!.code,
+      fromNode: siteCode, siteNode: originCode, decidedTick: later },
+    reverse = prepareResidentTransportReturnJourney(
+      { ...chosen!, x: atEnd.x, z: atEnd.z }, returnDecision, witness!, originCode,
+      edges, nodesByCode, index.adjacency, transport.bridges);
+  assert.ok(reverse, "current physical source must independently validate the opposite crossing");
+  assert.deepEqual(reverse!.edgeCodes, [...route!.edgeCodes].reverse());
 });
