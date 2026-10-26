@@ -2,7 +2,7 @@ name: S005 real selected-route surface diagnostic
 on:
   workflow_dispatch:
   push:
-    branches: ["agent1/s005-real-route-surface-witness-20261023"]
+    branches: ["agent1/s005-real-route-surface-witness-20261023", "agent1/wp-s005-001-001-grade-trace-20261026"]
     paths: [".github/workflows/s005-real-route-diagnostic.yml"]
 permissions:
   contents: read
@@ -18,4 +18,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Check exact selected gate to site surface without moving an actor
-        run: timeout 9m env S005_ROUTE_FULL_PROBE=1 node --experimental-strip-types --test --test-name-pattern="S005 real non-retracing gate-Y-bridge-site graph chain has exact physical endpoints" tests/transport-network.test.ts
+        run: timeout 9m env S005_ROUTE_FULL_PROBE=1 S005_ROUTE_GRADE_TRACE=1 node --experimental-strip-types --test --test-name-pattern="S005 real non-retracing gate-Y-bridge-site graph chain has exact physical endpoints" tests/transport-network.test.ts
