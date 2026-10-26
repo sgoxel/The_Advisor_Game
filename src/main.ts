@@ -1049,7 +1049,8 @@ function processStreaming(material: pc.StandardMaterial) {
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
-      else if (ready && !lodTransition && measuredStreamingFps >= 30) prefetchNext(root);
+      else if (ready && !lodTransition && measuredStreamingFps >= 30 &&
+        !residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect) prefetchNext(root);
       if(inFlight===before)break;
     }
   }
