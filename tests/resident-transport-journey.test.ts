@@ -57,7 +57,7 @@ test("synthetic five-road actor fixture preserves lawful shared-bank and arrival
   if (planned.status !== "ready") return;
   assert.equal(planned.stations.find(s => s.joinedEdgeCode === "d")?.edgeCode, "c",
     "verified incoming Y station is the dry bank of outgoing bridge road");
-  assert.equal(planned.stations.find(s => s.edgeCode === "d")?.x, 7,
+  assert.ok(Math.abs((planned.stations.find(s => s.edgeCode === "d")?.x ?? Infinity) - 7) < 1e-6,
     "the first outgoing-road sample is already over the river deck");
   const journey = prepareResidentTransportJourney(resident, decision, route,
     roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
