@@ -126,9 +126,13 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
       structures.box(towerX + 2, y - .2, towerZ, .4, towerHeight * .72, 4.2, stone);
       structures.box(towerX, y - .2, towerZ - 1.9, 4.4, towerHeight * .8, .4, stone);
       structures.box(towerX - 1.3, y - .2, towerZ + 1.9, 1.8, towerHeight * .65, .4, darkStone);
-      structures.box(localX + 2.8, y - 0.15, localZ + 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
+      // The legal arrival is site-centred. Keep the north approach from the
+      // default Hero camera visibly open instead of walling the character
+      // behind an opaque masonry slab. Shift only disposable ruin fragments;
+      // neither SEED site nor the real route/door location changes.
+      structures.box(localX + 6.5, y - 0.15, localZ + 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
       structures.box(localX + 5.7, y - 0.15, localZ - 0.6, 1.15, 3.2, 6.8, darkStone);
-      structures.box(localX - 0.2, y - 0.1, localZ + 5.4, 5.2, 1.55, 1.0, darkStone);
+      structures.box(localX - 6.5, y - 0.1, localZ + 5.4, 5.2, 1.55, 1.0, darkStone);
     } else {
       const stones = 5 + (variant % 2);
       for (let index = 0; index < stones; index++) {
