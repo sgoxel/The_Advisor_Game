@@ -17,7 +17,8 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
-import { freshwaterCrossingAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "../src/hydrology.ts";
+import { freshwaterCrossingAt, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "../src/hydrology.ts";
+import { roadNormalSource } from "../src/road-dimensions.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
@@ -2341,6 +2342,78 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     { from: villageNode!.code, to: site!.code, edgeCodes: chain },
     edgeByCode, nodeByCode, index.adjacency,
   );
+
+  if (process.env.S005_ALIGNMENT_SCOUT === "1") {
+    // Source-only, deterministic local detour scouting. Never mutates SEED
+    // geometry or claims actual final-surface / Simulation passage.
+    const original = roads.find(road => road.code === firstUnsafeRoad);
+    const points = original?.centerline;
+    assert.ok(points && points.length === 11,
+      "exact cached source road must have eleven physical waypoint identities");
+    const start = points![6], finish = points![7],
+      dx = wrapSourceX(finish.x - start.x), dz = finish.z - start.z,
+      normal = roadNormalSource(dx, dz, start.z, 1),
+      offsets = [0, -250, 250, -500, 500, -900, 900],
+      owner = countryAtPosition(sourceToLonLat(start.x, start.z));
+    const refusal = new Map<string, number>(), acceptable: {
+      left:number;right:number;distanceM:number;fine:boolean;points:{x:number;z:number}[]
+    }[] = [];
+    const inspect = (waypoints: {x:number;z:number}[], stepM:number) => {
+      let progress = 0, rangeLow = -Infinity, rangeHigh = Infinity, metres = 0;
+      for(let leg=1;leg<waypoints.length;leg++){
+        const a=waypoints[leg-1],b=waypoints[leg],
+          length=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(b.x,b.z)),
+          pieces=Math.ceil(length/stepM);
+        if (!(pieces>0&&pieces<=800)) return {reason:"segment length budget",distanceM:metres};
+        const nx=roadNormalSource(wrapSourceX(b.x-a.x),b.z-a.z,a.z,2);
+        for(let i=leg===1?0:1;i<=pieces;i++){
+          const t=i/pieces,x=wrapSourceX(a.x+wrapSourceX(b.x-a.x)*t),
+            z=a.z+(b.z-a.z)*t,
+            here=sourceToLonLat(x,z);
+          const country=countryAtPosition(here);
+          if(!country||country.continent!==owner?.continent||country.id!==owner.id)
+            return {reason:"SEED owner",distanceM:metres};
+          const surfaces=[naturalSurfaceAt(x,z),naturalSurfaceAt(x+nx.x,z+nx.z),naturalSurfaceAt(x-nx.x,z-nx.z)];
+          if(surfaces.some(v=>v.water.kind!=="none"||!Number.isFinite(v.groundHeight)))
+            return {reason:"water or invalid natural terrain",distanceM:metres};
+          const min=Math.max(...surfaces.map(v=>v.groundHeight-4)),
+            max=Math.min(...surfaces.map(v=>v.groundHeight+3));
+          if(min>max)return {reason:"cross-section cut/fill",distanceM:metres};
+          const delta=(length/pieces),nextLength=metres+(i===0?0:delta);
+          // A canonical shared endpoint is not silently raised/lowered.
+          const endpoint=(leg===1&&i===0)||(leg===waypoints.length-1&&i===pieces);
+          const lower=endpoint?surfaces[0].groundHeight:min,
+            upper=endpoint?surfaces[0].groundHeight:max;
+          if(lower<min||upper>max)return {reason:"shared endpoint earthwork",distanceM:metres};
+          const rise=progress===0?Infinity:.065*(nextLength-progress);
+          rangeLow=Math.max(lower,rangeLow-rise);
+          rangeHigh=Math.min(upper,rangeHigh+rise);
+          if(rangeLow>rangeHigh+1e-8)
+            return {reason:"6.5% construction grade",distanceM:nextLength};
+          progress=nextLength;metres=nextLength;
+        }
+      }
+      return {reason:"feasible natural bench",distanceM:metres};
+    };
+    for(const left of offsets)for(const right of offsets){
+      const shifted=(t:number,off:number)=>({
+        x:wrapSourceX(start.x+dx*t+normal.x*off),z:start.z+dz*t+normal.z*off
+      });
+      const candidate=[{x:start.x,z:start.z},shifted(1/3,left),shifted(2/3,right),{x:finish.x,z:finish.z}],
+        verdict=inspect(candidate,25);
+      refusal.set(verdict.reason,(refusal.get(verdict.reason)||0)+1);
+      if(verdict.reason!=="feasible natural bench")continue;
+      const fine=inspect(candidate,5);
+      acceptable.push({left,right,distanceM:fine.distanceM,fine:fine.reason==="feasible natural bench",points:candidate});
+    }
+    acceptable.sort((a,b)=>Number(b.fine)-Number(a.fine)||a.distanceM-b.distanceM||a.left-b.left||a.right-b.right);
+    console.log("S005_ALIGNMENT_SCOUT",JSON.stringify({
+      road:firstUnsafeRoad,originalPoints:points!.length,segment:6,
+      sampled:offsets.length**2,refusals:Object.fromEntries(refusal),
+      feasible25m:acceptable.length,feasible5m:acceptable.filter(c=>c.fine).length,
+      best:acceptable.slice(0,3), caveat:"source-only; candidate not committed, full composed surface and actor passage unverified"
+    }));
+  }
   assert.notEqual(segmented.status, "invalid",
     "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
   // Current Campaign-SEED's real selected gate/Y/bridge/site route fits
