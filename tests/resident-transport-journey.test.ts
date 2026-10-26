@@ -205,12 +205,29 @@ test("a real start position moves along a legal local approach before the same f
   assert.ok(Math.abs(atSite.x - nodes.get(route.to)!.x) < 1e-6);
   const returnDecision = { ...decision, fromNode: route.to, siteNode: route.from,
     decidedTick: departure + 10_000 };
-  const reverse = prepareResidentTransportReturnJourney(
-    { ...actor, x: atSite.x, z: atSite.z }, returnDecision, journey!, route.from,
-    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z));
-  assert.ok(reverse, "completed actor may revalidate a reverse road trip to the canonical gate");
-  assert.equal(reverse!.stations.at(-1)?.x, 0,
-    "arrival at the macro gate does not falsely claim the separate home connector");
+  const returnedActor = { ...actor, x: atSite.x, z: atSite.z },
+    reverse = prepareResidentTransportReturnJourney(
+      returnedActor, returnDecision, journey!, route.from,
+      roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z),
+      () => 0, (from,to) => from.z === 0 && to.z === 0 && to.x < from.x);
+  assert.ok(reverse, "completed actor revalidates both the owned bridge and real local street return");
+  assert.equal(reverse!.stations.at(-1)?.x, actor.x,
+    "arrival is the actual actor departure, not a free move to the macro gate");
+  assert.ok(reverse!.distanceM > journey!.distanceM - 1,
+    "the full return includes the previously legal street connector");
+  const arrivedHomeward = residentTransportJourneyAt(reverse!, returnDecision.decidedTick + 10_000);
+  assert.equal(arrivedHomeward.status, "arrived");
+  assert.ok(Math.abs(arrivedHomeward.x - actor.x) < 1e-6,
+    "no teleport, only time-resolved return to original position");
+  assert.equal(prepareResidentTransportReturnJourney(
+    returnedActor, returnDecision, journey!, route.from,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z)), null,
+    "a historical outward street validation cannot certify a return without current Simulation street authority");
+  assert.equal(prepareResidentTransportReturnJourney(
+    returnedActor, returnDecision, journey!, route.from,
+    roads, nodes, adjacency, bridges, (x,z) => surfaceAt(x,z),
+    () => 0, () => false), null,
+    "closed street/gate must reject even when the long bridge remains legal");
 });
 
 test("unverified gate approach, blocked streets and steep local slopes refuse without moving the actor", () => {
@@ -342,7 +359,11 @@ test("actual SEED village resident can join the fixed legal five-road wet-bridge
       fromNode: siteCode, siteNode: originCode, decidedTick: later },
     reverse = prepareResidentTransportReturnJourney(
       { ...chosen!, x: atEnd.x, z: atEnd.z }, returnDecision, witness!, originCode,
-      edges, nodesByCode, index.adjacency, transport.bridges);
-  assert.ok(reverse, "current physical source must independently validate the opposite crossing");
+      edges, nodesByCode, index.adjacency, transport.bridges,
+      undefined, undefined, (from,to) => residentLocalTransportSegmentLegal(place!, from, to));
+  assert.ok(reverse, "current physical source must independently validate the opposite crossing and town street");
   assert.deepEqual(reverse!.edgeCodes, [...route!.edgeCodes].reverse());
+  assert.ok(Math.abs(reverse!.stations.at(-1)!.x - chosen!.x) < 1e-6);
+  assert.ok(Math.abs(reverse!.stations.at(-1)!.z - chosen!.z) < 1e-6,
+    "real SEED resident returns along valid gate street to the actual departure, not an invented home door");
 });
