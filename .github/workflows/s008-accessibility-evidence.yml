@@ -1,0 +1,59 @@
+name: S008 accessible atlas visual evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'src/main.ts'
+      - 'src/npc-popup.ts'
+      - 'src/style.css'
+      - 'src/popup-panels.ts'
+      - 'src/popup-panels.css'
+      - 'tests/browser/accessibility.spec.js'
+      - '.github/workflows/s008-accessibility-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  accessible-atlas:
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgl2, webgpu]
+        profile: [fullhd-landscape, fullhd-portrait]
+    runs-on: ${{ matrix.renderer == 'webgpu' && 'macos-26' || 'ubuntu-latest' }}
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: Seven responsive viewports and canonical focus-return task
+        if: matrix.renderer == 'webgl2' && matrix.profile == 'fullhd-landscape'
+        run: xvfb-run -a npx playwright test tests/browser/accessibility.spec.js --config playwright.navigation.config.js --workers=1 --reporter=line
+      - name: Capture genuine S008 UI on the selected backend and orientation
+        run: |
+          npm run preview -- --port 4174 > /tmp/s008-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='click:#open-travel;visible:#travel-panel;settle;shot:travel-menu;click:#inspect-village;visible:#npc-popup;eval:document.getElementById("npc-popup").dataset.canonicalId===document.getElementById("village-select").value||Promise.reject(new Error("S008 canonical identity mismatch"));settle;shot:settlement-inspection;click:#npc-popup [data-close];eval:document.activeElement.id==="open-travel"||Promise.reject(new Error("S008 popup did not restore opener focus"))'
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --browser-channel chrome --out test-results/s008-${{ matrix.renderer }}-${{ matrix.profile }} --name accessible-atlas --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --initial-ready-only --timeout 180 --steps "$STEPS"
+          else
+            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 900s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s008-${{ matrix.renderer }}-${{ matrix.profile }} --name accessible-atlas --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --initial-ready-only --timeout 180 --steps "$STEPS"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s008-atlas-${{ matrix.renderer }}-${{ matrix.profile }}
+          path: test-results/s008-${{ matrix.renderer }}-${{ matrix.profile }}/
+          if-no-files-found: warn
