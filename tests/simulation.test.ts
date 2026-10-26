@@ -35,6 +35,7 @@ import {
   legalOpenGroundDetour,
   exteriorGroundCorridor,
   residentStreetPathKey,
+  validatedResidentRoadPolyline,
   residentViewQuery,
 } from "../src/simulation.ts";
 
@@ -270,6 +271,33 @@ test("S006 residents traverse only authoritative bridge decks and stand at deck 
     point => residentWalkableSurface(Math.abs(point.eastM) < .51
       ? { ...pointSurface(point.eastM), deckHeight: null } : pointSurface(point.eastM))), false,
     "the identical river segment cannot be traversed after removing its real deck");
+});
+
+test("real-road resident connector rejects absent deck and never cuts across a water gap", () => {
+  // This is a unit contract for the route adapter; it is NOT the separate
+  // real-SEED same-person bridge-day acceptance fixture.
+  const road = [
+    {eastM:0,northM:0}, {eastM:10,northM:0},
+    {eastM:20,northM:0}, {eastM:30,northM:0},
+  ], from = {eastM:0,northM:-3}, to = {eastM:30,northM:3};
+  const legal = (deck: boolean) => (a: typeof from, b: typeof from) =>
+    continuousWalkableOffsetSegment(a,b,point => deck ||
+      point.eastM < 13 || point.eastM > 17);
+  const valid = validatedResidentRoadPolyline(from,to,road,legal(true));
+  assert.ok(valid && valid.length >= 4, "both physical connectors and original road corners are retained");
+  assert.deepEqual(valid![0], from);
+  assert.deepEqual(valid!.at(-1), to);
+  assert.equal(validatedResidentRoadPolyline(from,to,road,legal(false)),null,
+    "no deck: even the real-road centreline is not permission to cross water");
+  assert.equal(validatedResidentRoadPolyline(from,to,road,()=>false),null,
+    "a disconnected real road never overrides enclosure or ground authority");
+  const reverse = validatedResidentRoadPolyline(to,from,road,legal(true));
+  assert.deepEqual(reverse, [...valid!].reverse(),
+    "road directions produce one identical canonical legal walk");
+  assert.equal(validatedResidentRoadPolyline(from,to,road,legal(true),2),null,
+    "a missing legal street-to-road connector cannot be skipped");
+  assert.equal(validatedResidentRoadPolyline(from,to,road,legal(true),450,20),null,
+    "bounded evidence cannot accept a journey longer than its explicit budget");
 });
 
 test("outdoor journeys can legally detour around small barriers without crossing water or walls", () => {
