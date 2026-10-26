@@ -76,7 +76,7 @@ jobs:
           # timing is never physical passage or a rendered-pixel measurement.
           if [ "${{ matrix.backend }}" = "webgpu" ]; then
             for SCALE in 20 50 100 250; do
-              STEPS="$STEPS;select:#map-scale=$SCALE;eval:window.advisorTransport.selectEvidence(\"junction\");eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
+              STEPS="$STEPS;select:#map-scale=$SCALE;until:window.advisorWorld?.state?.scaleLabel===\"1/$SCALE\";eval:window.advisorTransport.selectEvidence(\"junction\");eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
             done
             STEPS="$STEPS;eval:Object.values(window.advisorTransport.telemetry().fourScaleSiteRouteTimings).every(v=>v.samples>0&&v.ready>0&&Number.isFinite(v.calculationP95Ms))||Promise.reject(new Error(\"First-answer scale unmeasured\"))"
           fi
