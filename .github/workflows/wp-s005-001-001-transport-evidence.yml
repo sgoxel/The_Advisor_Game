@@ -2,7 +2,7 @@ name: S005 transport visual evidence
 on:
   workflow_dispatch:
   push:
-    branches: [main, "agent1/wp-s005-001-001-native-evidence-*", "agent1/wp-s005-001-001-canonical-bridge-evidence-*", "agent1/wp-s005-001-001-route-answer-clearview-*"]
+    branches: [main, "agent1/wp-s005-001-001-native-evidence-*", "agent1/wp-s005-001-001-canonical-bridge-evidence-*", "agent1/wp-s005-001-001-route-answer-clearview-*", "agent1/wp-s005-001-001-first-answer-summary-*"]
     paths:
       - ".github/workflows/wp-s005-001-001-transport-evidence.yml"
       - "src/transport-inspector.ts"
@@ -72,6 +72,14 @@ jobs:
           # banks and grade can be visually inspected rather than lost in night shading.
           FIXED_TIME_MS=1792874335750
           STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=50;settle;eval:document.querySelector("#transport-site-route").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus==="canonical walking graph preview ready"||Promise.reject(new Error("Real selected junction-to-site route unavailable"));settle;shot:junction-site-route;eval:window.advisorTransport.selectEvidence("bridge","ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19");eval:window.advisorTransport.telemetry().selection?.code==="ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19"||Promise.reject(new Error("Wrong canonical bridge evidence target"));click:#transport-bridge-closeup;settle;shot:owned-bridge-low-angle;click:#transport-bridge-clearview;settle;shot:owned-bridge-unobstructed;click:#transport-resume;eval:!document.querySelector("#transport-panel").hidden||Promise.reject(new Error("Inspector did not return after clear view"))'
+          # Real first graph answers at all four required S005 scales; graph
+          # timing is never physical passage or a rendered-pixel measurement.
+          if [ "${{ matrix.backend }}" = "webgpu" ]; then
+            for SCALE in 20 50 100 250; do
+              STEPS="$STEPS;select:#map-scale=$SCALE;eval:window.advisorTransport.selectEvidence(\"junction\");eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
+            done
+            STEPS="$STEPS;eval:Object.values(window.advisorTransport.telemetry().fourScaleSiteRouteTimings).every(v=>v.samples>0&&v.ready>0&&Number.isFinite(v.calculationP95Ms))||Promise.reject(new Error(\"First-answer scale unmeasured\"))"
+          fi
           # WebGL2's remote-junction 1/50 warm-up fails to settle on both
           # Linux viewport sizes (0 captured PNGs). Capture the actual selected
           # bridge FIRST at Street scale for both; keep full junction→site

@@ -501,13 +501,17 @@ function renderSiteRoute() {
       `Walking graph preview: ${lastSiteRouteStatus}. No physical traversal certified.`;
     return;
   }
+  // First-answer facts and the physical-certification boundary precede long
+  // immutable SEED IDs. On 1920×1080 the inspector scrolls; essential graph
+  // distance/time and NOT TRAVEL must be visible before any scrolling.
   target.innerHTML = `<div class="eyebrow">CANONICAL WALKING GRAPH PREVIEW · NOT TRAVEL</div>
     <dl>
+      <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
+      <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
+      <dt>Physical passage</dt><dd>NOT CERTIFIED · road grades, river banks and character movement require separate validation</dd>
       <dt>From road endpoint</dt><dd>${codeText(siteRoute.from)}</dd>
       <dt>Reachable site by graph</dt><dd>${codeText(siteRoute.to)}</dd>
       <dt>Selected crossing constraint</dt><dd>${selection?.kind === "bridge" ? "Route starts by traversing the chosen bridge-owned road; no ferry or edge retracing" : "Unconstrained shortest road route"}</dd>
-      <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
-      <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
       <dt>Canonical walking edges</dt><dd>${siteRoute.edgeCodes.length} · no ferry segments</dd>
       <dt>Map preview</dt><dd>Visible route segments highlighted in teal at 1/100 and closer · distant segments appear as you pan · no guaranteed physical passage</dd>
       <dt>Evidence limit</dt><dd>Graph route only · individual physical road grades and bank-to-bank crossings not fully certified · character has not moved</dd>
