@@ -1010,9 +1010,9 @@ const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field"
 function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
   navigate(x, z, Math.min(view.halfHeight, maxHalfHeight));
 }
-function openSettlementCard(place: (typeof places)[number]) {
+function openSettlementCard(place: (typeof places)[number], returnFocus?: HTMLElement) {
   centreOn(place.x, place.z, place.kind === "city" ? 60 : 25);
-  showSettlementPopup(place, populationOf(place));
+  showSettlementPopup(place, populationOf(place), returnFocus);
 }
 /**
  * Game-facing click: a building (or gate, field, well) under the point opens its card; ground inside a
@@ -1361,6 +1361,15 @@ function setupTravel() {
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
+  // Non-canvas equivalent of a visible map-label click: use the same place
+  // record, canonical ID and read-only inspector, never a character command.
+  const inspect = (place: (typeof places)[number] | undefined) => {
+    if (!place) return;
+    $("travel-panel").hidden = true;
+    openSettlementCard(place, $("open-travel"));
+  };
+  $("inspect-city").onclick = () => inspect(cities.find((p) => p.id === city.value));
+  $("inspect-village").onclick = () => inspect(villages.find((p) => p.id === village.value));
 }
 /**
  * One material per illustrated character type, created on first use. Textures

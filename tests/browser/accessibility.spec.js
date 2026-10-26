@@ -117,5 +117,22 @@ test("touch targets, text size, viewport meta and keyboard panel focus", async (
   await expect(panel).toBeHidden();
   expect(await activeId()).toBe("open-travel");
 
+  // The semantic selector invokes the same SEED-owned settlement card as a
+  // decorative map label. The popup is a read-only inspection, not travel.
+  await page.locator("#open-travel").focus();
+  await page.keyboard.press("Enter");
+  await expect(panel).toBeVisible();
+  const selectedVillageId = await page.locator("#village-select").inputValue();
+  await page.locator("#inspect-village").focus();
+  await page.keyboard.press("Enter");
+  await expect(panel).toBeHidden();
+  const popup = page.locator("#npc-popup");
+  await expect(popup).toBeVisible();
+  await expect(popup).toHaveAttribute("data-canonical-id", selectedVillageId);
+  await expect(page.locator("#npc-popup [data-close]")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(popup).toBeHidden();
+  await expect(page.locator("#open-travel")).toBeFocused();
+
   expect(errors).toEqual([]);
 });
