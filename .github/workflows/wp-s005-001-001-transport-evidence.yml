@@ -75,8 +75,13 @@ jobs:
           # Real first graph answers at all four required S005 scales; graph
           # timing is never physical passage or a rendered-pixel measurement.
           if [ "${{ matrix.backend }}" = "webgpu" ]; then
+            # Selecting evidence explicitly focuses the camera at 1/100.
+            # Select the canonical Y ONCE, then let each user-selected scale
+            # persist through the actual first-answer click. Previously the
+            # second selection reset all 1/20 and 1/250 samples to 1/100.
+            STEPS="$STEPS;eval:window.advisorTransport.selectEvidence(\"junction\")"
             for SCALE in 20 50 100 250; do
-              STEPS="$STEPS;select:#map-scale=$SCALE;until:window.advisorWorld?.state?.scaleLabel===\"1/$SCALE\";eval:window.advisorTransport.selectEvidence(\"junction\");eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
+              STEPS="$STEPS;select:#map-scale=$SCALE;until:window.advisorWorld?.state?.scaleLabel===\"1/$SCALE\";eval:document.querySelector(\"#transport-site-route\").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus===\"canonical walking graph preview ready\"||Promise.reject(new Error(\"No graph answer at $SCALE\"))"
             done
             STEPS="$STEPS;eval:Object.values(window.advisorTransport.telemetry().fourScaleSiteRouteTimings).every(v=>v.samples>0&&v.ready>0&&Number.isFinite(v.calculationP95Ms))||Promise.reject(new Error(\"First-answer scale unmeasured\"))"
           fi
