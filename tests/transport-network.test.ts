@@ -2359,7 +2359,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       left:number;right:number;distanceM:number;fine:boolean;points:{x:number;z:number}[]
     }[] = [];
     const inspect = (waypoints: {x:number;z:number}[], stepM:number) => {
-      let progress = 0, rangeLow = -Infinity, rangeHigh = Infinity, metres = 0;
+      let progress = 0, rangeLow = -Infinity, rangeHigh = Infinity, metres = 0, started = false;
       for(let leg=1;leg<waypoints.length;leg++){
         const a=waypoints[leg-1],b=waypoints[leg],
           length=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(b.x,b.z)),
@@ -2385,12 +2385,12 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
           const lower=endpoint?surfaces[0].groundHeight:min,
             upper=endpoint?surfaces[0].groundHeight:max;
           if(lower<min||upper>max)return {reason:"shared endpoint earthwork",distanceM:metres};
-          const rise=progress===0?Infinity:.065*(nextLength-progress);
+          const rise=started?.065*(nextLength-progress):Infinity;
           rangeLow=Math.max(lower,rangeLow-rise);
           rangeHigh=Math.min(upper,rangeHigh+rise);
           if(rangeLow>rangeHigh+1e-8)
             return {reason:"6.5% construction grade",distanceM:nextLength};
-          progress=nextLength;metres=nextLength;
+          progress=nextLength;metres=nextLength;started=true;
         }
       }
       return {reason:"feasible natural bench",distanceM:metres};
