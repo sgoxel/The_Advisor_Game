@@ -268,7 +268,7 @@ function pathFor(edge: TransportRoadEdge, state: AdvisorWorld["state"]) {
   return `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" L ")}`;
 }
 
-function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selected: ReadonlySet<string>, preview = false) {
+function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selected: ReadonlySet<string>, preview = false, unsafeSampledRoad = false) {
   const d = pathFor(edge, state);
   if (!d) return false;
   const path = document.createElementNS(SVG_NS, "path");
@@ -276,6 +276,8 @@ function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selec
   path.classList.add("transport-road", `transport-road-${edge.roadClass}`);
   if (selected.has(edge.code)) path.classList.add("selected");
   if (preview) path.classList.add("route-preview");
+  // Only the exact road with a rejected physical station gets unsafe color.
+  if (preview && unsafeSampledRoad) path.classList.add("unsafe-physical-sample");
   path.dataset.transportCode = edge.code;
   overlay.append(path);
   return true;
@@ -640,6 +642,8 @@ function resetCorridorProbe() {
   corridorGraphDetour = null;
   corridorGraphDetourPending = false;
   corridorSelectedBridgeConstraint = null;
+  // Reset any stale physical-warning overlay when the selected route resets.
+  lastFingerprint = "";
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
 }
@@ -757,6 +761,9 @@ function probeRouteCorridor() {
       corridorGraphDetourPending = !!unsafeRoad && !!route && !!index && !selectedBridgeUnsafe;
       renderCorridorProbe();
       renderMetrics();
+      // The probe completion is an on-demand event: reveal the actual failed
+      // station pin immediately rather than waiting for a camera change.
+      if (corridorProbeFirstUnsafeSource) refreshOverlay(true);
       if (unsafeRoad && route && index && !selectedBridgeUnsafe) requestAnimationFrame(() => {
         if (revision !== corridorProbeRevision) return;
         const excluded = new Set([unsafeRoad]);
@@ -1078,7 +1085,8 @@ function refreshOverlay(force = false) {
     for (const edge of query.edges)
       if (!preview.has(edge.code) && appendRoad(edge, state, selected)) lastOverlayRoads++;
     for (const edge of query.edges)
-      if (preview.has(edge.code) && appendRoad(edge, state, selected, true)) lastOverlayRoads++;
+      if (preview.has(edge.code) && appendRoad(edge, state, selected, true,
+        corridorProbeFirstUnsafeSource !== null && corridorProbeFirstUnsafeRoad === edge.code)) lastOverlayRoads++;
     appendLakeDetour(state);
     const localCodes = new Set(query.edges.map((edge) => edge.code));
     for (const bridge of transportNetwork.bridges)
