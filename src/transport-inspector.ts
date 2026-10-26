@@ -1161,6 +1161,9 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   lastSiteRouteAnswerContext = null;
   resetSiteAccessProbe();
   openPanel();
+  // A newly selected SEED target starts at its own overview. Reusing the
+  // previous route-verdict scroll left summary chips covering the bridge title.
+  panel.scrollTop = 0;
   if (!selection)
     panel.querySelector<HTMLElement>("#transport-selection")!.textContent = `Canonical ${kind.replace("-", " ")} evidence unavailable. No location selected.`;
   focusSelection();
