@@ -763,7 +763,10 @@ function probeRouteCorridor() {
       renderMetrics();
       // The probe completion is an on-demand event: reveal the actual failed
       // station pin immediately rather than waiting for a camera change.
-      if (corridorProbeFirstUnsafeSource) refreshOverlay(true);
+      if (corridorProbeFirstUnsafeSource) requestAnimationFrame(() => {
+        // Do not stack SVG projection on the already expensive sampling frame.
+        if (revision === corridorProbeRevision && corridorProbeFirstUnsafeSource) refreshOverlay(true);
+      });
       if (unsafeRoad && route && index && !selectedBridgeUnsafe) requestAnimationFrame(() => {
         if (revision !== corridorProbeRevision) return;
         const excluded = new Set([unsafeRoad]);
