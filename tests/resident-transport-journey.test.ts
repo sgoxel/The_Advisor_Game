@@ -11,7 +11,7 @@ import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
-import type { Resident } from "../src/simulation.ts";
+import { LazySimulation, type Resident } from "../src/simulation.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
 
 const codes = ["a","b","c","d","e"] as const;
@@ -258,6 +258,17 @@ test("unverified gate approach, blocked streets and steep local slopes refuse wi
     : surfaceAt(x,z)), null, "a steep interval cannot be hidden before the macro road");
   assert.equal(run(actor, approach, legal, (x,z) => surfaceAt(x,z,true)), null,
     "the same owned bridge still has to exist beyond the legal approach");
+});
+
+test("Simulation site-departure entry refuses invented residents without an event", async () => {
+  const sim = new LazySimulation();
+  sim.advance(departure);
+  assert.equal(await sim.tryBeginSelfDirectedSiteVisit("invented-resident", route), null);
+  assert.equal(sim.preparedSiteVisitFor("invented-resident"), undefined);
+  assert.equal(await sim.tryBeginSelfDirectedSiteVisit(resident.code,
+    { ...route, edgeCodes: [] }), null,
+    "no empty route can create an accepted Simulation event");
+  assert.equal(sim.preparedSiteVisitFor(resident.code), undefined);
 });
 
 /** Independent choice/event ledger under a controlled source-surface fixture:
