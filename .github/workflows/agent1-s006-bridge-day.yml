@@ -4,6 +4,7 @@ on:
     branches: ["agent1/s006-bridge-day-proof-20261026"]
     paths:
       - "tools/s006-bridge-day-witness.ts"
+      - "src/simulation.ts"
       - ".github/workflows/agent1-s006-bridge-day.yml"
   workflow_dispatch:
 permissions:
