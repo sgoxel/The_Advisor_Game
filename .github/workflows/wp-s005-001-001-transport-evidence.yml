@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/wp-s005-001-001-transport-evidence.yml"
       - "src/transport-inspector.ts"
+      - "src/wilderness-overlay.ts"
       - "src/world-core.ts"
       - "src/transport-route-corridor.ts"
 permissions:
