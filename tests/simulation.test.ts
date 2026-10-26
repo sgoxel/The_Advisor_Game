@@ -1475,7 +1475,7 @@ test("one real Greyfield worker crosses its SEED gate and wet bridge to work and
         }
         const distance=greatCircleDistance(sourceToLonLat(p.x,p.z),sourceToLonLat(q.x,q.z)),
           steps=Math.max(1,Math.ceil(distance));
-        assert.ok(steps<=24.1,"the resident cannot skip an impassable cut in one render window");
+        assert.ok(distance<=24.1,`the actual resident walked ${distance.toFixed(3)}m in a 24-fantasy-second window`);
         let segmentHasBridge=false;
         for(let k=0;k<=steps;k++){
           const t=k/steps, x=p.x+wrapSourceX(q.x-p.x)*t, z=p.z+(q.z-p.z)*t,
