@@ -1051,7 +1051,7 @@ function refreshOverlay(force = false) {
   }
 }
 
-function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
+function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry", bridgeCode?: string) {
   siteRouteFrameRevision++;
   lastSiteRouteFrameMs = null;
   // An explicit new selection cancels an older deferred first-road request.
@@ -1063,7 +1063,10 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   siteRouteRequestedAt = null;
   selection = undefined;
   if (kind === "bridge") {
-    const bridge = ensureTransportBridgeEvidence();
+    // Explicitly selected SEED bridge codes must not drift with nearby LRU
+    // discoveries, viewport, renderer or capture ordering. Invalid codes fail
+    // closed; diagnostic selection never invents a bridge or moves an actor.
+    const bridge = bridgeCode === undefined ? ensureTransportBridgeEvidence() : transportBridgeByCode(bridgeCode);
     if (bridge) selection = { kind: "bridge", code: bridge.code };
   } else if (kind === "border-crossing") {
     const crossing = [...transportNetwork.borderCrossings]
