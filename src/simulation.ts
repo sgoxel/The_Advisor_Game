@@ -820,13 +820,35 @@ export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" |
       (surface.deckHeight !== null && surface.traversal === "bridge" &&
         surface.surfaceHeight === surface.deckHeight));
 }
-function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
+/** The same 8% interval limit as the selected S005 physical corridor.
+ * A walkable road-top pixel alone cannot legalize a longitudinal cliff. */
+export function residentTransportIntervalGradePass(fromHeight: number, toHeight: number, distanceM: number): boolean {
+  return Number.isFinite(fromHeight) && Number.isFinite(toHeight) &&
+    Number.isFinite(distanceM) && distanceM >= 0 &&
+    (distanceM === 0 ? fromHeight === toHeight :
+      Math.abs(toHeight - fromHeight) / distanceM <= .08);
+}
+function legalStreetSegment(place: Place, from: Offset, to: Offset, transportGrade = false): boolean {
   const { border, gates } = streetGraphFor(place);
   if (!legalEnclosureSegment(from, to, border, gates)) return false;
+  // Reuse the ordinary one-metre final-surface samples; bridge approaches
+  // need a physical grade check, not another terrain scan or global road ban.
+  const lengthM = Math.hypot(to.eastM - from.eastM, to.northM - from.northM),
+    stepM = lengthM / Math.max(1, Math.ceil(lengthM));
+  let previousHeight: number | null = null;
   return continuousWalkableOffsetSegment(from, to, point => {
     const p = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(p.lon, p.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+      source = lonLatToSource(p.lon, p.lat),
+      surface = finalSurfaceAt(source.x, source.z);
+    if (!residentWalkableSurface(surface)) return false;
+    if (transportGrade) {
+      if (!Number.isFinite(surface.surfaceHeight) ||
+          (previousHeight !== null &&
+            !residentTransportIntervalGradePass(previousHeight, surface.surfaceHeight, stepM)))
+        return false;
+      previousHeight = surface.surfaceHeight;
+    }
+    return true;
   });
 }
 /** A resident's nearest street vertex may lie across an impassable cut.
@@ -982,7 +1004,7 @@ function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Of
     if (!actualBridgeRoads.has(road.code) || road.centerline.length > 32) continue;
     const points = road.centerline.map(point => offsetForSource(place, point.x, point.z)),
       candidate = validatedResidentRoadPolyline(from, to, points,
-        (a, b) => legalStreetSegment(place, a, b));
+        (a, b) => legalStreetSegment(place, a, b, true));
     if (!candidate) continue;
     const length = pathLength(candidate);
     if (length < bestDistance) { best = candidate; bestDistance = length; }
