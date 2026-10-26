@@ -348,7 +348,7 @@ const roadProfileHeights = new Map<string, readonly [number, number]>();
 // Every sampled station must remain within 4m cut / 3m fill and its adjacent
 // roadway height within 6.5%. Unbuildable terrain keeps the original
 // fail-closed final surface; the SEED centerline and bridge law never change.
-const gradeRoadCode = PLACEHOLDER;
+const gradeRoadCode = `${WORLD_SEED}/macro-roads-v2/ROAD/0/0/2/2~J/0/0/2/1`;
 type GradeStation = {metres:number;ground:number;min:number;max:number;height:number};
 let gradeStations: readonly GradeStation[] | null | undefined;
 let gradeVertices: readonly number[] | undefined;
