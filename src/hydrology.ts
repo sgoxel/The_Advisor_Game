@@ -530,7 +530,29 @@ export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number
   if(!Number.isFinite(dryApproachM)||dryApproachM<0||dryApproachM>80)return null;
   const hit=nearestRiver(wrapSourceX(x),z);
   if(!hit)return null;
-  if(dryApproachM===0&&hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
+  if(hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE){
+    if(dryApproachM===0)return null;
+    // Rebase the dry approach onto the same physical road/riversegment
+    // intersection. Recomputing a river union from a different dry bucket
+    // can silently change the deck span at the approach station.
+    const roadLength=Math.hypot(roadX,roadZ);
+    if(!roadLength)return null;
+    const ux=roadX/roadLength,uz=roadZ/roadLength,
+      vx=wrapSourceX(hit.segment.bx-hit.segment.ax),vz=hit.segment.bz-hit.segment.az,
+      determinant=ux*vz-uz*vx,
+      px=wrapSourceX(hit.segment.ax-x),pz=hit.segment.az-z;
+    if(Math.abs(determinant)<1e-9)return null;
+    const offset=(px*vz-pz*vx)/determinant,
+      segmentT=((wrapSourceX(x+ux*offset-hit.segment.ax))*vx+(z+uz*offset-hit.segment.az)*vz)/(vx*vx+vz*vz),
+      metresPerUnit=CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(ux*Math.cos(sourceToLonLat(x,z).lat),uz);
+    if(!Number.isFinite(offset)||!Number.isFinite(segmentT)||segmentT<0||segmentT>1||
+      metresPerUnit<.1||
+      Math.abs(offset)*metresPerUnit>dryApproachM+(hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)*metresPerUnit)
+      return null;
+    const centred=freshwaterCrossingAt(wrapSourceX(x+ux*offset),z+uz*offset,roadX,roadZ);
+    if(!centred||centred.code!==hit.segment.code)return null;
+    return Object.freeze({...centred,lo:centred.lo+offset,hi:centred.hi+offset});
+  }
   const roadLength=Math.hypot(roadX,roadZ);if(!roadLength)return null;
   const ux=roadX/roadLength,uz=roadZ/roadLength,dx=wrapSourceX(hit.segment.bx-hit.segment.ax),dz=hit.segment.bz-hit.segment.az;
   if(Math.abs(ux*dz-uz*dx)/(Math.hypot(dx,dz)||1)<.1)return null;
