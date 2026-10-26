@@ -20,6 +20,7 @@ import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRequiredBridgeCut, transportWalkingRoute, transportWalkingDetourAfterUnsafeRoad, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
+import { residentWalkableSurface } from "./simulation.ts";
 import { createSiteRouteTimings } from "./transport-answer-timings.ts";
 
 type AdvisorWorld = {
@@ -709,7 +710,10 @@ function probeRouteCorridor() {
       // corridor still requires the stricter canonical 8% road limit.
       const localRoadSlope = surface.deckHeight === null && surface.traversal === "open" && surface.walkable
         ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined;
-      const failure = sampledCorridorStationFailure(station, surface, localRoadSlope);
+      // The game must not describe a sampled road as walkable when the
+      // Simulation rejects that very same final surface for a real resident.
+      const failure = sampledCorridorStationFailure(station, surface, localRoadSlope) ??
+        (residentWalkableSurface(surface) ? null : "Simulation resident cannot walk on this surface");
       if (failure !== null) {
         corridorProbeFirstUnsafeRoad = corridorUnsafeRoadExclusion(station);
         corridorProbeFirstUnsafeStation = index + 1;
