@@ -261,21 +261,17 @@ SCENARIOS: dict[str, str] = {
 
 # Software rendering flags from playwright.fallback.config.js and playwright.webgpu.config.js.
 WEBGL2_ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
-# When Dawn's WebGPU device and ANGLE's desktop compositor both force the
-# Vulkan-ANGLE surface on headed software CI, real WebGPU frames can advance
-# while the Chrome/X11 compositor stops presenting ANY new pixels (observed
-# S006 exact-main logs on both native viewports). Keep Dawn on genuine Vulkan
-# SwiftShader but let ANGLE use SwiftShader's separate GLES compositor path.
-# This is a targeted compositor hypothesis, NOT a WebGL fallback: the capture
-# verifies that window.advisorWorld.renderer.backend remains "webgpu".
+# Use Chromium's coherent, verified Linux Vulkan/SwiftShader presentation path:
+# ANGLE's Vulkan device and Dawn's WebGPU device must share the compositor.
+# The previous split GLES/Vulkan mode showed a real running WebGPU actor but
+# NO compositor frames on either viewport. --disable-vulkan-surface avoids the
+# unsupported software swapchain; Mesa's ICD is installed in the workflow.
+# Keep the actual backend=webgpu and native pixel/freshness checks unchanged.
 WEBGPU_ARGS = [
     "--enable-unsafe-webgpu", "--ignore-gpu-blocklist", "--enable-gpu",
-    "--enable-features=Vulkan", "--use-gl=angle", "--use-angle=swiftshader",
+    "--enable-features=Vulkan", "--use-angle=vulkan",
     "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader",
-    "--disable-vulkan-surface", "--enable-unsafe-swiftshader",
-    "--enable-dawn-features=allow_unsafe_apis", "--disable-dawn-features=use_dxc",
-    "--enable-webgpu-developer-features", "--use-gpu-in-tests",
-    "--enable-accelerated-2d-canvas",
+    "--disable-vulkan-surface",
 ]
 
 # True when settled, 'error' when the page failed, otherwise false (keep waiting).
