@@ -1678,6 +1678,7 @@ export class LazySimulation {
   private residentIndexes = new Map<string, ResidentSpatialIndex>();
   private selectedResidentCode = "";
   private siteVisitJournal?: ResidentSiteVisitJournal;
+  private restoringSiteVisits = false;
   private inspector?: HTMLElement;
 
   constructor() {
@@ -2054,7 +2055,8 @@ export class LazySimulation {
     residentCode: string,
     route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
   ) {
-    return this.verifySiteVisitAt(residentCode, route, this.tick);
+    return this.restoringSiteVisits ? null :
+      this.verifySiteVisitAt(residentCode, route, this.tick);
   }
 
   /** Same strict physical and character decision replay at the SAVED Fantasy
@@ -2077,7 +2079,9 @@ export class LazySimulation {
       import("./resident-transport-events.ts"),
     ]);
     // A stale async candidate never starts a journey at a superseded tick.
-    if (this.tick !== currentTick) return null;
+    // Live offers cannot be backdated; persisted past events replay against
+    // their original Fantasy ticks even while present time keeps advancing.
+    if (tick === currentTick && this.tick !== currentTick && !this.restoringSiteVisits) return null;
     const nodes = new Map(siteTransportNetwork.nodes.map(node => [node.code, node])),
       origin = nodes.get(route.from), destination = nodes.get(route.to);
     if (!origin || origin.sourceId !== place.id ||
@@ -2106,6 +2110,8 @@ export class LazySimulation {
   async considerAdvisorSiteVisit(residentCode: string): Promise<{
     started: boolean; message: string;
   }> {
+    if (this.restoringSiteVisits)
+      return { started: false, message: "Saved journeys are being revalidated; no new advice has been applied." };
     const tick = this.tick, actor = this.residentByCode(residentCode, tick);
     if (!actor || actor.code !== residentCode)
       return { started: false, message: "No canonical resident is available to consider this advice." };
@@ -2216,7 +2222,9 @@ export class LazySimulation {
     if (input.version !== 1 || input.seed !== "ADVISOR-0126-ALDERWICK" ||
         input.foundation !== "v5" || !Array.isArray(input.visits) ||
         input.visits.length > 16) return false;
+    if (this.restoringSiteVisits) return false;
     const original = this.siteVisitJournal, replayTick = this.tick;
+    this.restoringSiteVisits = true;
     this.siteVisitJournal = undefined;
     const reject = () => { this.siteVisitJournal = original; return false; };
     try {
@@ -2235,7 +2243,7 @@ export class LazySimulation {
         const accepted = await this.verifySiteVisitAt(record.residentCode,
           { from: record.from, to: record.to, edgeCodes: record.edgeCodes },
           record.decidedTick as number);
-        if (!accepted || this.tick !== replayTick) return reject();
+        if (!accepted) return reject();
         if (record.homeReturnTick !== undefined) {
           if (!Number.isSafeInteger(record.homeReturnTick) ||
               (record.homeReturnTick as number) > replayTick ||
@@ -2246,6 +2254,8 @@ export class LazySimulation {
       return true;
     } catch {
       return reject();
+    } finally {
+      this.restoringSiteVisits = false;
     }
   }
 
