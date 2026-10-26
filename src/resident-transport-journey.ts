@@ -35,6 +35,8 @@ export type ValidatedResidentJourney = Readonly<{
   departedTick: number;
   edgeCodes: readonly string[];
   stations: readonly Source[];
+  /** Exact macro-road gate after a physically verified local approach (if any). */
+  macroStart?: Source;
   cumulativeMetres: readonly number[];
   distanceM: number;
   /** Fixed longitude of the SEED gate owns the walk/rest schedule. */
@@ -133,6 +135,97 @@ export function prepareResidentTransportJourney(
 }
 
 /**
+ * Join a real outdoor actor to an existing SEED road origin ONLY by a local
+ * path already validated by the Simulation street/enclosure authority. The
+ * local approach is timed movement, not a synthetic starting position or
+ * an extra fabricated macro-road. A missing gate, unsafe connector, steep
+ * surface or blocked water segment refuses the whole journey.
+ *
+ * `localSegmentLegal` must be the Simulation's legalStreetSegment predicate:
+ * it proves the enclosure/gate and samples the actual street, while this
+ * function independently checks final-surface walkability and 8% grades.
+ * Calls are bounded and on demand; never run in the frame/render loop.
+ */
+export function prepareResidentTransportJourneyWithApproach(
+  resident: ResidentStart,
+  decision: ResidentTravelDecision,
+  route: Route,
+  roads: ReadonlyMap<string, Edge>,
+  nodes: ReadonlyMap<string, Node>,
+  adjacency: ReadonlyMap<string, readonly { edge: Edge }[]>,
+  bridges: readonly Pick<TransportBridge, "roadCode">[],
+  approach: readonly Source[],
+  localSegmentLegal: (from: Source, to: Source) => boolean,
+  surfaceAt: Sample = finalSurfaceAt,
+  slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
+): ValidatedResidentJourney | null {
+  if (!resident.grounded || resident.indoors || resident.route.startsWith("BLOCKED:") ||
+      approach.length < 2 || approach.length > 256 ||
+      ![resident.x, resident.z].every(Number.isFinite) ||
+      !approach.every(point => Number.isFinite(point.x) && Number.isFinite(point.z)) ||
+      distance(resident, approach[0]) > .01 ||
+      !nodes.has(route.from) || distance(approach[approach.length - 1], nodes.get(route.from)!) > .01)
+    return null;
+
+  let approachMetres = 0;
+  const cumulative = [0];
+  for (let i = 0; i < approach.length; i++) {
+    const current = approach[i], currentSurface = surfaceAt(current.x, current.z),
+      localSlope = currentSurface.deckHeight === null && currentSurface.traversal === "open"
+        ? slopeAt(current.x, current.z) : undefined;
+    if (!residentWalkableSurface(currentSurface) ||
+        !Number.isFinite(currentSurface.surfaceHeight) ||
+        (localSlope !== undefined &&
+          (!Number.isFinite(localSlope) || localSlope < 0 || localSlope > .08))) return null;
+    if (!i) continue;
+    const previous = approach[i - 1], previousSurface = surfaceAt(previous.x, previous.z),
+      metres = distance(previous, current),
+      mid = { x: wrapSourceX(previous.x + wrapSourceX(current.x - previous.x) / 2),
+        z: (previous.z + current.z) / 2 },
+      middle = surfaceAt(mid.x, mid.z),
+      midpointSlope = middle.deckHeight === null && middle.traversal === "open"
+        ? slopeAt(mid.x, mid.z) : undefined,
+      firstHalf = distance(previous, mid), secondHalf = distance(mid, current);
+    if (!(metres > 0) || metres > 1_200 || approachMetres + metres > 6_500 ||
+        !Number.isFinite(metres) || !localSegmentLegal(previous, current) ||
+        !residentWalkableSurface(middle) || !Number.isFinite(middle.surfaceHeight) ||
+        (midpointSlope !== undefined &&
+          (!Number.isFinite(midpointSlope) || midpointSlope < 0 || midpointSlope > .08)) ||
+        !(firstHalf > 0 && secondHalf > 0) ||
+        Math.abs(middle.surfaceHeight - previousSurface.surfaceHeight) / firstHalf > .08 ||
+        Math.abs(currentSurface.surfaceHeight - middle.surfaceHeight) / secondHalf > .08 ||
+        Math.abs(currentSurface.surfaceHeight - previousSurface.surfaceHeight) / metres > .08)
+      return null;
+    approachMetres += metres;
+    cumulative.push(approachMetres);
+  }
+
+  // The actor has NOT teleported to the gate. Only the physical macro section
+  // is verified from the proven local path's endpoint, then composed with
+  // every already-timed local street step.
+  const origin = approach[approach.length - 1],
+    planned = prepareResidentTransportJourney(
+      { ...resident, x: origin.x, z: origin.z }, decision, route,
+      roads, nodes, adjacency, bridges, surfaceAt, slopeAt,
+    );
+  if (!planned || distance(origin, planned.stations[0]) > .01) return null;
+  return Object.freeze({
+    ...planned,
+    stations: Object.freeze([
+      ...approach.slice(0, -1).map(point => Object.freeze({ x: point.x, z: point.z })),
+      ...planned.stations,
+    ]),
+    cumulativeMetres: Object.freeze([
+      ...cumulative.slice(0, -1),
+      ...planned.cumulativeMetres.map(metres => approachMetres + metres),
+    ]),
+    distanceM: approachMetres + planned.distanceM,
+    originLongitude: sourceToLonLat(approach[0].x, approach[0].z).lon,
+    macroStart: planned.stations[0],
+  });
+}
+
+/**
  * A resident who actually reached the canonical site may independently choose
  * to return along the same owned SEED edges. The previous proof does not make
  * a return lawful after a collapsed deck or other world change: build a FRESH
@@ -155,7 +248,7 @@ export function prepareResidentTransportReturnJourney(
   surfaceAt: Sample = finalSurfaceAt,
   slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
 ): ValidatedResidentJourney | null {
-  const outwardStart = outward.stations[0],
+  const outwardStart = outward.macroStart ?? outward.stations[0],
     outwardEnd = outward.stations[outward.stations.length - 1],
     canonicalOrigin = nodes.get(originNode);
   if (!outwardStart || !outwardEnd || !canonicalOrigin ||

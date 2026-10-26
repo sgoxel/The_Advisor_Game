@@ -1085,6 +1085,48 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
   return path;
 }
+/**
+ * The real resident's existing street/enclosure planner owns the local
+ * approach to a macro-road origin. Transport cannot synthesize an actor at
+ * a village node: they first follow these actual legal street points.
+ * This does not decide to travel or mutate the resident's daily routine.
+ */
+export function residentLocalTransportApproach(
+  place: Place,
+  resident: Resident,
+  node: Readonly<{ x: number; z: number }>,
+): readonly Readonly<{ x: number; z: number }>[] | null {
+  if (resident.settlement !== place.id ||
+      resident.code !== `${place.code}/RESIDENT/${resident.index}` ||
+      !resident.grounded || resident.indoors ||
+      resident.route.startsWith("BLOCKED:") ||
+      ![resident.x, resident.z, node.x, node.z].every(Number.isFinite))
+    return null;
+  const from = offsetForSource(place, resident.x, resident.z),
+    to = offsetForSource(place, node.x, node.z),
+    path = streetPath(place, from, to);
+  if (!path || path.length < 2 || path.length > 256) return null;
+  const source = path.map(point => {
+    const ll = canonicalOffset(place, point.eastM, point.northM);
+    return lonLatToSource(ll.lon, ll.lat);
+  });
+  if (sourceDistance(source[0].x, source[0].z, resident.x, resident.z) > 1e-4 ||
+      sourceDistance(source[source.length - 1].x, source[source.length - 1].z, node.x, node.z) > 1e-4)
+    return null;
+  return Object.freeze(source.map(point => Object.freeze(point)));
+}
+
+/** Existing Simulation enclosure + metre-sampled street legality; required at
+ * every segment of a resident's local-to-macro travel connector. */
+export function residentLocalTransportSegmentLegal(
+  place: Place,
+  a: Readonly<{ x: number; z: number }>,
+  b: Readonly<{ x: number; z: number }>,
+) {
+  return legalStreetSegment(place, offsetForSource(place, a.x, a.z),
+    offsetForSource(place, b.x, b.z));
+}
+
 /** Field crews share the fixed SEED field centre as an approach, then walk
  * to their own standing slot. Every added connector uses the same authoritative
  * ground and enclosure checks; failed approaches fall back to the exact search. */
