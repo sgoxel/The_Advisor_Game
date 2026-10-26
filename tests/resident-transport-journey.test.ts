@@ -10,6 +10,8 @@ import { residentAt, residentLocalTransportApproach, residentLocalTransportSegme
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
+import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
+import type { Resident } from "../src/simulation.ts";
 import type { TransportRoadEdge, TransportNode, TransportBridge } from "../src/transport-network.ts";
 
 const codes = ["a","b","c","d","e"] as const;
@@ -256,6 +258,59 @@ test("unverified gate approach, blocked streets and steep local slopes refuse wi
     : surfaceAt(x,z)), null, "a steep interval cannot be hidden before the macro road");
   assert.equal(run(actor, approach, legal, (x,z) => surfaceAt(x,z,true)), null,
     "the same owned bridge still has to exist beyond the legal approach");
+});
+
+/** Independent choice/event ledger under a controlled source-surface fixture:
+ * this is NOT yet visible worker-main gameplay or persistent home arrival. */
+test("Simulation-owned site-visit decision refuses orders and journals only a fully verified departure", () => {
+  const actor = {
+    ...resident, x: -2, z: 0, activity: "stroll",
+    mood: { value: .4, label: "hopeful" },
+    traits: { personality: { curiosity: .9, sociability: .8, piety: .5,
+      temper: .1, diligence: .5 }, abilities: { strength: 8,
+      dexterity: 8, constitution: 8, knowledge: 8, wisdom: 8, charisma: 8 },
+      temperament: "inquisitive" },
+  } as Resident;
+  const approach = [{x:-2,z:0},{x:-1,z:0},{x:0,z:0}],
+    permitted = (a: {x:number;z:number}, b: {x:number;z:number}) =>
+      a.z === 0 && b.z === 0 && b.x > a.x,
+    start = (journal: ResidentSiteVisitJournal,
+      source = (x:number,z:number) => surfaceAt(x,z),
+      street = permitted,
+    ) => journal.tryStart(actor.code, departure, route, roads, nodes, adjacency,
+      bridges, () => approach, street, source);
+  assert.equal(residentChoosesSiteVisit({ ...actor, activity: "work" }, route.from, route.to, departure), null,
+    "Advisor route selection may not override an actual scheduled job");
+  assert.equal(residentChoosesSiteVisit({ ...actor, indoors: true }, route.from, route.to, departure), null);
+  assert.equal(residentChoosesSiteVisit({ ...actor, mood: {...actor.mood, value: -.9} },
+    route.from, route.to, departure), null);
+  assert.equal(residentChoosesSiteVisit({ ...actor, traits: { ...actor.traits, personality:
+    { ...actor.traits.personality, curiosity: .1, sociability: .1 } } },
+    route.from, route.to, departure), null);
+  assert.equal(start(new ResidentSiteVisitJournal(() => actor), (x,z)=>surfaceAt(x,z,true)), null,
+    "no owned wet deck never creates a travel event");
+  assert.equal(start(new ResidentSiteVisitJournal(() => actor), (x,z)=>surfaceAt(x,z),
+    () => false), null, "a denied gate street never creates an event");
+  const wrong = new ResidentSiteVisitJournal(() => ({ ...actor, code: "different" }));
+  assert.equal(start(wrong), null, "resident identity mismatch fails closed");
+  assert.equal(wrong.count, 0);
+  const events = new ResidentSiteVisitJournal((code) => code === actor.code ? actor : undefined);
+  const accepted = start(events);
+  assert.ok(accepted, "character chooses for its own motives, and Simulation proves the real five-edge physical fixture");
+  assert.equal(accepted!.kind, "resident-site-visit");
+  assert.equal(accepted!.residentCode, actor.code);
+  assert.equal(events.count, 1);
+  assert.equal(start(events), null, "an active original actor may not acquire a duplicate overlapping journey");
+  assert.equal(events.at(actor.code, departure - 1)?.status, "not-departed");
+  const walking = events.at(actor.code, departure + 5);
+  assert.equal(walking?.status, "walking");
+  assert.ok(walking!.x > actor.x && walking!.x < 0, "real street movement precedes the bridge route");
+  const arrived = events.at(actor.code, departure + 10000);
+  assert.equal(arrived?.status, "arrived");
+  assert.ok(Math.abs(arrived!.x - nodes.get(route.to)!.x) < 1e-6);
+  assert.deepEqual(events.at(actor.code, departure + 5), walking,
+    "absolute Fantasy Time replays the same committed SEED actor event");
+  assert.equal(events.at("different", departure + 5), undefined);
 });
 
 test("actual Greyfield SEED actor supplies only his own verified local street origin", () => {
