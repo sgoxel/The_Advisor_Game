@@ -11,6 +11,7 @@ import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood,
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
+import { transportNetwork, transportRoadsNear } from "./transport-network.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -854,6 +855,73 @@ const pathCache = new Map<string, Offset[] | null>();
 export function residentStreetPathKey(placeCode: string, from: Offset, to: Offset, allowGateDetour: boolean) {
   return `${placeCode}|${from.eastM},${from.northM}|${to.eastM},${to.northM}|${allowGateDetour ? "g" : "d"}`;
 }
+/**
+ * Follow a real SEED road polyline only when its two physical connectors and
+ * every intermediate metre are legal. Pure, finite adapter: it proposes neither
+ * a new bridge nor a new workplace, and never supplies authoritative walkability.
+ */
+export function validatedResidentRoadPolyline(
+  from: Offset, to: Offset, road: readonly Offset[],
+  legal: (a: Offset, b: Offset) => boolean,
+  maxConnectorM = 450, maxPathM = 6500,
+): Offset[] | null {
+  if (road.length < 2 || road.length > 32 || ![from.eastM, from.northM, to.eastM, to.northM].every(Number.isFinite) ||
+      road.some(point => !Number.isFinite(point.eastM) || !Number.isFinite(point.northM))) return null;
+  const foot = (point: Offset) => {
+    let best: { segment: number; offset: Offset; distance: number } | undefined;
+    for (let i = 0; i < road.length - 1; i++) {
+      const a = road[i], b = road[i + 1],
+        dx = b.eastM - a.eastM, dz = b.northM - a.northM,
+        squared = dx * dx + dz * dz;
+      if (squared < 1e-8) continue;
+      const t = Math.max(0, Math.min(1,
+        ((point.eastM - a.eastM) * dx + (point.northM - a.northM) * dz) / squared)),
+        offset = { eastM: a.eastM + dx * t, northM: a.northM + dz * t },
+        distance = Math.hypot(point.eastM - offset.eastM, point.northM - offset.northM);
+      if (!best || distance < best.distance) best = { segment: i, offset, distance };
+    }
+    return best;
+  };
+  const a = foot(from), b = foot(to);
+  if (!a || !b || a.distance > maxConnectorM || b.distance > maxConnectorM) return null;
+  const interior = a.segment <= b.segment
+    ? road.slice(a.segment + 1, b.segment + 1)
+    : road.slice(b.segment + 1, a.segment + 1).reverse();
+  const path = [from, a.offset, ...interior, b.offset, to],
+    distance = path.reduce((sum, p, i) =>
+      i ? sum + Math.hypot(p.eastM - path[i - 1].eastM, p.northM - path[i - 1].northM) : 0, 0);
+  if (distance > maxPathM) return null;
+  for (let i = 1; i < path.length; i++)
+    if (!legal(path[i - 1], path[i])) return null;
+  return path;
+}
+
+/** Demand-driven real transport bridge route between a SEED gate and an
+ * exterior livelihood. Called only after local street/dry-detour failure.
+ * No source road or water span gets a free pass: every segment uses the
+ * same final-surface and enclosure validator as ordinary resident walking. */
+function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Offset[] | null {
+  const distance = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
+  if (distance < 300 || distance > 5200) return null;
+  const midpoint = canonicalOffset(place, (from.eastM + to.eastM) * .5, (from.northM + to.northM) * .5),
+    source = lonLatToSource(midpoint.lon, midpoint.lat),
+    scale = sourceUnitsPerMetreAt(source.z),
+    radius = Math.min(16_384, Math.max(10, Math.max(scale.x, scale.z) * (distance * .7 + 600)));
+  const roads = transportRoadsNear(source.x, source.z, radius, 6),
+    actualBridgeRoads = new Set(transportNetwork.bridges.map(bridge => bridge.roadCode));
+  let best: Offset[] | null = null, bestDistance = Infinity;
+  for (const road of roads) {
+    if (!actualBridgeRoads.has(road.code) || road.centerline.length > 32) continue;
+    const points = road.centerline.map(point => offsetForSource(place, point.x, point.z)),
+      candidate = validatedResidentRoadPolyline(from, to, points,
+        (a, b) => legalStreetSegment(place, a, b));
+    if (!candidate) continue;
+    const length = pathLength(candidate);
+    if (length < bestDistance) { best = candidate; bestDistance = length; }
+  }
+  return best;
+}
+
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
   // Surface, enclosure and street links are bidirectional. Resolve the same
@@ -926,6 +994,10 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   // the main route must still connect through a legal SEED gate.
   if (!path && !allowGateDetour && exteriorGroundCorridor(from, to, graph.border, graph.gates))
     path = legalOpenGroundDetour(from, to, (a, b) => legalStreetSegment(place, a, b));
+  // A disconnected local footpath may reach an existing bridge by following
+  // its actual SEED macro road, never by cutting across the river.
+  if (!path && !allowGateDetour && exteriorGroundCorridor(from, to, graph.border, graph.gates))
+    path = residentTransportBridgePath(place, from, to);
   // Outside farm/woodland/shore sites may lie beyond the enclosure. A direct
   // dry chord through the wall is forbidden, but an actual SEED gate can join
   // an internal street approach to a separately verified exterior corridor.
