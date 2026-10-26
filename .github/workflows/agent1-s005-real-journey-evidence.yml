@@ -8,6 +8,7 @@ on:
       - 'src/resident-transport-journey.ts'
       - 'src/simulation.ts'
       - 'src/main.ts'
+      - 'src/site-geometry.ts'
       - 'src/site-visit-advice.ts'
       - 'tests/resident-transport-journey.test.ts'
       - '.github/workflows/agent1-s005-real-journey-evidence.yml'
