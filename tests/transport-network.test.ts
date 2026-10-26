@@ -2350,7 +2350,8 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     const points = original?.centerline;
     assert.ok(points && points.length === 11,
       "exact cached source road must have eleven physical waypoint identities");
-    const start = points![6], finish = points![7],
+    for (const [startIndex, endIndex] of [[6,7],[5,8],[4,9]] as const) {
+    const start = points![startIndex], finish = points![endIndex],
       dx = wrapSourceX(finish.x - start.x), dz = finish.z - start.z,
       normal = roadNormalSource(dx, dz, start.z, 1),
       offsets = [0, -250, 250, -500, 500, -900, 900],
@@ -2408,11 +2409,13 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     }
     acceptable.sort((a,b)=>Number(b.fine)-Number(a.fine)||a.distanceM-b.distanceM||a.left-b.left||a.right-b.right);
     console.log("S005_ALIGNMENT_SCOUT",JSON.stringify({
-      road:firstUnsafeRoad,originalPoints:points!.length,segment:6,
+      road:firstUnsafeRoad,originalPoints:points!.length,startIndex,endIndex,
+      endpointNaturalRiseM:naturalSurfaceAt(finish.x,finish.z).groundHeight-naturalSurfaceAt(start.x,start.z).groundHeight,
       sampled:offsets.length**2,refusals:Object.fromEntries(refusal),
       feasible25m:acceptable.length,feasible5m:acceptable.filter(c=>c.fine).length,
       best:acceptable.slice(0,3), caveat:"source-only; candidate not committed, full composed surface and actor passage unverified"
     }));
+    }
   }
   assert.notEqual(segmented.status, "invalid",
     "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
