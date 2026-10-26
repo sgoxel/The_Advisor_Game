@@ -266,7 +266,7 @@ WEBGL2_ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
 # while the Chrome/X11 compositor stops presenting ANY new pixels (observed
 # S006 exact-main logs on both native viewports). Keep Dawn on genuine Vulkan
 # SwiftShader but let ANGLE use SwiftShader's separate GLES compositor path.
-# This is an evidence-tested hypothesis, NOT a WebGL fallback: the capture
+# This is a targeted compositor hypothesis, NOT a WebGL fallback: the capture
 # verifies that window.advisorWorld.renderer.backend remains "webgpu".
 WEBGPU_ARGS = [
     "--enable-unsafe-webgpu", "--ignore-gpu-blocklist", "--enable-gpu",
