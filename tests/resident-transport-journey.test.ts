@@ -621,8 +621,15 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
     const { mkdirSync, writeFileSync } = await import("node:fs"),
       { dirname } = await import("node:path"),
       file = process.env.S005_VISUAL_WITNESS,
-      fixedMs = (tick: number) => REAL_EPOCH_MS + Math.ceil(tick / TIME_SCALE) * 1000,
+      // Fixed screenshot clocks must reproduce the EXACT original Fantasy tick.
+      // Rounding to the next whole real second advances up to TIME_SCALE
+      // fantasy seconds and moves the actor off the selected wet deck.
+      fixedMs = (tick: number) => REAL_EPOCH_MS +
+        Math.round((tick + 0.5) * 1000 / TIME_SCALE),
       door = selected!.residentByCode(chosenCode)!.homeEntrance;
+    for (const tick of [lowTick, destinationTick, destinationTick + 30*86400])
+      assert.equal(Math.floor((fixedMs(tick) - REAL_EPOCH_MS) * TIME_SCALE / 1000), tick,
+        "captured browser time must project the actual canonical SEED event tick");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify({
       residentCode: chosenCode, ownedDoorCode: door,
