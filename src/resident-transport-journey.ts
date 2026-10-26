@@ -115,7 +115,8 @@ export function prepareResidentTransportJourney(
   // equal the outgoing road would falsely reject a lawful crossing.
   for (const roadCode of new Set(selectedWet.map(i => source.stations[i].edgeCode))) {
     const first = source.stations.findIndex(s => s.edgeCode === roadCode || s.joinedEdgeCode === roadCode),
-      last = source.stations.findLastIndex(s => s.edgeCode === roadCode || s.joinedEdgeCode === roadCode),
+      last = source.stations.reduce((index, station, i) =>
+        station.edgeCode === roadCode || station.joinedEdgeCode === roadCode ? i : index, -1),
       wet = selectedWet.filter(i => source.stations[i].edgeCode === roadCode);
     if (first < 0 || last <= first || first >= wet[0] || last <= wet[wet.length - 1] ||
         surfaceAt(source.stations[first].x, source.stations[first].z).water.kind !== "none" ||
