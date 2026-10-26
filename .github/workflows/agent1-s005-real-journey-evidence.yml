@@ -1,0 +1,105 @@
+name: Validate S005 real resident bridge and home journey
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/resident-transport-events.ts'
+      - 'src/resident-transport-journey.ts'
+      - 'src/simulation.ts'
+      - 'src/main.ts'
+      - 'src/site-visit-advice.ts'
+      - 'tests/resident-transport-journey.test.ts'
+      - '.github/workflows/agent1-s005-real-journey-evidence.yml'
+permissions:
+  contents: read
+concurrency:
+  group: agent1-s005-real-journey-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  journey-evidence:
+    # Real native Chrome + Mac renderer avoids software-renderer readback stalls.
+    # Test the actual saved original actor on the owned wet deck, site, and
+    # home/explicit refusal at both mandatory 1920x1080 / 1080x1920 sizes.
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgpu, webgl2]
+        profile: [fullhd-landscape, fullhd-portrait]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: Validate real Campaign-SEED witness and capture original-game-state PNGs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results
+          # The SAME release-proven original actor must pass personality,
+          # physical five-road bridge, site arrival and event replay here.
+          # The optional witness is generated only from a successful REAL
+          # Simulation test, never by hardcoding an acceptedByResident flag.
+          export S005_VISUAL_WITNESS="$PWD/test-results/real-s005-witness.json"
+          node --experimental-strip-types --test --test-name-pattern="a real independently deciding SEED resident reaches a legal bridge site and reloads the same travel" tests/resident-transport-journey.test.ts > test-results/real-witness-test.log 2>&1 || {
+            cat test-results/real-witness-test.log
+            exit 1
+          }
+          test -s "$S005_VISUAL_WITNESS"
+          npm run preview -- --port 4174 > /tmp/s005-journey-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          # Produce three separate actual-game screenshots so changes in
+          # Fantasy time cannot be represented by a synthetic animation frame.
+          # Each new browser reconstructs the saved IDs at its fixed Fantasy
+          # time and revalidates all route stations, streets, decks and grades.
+          for SCENE in bridge site home; do
+            eval "$(python - "$S005_VISUAL_WITNESS" "$SCENE" <<'PY'
+          import base64,json,shlex,sys
+          w=json.load(open(sys.argv[1],encoding='utf-8'))
+          scene=sys.argv[2]
+          if scene=='home':
+              success=w['homeStarted']
+              point=w['ownedDoorPoint'] if success else w['site']
+              saved=w['homeHistory'] if success else w['outboundHistory']
+              fixed=w['homeFixedMs'] if success else w['siteFixedMs']
+              caption='home-door-arrival' if success else 'truthful-return-refusal'
+          else:
+              point=w[scene]; saved=w['outboundHistory']
+              fixed=w[scene+'FixedMs']
+              caption='real-owned-bridge' if scene=='bridge' else 'real-site-arrival'
+          values={'CAPTURE_X':repr(point['x']),'CAPTURE_Z':repr(point['z']),
+                  'CAPTURE_MS':str(fixed),'CAPTURE_CAPTION':caption,
+                  'CAPTURE_CODE_B64':base64.b64encode(w['residentCode'].encode()).decode(),
+                  'CAPTURE_SAVE_B64':base64.b64encode(json.dumps(saved,separators=(',',':')).encode()).decode(),
+                  'CAPTURE_REFUSAL':'true' if scene=='home' and not w['homeStarted'] else 'false'}
+          for key,value in values.items():print(key+'='+shlex.quote(value))
+          PY
+            )"
+            STEPS="eval:localStorage.setItem('advisor-game:s005:ALDERWICK:v5:site-visits',atob('${CAPTURE_SAVE_B64}'));eval:window.location.reload();until:window.advisorWorld?.state?.ready;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.planet.flatToLonLat(${CAPTURE_X},${CAPTURE_Z}));eval:window.advisorWorld.setHalfHeight(16);settle;shot:${CAPTURE_CAPTION}-terrain;until:window.advisorWorld.residentEvidencePick()?.code===atob('${CAPTURE_CODE_B64}');tap:resident;visible:#npc-popup:not([hidden]);eval:document.getElementById('npc-seed-code')?.textContent===atob('${CAPTURE_CODE_B64}')||Promise.reject(new Error('Original SEED actor not rendered/picked'));eval:document.querySelector('#npc-popup .npc-technical').open=true;settle;shot:${CAPTURE_CAPTION}-canonical-resident"
+            if [ "${CAPTURE_REFUSAL}" = true ]; then
+              STEPS="$STEPS;click:#npc-popup [data-advice-site];until:(e=>e&&e.textContent?.trim()&&!e.textContent.includes('considering'))(document.getElementById('npc-advice-result'));shot:lawful-return-refusal"
+            fi
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ \
+              --headed --browser-channel chrome \
+              --out "test-results/${SCENE}-${{ matrix.renderer }}-${{ matrix.profile }}" \
+              --name "s005-${SCENE}" --profile "${{ matrix.profile }}" \
+              --renderer "${{ matrix.renderer }}" --fixed-time-ms "${CAPTURE_MS}" \
+              --initial-ready-only --timeout 180 --steps "$STEPS"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s005-real-journey-${{ matrix.renderer }}-${{ matrix.profile }}
+          path: test-results/
+          if-no-files-found: warn
