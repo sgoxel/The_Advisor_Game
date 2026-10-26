@@ -1117,9 +1117,9 @@ const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field"
 function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
   navigate(x, z, Math.min(view.halfHeight, maxHalfHeight));
 }
-function openSettlementCard(place: (typeof places)[number]) {
+function openSettlementCard(place: (typeof places)[number], returnFocus?: HTMLElement) {
   centreOn(place.x, place.z, place.kind === "city" ? 60 : 25);
-  showSettlementPopup(place, populationOf(place));
+  showSettlementPopup(place, populationOf(place), returnFocus);
 }
 /**
  * Game-facing click: a building (or gate, field, well) under the point opens its card; ground inside a
@@ -1482,6 +1482,15 @@ function setupTravel() {
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
+  // Exact non-canvas counterpart to clicking a visible map label: the same
+  // SEED-backed place record enters the same read-only inspector.
+  const inspect = (place: (typeof places)[number] | undefined) => {
+    if (!place) return;
+    $("travel-panel").hidden = true;
+    openSettlementCard(place, $("open-travel"));
+  };
+  $("inspect-city").onclick = () => inspect(cities.find((p) => p.id === city.value));
+  $("inspect-village").onclick = () => inspect(villages.find((p) => p.id === village.value));
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;

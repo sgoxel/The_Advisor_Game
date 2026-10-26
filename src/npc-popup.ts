@@ -39,6 +39,7 @@ const bar = (value: number, max: number, hue: string) =>
 
 let root: HTMLElement | undefined;
 let currentCode = "";
+let popupReturnFocus: HTMLElement | null = null;
 let currentNpcPoint: { code: string; x: number; z: number } | undefined;
 /** What the popup shows: a resident (refreshed with Fantasy Time), a building or a settlement. */
 let currentKind: "npc" | "building" | "settlement" | "wilderness" | "" = "";
@@ -197,17 +198,35 @@ function install() {
     if(minimize&&content){content.hidden=!content.hidden;minimize.textContent=content.hidden?"+":"−";minimize.setAttribute("aria-expanded",String(!content.hidden));minimize.setAttribute("aria-label",content.hidden?"Restore window":"Minimize window");}
   });
   document.body.append(root);
-  addEventListener("keydown", (event: KeyboardEvent) => { if (event.key === "Escape") hideNpcPopup(); });
+  addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Escape" && root && !root.hidden) {
+      event.preventDefault();
+      hideNpcPopup();
+    }
+  });
 }
 
 export function npcPopupCode() {
   return root && !root.hidden && currentKind === "npc" ? currentCode : "";
 }
 export function hideNpcPopup() {
-  if (root) root.hidden = true;
+  if (root) {
+    root.hidden = true;
+    delete root.dataset.canonicalId;
+  }
   currentCode = "";
   currentKind = "";
   currentNpcPoint = undefined;
+  const opener = popupReturnFocus;
+  popupReturnFocus = null;
+  // Opening the travel menu may collapse its parent information panel; do
+  // not send the keyboard to a CSS-hidden opener. Return to the visible
+  // information-panel toggle so the user can reopen Explore without a mouse.
+  const visible = opener?.isConnected && !opener.closest("[hidden]") &&
+    !!opener.getClientRects().length && getComputedStyle(opener).visibility !== "hidden";
+  const target = visible ? opener : opener?.id === "open-travel"
+    ? document.getElementById("toggle-region-panel") : document.getElementById("world");
+  target?.focus({ preventScroll: true });
 }
 
 /** Open (or refresh) the popup for a resident at a simulation tick. */
@@ -390,11 +409,14 @@ function surroundings(place: Place) {
 }
 
 /** Town card: type, population, country, notable places, farmland, terrain, nearby sites and neighbours. */
-export function showSettlementPopup(place: Place, population: number) {
+export function showSettlementPopup(place: Place, population: number, returnFocus?: HTMLElement) {
   install();
   if (!root) return;
   currentCode = place.code;
   currentKind = "settlement";
+  root.dataset.canonicalId = place.id;
+  root.setAttribute("aria-label", `${place.name} settlement inspection`);
+  popupReturnFocus = returnFocus ?? null;
   const plan = settlementExteriorFor(place), city = place.kind === "city",
     country = countries.find((entry) => entry.continent === place.continent && entry.id === place.country),
     continent = continents[place.continent]?.name ?? "",
@@ -434,6 +456,7 @@ export function showSettlementPopup(place: Place, population: number) {
     <section><h3>Points of interest nearby</h3>${list(sites.map((site) => goRow(`${site.text} <span class="npc-muted">· ${km(site.distance)} ${site.dir}</span>`, site.ref, site.name)))}</section>
     <section><h3>Neighbouring settlements</h3>${list(neighbours.map(({ other, distance }) => goRow(`${escape(other.name)} <span class="npc-muted">· ${other.kind} · ${km(distance)} ${direction(place.x, place.z, other.x, other.z)}${linked.has(other.id) ? " · road" : ""}</span>`, `place:${other.id}`, other.name)))}</section>`;
   root.hidden = false;
+  if (returnFocus) root.querySelector<HTMLButtonElement>("[data-close]")?.focus({ preventScroll: true });
 }
 
 
