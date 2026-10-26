@@ -17,14 +17,14 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
-import { freshwaterCrossingAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "../src/hydrology.ts";
+import { freshwaterCrossingAt, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "../src/hydrology.ts";
 import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt, roadTangentAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -2389,6 +2389,28 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       if (failure) {
         firstUnsafe = { station: i + 1, road: station.edgeCode, cause: failure,
           x: station.x, z: station.z };
+        if (full) {
+          const latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(station.x, station.z).lat))),
+            east = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale),
+            north = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
+            road = roads.find(candidate => candidate.code === station.edgeCode),
+            offsets = [["center", 0, 0], ["east", east, 0], ["west", -east, 0],
+              ["north", 0, north], ["south", 0, -north]] as const,
+            samples = offsets.map(([side, dx, dz]) => {
+              const x = wrapSourceX(station.x + dx), z = station.z + dz,
+                current = finalSurfaceAt(x, z), natural = naturalSurfaceAt(x, z);
+              return { side, x, z, owner: current.reservedUse, material: current.material,
+                walkable: current.walkable, traversal: current.traversal,
+                surfaceHeight: current.surfaceHeight, groundHeight: current.groundHeight,
+                deckHeight: current.deckHeight, naturalHeight: natural.groundHeight,
+                naturalWater: natural.water.kind };
+            });
+          console.log("S005_REAL_FAILURE_SURFACE", JSON.stringify({
+            station: i + 1, road: station.edgeCode, segment: road
+              ? roadTangentAt(station.x, station.z, road).segment : null,
+            roadPoints: road?.centerline?.length ?? 0, samples,
+          }));
+        }
         break;
       }
       if (previousHeight !== null) {
