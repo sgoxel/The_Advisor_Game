@@ -238,6 +238,10 @@ test("S006 residents traverse only authoritative bridge decks and stand at deck 
     "a physically valid bridge is walkable despite the submerged ground beneath it");
   assert.equal(residentWalkableSurface({ ...surface, deckHeight: null, walkable: true }), false,
     "an open water gap without a deck cannot become a walkable shortcut");
+  assert.equal(residentWalkableSurface({ ...surface, traversal: "open" }), false,
+    "a height field without canonical bridge traversal cannot authorize the river crossing");
+  assert.equal(residentWalkableSurface({ ...surface, surfaceHeight: surface.deckHeight! + 1 }), false,
+    "a resident cannot stand on an asserted deck at a different physical walking elevation");
   assert.equal(residentWalkableSurface({
     ...surface, water: { ...surface.water, kind: "none" }, deckHeight: null, groundHeight: 0, walkable: true,
   }), false, "near-sea-level non-deck ground keeps its existing clearance rule");
