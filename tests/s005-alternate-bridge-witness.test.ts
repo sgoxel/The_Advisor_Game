@@ -121,6 +121,14 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
         const at=selected[firstWet], surface=finalSurfaceAt(at.x,at.z);
         if(surface.deckHeight===null||surface.traversal!=="bridge")
           reason="selected wet bridge has no traversed deck";
+        else {
+          // Negative predicate: removing this same SEED-owned wet deck must
+          // refuse traversal, not silently paint a dry road over water.
+          const missingDeck={...surface,deckHeight:null,deckOwnerIds:[],walkable:false,
+            traversal:"blocked" as const,surfaceHeight:surface.groundHeight};
+          assert.equal(sampledCorridorStationFailure(at,missingDeck),
+            "water without owned bridge deck");
+        }
       }
     }
     verdicts.push({from:from.code,to:to.code,roads:route.edgeCodes.length,
@@ -138,4 +146,12 @@ test("S005 alternate canonical owned bridge: gate-Y-site full physical witness s
     caution:"source-only complete sampled stations, not between-station or Simulation actor travel"
   }));
   assert.ok(firstLegal, "no full physically sampled legal gate→selected bridge→site source witness within bounded candidate budget");
+  // This is a fixed, current-SEED positive witness, not a pass obtained by
+  // silently switching to another nearby gate or endpoint.
+  assert.equal(firstLegal.from,"ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/PLACE/0/11/1/2");
+  assert.equal(firstLegal.to,"ADVISOR-0126-ALDERWICK/v5/TRANSPORT/NODE/SITE/ADVISOR-0126-ALDERWICK/v4/CONT/0/COUNTRY/11/SITE/0");
+  assert.equal(firstLegal.roads,5);
+  assert.equal(firstLegal.stations,9226);
+  assert.equal(firstLegal.midpointStations,9225);
+  assert.equal(firstLegal.edges[3],crossing!.code,"fourth owned source leg must cross the selected real river bridge");
 });
