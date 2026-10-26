@@ -35,6 +35,8 @@ export type ValidatedResidentJourney = Readonly<{
   departedTick: number;
   edgeCodes: readonly string[];
   stations: readonly Source[];
+  /** Exact macro-road gate after a physically verified local approach (if any). */
+  macroStart?: Source;
   cumulativeMetres: readonly number[];
   distanceM: number;
   /** Fixed longitude of the SEED gate owns the walk/rest schedule. */
@@ -211,6 +213,7 @@ export function prepareResidentTransportJourneyWithApproach(
     ]),
     distanceM: approachMetres + planned.distanceM,
     originLongitude: sourceToLonLat(approach[0].x, approach[0].z).lon,
+    macroStart: planned.stations[0],
   });
 }
 
@@ -237,7 +240,7 @@ export function prepareResidentTransportReturnJourney(
   surfaceAt: Sample = finalSurfaceAt,
   slopeAt: (x: number, z: number) => number = finalSurfaceLocalSlopeAt,
 ): ValidatedResidentJourney | null {
-  const outwardStart = outward.stations[0],
+  const outwardStart = outward.macroStart ?? outward.stations[0],
     outwardEnd = outward.stations[outward.stations.length - 1],
     canonicalOrigin = nodes.get(originNode);
   if (!outwardStart || !outwardEnd || !canonicalOrigin ||
