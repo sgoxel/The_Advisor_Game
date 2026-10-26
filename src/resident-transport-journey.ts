@@ -109,10 +109,15 @@ export function prepareResidentTransportJourney(
   // Require the selected actual wet deck to be flanked by dry road samples,
   // not merely a floating isolated bridge or a water-only endpoint.
   if (!selectedWet.length || !(cumulative[cumulative.length - 1] > 0)) return null;
-  for (const index of selectedWet) {
-    const first = source.stations.findIndex(s => s.edgeCode === source.stations[index].edgeCode),
-      last = source.stations.findLastIndex(s => s.edgeCode === source.stations[index].edgeCode);
-    if (first < 0 || last <= first || first === index || last === index ||
+  // At a canonical Y, the shared endpoint belongs to the incoming station
+  // and records the outgoing bridge road as joinedEdgeCode. Count that proven
+  // physical endpoint as the bridge's dry approach; requiring its edgeCode to
+  // equal the outgoing road would falsely reject a lawful crossing.
+  for (const roadCode of new Set(selectedWet.map(i => source.stations[i].edgeCode))) {
+    const first = source.stations.findIndex(s => s.edgeCode === roadCode || s.joinedEdgeCode === roadCode),
+      last = source.stations.findLastIndex(s => s.edgeCode === roadCode || s.joinedEdgeCode === roadCode),
+      wet = selectedWet.filter(i => source.stations[i].edgeCode === roadCode);
+    if (first < 0 || last <= first || first >= wet[0] || last <= wet[wet.length - 1] ||
         surfaceAt(source.stations[first].x, source.stations[first].z).water.kind !== "none" ||
         surfaceAt(source.stations[last].x, source.stations[last].z).water.kind !== "none") return null;
   }
