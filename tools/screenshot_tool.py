@@ -261,14 +261,16 @@ SCENARIOS: dict[str, str] = {
 
 # Software rendering flags from playwright.fallback.config.js and playwright.webgpu.config.js.
 WEBGL2_ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
-# Software WebGPU CI must present the actual Vulkan frame, not leave Xvfb
-# displaying the startup splash while DOM/Simulation advance. Chromium's
-# tested SwiftShader path uses Vulkan ANGLE plus disabled Vulkan swapchain
-# surfaces. Do NOT append WEBGL2_ARGS: its later --use-angle=swiftshader
-# overrides the Vulkan selection and hides compositor/presentation failures.
+# When Dawn's WebGPU device and ANGLE's desktop compositor both force the
+# Vulkan-ANGLE surface on headed software CI, real WebGPU frames can advance
+# while the Chrome/X11 compositor stops presenting ANY new pixels (observed
+# S006 exact-main logs on both native viewports). Keep Dawn on genuine Vulkan
+# SwiftShader but let ANGLE use SwiftShader's separate GLES compositor path.
+# This is a targeted compositor hypothesis, NOT a WebGL fallback: the capture
+# verifies that window.advisorWorld.renderer.backend remains "webgpu".
 WEBGPU_ARGS = [
     "--enable-unsafe-webgpu", "--ignore-gpu-blocklist", "--enable-gpu",
-    "--enable-features=Vulkan", "--use-angle=vulkan",
+    "--enable-features=Vulkan", "--use-gl=angle", "--use-angle=swiftshader",
     "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader",
     "--disable-vulkan-surface", "--enable-unsafe-swiftshader",
     "--enable-dawn-features=allow_unsafe_apis", "--disable-dawn-features=use_dxc",
