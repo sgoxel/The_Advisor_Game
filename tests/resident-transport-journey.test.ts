@@ -322,6 +322,31 @@ test("Simulation-owned site-visit decision refuses orders and journals only a fu
   assert.deepEqual(events.at(actor.code, departure + 5), walking,
     "absolute Fantasy Time replays the same committed SEED actor event");
   assert.equal(events.at("different", departure + 5), undefined);
+
+  const original = { ...actor, home: "original-owned-home", homeBuilding: "original-house",
+    position: { ...sourceToLonLat(actor.x, actor.z), elevation: 1 } } as Resident;
+  assert.strictEqual(events.project(original, departure - 1, () => 1), original,
+    "before an accepted departure, the canonical ordinary routine remains unchanged");
+  const projected = events.project(original, departure + 5, () => 1);
+  assert.equal(projected.code, original.code);
+  assert.equal(projected.home, "original-owned-home");
+  assert.equal(projected.homeBuilding, "original-house");
+  assert.equal(projected.indoors, false);
+  assert.equal(projected.activity, "commute");
+  assert.ok(projected.x > original.x && projected.x < nodes.get(route.to)!.x);
+  assert.ok(projected.walkAhead && projected.walkAhead.length >= 2,
+    "render motion follows timed physically verified station windows");
+  assert.deepEqual(events.project(original, departure + 5, () => 1), projected,
+    "same Fantasy tick and original identity reproduce one deterministic actor");
+  const atSite = events.project(original, departure + 10000, () => 1);
+  assert.equal(atSite.activity, "stroll");
+  assert.equal(atSite.travelProgress, 1);
+  assert.equal(atSite.walkAhead, undefined);
+  assert.ok(Math.abs(atSite.x - nodes.get(route.to)!.x) < 1e-6);
+  const otherResident = { ...original, code: "unrelated-original" } as Resident;
+  assert.strictEqual(events.project(otherResident, departure + 5, () => 1), otherResident,
+    "a visit may not spawn or displace another canonical SEED identity");
+
 });
 
 test("actual Greyfield SEED actor supplies only his own verified local street origin", () => {
