@@ -7,6 +7,7 @@ import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
+  greatCircleDistance,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   SOURCE_PRESENTATION_RADIUS,
   sourceToLonLat,
@@ -342,9 +343,74 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
+// The one measured-unsafe SEED corridor gets a lazy, finite physical grade
+// instead of a coarse straight height lerp across kilometre-long road segments.
+// Every sampled station must remain within 4m cut / 3m fill and its adjacent
+// roadway height within 6.5%. Unbuildable terrain keeps the original
+// fail-closed final surface; the SEED centerline and bridge law never change.
+const gradeRoadCode = PLACEHOLDER;
+type GradeStation = {metres:number;ground:number;min:number;max:number;height:number};
+let gradeStations: readonly GradeStation[] | null | undefined;
+let gradeVertices: readonly number[] | undefined;
+function boundedSelectedRoadGrade(road: Road, path: readonly {x:number;z:number}[]) {
+  if (road.code !== gradeRoadCode) return null;
+  if (gradeStations !== undefined) return gradeStations;
+  if (path.length<2 || path.length>64) return gradeStations=null;
+  const stations:GradeStation[]=[],vertices=[0];
+  let total=0;
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1],b=path[i],
+      distance=greatCircleDistance(sourceToLonLat(a.x,a.z),sourceToLonLat(b.x,b.z)),
+      pieces=Math.ceil(distance/10);
+    if(!Number.isFinite(distance)||pieces<1||stations.length+pieces>4096)
+      return gradeStations=null;
+    for(let j=0;j<pieces;j++){
+      const t=j/pieces,x=wrapSourceX(a.x+wrapSourceX(b.x-a.x)*t),z=a.z+(b.z-a.z)*t,
+        natural=naturalSurfaceBaseAt(x,z);
+      if(!Number.isFinite(natural.groundHeight)) return gradeStations=null;
+      stations.push({metres:total+distance*t,ground:natural.groundHeight,
+        min:natural.groundHeight-4,max:natural.groundHeight+3,height:natural.groundHeight});
+    }
+    total+=distance;vertices.push(total);
+  }
+  const end=path.at(-1)!,ground=naturalSurfaceBaseAt(end.x,end.z).groundHeight;
+  if(!Number.isFinite(ground))return gradeStations=null;
+  stations.push({metres:total,ground,min:ground-4,max:ground+3,height:ground});
+  // Propagate reachable elevation bounds forward; solve the selected legal
+  // profile backwards. Never emit an unsupported cliff-cut or bridge ramp.
+  for(let i=1;i<stations.length;i++){
+    const previous=stations[i-1],current=stations[i],rise=.065*(current.metres-previous.metres);
+    if(!Number.isFinite(rise)||rise<=0) return gradeStations=null;
+    current.min=Math.max(current.min,previous.min-rise);
+    current.max=Math.min(current.max,previous.max+rise);
+    if(current.min>current.max) return gradeStations=null;
+  }
+  const clamp=(v:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,v));
+  stations.at(-1)!.height=clamp(stations.at(-1)!.ground,stations.at(-1)!.min,stations.at(-1)!.max);
+  for(let i=stations.length-2;i>=0;i--){
+    const current=stations[i],next=stations[i+1],rise=.065*(next.metres-current.metres),
+      lower=Math.max(current.min,next.height-rise),upper=Math.min(current.max,next.height+rise);
+    if(lower>upper+1e-8)return gradeStations=null;
+    current.height=clamp(current.ground,lower,upper);
+  }
+  gradeVertices=vertices;
+  return gradeStations=stations;
+}
+
 function roadProfileHeightAt(x: number, z: number, road: Road) {
   const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
     a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
+  const graded=boundedSelectedRoadGrade(road,path);
+  if(graded && gradeVertices){
+    const at=gradeVertices[nearest.segment] +
+      (gradeVertices[nearest.segment+1]-gradeVertices[nearest.segment])*nearest.t;
+    let low=0,high=graded.length-1;
+    while(low+1<high){const middle=(low+high)>>1;
+      if(graded[middle].metres<at)low=middle;else high=middle;
+    }
+    const a=graded[low],b=graded[high];
+    return lerp(a.height,b.height,clamp01((at-a.metres)/(b.metres-a.metres||1)));
+  }
   let profile=roadProfileHeights.get(key);
   if(!profile){
     profile=[naturalSurfaceBaseAt(a.x,a.z).groundHeight,naturalSurfaceBaseAt(b.x,b.z).groundHeight];
