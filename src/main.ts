@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, selectedResidentVisibleInView, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, selectedResidentVisibleInView, residentLabelRightOfActor, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1912,7 +1912,7 @@ async function start() {
           selectedHomeDoorMarker.dataset.homeEntrance = door ? resident.homeEntrance : "";
         }
         // Displace the name to reveal the actual small on-scene character.
-        const right = x < innerWidth - 260;
+        const right = residentLabelRightOfActor(x, innerWidth, innerHeight);
         const transform = `translate3d(${x + (right ? 14 : -14)}px, ${y}px, 0) translate(${right ? "0" : "-100%"}, -110%)`;
         if (transform !== markedResidentTransform) {
           selectedResidentMarker.style.transform = transform;
