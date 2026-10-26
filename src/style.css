@@ -1541,3 +1541,9 @@ body.globe-mode .travel-button {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* S008 portrait inspector must not overlap the canonical place label at map
+   centre. Give the right-hand card a narrower rail instead of moving focus. */
+@media (orientation: portrait) and (min-width: 701px) {
+  #npc-popup { width: min(380px, calc(100vw - 32px)); }
+}
