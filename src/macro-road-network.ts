@@ -1,6 +1,7 @@
 import { compareText } from "./compare-text.ts";
 import {roadBucketCells} from './road-spatial-index.ts';
 import {macroSampleAt} from './macro-geography.ts';
+import {naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE} from './hydrology.ts';
 import {CANONICAL_PLANET_RADIUS, CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, lonLatToSource, sourceToLonLat, wrapSourceX, type CanonicalPosition, type LonLat} from './planet.ts';
 
 export const MACRO_ROAD_VERSION='macro-roads-v2';
@@ -24,7 +25,7 @@ const angleDifference=(a:number,b:number)=>Math.abs(Math.atan2(Math.sin(a-b),Mat
 /** Finite coarse graph only. No final cells, buildings or scenery are prepared.
  * Shared approaches become one physical trunk; connection records reference it.
  * Layered terrain search penalizes climb, high relief, obstacles and sharp turns. */
-export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly (readonly [RoadNode,RoadNode])[],ownerAt:(p:LonLat)=>string|undefined,seed:string,sample:typeof macroSampleAt=macroSampleAt,waterSegments:readonly CoarseWater[]=[]){
+export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly (readonly [RoadNode,RoadNode])[],ownerAt:(p:LonLat)=>string|undefined,seed:string,sample:typeof macroSampleAt=macroSampleAt,waterSegments:readonly CoarseWater[]=[],avoidSteepRiverBanks=false){
  let coarseSamples=0,maxStates=0,fallbacks=0,unbridgeableCrossings=0;
 
  const waterBuckets=new Map<string,CoarseWater[]>(),waterSize=8192;
@@ -148,6 +149,29 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     const sine=Math.abs(det)/(Math.hypot(dx,dz)*Math.hypot(vx,vz)||1),span=2*r.width*CANONICAL_METRES_PER_SOURCE_UNIT/Math.max(.001,sine);
     if(span>120){unbridgeableCrossings++;return Infinity;}
     cost+=1500+span*30;
+    if(avoidSteepRiverBanks){
+     // Coarse relief missed a steep dry cliff beside an otherwise legal wet deck.
+     // Price the SAME road arc on both real natural dry banks; do not
+     // change physical road grade limits or invent a water/bridge owner.
+     const arcLength=Math.hypot(dx,dz)||1,ux=dx/arcLength,uz=dz/arcLength,
+      cx=a.x+dx*t,cz=a.z+dz*t,
+      halfWetSource=r.width/Math.max(.001,sine)+RIVER_BANK_HALF_WIDTH_SOURCE;
+     for(const side of [-1,1]){
+      let previous:{x:number;z:number;height:number}|undefined;
+      for(const extra of [1,4,8,16,24]){
+       const x=wrapSourceX(cx+ux*side*(halfWetSource+extra)),
+        z=cz+uz*side*(halfWetSource+extra),natural=naturalSurfaceAt(x,z);
+       if(natural.water.kind!=='none'){cost+=100000;previous=undefined;continue;}
+       if(previous){
+        const distance=greatCircleDistance(sourceToLonLat(previous.x,previous.z),sourceToLonLat(x,z)),
+         grade=distance>0?Math.abs(natural.groundHeight-previous.height)/distance:Infinity;
+        if(!Number.isFinite(grade))cost+=100000;
+        else cost+=300000*Math.pow(Math.max(0,grade-.08),2);
+       }
+       previous={x,z,height:natural.groundHeight};
+      }
+     }
+    }
    }return cost;
   };
   type State={lane:number;previousLane:number;cost:number;node:typeof rows[number][number];previous?:State};
@@ -182,13 +206,13 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   const path:RoadPoint[]=[];for(let state:State|undefined=best;state;state=state.previous)path.push(state.node.point);path.reverse();
   // Remove near-collinear stations only. Keep terrain-selected deviations.
   for(let i=path.length-2;i>0;i--){const a=path[i-1],p=path[i],b=path[i+1],dx=b.x-a.x,dz=b.z-a.z,t=((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz||1),deviation=Math.hypot(p.x-a.x-dx*t,p.z-a.z-dz*t)*CANONICAL_METRES_PER_SOURCE_UNIT;
-   if(deviation<15&&Number.isFinite(crossingCost(a,b))&&legal(sourceToLonLat((a.x+b.x)/2,(a.z+b.z)/2),key))path.splice(i,1);
+   if(deviation<15&&Number.isFinite(crossingCost(a,b))&&(!avoidSteepRiverBanks||crossingCost(a,b)<50000)&&legal(sourceToLonLat((a.x+b.x)/2,(a.z+b.z)/2),key))path.splice(i,1);
   }
   // One bounded corner-rounding pass, preserving exact shared graph nodes.
   const smooth=[path[0]];
   for(let i=1;i<path.length-1;i++){
    const p=path[i],a=path[i-1],b=path[i+1],point=(q:RoadPoint,t:number)=>{const x=p.x+(q.x-p.x)*t,z=p.z+(q.z-p.z)*t;return{x,z,position:sourceToLonLat(x,z)};},u=point(a,.18),v=point(b,.18);
-   if(!inWater(u.position)&&!inWater(v.position)&&Number.isFinite(crossingCost(u,v))&&legal(u.position,key)&&legal(v.position,key)&&legal(sourceToLonLat((u.x+v.x)/2,(u.z+v.z)/2),key))smooth.push(u,v);else smooth.push(p);
+   if(!inWater(u.position)&&!inWater(v.position)&&Number.isFinite(crossingCost(u,v))&&(!avoidSteepRiverBanks||crossingCost(u,v)<50000)&&legal(u.position,key)&&legal(v.position,key)&&legal(sourceToLonLat((u.x+v.x)/2,(u.z+v.z)/2),key))smooth.push(u,v);else smooth.push(p);
   }
   smooth.push(path.at(-1)!);return {points:smooth,fallback:false};
  }
