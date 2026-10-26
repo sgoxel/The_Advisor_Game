@@ -99,6 +99,19 @@
 .transport-resume[hidden] { display: none; }
 #transport-site-answer:not(:empty), #transport-site-surface:not(:empty) { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(217, 184, 116, .24); }
 #transport-site-answer .eyebrow, #transport-site-surface .eyebrow { line-height: 1.35; }
+/* Keep canonical IDs available without pushing physical safety and timing below the fold. */
+.transport-route-provenance { margin-top: .6rem; border-top: 1px solid rgba(217, 184, 116, .24); }
+.transport-route-provenance summary {
+  display: list-item;
+  min-height: 44px;
+  padding: .7rem 0;
+  line-height: 1.25rem;
+  cursor: pointer;
+  color: #ead39d;
+  font-size: .82rem;
+  overflow-wrap: anywhere;
+}
+.transport-route-provenance summary:focus-visible { outline: 2px solid #ead39d; outline-offset: 2px; }
 #transport-selection h3 {
   margin: .45rem 0 .75rem;
   font-size: .88rem;
