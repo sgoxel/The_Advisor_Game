@@ -1,11 +1,12 @@
 import * as pc from 'playcanvas';
-import { loadDefaultCharacter } from './default-character.ts';
+import { loadGalleryCharacter } from './npc-gallery-model.ts';
 import { npcModels } from './npc-models.ts';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#character')!;
 const selector = document.querySelector<HTMLSelectElement>('#character-select')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 const name = document.querySelector<HTMLElement>('#name')!;
+const focus = document.querySelector<HTMLSelectElement>('#view-focus')!;
 const label = (key: string) => key.replaceAll('_', ' ').replace(/\b\w/g, value => value.toUpperCase());
 
 async function start() {
@@ -28,10 +29,11 @@ async function start() {
   light.addComponent('light', { type: 'directional', intensity: 1.3 });
   light.setEulerAngles(40, -30, 0);
   app.root.addChild(light);
-  const factory = await loadDefaultCharacter(app);
+  const factory = await loadGalleryCharacter(app);
   const actor = factory.create();
   app.root.addChild(actor);
   let moving = false, yaw = 18, pitch = 6, distance = 4.1;
+  focus.addEventListener('change', () => { distance = focus.value === 'face' ? .8 : 4.1; });
   let selection = 0;
   async function choose(key: string) {
     const ticket = ++selection;
@@ -42,7 +44,7 @@ async function start() {
     const entry = (await npcModels()).characters[key];
     canvas.dataset.character = key;
     canvas.dataset.generated = String(actor.tags.has('generated-npc'));
-    status.textContent = entry ? `${entry.triangles.toLocaleString()} triangles · textured and animated` : 'Original animated 3D character';
+    status.textContent = entry ? `${entry.triangles.toLocaleString()} triangles · textured, rigged${entry.visualScore !== undefined ? ` · visual review ${entry.visualScore}/10` : ''}` : '3D character';
     const url = new URL(location.href);
     url.searchParams.set('character', key);
     history.replaceState(null, '', url);
@@ -61,8 +63,9 @@ async function start() {
   }
   selector.addEventListener('change', () => void choose(selector.value));
   for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>('[data-motion]'))) button.addEventListener('click', () => {
+    factory.rest(actor, button.dataset.motion === 'rest');
     moving = button.dataset.motion === 'walk';
-    canvas.dataset.motion = moving ? 'walk' : 'idle';
+    canvas.dataset.motion = button.dataset.motion;
   });
   let drag: [number, number] | undefined;
   canvas.addEventListener('pointerdown', event => { drag = [event.clientX, event.clientY]; canvas.setPointerCapture(event.pointerId); });
@@ -73,12 +76,14 @@ async function start() {
     drag = [event.clientX,event.clientY];
   });
   canvas.addEventListener('pointerup', () => { drag = undefined; });
-  canvas.addEventListener('wheel', event => { event.preventDefault(); distance = Math.max(2, Math.min(7, distance+event.deltaY*.004)); }, { passive: false });
+  canvas.addEventListener('wheel', event => { event.preventDefault(); distance = Math.max(focus.value === 'face' ? .4 : 2, Math.min(7, distance+event.deltaY*.004)); }, { passive: false });
   app.on('update', () => {
     factory.move(actor, moving ? .8 : 0, 0, 1);
     const y=yaw*Math.PI/180, p=pitch*Math.PI/180;
-    camera.setPosition(Math.sin(y)*Math.cos(p)*distance, .9+Math.sin(p)*distance, Math.cos(y)*Math.cos(p)*distance);
-    camera.lookAt(0,.9,0);
+    canvas.dataset.animation = factory.animationState(actor);
+    const center = focus.value === 'face' ? factory.faceCenter(actor) : new pc.Vec3(0, .9, 0);
+    camera.setPosition(center.x+Math.sin(y)*Math.cos(p)*distance, center.y+Math.sin(p)*distance, center.z+Math.cos(y)*Math.cos(p)*distance);
+    camera.lookAt(center);
   });
   window.addEventListener('resize', resize);
   app.start();

@@ -50,6 +50,15 @@
       "rigged": true,
       "style": "studio-lowpoly-hires-v4",
       "revision": "aa613a31f49227a9"
+    },
+    "barbarian_girl_warrior": {
+      "url": "models/npcs/barbarian_girl_warrior.glb",
+      "heightM": 1.782,
+      "triangles": 29980,
+      "rigged": true,
+      "style": "projection-v2-reference-cleanup",
+      "revision": "907bcb0fa9976a20",
+      "visualScore": 7
     }
   }
 }

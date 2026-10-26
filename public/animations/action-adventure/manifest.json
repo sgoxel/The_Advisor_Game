@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "name": "Action Adventure Pack",
+  "source": "User-supplied Mixamo FBX pack",
+  "clips": [
+    {
+      "id": "cover-to-stand-2",
+      "name": "Cover To Stand (2)",
+      "url": "animations/action-adventure/cover-to-stand-2.json",
+      "duration": 1.133333,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "cover to stand (2).fbx",
+      "sourceSha256": "5eeed97f51ba19f558c9fe37b5bfdd045b2b1491f4e7f152e2b3de130a83cdc9"
+    },
+    {
+      "id": "cover-to-stand",
+      "name": "Cover To Stand",
+      "url": "animations/action-adventure/cover-to-stand.json",
+      "duration": 1.5,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "cover to stand.fbx",
+      "sourceSha256": "f0acddae48ccb4f170178ca98d7f2ed270b8a0d730b546dfc219715787e8b255"
+    },
+    {
+      "id": "crouched-sneaking-left",
+      "name": "Crouched Sneaking Left",
+      "url": "animations/action-adventure/crouched-sneaking-left.json",
+      "duration": 1.266667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "crouched sneaking left.fbx",
+      "sourceSha256": "22e09cfc48177c7ce21e1f9a5b270d6aa9e0cfbb4ecf358d507d35762a19fd7f"
+    },
+    {
+      "id": "crouched-sneaking-right",
+      "name": "Crouched Sneaking Right",
+      "url": "animations/action-adventure/crouched-sneaking-right.json",
+      "duration": 1.1,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "crouched sneaking right.fbx",
+      "sourceSha256": "560aba412e7cbc701eac789f3f20808bad00dc04ac6d83da5d051f1030dccfc1"
+    },
+    {
+      "id": "falling-idle",
+      "name": "Falling Idle",
+      "url": "animations/action-adventure/falling-idle.json",
+      "duration": 0.7,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "falling idle.fbx",
+      "sourceSha256": "3318bddca5737dffa6dd61631be4842218b96109c123ea11f74e1db5b14443ad"
+    },
+    {
+      "id": "falling-to-roll",
+      "name": "Falling To Roll",
+      "url": "animations/action-adventure/falling-to-roll.json",
+      "duration": 1.466667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "falling to roll.fbx",
+      "sourceSha256": "623f45a0c11b51a4bfc2cb58a55e4e93956cb48e0364596ef0faf66467a9d13f"
+    },
+    {
+      "id": "hard-landing",
+      "name": "Hard Landing",
+      "url": "animations/action-adventure/hard-landing.json",
+      "duration": 2.0,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "hard landing.fbx",
+      "sourceSha256": "d08069dda4620f01097c8c663d19eb16877f0bdf23a68f80b8e8131fb03e1965"
+    },
+    {
+      "id": "idle-2",
+      "name": "Idle (2)",
+      "url": "animations/action-adventure/idle-2.json",
+      "duration": 10.0,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle (2).fbx",
+      "sourceSha256": "7f3abeb6f6fb4a7b087d2064cd97cefeb09d658000af7b500200250a99c38a74"
+    },
+    {
+      "id": "idle-3",
+      "name": "Idle (3)",
+      "url": "animations/action-adventure/idle-3.json",
+      "duration": 3.266667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle (3).fbx",
+      "sourceSha256": "de1acf3246359fdc297f0a502824ab54f64a5df0104ab3eb1a40e86e549b06dc"
+    },
+    {
+      "id": "idle-4",
+      "name": "Idle (4)",
+      "url": "animations/action-adventure/idle-4.json",
+      "duration": 2.533333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle (4).fbx",
+      "sourceSha256": "dfb346306342ae00771a9812c5c90d82f4cd4a3d7a22b7e9cdfece5ef4d7a943"
+    },
+    {
+      "id": "idle-5",
+      "name": "Idle (5)",
+      "url": "animations/action-adventure/idle-5.json",
+      "duration": 2.166667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle (5).fbx",
+      "sourceSha256": "d17e2e6bf52576a650177a9e21bb889b046bcaf7a048bd20fd9b8c1c6169a3c4"
+    },
+    {
+      "id": "idle",
+      "name": "Idle",
+      "url": "animations/action-adventure/idle.json",
+      "duration": 3.9,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle.fbx",
+      "sourceSha256": "e29d54c3a00d00d8bd5c135c9572d2cfe91c47692b46b5dcac21d379fbfbe44b"
+    },
+    {
+      "id": "jumping-up",
+      "name": "Jumping Up",
+      "url": "animations/action-adventure/jumping-up.json",
+      "duration": 0.233333,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "jumping up.fbx",
+      "sourceSha256": "29736587949ec0decbaacdcd3ee7a66d3627f8646fece8e12c35b1cb3b3c1daf"
+    },
+    {
+      "id": "left-cover-sneak",
+      "name": "Left Cover Sneak",
+      "url": "animations/action-adventure/left-cover-sneak.json",
+      "duration": 1.133333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "left cover sneak.fbx",
+      "sourceSha256": "e1a04d580ea256320fc4d028babc2235c15e9a2609ccb950fb78d5654ba49180"
+    },
+    {
+      "id": "left-turn",
+      "name": "Left Turn",
+      "url": "animations/action-adventure/left-turn.json",
+      "duration": 1.033333,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "left turn.fbx",
+      "sourceSha256": "5caa0cb1eb6cafead613774e8d92f1c254d7f916969d2f0de259a230d1a57f7c"
+    },
+    {
+      "id": "right-cover-sneak",
+      "name": "Right Cover Sneak",
+      "url": "animations/action-adventure/right-cover-sneak.json",
+      "duration": 1.133333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "right cover sneak.fbx",
+      "sourceSha256": "3c1462db220bc62f2457e368e9dabb9e830691d59af8922b5e8184faa03f855b"
+    },
+    {
+      "id": "right-turn",
+      "name": "Right Turn",
+      "url": "animations/action-adventure/right-turn.json",
+      "duration": 0.966667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "right turn.fbx",
+      "sourceSha256": "32408bbbe585f4c849f05927f409e02397fa53c53ab2cefe22c00ab86b27e611"
+    },
+    {
+      "id": "run-to-stop",
+      "name": "Run To Stop",
+      "url": "animations/action-adventure/run-to-stop.json",
+      "duration": 0.8,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "run to stop.fbx",
+      "sourceSha256": "0b4b44011c8460986cd2907a5f5ebf27d2315071fa02d85ed111b32fd14fde95"
+    },
+    {
+      "id": "running",
+      "name": "Running",
+      "url": "animations/action-adventure/running.json",
+      "duration": 0.7,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "running.fbx",
+      "sourceSha256": "a06906d9ed7351b41e50fe3e32fd9aa7cb3df7b836f6117aecced273d5a63375"
+    },
+    {
+      "id": "stand-to-cover-2",
+      "name": "Stand To Cover (2)",
+      "url": "animations/action-adventure/stand-to-cover-2.json",
+      "duration": 1.266667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "stand to cover (2).fbx",
+      "sourceSha256": "7ce680be7ecd70ec16d0f7849f982f329e06ee8bb38be873be71b60548613056"
+    },
+    {
+      "id": "stand-to-cover",
+      "name": "Stand To Cover",
+      "url": "animations/action-adventure/stand-to-cover.json",
+      "duration": 1.133333,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "stand to cover.fbx",
+      "sourceSha256": "8f391f2532ac6f71ac4e065c9d4c3b32ff18630dfba3ceaa877e2242fdaeb06e"
+    },
+    {
+      "id": "walking",
+      "name": "Walking",
+      "url": "animations/action-adventure/walking.json",
+      "duration": 1.033333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "walking.fbx",
+      "sourceSha256": "6a3531d42682f538340c7032d32dee97ee82d536d672719767ac68dbc200c00b"
+    }
+  ],
+  "defaults": {
+    "idle": "idle",
+    "walk": "walking",
+    "run": "running"
+  }
+}

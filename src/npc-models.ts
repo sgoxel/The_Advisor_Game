@@ -1,4 +1,4 @@
-export type NpcModelEntry = { url: string; heightM: number; triangles: number; rigged: boolean };
+export type NpcModelEntry = { url: string; heightM: number; triangles: number; rigged: boolean; revision?: string; visualScore?: number };
 export type NpcModelManifest = { version: number; characters: Record<string, NpcModelEntry> };
 
 let current: NpcModelManifest = { version: 1, characters: {} };
