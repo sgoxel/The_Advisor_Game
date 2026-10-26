@@ -192,7 +192,8 @@ test("a real start position moves along a legal local approach before the same f
   assert.equal(journey!.macroStart?.x, 0, "the actual road origin remains canonical");
   assert.equal(journey!.stations[0].x, actor.x);
   assert.ok(journey!.distanceM > 0);
-  assert.equal(residentTransportJourneyAt(journey!, departure).x, actor.x);
+  assert.ok(Math.abs(residentTransportJourneyAt(journey!, departure).x - actor.x) < 1e-6,
+    "source-coordinate round-trip must preserve the actual departure point within precision");
   const onApproach = residentTransportJourneyAt(journey!, departure + 5);
   assert.ok(onApproach.x > actor.x && onApproach.x < 0,
     "local movement happens before macro-road movement");
