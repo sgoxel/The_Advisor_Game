@@ -46,30 +46,30 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Hard 4/6/8 streaming admission, ≤1 upload/frame & first authoritative response
-- WP-S009-002-001 — Bounded final-surface picking & zero avoidable idle-frame DOM layout work
-- WP-S009-003-001 — 256MB cache-trim trigger, ≤1GB CPU+GPU, DPR/shadow caps & WebGL2 recovery
-- WP-S009-004-001 — README compliance ledger: Advisor autonomy, campaign time/save, 2D actor truth & honest UX
-- WP-S009-005-001 — Honest 3-step scene readiness, no false 100%, stable pure zoom & visible homes
+- WP-S009-001-001 — Cap aggregate streaming jobs at 4/6/8, keep ≤1 upload/frame & deliver timely authoritative inspect
+- WP-S009-002-001 — Eliminate idle-frame DOM measurements & bound canonical terrain picking
+- WP-S009-003-001 — Trim unused cache above 256MB & cap CPU+GPU at 1GB with mobile DPR/WebGL2 recovery
+- WP-S009-004-001 — SHA-backed README compliance audit: Advisor autonomy, Fantasy Time, saves, 2D actors & honest UX
+- WP-S009-005-001 — Truthful 3-stage loading, settled 3D homes & pure-zoom continuity
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Decisions, Same-World Interiors & Campaign Persistence
 
-- WP-S010-001-001 — Research-first Hero/Close UX: SEED 3D geometry, 2D residents, camera focus & mobile budgets
-- WP-S010-002-001 — Reusable SEED GLB/toon prop kits: legal entrances, instancing, LOD & low draw cost
-- WP-S010-003-001 — 2D residents in true 3D: anchored feet, depth/roof occlusion, canonical picking & accessibility
-- WP-S010-003-002 — Read-only Advisor map tools: inspect/follow/measure, honest route preview & focus return
-- WP-S010-004-001 — Lawful daily work: real resident shifts, station/tool access & illustrated actions
-- WP-S010-004-002 — 3D SEED homes/yards: grounded props, actual owned doors & traversable footpaths
-- WP-S010-004-003 — Canonical inventory: accessible UI, SEED item IDs, lawful transfer & durable ownership
-- WP-S010-005-001 — Same-world home entry: real door→room access, honest readiness & no teleport
-- WP-S010-005-002 — Walkable service interiors: owned doors, real workstations & lawful occupants
-- WP-S010-005-003 — Same resident indoors: Simulation-validated door traversal, 2D occlusion & occupancy
-- WP-S010-005-004 — Persisted same-world interiors: validated occupant/item deltas, reconstruction & safe exit
-- WP-S010-006-001 — Real-device Hero/Close acceptance: 30 FPS p95, input latency, ≤1GB & renderer parity
+- WP-S010-001-001 — Research Hero/Close contracts for 3D depth, 2D residents, usable controls & mobile budgets
+- WP-S010-002-001 — Reusable low-draw 3D GLB/toon props with instancing, LOD & SEED-lawful doors
+- WP-S010-003-001 — Accurate 2D residents in 3D: feet, roof occlusion, picking & accessible selection
+- WP-S010-003-002 — Read-only Advisor tools: inspect, follow, measure & preview without actor teleport
+- WP-S010-004-001 — Simulation-legal daily work: real resident shifts, workstation access & visible 2D actions
+- WP-S010-004-002 — Real SEED homes at Hero zoom: grounded 3D lots, owned doors & walkable streets
+- WP-S010-004-003 — Legal inventory with SEED item IDs, accessible UI, validated transfer & persistence
+- WP-S010-005-001 — Enter a real home via owned door→room→exit with no teleport or false readiness
+- WP-S010-005-002 — Walkable 3D service interiors: street access, real workstations & legal occupants
+- WP-S010-005-003 — Simulation-validated resident door traversal with 2D depth & room occupancy
+- WP-S010-005-004 — Durable same-world interior events: occupancy/items, reconstruction & lawful exit
+- WP-S010-006-001 — Physical-device Hero/Close proof: 30 FPS floor, input p95, ≤1GB & GPU/GL2 parity
 
-- WP-S010-007-001 — Research-first Advisor interaction: Sentence Library, autonomous decisions & Simulation command contracts
-- WP-S010-007-002 — Playable Advisor conversation UI: deterministic Sentence Library, safe intent routing & offline fallback
-- WP-S010-007-003 — Autonomous protagonist decisions: accepted advice→legal Simulation events→observable consequences
-- WP-S010-008-001 — Research-first campaign creation & persistence: SEED authority, Fantasy Time, events & offline resume
-- WP-S010-008-002 — Create playable campaigns: visible SEED, accepted creation time & original protagonist identity
-- WP-S010-008-003 — Durable campaign history: Simulation-validated events, atomic save/load & deterministic offline catch-up
+- WP-S010-007-001 — Research Advisor contracts: Sentence Library, autonomous character & bounded LLM commands
+- WP-S010-007-002 — Accessible Advisor chat: deterministic Sentence Library, bounded LLM & offline fallback
+- WP-S010-007-003 — Autonomous character evaluates advice; Simulation validates observable world outcomes
+- WP-S010-008-001 — Research campaign authority: accepted creation date, Fantasy Time, SEED & offline resume
+- WP-S010-008-002 — Playable campaign create/select: visible SEED, accepted date & stable protagonist
+- WP-S010-008-003 — Crash-safe campaign save/reload: validated events & deterministic offline advancement
