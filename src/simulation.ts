@@ -12,6 +12,7 @@ import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clo
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { transportNetwork, transportRoadsNear } from "./transport-network.ts";
+import { transportRoadArcStations } from "./transport-bridge-surface.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -214,7 +215,7 @@ type SlotState = { valid: Offset[]; next: number; exhausted: boolean; rivals?: S
 type StreetSegment = { ax: number; az: number; bx: number; bz: number; halfM: number };
 type StandTable = { slotOf: Map<string, number>; total: Map<string, number> };
 type SettlementAnchors = {
-  markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][];
+  markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[]; maintenance: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][];
   /** Standing grounds by anchor coordinates, all of them (each once), the slots generated so far, street segments in metres and the resident-to-slot table. */
   areas: Map<string, StandArea>; areaList: StandArea[]; slots: Map<string, SlotState>; streetCells?: Map<string, StreetSegment[]>; stand?: StandTable;
 };
@@ -359,9 +360,59 @@ function natureSites(place: Place) {
       return finalSurfaceAt(p.x, p.z).water.kind !== "none";
     }) && reachable(point)) fishing.push({ ...point, id: `${place.code}/SHORE/${i}`, label: "Fishing from the bank" });
   }
-  // Fishing banks and woodland work sites are small standing grounds of their own.
-  for (const site of [...fishing, ...woodland]) standArea(anchors, site, 2.5);
-  return anchors.nature = { fishing, woodland };
+  // Ordinary labour includes upkeep of physically existing bridges. A far
+  // bank is work only when a real SEED gate connects to an actual wet deck
+  // and the same canonical road leads all the way to a dry bank station.
+  // One local bridge and one small outdoor worksite per village: this never
+  // constructs a bridge or derives a path from a screen-space icon.
+  const maintenance: ActivitySite[] = [];
+  if (place.kind === "village" && connectedGates.length) {
+    const scale = sourceUnitsPerMetreAt(place.z),
+      roads = transportRoadsNear(place.x, place.z,
+        Math.min(16_384, 3800 * Math.max(scale.x, scale.z)), 12),
+      bridgeRoads = new Map(roads.map(road => [road.code, road])),
+      candidates = transportNetwork.bridges
+        .filter(bridge => bridgeRoads.has(bridge.roadCode) &&
+          Math.hypot(offsetForSource(place, bridge.x, bridge.z).eastM,
+            offsetForSource(place, bridge.x, bridge.z).northM) < 3500)
+        .sort((a, b) => compareText(a.code, b.code));
+    for (const bridge of candidates.slice(0, 3)) {
+      const center = finalSurfaceAt(bridge.x, bridge.z);
+      if (center.water.kind === "none" || !residentWalkableSurface(center)) continue;
+      const owner = bridgeRoads.get(bridge.roadCode)!,
+        banks = transportRoadArcStations(owner.centerline, bridge.x, bridge.z,
+          -(bridge.spanM / 2 + 24), bridge.spanM / 2 + 24, 1),
+        bridgeOffset = offsetForSource(place, bridge.x, bridge.z);
+      for (const [bankIndex, bank] of banks.entries()) {
+        const site = offsetForSource(place, bank.x, bank.z);
+        if (!outdoorSiteLegal(place, site)) continue;
+        for (const gate of connectedGates) {
+          const route = residentTransportBridgePath(place, gate, site);
+          if (!route) continue;
+          // Confirm the executed polyline actually reaches the original
+          // water-spanning bridge, not an unrelated same-bank road branch.
+          const crossesDeck = route.slice(1).some((to, i) => {
+            const from = route[i], dx = to.eastM - from.eastM,
+              dz = to.northM - from.northM, length2 = dx * dx + dz * dz,
+              t = length2 ? Math.max(0, Math.min(1,
+                ((bridgeOffset.eastM - from.eastM) * dx +
+                  (bridgeOffset.northM - from.northM) * dz) / length2)) : 0;
+            return Math.hypot(from.eastM + dx * t - bridgeOffset.eastM,
+              from.northM + dz * t - bridgeOffset.northM) <= 2;
+          });
+          if (!crossesDeck) continue;
+          maintenance.push({ ...site, id: `${bridge.code}/MAINTENANCE/BANK/${bankIndex}`,
+            label: "Maintaining the bridge approach" });
+          break;
+        }
+        if (maintenance.length) break;
+      }
+      if (maintenance.length) break;
+    }
+  }
+  // Shared real outdoor slots remain SEED-indexed; no fabricated workers.
+  for (const site of [...fishing, ...woodland, ...maintenance]) standArea(anchors, site, 2.5);
+  return anchors.nature = { fishing, woodland, maintenance };
 }
 function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
   const anchors = settlementAnchors(place), nearby = [...(kind === "garden" ? anchors.gardens : anchors.markets)].sort((a,b) => Math.hypot(a.eastM-foundation.homeOffset.eastM,a.northM-foundation.homeOffset.northM)-Math.hypot(b.eastM-foundation.homeOffset.eastM,b.northM-foundation.homeOffset.northM)).slice(0,3);
@@ -423,6 +474,15 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
     case "farmer": return index < SERVICE_ROLES.length || !anchors.fieldsSites.length ? service("farmstead") : pick(anchors.fieldsSites, "FIELD");
     case "laborer": {
       const habitat = natureSites(place), sites = character.startsWith("fisherman") ? habitat.fishing : /^(hunter|woodcutter|herbalist)/.test(character) ? habitat.woodland : [];
+      // One ordinary, SEED-selected town labourer maintains a bridge only
+      // when its far bank and entire legal approach have been verified.
+      // Other trades retain their immutable seeded site selection.
+      const firstLaborer = habitat.maintenance.length
+        ? Array.from({ length: Math.min(80, populationOf(place)) - SERVICE_ROLES.length },
+            (_, i) => i + SERVICE_ROLES.length)
+            .find(i => residentRoleFor(place, i) === "laborer")
+        : undefined;
+      if (index === firstLaborer) return habitat.maintenance[0];
       return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
     }
     // A city's clergy minister at the well square and, for two in three, at a shrine in a neighbourhood garden, not all on one spot.
