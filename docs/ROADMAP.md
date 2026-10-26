@@ -31,7 +31,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Traversable SEED transport: grade-safe roads, connected bridges/ferries & honest route preview
+- WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -42,27 +42,34 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible world inspection: semantic SEED targets, ≥44px controls, safe-area layouts & focus return
+- WP-S008-001-001 — Accessible atlas UI: ≥44px touch targets, readable safe-area panels, semantic picking & focus return
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Bounded streaming and first-use response: aggregate 4/6/8 admission & ≤1 upload/frame
-- WP-S009-002-001 — Responsive world picking: bounded final-surface hits & no redundant idle layout work
-- WP-S009-003-001 — Mobile/browser resource safety: >256MB unused-cache trim, ≤1GB total, DPR caps & WebGL2 recovery
-- WP-S009-004-001 — README gameplay conformance audit: Advisor autonomy, campaign time/save, 2D characters & truthful UX
-- WP-S009-005-001 — Honest first-visible 3D readiness & pure zoom: stable focus, no blank homes or false 100%
+- WP-S009-001-001 — Hard 4/6/8 streaming admission, ≤1 upload/frame & first authoritative response
+- WP-S009-002-001 — Bounded final-surface picking & zero avoidable idle-frame DOM layout work
+- WP-S009-003-001 — 256MB cache-trim trigger, ≤1GB CPU+GPU, DPR/shadow caps & WebGL2 recovery
+- WP-S009-004-001 — README compliance ledger: Advisor autonomy, campaign time/save, 2D actor truth & honest UX
+- WP-S009-005-001 — Honest 3-step scene readiness, no false 100%, stable pure zoom & visible homes
 
-## STAGE S010 — Hero-Zoom Gameplay, Advisor Tools & Same-World Interiors
+## STAGE S010 — Hero-Zoom Gameplay, Advisor Decisions, Same-World Interiors & Campaign Persistence
 
-- WP-S010-001-001 — Research-first Hero/Close architecture: 3D world, 2D residents, legal camera UX & mobile budgets
-- WP-S010-002-001 — Shared toon-ready GLB/prop kits: SEED placement, instancing, safe access & LOD reuse
-- WP-S010-003-001 — Hero/Close illustrated 2D residents: real feet, roof occlusion, canonical picking & accessibility
-- WP-S010-003-002 — Advisor read-only camera tools: inspect/follow/measure, legal route preview & focus return
-- WP-S010-004-001 — Truthful work activity: Simulation-validated stations/tools & illustrated 2D action frames
-- WP-S010-004-002 — SEED homes/yards: grounded reusable 3D props, visible owned doors & legal footpaths
-- WP-S010-004-003 — Canonical inventory UI: SEED item IDs, legal transfers & persistent ownership truth
-- WP-S010-005-001 — Legal same-world home entry: camera preview, physical door, room readiness & no teleport
-- WP-S010-005-002 — Enterable service interiors: legal connected rooms, real workstations & lawful occupants
-- WP-S010-005-003 — Same resident indoors: validated door traversal, 2D occlusion & truthful occupancy
-- WP-S010-005-004 — Persistent interiors: validated item/occupant events, stable revisits & safe exit/recovery
-- WP-S010-006-001 — Hero/Close device acceptance: 30 FPS floor, first-response latency, 1GB cap & renderer parity
+- WP-S010-001-001 — Research-first Hero/Close UX: SEED 3D geometry, 2D residents, camera focus & mobile budgets
+- WP-S010-002-001 — Reusable SEED GLB/toon prop kits: legal entrances, instancing, LOD & low draw cost
+- WP-S010-003-001 — 2D residents in true 3D: anchored feet, depth/roof occlusion, canonical picking & accessibility
+- WP-S010-003-002 — Read-only Advisor map tools: inspect/follow/measure, honest route preview & focus return
+- WP-S010-004-001 — Lawful daily work: real resident shifts, station/tool access & illustrated actions
+- WP-S010-004-002 — 3D SEED homes/yards: grounded props, actual owned doors & traversable footpaths
+- WP-S010-004-003 — Canonical inventory: accessible UI, SEED item IDs, lawful transfer & durable ownership
+- WP-S010-005-001 — Same-world home entry: real door→room access, honest readiness & no teleport
+- WP-S010-005-002 — Walkable service interiors: owned doors, real workstations & lawful occupants
+- WP-S010-005-003 — Same resident indoors: Simulation-validated door traversal, 2D occlusion & occupancy
+- WP-S010-005-004 — Persisted same-world interiors: validated occupant/item deltas, reconstruction & safe exit
+- WP-S010-006-001 — Real-device Hero/Close acceptance: 30 FPS p95, input latency, ≤1GB & renderer parity
+
+- WP-S010-007-001 — Research-first Advisor interaction: Sentence Library, autonomous decisions & Simulation command contracts
+- WP-S010-007-002 — Playable Advisor conversation UI: deterministic Sentence Library, safe intent routing & offline fallback
+- WP-S010-007-003 — Autonomous protagonist decisions: accepted advice→legal Simulation events→observable consequences
+- WP-S010-008-001 — Research-first campaign creation & persistence: SEED authority, Fantasy Time, events & offline resume
+- WP-S010-008-002 — Create playable campaigns: visible SEED, accepted creation time & original protagonist identity
+- WP-S010-008-003 — Durable campaign history: Simulation-validated events, atomic save/load & deterministic offline catch-up
