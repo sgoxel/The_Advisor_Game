@@ -14,7 +14,7 @@ import { tickAtLocalTime, localDayIndex, localWeekday } from "../src/clock.ts";
 import { dailyPlan } from "../src/routines.ts";
 
 const HOUR = 3600;
-const places = [...villages.slice(0, 32), ...cities.slice(0, 8)];
+const places = [...villages.slice(0, 96), ...cities.slice(0, 16)];
 // Demand-load at most twelve roads/settlement. Never scan the entire road
 // graph into the cache or make camera/viewport state part of decisions.
 for (const place of places) {
@@ -25,19 +25,20 @@ const byCode = new Map(transportNetwork.bridges.map(b => [b.code, b]));
 const candidates = places.flatMap(place => [...byCode.values()]
   .map(bridge => ({ place, bridge, distance: greatCircleDistance(place.canonicalPosition, bridge.position) }))
   .filter(candidate => candidate.distance <= 4_000))
-  .sort((a, b) => a.distance - b.distance || a.place.code.localeCompare(b.place.code) || a.bridge.code.localeCompare(b.bridge.code));
+  .sort((a, b) => a.distance - b.distance || a.place.code.localeCompare(b.place.code) || a.bridge.code.localeCompare(b.bridge.code))
+  .filter((candidate, i, all) => all.findIndex(previous => previous.place.code === candidate.place.code) === i);
 console.log("S006 bridge witness search", JSON.stringify({
   settlements: places.length, discoveredRealBridges: byCode.size,
   nearbyPairs: candidates.length,
-  nearestPairs: candidates.slice(0, 8).map(x => ({ place:x.place.name, bridge:x.bridge.code, distanceM: Math.round(x.distance) }))
+  nearestPairs: candidates.slice(0, 20).map(x => ({ place:x.place.name, bridge:x.bridge.code, distanceM: Math.round(x.distance) }))
 }));
 let groundedRoutes = 0, blockedRoutes = 0, realBridgeWindows = 0;
-for (const { place, bridge } of candidates.slice(0, 8)) {
+for (const { place, bridge } of candidates.slice(0, 20)) {
   const lon = place.canonicalPosition.lon,
     day = [1,2,3,4,5,6,7].find(d => localWeekday(tickAtLocalTime(d,12*HOUR,lon),lon) !== 6)!,
     noon = tickAtLocalTime(day, 12*HOUR, lon);
   let probed = 0;
-  for (let index = 6; index < Math.min(populationOf(place), 140) && probed < 12; index++) {
+  for (let index = 6; index < Math.min(populationOf(place), 160) && probed < 16; index++) {
     const foundation = residentFoundationAt(place, index);
     if (foundation.role !== "laborer" && foundation.role !== "farmer") continue;
     if (!resolvedSettlementHomeDoorFor(place, index)) continue;
