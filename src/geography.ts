@@ -544,6 +544,29 @@ export function generateRoadNetworkLive() {
   return createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments);
 }
 const generatedRoadNetwork=cachedRoadNetwork(ROAD_NETWORK_FINGERPRINT,ROAD_NETWORK_FINGERPRINT_PARTS,()=>({places:places.map(p=>p.id),links:backboneEdges.map(([a,b])=>`${a.id}>${b.id}`)})) ?? generateRoadNetworkLive();
+/**
+ * The shipped macro cache is still authoritative for every unaffected road.
+ * Replan ONLY the proven grade-unsafe S005 source edge against genuine natural
+ * river-bank gradients. The existing SEED nodes/graph/code remain unchanged;
+ * this is an immutable derived alignment, not a fake traversal approval.
+ * Full final-surface route tests must still refuse any unsafe result.
+ */
+const selectedBankRoadId = "0/0/2/2~J/0/0/2/1";
+const selectedBankEdgeIndex = generatedRoadNetwork.edges.findIndex(edge => edge.id === selectedBankRoadId);
+if (selectedBankEdgeIndex >= 0) {
+  const original = generatedRoadNetwork.edges[selectedBankEdgeIndex],
+    refined = createMacroRoadNetwork(
+      [original.from, original.to], [[original.from, original.to]],
+      position => { const country = countryAtPosition(position);
+        return country ? `${country.continent}/${country.id}` : undefined; },
+      WORLD_SEED, macroSampleAt, drainageCoarseSegments, true,
+    ).edges.find(edge => edge.id === original.id);
+  if (!refined || refined.points.length < 2 ||
+      refined.from.id !== original.from.id || refined.to.id !== original.to.id)
+    throw new Error(`Invalid SEED bank-grade road replan: ${selectedBankRoadId}`);
+  generatedRoadNetwork.edges[selectedBankEdgeIndex] = { ...original, points: refined.points };
+}
+
 export const roadJunctions=generatedRoadNetwork.junctions;
 export const roadConnections=generatedRoadNetwork.connections;
 export const roadNetworkTelemetry=generatedRoadNetwork.telemetry;
