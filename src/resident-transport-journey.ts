@@ -161,7 +161,7 @@ export function prepareResidentTransportJourneyWithApproach(
       approach.length < 2 || approach.length > 256 ||
       ![resident.x, resident.z].every(Number.isFinite) ||
       !approach.every(point => Number.isFinite(point.x) && Number.isFinite(point.z)) ||
-      distance(resident, approach[0]) > 1 ||
+      distance(resident, approach[0]) > .01 ||
       !nodes.has(route.from) || distance(approach[approach.length - 1], nodes.get(route.from)!) > .01)
     return null;
 
@@ -178,8 +178,8 @@ export function prepareResidentTransportJourneyWithApproach(
         z: (previous.z + current.z) / 2 },
       middle = surfaceAt(mid.x, mid.z),
       firstHalf = distance(previous, mid), secondHalf = distance(mid, current);
-    if (!(metres > 0) || !Number.isFinite(metres) ||
-        !localSegmentLegal(previous, current) ||
+    if (!(metres > 0) || metres > 1_200 || approachMetres + metres > 6_500 ||
+        !Number.isFinite(metres) || !localSegmentLegal(previous, current) ||
         !residentWalkableSurface(middle) ||
         !(firstHalf > 0 && secondHalf > 0) ||
         Math.abs(middle.surfaceHeight - previousSurface.surfaceHeight) / firstHalf > .08 ||
