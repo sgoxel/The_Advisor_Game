@@ -63,11 +63,14 @@ jobs:
           # Two real S005 player surfaces: an authoritative SEED graph route
           # preview (not an actor-travel claim) and the selected physical bridge.
           # Preserve the original final-surface tests as separate authority.
-          STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=50;settle;eval:document.querySelector("#transport-site-route").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus==="canonical walking graph preview ready"||Promise.reject(new Error("Real selected junction-to-site route unavailable"));settle;shot:junction-site-route;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=20;settle;shot:owned-bridge'
+          # Use the previously proven fixed daylight tick so the real bridge,
+          # banks and grade can be visually inspected rather than lost in night shading.
+          FIXED_TIME_MS=1792874335750
+          STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=50;settle;eval:document.querySelector("#transport-site-route").click();eval:window.advisorTransport.telemetry().firstSiteRouteStatus==="canonical walking graph preview ready"||Promise.reject(new Error("Real selected junction-to-site route unavailable"));settle;shot:junction-site-route;eval:window.advisorTransport.selectEvidence("bridge");click:#transport-bridge-closeup;settle;shot:owned-bridge-low-angle'
           if [ "${{ runner.os }}" = "macOS" ]; then
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --browser-channel chrome --out test-results/s005-${{ matrix.backend }}-${{ matrix.profile }} --name s005 --profile ${{ matrix.profile }} --renderer ${{ matrix.backend }} --initial-ready-only --timeout 180 --steps "$STEPS"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --browser-channel chrome --out test-results/s005-${{ matrix.backend }}-${{ matrix.profile }} --name s005 --profile ${{ matrix.profile }} --renderer ${{ matrix.backend }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$STEPS"
           else
-            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s005-${{ matrix.backend }}-${{ matrix.profile }} --name s005 --profile ${{ matrix.profile }} --renderer ${{ matrix.backend }} --initial-ready-only --timeout 180 --steps "$STEPS"
+            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s005-${{ matrix.backend }}-${{ matrix.profile }} --name s005 --profile ${{ matrix.profile }} --renderer ${{ matrix.backend }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$STEPS"
           fi
       - uses: actions/upload-artifact@v4
         if: always()
