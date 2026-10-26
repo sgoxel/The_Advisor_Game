@@ -14,6 +14,7 @@ import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { transportNetwork, transportRoadsNear } from "./transport-network.ts";
 import { transportRoadArcStations } from "./transport-bridge-surface.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
+import type { ResidentSiteVisitJournal } from "./resident-transport-events.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   CANONICAL_PLANET_RADIUS,
@@ -1676,6 +1677,7 @@ export class LazySimulation {
   private residentIndexBuilds = 0;
   private residentIndexes = new Map<string, ResidentSpatialIndex>();
   private selectedResidentCode = "";
+  private siteVisitJournal?: ResidentSiteVisitJournal;
   private inspector?: HTMLElement;
 
   constructor() {
@@ -2015,6 +2017,58 @@ export class LazySimulation {
     if (!Number.isInteger(index) || index < 0 || index >= populationOf(place))
       return undefined;
     return residentAt(place, index, tick);
+  }
+
+  /**
+   * On-demand Simulation authority for a proposed canonical site itinerary:
+   * character decides independently from SEED personality, mood and current
+   * free-time activity; the current street/gate and every owned river/macro
+   * section must validate before a journey event is recorded. No camera/route
+   * preview can set acceptedByResident. Import terrain/route proof only on
+   * explicit demand, never in focusedResidents or an animation frame.
+   *
+   * Event journal is not yet a live/persistent worker snapshot: callers must
+   * not portray it as actual character movement until the shared resident
+   * query surface consumes these events.
+   */
+  async tryBeginSelfDirectedSiteVisit(
+    residentCode: string,
+    route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
+  ) {
+    const tick = this.tick, actor = this.residentByCode(residentCode, tick);
+    if (!actor || !actor.grounded || actor.indoors ||
+        route.edgeCodes.length < 2 || route.edgeCodes.length > 12) return null;
+    const place = places.find(entry => entry.id === actor.settlement);
+    if (!place || actor.code !== `${place.code}/RESIDENT/${actor.index}`) return null;
+    const [{ siteTransportNetwork }, { createTransportWalkingIndex },
+      { ResidentSiteVisitJournal }] = await Promise.all([
+      import("./site-transport-network.ts"),
+      import("./transport-walking-route.ts"),
+      import("./resident-transport-events.ts"),
+    ]);
+    // A stale async candidate never starts a journey at a superseded tick.
+    if (this.tick !== tick) return null;
+    const nodes = new Map(siteTransportNetwork.nodes.map(node => [node.code, node])),
+      origin = nodes.get(route.from), destination = nodes.get(route.to);
+    if (!origin || origin.sourceId !== place.id ||
+        !["village", "city", "capital"].includes(origin.kind) ||
+        !destination || destination.kind !== "site" ||
+        !route.edgeCodes.every(code => siteTransportNetwork.roadEdges.some(edge => edge.code === code)))
+      return null;
+    const roads = new Map(siteTransportNetwork.roadEdges.map(edge => [edge.code, edge])),
+      index = createTransportWalkingIndex(siteTransportNetwork);
+    this.siteVisitJournal ??= new ResidentSiteVisitJournal(
+      (code, atTick) => this.residentByCode(code, atTick),
+    );
+    return this.siteVisitJournal.tryStart(residentCode, tick, route, roads, nodes,
+      index.adjacency, siteTransportNetwork.bridges,
+      (resident, gate) => residentLocalTransportApproach(place, resident, gate),
+      (from, to) => residentLocalTransportSegmentLegal(place, from, to));
+  }
+
+  /** Read-only validated departure event; not yet an applied worker-visible trip. */
+  preparedSiteVisitFor(residentCode: string) {
+    return this.siteVisitJournal?.eventFor(residentCode);
   }
 
   /** Diagnostic compatibility façade. It materializes one analytical sample only on read. */
