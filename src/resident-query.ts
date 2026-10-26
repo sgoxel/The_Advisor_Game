@@ -2,6 +2,17 @@ import { compareText } from "./compare-text.ts";
 import { wrapSourceX } from "./planet.ts";
 import type { Resident, QueryStats } from "./simulation.ts";
 
+/** Camera frame rate must never advance a SEED actor ahead of Simulation time.
+ * Clock-tick interpolation is stable on reload, pause, frozen screenshot,
+ * worker handoff, and delayed frames; timing never changes the physical route. */
+export function residentMotionFraction(
+  currentTick: number, sourceTick: number, ticksPerRealSecond: number,
+): number {
+  if (!Number.isFinite(currentTick) || !Number.isFinite(sourceTick) ||
+      !Number.isFinite(ticksPerRealSecond) || ticksPerRealSecond <= 0) return 0;
+  return Math.max(0, Math.min(1, (currentTick - sourceTick) / ticksPerRealSecond));
+}
+
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number; actors?: boolean };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number } };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
