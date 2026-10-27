@@ -705,7 +705,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; border: Offset[]; gates: Offset[]; cell: number };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; border: Offset[]; gates: Offset[]; cell: number };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -738,6 +738,7 @@ function streetGraphFor(place: Place): StreetGraph {
     }
   });
   const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(),
+    nearestLegal: new Map<string, number>(),
     border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
     gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
   streetGraphs.set(place.code, graph);
@@ -1030,8 +1031,21 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   }
   const graph = streetGraphFor(place),
     legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
-    start = nearestLegalStreetNode(graph, from, legalConnector),
-    goal = nearestLegalStreetNode(graph, to, legalConnector);
+    // The settlement graph, source offsets and legal final surface are
+    // immutable within this SEED. Reuse exact directed connector verdicts
+    // for home/public/work endpoints across distinct legal route searches.
+    nearest = (point: Offset) => {
+      const pointKey = `${point.eastM},${point.northM}`,
+        cached = graph.nearestLegal.get(pointKey);
+      if (cached !== undefined) return cached; // -1 is also a lawful blocked result.
+      const chosen = nearestLegalStreetNode(graph, point, legalConnector);
+      graph.nearestLegal.set(pointKey, chosen);
+      while (graph.nearestLegal.size > 2048)
+        graph.nearestLegal.delete(graph.nearestLegal.keys().next().value!);
+      return chosen;
+    },
+    start = nearest(from),
+    goal = nearest(to);
   let path: Offset[] | null = null;
   if (start >= 0 && goal >= 0) {
     if (start === goal) {
