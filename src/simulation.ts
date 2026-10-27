@@ -575,6 +575,25 @@ function residentSpatialFactsAt(
   return { code, role, index, assignment, character, homeOffset, workOffset };
 }
 
+/** Standing-slot rankings need canonical role, traits and anchor offsets, not
+ * thousands of full city biographies, birthdays or appearance sprites.
+ * Preserve exactly the inputs used by residentFoundationAt + dailyPlan. */
+export function residentStandSeedFor(
+  place: Place, index: number,
+  exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
+): Pick<ResidentFoundation, "code" | "role" | "ageGroup" | "guardShift" | "traits" | "homeOffset" | "workOffset"> {
+  if (!Number.isInteger(index) || index < 0 || index >= populationOf(place))
+    throw new RangeError(`Resident index ${index} is outside ${place.code}`);
+  const code = `${place.code}/RESIDENT/${index}`,
+    full = residentFoundationCache.get(code);
+  if (full) return full;
+  const seeded = residentSpatialFactsAt(place, index, exteriorPlan);
+  return { code: seeded.code, role: seeded.role, ageGroup: seeded.character.age,
+    guardShift: seeded.assignment?.shift,
+    traits: traitsFor(seeded.code, seeded.role, seeded.character.age),
+    homeOffset: seeded.homeOffset, workOffset: seeded.workOffset };
+}
+
 /** Expensive immutable SEED identities are shared by the spatial index, standing-slot
  * roster and route evaluation. Cache data, never a mutable Simulation position.
  * The bounded cache only changes reconstruction cost, not identity or output. */
@@ -679,7 +698,7 @@ export function guardCoverageAt(place: Place, tick: number) {
   return coverage;
 }
 
-function anchorOffset(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor): Offset {
+function anchorOffset(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset" | "workOffset">, anchor: RoutineAnchor): Offset {
   if (anchor === "home") return foundation.homeOffset;
   if (anchor === "work") return foundation.workOffset;
   const anchors = settlementAnchors(place);
@@ -745,9 +764,10 @@ const KIND_RANK: Readonly<Partial<Record<ActivityKind, number>>> = { guard: 0, w
 function standTableFor(place: Place): StandTable {
   const anchors = settlementAnchors(place);
   if (anchors.stand) return anchors.stand;
+  const exteriorPlan = settlementExteriorFor(place);
   const users = new Map<string, [number, number][]>();
   for (let index = 0; index < populationOf(place); index++) {
-    const foundation = residentFoundationAt(place, index), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, best = new Map<string, number>();
+    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, best = new Map<string, number>();
     for (const [day, weekday] of [[0, 0], [6, 6]]) for (const entry of dailyPlan(subject, foundation.traits, day, weekday)) {
       if (entry.indoors || entry.anchor === "home") continue;
       const ground = anchors.areas.get(coordKey(anchorOffset(place, foundation, entry.anchor)));
