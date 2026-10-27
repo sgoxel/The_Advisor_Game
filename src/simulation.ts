@@ -1627,7 +1627,11 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
     // One final SEED border/lot reconciliation per cold spatial index.
     // Previously each residentFoundationAt() called settlementExteriorFor()
     // and repeated the same village border reconciliation thousands of times.
-    exteriorPlan = settlementExteriorFor(place);
+    exteriorPlan = settlementExteriorFor(place),
+    // Four common public anchors are independent of the resident index.
+    // Reuse exact canonical projections while leaving per-resident points intact.
+    sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep]
+      .map(offset => relativeSourceForOffset(place, offset));
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index, exteriorPlan),
@@ -1636,10 +1640,13 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
       // resolved here; never materialize all household doors for indexing.
       guardDoor = foundation.role === "guard" ? resolvedSettlementHomeDoorFor(place, index) : undefined,
       resolvedGuardHome = guardDoor ? offsetForSource(place, guardDoor.x, guardDoor.z) : undefined,
-      points = [foundation.homeOffset, ...(resolvedGuardHome ? [resolvedGuardHome] : []),
-        foundation.workOffset, anchors.inn, anchors.market, anchors.plaza, anchors.keep,
-        gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")]
-        .map((offset) => relativeSourceForOffset(place, offset)),
+      points = [
+        ...[foundation.homeOffset, ...(resolvedGuardHome ? [resolvedGuardHome] : []), foundation.workOffset]
+          .map(offset => relativeSourceForOffset(place, offset)),
+        ...sharedPoints,
+        ...[gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")]
+          .map(offset => relativeSourceForOffset(place, offset)),
+      ],
       // Street routes can bend away from the straight line between places: pad the box.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
       minX = Math.min(...points.map((point) => point.x)) - pad,
@@ -1676,6 +1683,9 @@ export class LazySimulation {
   private reconstructionCount = 0;
   private residentIndexBuilds = 0;
   private residentIndexes = new Map<string, ResidentSpatialIndex>();
+  private lastResidentIndexBuildMs = 0;
+  /** Read-only profiling of the most recent focused query; never affects SEED or routines. */
+  get residentIndexBuildMs() { return this.lastResidentIndexBuildMs; }
   private selectedResidentCode = "";
   private siteVisitJournal?: ResidentSiteVisitJournal;
   /** Validating a saved ledger must never publish partially restored actors. */
@@ -1827,7 +1837,9 @@ export class LazySimulation {
   private indexFor(place: Place) {
     let index = this.residentIndexes.get(place.code);
     if (!index) {
+      const started = performance.now();
       index = residentIndexFor(place);
+      this.lastResidentIndexBuildMs += performance.now() - started;
       this.residentIndexes.set(place.code, index);
       this.residentIndexBuilds++;
     }
@@ -1935,6 +1947,7 @@ export class LazySimulation {
     shard?: { index: number; count: number },
     prioritizeActors = false,
   ) {
+    this.lastResidentIndexBuildMs = 0;
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
     // A zero actor budget must be a zero-work, zero-actor query (never one
     // accidental resident from the first candidate bucket).
