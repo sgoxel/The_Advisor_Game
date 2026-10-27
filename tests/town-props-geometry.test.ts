@@ -77,6 +77,42 @@ test('town props: café terraces keep the door clear and inn terraces keep the p
   }
 });
 
+test('S005 original owned-front-wall portal has a real person-wide gap at close zoom', () => {
+  // A painted door over a solid wall previously occluded the actual SEED
+  // resident even though the owned entrance and canvas pick were correct.
+  // Intersect the real front-facade triangles at the canonical door (x=0,
+  // z=+depth/2), not a screenshot label or an unrelated drawn door decal.
+  const facadeCoversDoor = (g: Geo, yaw: number, depth: number) => {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const at = (index: number) => {
+      const x = g.positions[index * 3], y = g.positions[index * 3 + 1],
+        z = g.positions[index * 3 + 2];
+      return { x: x * c - z * s, y, z: x * s + z * c };
+    };
+    for (let i = 0; i < g.indices.length; i += 3) {
+      const [a, b, c0] = [at(g.indices[i]), at(g.indices[i + 1]), at(g.indices[i + 2])];
+      if (![a, b, c0].every(p => Math.abs(p.z - depth / 2) < .04)) continue;
+      const cross = (p: typeof a, q: typeof a) =>
+        (q.x - p.x) * (1.05 - p.y) - (q.y - p.y) * (0 - p.x);
+      const sides = [cross(a,b),cross(b,c0),cross(c0,a)];
+      if (sides.every(v => v >= -1e-6) || sides.every(v => v <= 1e-6)) return true;
+    }
+    return false;
+  };
+  for (const yaw of [0, .7, -2.1]) for (const shop of [undefined, 'cafe', 'restaurant']) {
+    const feature = {...base, kind: 'residence', shop, widthM: 7, depthM: 9,
+      variant: 4, yawRad: yaw, house: {wallHeightM: 5.4, storeys: 2}};
+    const close = buildPropForTest(feature, 8),
+      distant = buildPropForTest(feature, 16);
+    assert.equal(facadeCoversDoor(close.structures, yaw, 9), false,
+      `close ${shop ?? 'home'} must leave the true front-door/2D actor corridor open`);
+    assert.equal(facadeCoversDoor(distant.structures, yaw, 9), true,
+      'distant LOD preserves the low-poly opaque wall');
+    assert.ok(tris(close.structures) < 140, 'close wall opening stays mobile-safe');
+    finite(close.structures);
+  }
+});
+
 test('town props: output is deterministic and seeded by variant', () => {
   for (const {feature} of cases) {
     const a = buildPropForTest({...feature, yawRad: .4}), b = buildPropForTest({...feature, yawRad: .4});
