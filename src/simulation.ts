@@ -6,7 +6,7 @@ import { characterForRole, type CharacterAge, type CharacterSex } from "./charac
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
-import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeAnchorFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
@@ -579,7 +579,7 @@ export function residentFoundationAt(
     character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
     // Stable SEED lot for population indexing; resolving rendered doors is
     // expensive and belongs to bounded per-resident evaluation, not full rosters.
-    homeLot = settlementHomeFor(place, index, exteriorPlan).candidates[0],
+    homeLot = settlementHomeAnchorFor(place, index, exteriorPlan),
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
   const foundation: ResidentFoundation = {
