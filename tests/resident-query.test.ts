@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -71,6 +71,23 @@ test("selected S006 resident caption stays clear of portrait inspector without c
     "landscape selected resident keeps its previously accepted location");
   assert.equal(residentLabelRightOfActor(1790, 1920, 1080), false,
     "right-edge labels never extend outside the screen");
+});
+
+test("S005 owned-door marker cannot cover returning original 2D resident", () => {
+  // Genuine original front-door screenshot: the UI door anchor is almost
+  // identical to the resident's feet; old head-only check incorrectly drew
+  // a solid DOM label across the illustrated actor's head and torso.
+  const feet = { x: 824, y: 458 }, head = { x: 824, y: 398 };
+  assert.equal(ownedDoorLabelClearOfResident({ x: 824, y: 458 }, feet, head), false,
+    "owned doorway at original feet must never obscure the arriving body");
+  assert.equal(ownedDoorLabelClearOfResident({ x: 842, y: 422 }, feet, head), false,
+    "the entire vertical 2D body is a label-free corridor");
+  assert.equal(ownedDoorLabelClearOfResident({ x: 824, y: 347 }, feet, head), true,
+    "a different nearby but non-overlapping building entrance is still labeled");
+  assert.equal(ownedDoorLabelClearOfResident({ x: 900, y: 458 }, feet, head), true,
+    "a separately located genuine door keeps its independent marker");
+  assert.equal(ownedDoorLabelClearOfResident({ x: Number.NaN, y: 458 }, feet, head), false,
+    "invalid projection must not create a floating doorway label");
 });
 
 test("resident facts dispatch after initial ready without waiting for later zoom refinement", () => {
