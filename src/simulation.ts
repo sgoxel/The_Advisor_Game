@@ -895,9 +895,14 @@ export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
   const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
   if (!graph.grid.size) return -1;
   const bounds = (graph as Partial<StreetGraph>).gridBounds;
-  if (bounds && (cx + 39 < bounds.minX || cx - 39 > bounds.maxX ||
-    cz + 39 < bounds.minZ || cz - 39 > bounds.maxZ)) return -1;
-  for (let ring = 0; ring < 40; ring++) {
+  // An occupied cell cannot occur inside the Chebyshev distance from
+  // this query cell to the graph's exact occupied-grid rectangle. Skip
+  // only wholly empty inner rings; preserve every later bucket's order,
+  // nearest choice and deterministic exact-distance ties.
+  const firstRing = bounds ? Math.max(0,
+    bounds.minX - cx, cx - bounds.maxX, bounds.minZ - cz, cz - bounds.maxZ) : 0;
+  if (firstRing >= 40) return -1;
+  for (let ring = firstRing; ring < 40; ring++) {
     // Visit exactly the same perimeter buckets, in the same dx/dz order,
     // without scanning (and rejecting) the growing square's interior.
     for (let dx = -ring; dx <= ring; dx++) {
