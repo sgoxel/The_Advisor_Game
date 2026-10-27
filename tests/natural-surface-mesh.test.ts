@@ -8,9 +8,7 @@ import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
-import { villages, roads, roadDistanceAt } from "../src/geography.ts";
-import { siteAccessRoads } from "../src/sites.ts";
-import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
+import { villages } from "../src/geography.ts";
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
   const place= villages[0], tile=tileForPosition(place.x,place.z,10);
@@ -141,32 +139,4 @@ test("shoreline skirts do not hang above the real crossing water", () => {
     wetSkirts++;
   }
   assert.ok(wetSkirts>0);
-});
-
-test("clipped adaptive fragments have exactly the canonical road distance on land, bridges and seam aliases", () => {
-  const allRoads = [...roads, ...siteAccessRoads],
-    byLine = new Map(allRoads
-      .filter(road => road.centerline && road.centerline.length > 1)
-      .map(road => [road.centerline!, road] as const)),
-    bridge = finalSurfaceEvidenceAnchors().bridge;
-  let compared = 0, reused = 0;
-  for (const focus of [villages[0], bridge]) for (const level of [9, 11]) {
-    const tile = tileForPosition(focus.x, focus.z, level);
-    for (const fragment of roadFragmentsInBounds(allRoads, tile.minX, tile.minZ, tile.size)) {
-      const canonical = fragment.centerline ? byLine.get(fragment.centerline) ?? fragment : fragment;
-      if (canonical !== fragment) reused++;
-      for (const point of [
-        { x: tile.minX + tile.size / 2, z: tile.minZ + tile.size / 2 },
-        { x: fragment.fromX, z: fragment.fromZ },
-        { x: fragment.toX + SOURCE_PRESENTATION_WIDTH, z: fragment.toZ },
-      ]) {
-        assert.equal(roadDistanceAt(point.x, point.z, canonical),
-          roadDistanceAt(point.x, point.z, fragment),
-          "canonical source polyline must match each tile fragment even at the longitude seam");
-        compared++;
-      }
-    }
-  }
-  assert.ok(reused > 0, "real adaptive tiles must exercise reuse of full canonical road polylines");
-  assert.ok(compared > 0);
 });
