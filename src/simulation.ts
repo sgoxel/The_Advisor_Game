@@ -821,14 +821,25 @@ export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" |
       (surface.deckHeight !== null && surface.traversal === "bridge" &&
         surface.surfaceHeight === surface.deckHeight));
 }
+// SEED-owned final surface and enclosure never change during resident queries.
+// Cache exact *directed* metre-sampled checks; no coordinate rounding, and no
+// reversal that could change floating-point boundary samples on a wet bridge.
+const streetSegmentLegality = new Map<string, boolean>();
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
-  const { border, gates } = streetGraphFor(place);
-  if (!legalEnclosureSegment(from, to, border, gates)) return false;
-  return continuousWalkableOffsetSegment(from, to, point => {
-    const p = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(p.lon, p.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  });
+  const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
+    cached = streetSegmentLegality.get(key);
+  if (cached !== undefined) return cached;
+  const { border, gates } = streetGraphFor(place),
+    legal = legalEnclosureSegment(from, to, border, gates) &&
+      continuousWalkableOffsetSegment(from, to, point => {
+        const p = canonicalOffset(place, point.eastM, point.northM),
+          source = lonLatToSource(p.lon, p.lat);
+        return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+      });
+  streetSegmentLegality.set(key, legal);
+  while (streetSegmentLegality.size > 16384)
+    streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
+  return legal;
 }
 /** A resident's nearest street vertex may lie across an impassable cut.
  * Inspect at most sixteen other local vertices (within 24 m of that nearest
@@ -1033,6 +1044,10 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
         openSet.delete(current);
         if (current === goal) break;
         graph.edges[current].forEach((next, i) => {
+          // A nonimproving edge cannot enter the path, regardless of whether its
+          // physical surface is legal. Do not sample every metre needlessly.
+          const tentative = cost.get(current)! + graph.weights[current][i];
+          if (!(tentative < (cost.get(next) ?? Infinity))) return;
           const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
           let legal = graph.legalEdges.get(edgeKey);
           if (legal === undefined) {
@@ -1040,11 +1055,8 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
             graph.legalEdges.set(edgeKey, legal);
           }
           if (!legal) return;
-          const tentative = cost.get(current)! + graph.weights[current][i];
-          if (tentative < (cost.get(next) ?? Infinity)) {
-            cost.set(next, tentative); cameFrom.set(next, current);
-            if (!openSet.has(next)) { open.push(next); openSet.add(next); }
-          }
+          cost.set(next, tentative); cameFrom.set(next, current);
+          if (!openSet.has(next)) { open.push(next); openSet.add(next); }
         });
       }
       if (cost.has(goal)) {
