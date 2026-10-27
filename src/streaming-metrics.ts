@@ -58,6 +58,7 @@ export class ResidentQueryPhaseSamples {
   readonly workerResidentFoundationWallMs = new BoundedTimingSamples();
   readonly workerResidentDoorWallMs = new BoundedTimingSamples();
   readonly workerResidentScheduleWallMs = new BoundedTimingSamples();
+  readonly workerResidentOvernightRiskWallMs = new BoundedTimingSamples();
   readonly workerResidentGroundingWallMs = new BoundedTimingSamples();
   readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
   readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
@@ -85,7 +86,7 @@ export class ResidentQueryPhaseSamples {
   complete(
     id: number, accepted: boolean, at: number,
     workerPhases?: { preparationMs?: number; queryMs?: number; indexBuildMs?: number;
-      candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; groundingMs?: number },
+      candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; overnightRiskMs?: number; groundingMs?: number },
     wasWarm = false,
   ): void {
     const active = this.active.get(id);
@@ -102,6 +103,7 @@ export class ResidentQueryPhaseSamples {
     this.workerResidentFoundationWallMs.record(workerPhases?.foundationMs);
     this.workerResidentDoorWallMs.record(workerPhases?.doorMs);
     this.workerResidentScheduleWallMs.record(workerPhases?.scheduleMs);
+    this.workerResidentOvernightRiskWallMs.record(workerPhases?.overnightRiskMs);
     this.workerResidentGroundingWallMs.record(workerPhases?.groundingMs);
     // Includes canonical resident evaluation and any non-index query work.
     if (workerPhases?.queryMs !== undefined && workerPhases.indexBuildMs !== undefined)
@@ -134,6 +136,7 @@ export class ResidentQueryPhaseSamples {
       workerResidentFoundationWallMs: this.workerResidentFoundationWallMs.summary(),
       workerResidentDoorWallMs: this.workerResidentDoorWallMs.summary(),
       workerResidentScheduleWallMs: this.workerResidentScheduleWallMs.summary(),
+      workerResidentOvernightRiskWallMs: this.workerResidentOvernightRiskWallMs.summary(),
       workerResidentGroundingWallMs: this.workerResidentGroundingWallMs.summary(),
       coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
       warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),

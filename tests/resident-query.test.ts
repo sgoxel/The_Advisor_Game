@@ -1,11 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
-import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite } from "../src/simulation.ts";
+import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("S009 unchanged prior-day anchors cannot require a physical homecoming route", () => {
+  assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "home" }, { anchor: "home" }]), false);
+  assert.equal(routineHasAnchorChange([{ anchor: "garden" }, { anchor: "garden" }]), false);
+  assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "work" }, { anchor: "home" }]), true);
+  assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "home" }, { anchor: "market" }]), true);
+  assert.equal(routineHasAnchorChange([]), false);
+});
 
 test("S009 resident cold index builds only the shard while retaining all original SEED candidates and order", () => {
   const place = villages[0], simulation = new LazySimulation();
