@@ -278,6 +278,14 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
   const remote = { eastM: 5000, northM: -5000 };
   assert.equal(nearestNode(boundedGraph, remote), originalSquareScan(remote));
   assert.equal(remoteBucketReads, 0, "proved-out-of-range routes never scan empty street buckets");
+  // The same occupied-cell bound must also skip empty *inner* rings when
+  // there is a real reachable node further out. The original nearest node,
+  // scanned distance and tie rule remain the reference, never a new guess.
+  remoteBucketReads = 0;
+  const withinRange = { eastM: 500, northM: 500 };
+  assert.equal(nearestNode(boundedGraph, withinRange), originalSquareScan(withinRange));
+  assert.ok(remoteBucketReads < 1500,
+    "provably empty inner rings are not probed before reaching a real street");
   for (const offset of [
     { eastM: 0, northM: 0 },
     { eastM: 30, northM: -15 },
