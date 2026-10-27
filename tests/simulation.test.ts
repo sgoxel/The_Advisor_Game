@@ -174,6 +174,49 @@ test("resident streets attach to the true nearest vertex across grid bucket boun
     "empty streets cannot invent a connected vertex");
 });
 
+test("street ring perimeter scan preserves distant nearest-node and tie choices", () => {
+  const cell = 12, nodes = [
+    { eastM: -307, northM: 305 },
+    { eastM: 306, northM: -304 },
+    { eastM: 306, northM: 304 },
+    { eastM: -306, northM: -304 },
+    { eastM: 0, northM: 0 },
+    { eastM: 0, northM: 0 }, // exact ties must keep original node order
+  ];
+  const grid = new Map<string, number[]>();
+  nodes.forEach((node, index) => {
+    const key = `${Math.floor(node.eastM / cell)}/${Math.floor(node.northM / cell)}`;
+    grid.set(key, [...(grid.get(key) ?? []), index]);
+  });
+  const graph = { nodes, grid, cell };
+  const originalSquareScan = (offset: { eastM: number; northM: number }) => {
+    let best = -1, bestDistance = Infinity;
+    const cx = Math.floor(offset.eastM / cell), cz = Math.floor(offset.northM / cell);
+    for (let ring = 0; ring < 40; ring++) {
+      for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+        for (const id of grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
+          const distance = Math.hypot(nodes[id].eastM - offset.eastM, nodes[id].northM - offset.northM);
+          if (distance < bestDistance) { best = id; bestDistance = distance; }
+        }
+      }
+      if (best >= 0 && bestDistance <= ring * cell) break;
+    }
+    return best;
+  };
+  for (const offset of [
+    { eastM: 0, northM: 0 },
+    { eastM: 30, northM: -15 },
+    { eastM: -126, northM: 130 },
+    { eastM: 300, northM: 310 },
+    { eastM: -300, northM: -290 },
+    { eastM: 500, northM: 500 },
+  ]) {
+    assert.equal(nearestNode(graph, offset), originalSquareScan(offset),
+      "perimeter traversal must retain the original nearest vertex and deterministic ties");
+  }
+});
+
 test("resident street connectors choose a nearby legal vertex, never an unverified chord", () => {
   const cell = 12, nodes = [
     { eastM: 2, northM: 0 }, // physically nearest, but blocked by a wall
