@@ -72,7 +72,7 @@ test("old-camera and aged-tick answers are counted but never classified as accep
   assert.equal(report.firstAcceptedViewMs, 160, "latest view first offered at 130");
   assert.equal(report.coldWorkerQueryWallMs.samples, 1);
   assert.equal(report.warmWorkerQueryWallMs.samples, 2);
-  assert.equal(report.offerToDispatchMs.latest, 5, "accepted query has fresh clock-visible offer");
+  assert.equal(report.offerToDispatchMs.latest, 150, "same-view retry retains first pending offer");
 });
 
 test("clearing a view does not turn a delayed worker answer into an authoritative fact", () => {
