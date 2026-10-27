@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   cellAt,
   finalSurfaceAt,
+  finalSurfaceRenderChannelsAt,
   cellSeed,
   regionSeed,
   districtSeed,
@@ -49,6 +50,30 @@ import {
 import { LazySimulation, summaryAt, residentAt, populationOf } from "../src/simulation.ts";
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
+
+test("S009 render-only mesh channels match canonical water, height and material without changing legal traversal", () => {
+  const anchors = [
+    ...villages.slice(0, 3).map(place => ({ x: place.x, z: place.z })),
+    ...roads.slice(0, 3).map(road => ({ x: road.fromX, z: road.fromZ })),
+    ...MACRO_PLAN.continents.slice(0, 2).map(item => lonLatToSource(item.center.lon, item.center.lat)),
+    ...MACRO_PLAN.lakes.slice(0, 2).map(item => lonLatToSource(item.center.lon, item.center.lat)),
+    lonLatToSource(0, Math.PI / 2),
+  ];
+  let wet = 0;
+  for (const { x, z } of anchors) {
+    const sampled = finalSurfaceRenderChannelsAt(x, z);
+    const authoritative = finalSurfaceAt(x, z);
+    assert.deepEqual(
+      { groundHeight: sampled.groundHeight, groundMaterial: sampled.groundMaterial, water: sampled.water },
+      { groundHeight: authoritative.groundHeight, groundMaterial: authoritative.groundMaterial, water: authoritative.water },
+      `renderer and Simulation must share exact SEED channels at ${x},${z}`,
+    );
+    if (sampled.water.kind !== "none") wet++;
+    assert.deepEqual(finalSurfaceAt(x, z), authoritative,
+      "render-only query cannot mutate cached traversal or walkability");
+  }
+  assert.ok(wet > 0, "test must include canonical natural water");
+});
 
 test("real front-wall doorstep approaches never enter a house or jump to a side street", () => {
   const metre = 1 / (2 * Math.PI * 637100 / 262144);
