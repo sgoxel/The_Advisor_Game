@@ -13,6 +13,7 @@ import {
   heightAt,
   selectTiles,
   tileAt,
+  tileForPosition,
   WORLD_SEED,
   WORLD_MIN,
   MAX_LEVEL,
@@ -338,25 +339,32 @@ test("feature identity survives LOD changes and adjacent tile ownership is uniqu
   assert.ok(mesh.terrain.positions.length > 0);
 });
 
-test("S009 replaced-detail tiles skip only discarded base terrain, preserving every emitted layer", async () => {
-  const { rebuildNaturalSurface, NATURAL_MESH_LIMITS } = await import("../src/natural-surface-mesh.ts");
-  const tile = tileAt(13, 4096, 4096);
-  assert.ok(tile.size <= NATURAL_MESH_LIMITS.maximumTile);
-  const original = buildTile(tile), streamlined = buildTile(tile, { skipBaseTerrain: true });
-  assert.ok(original.terrain.positions.length > 0);
-  assert.equal(streamlined.terrain.positions.length, 0,
-    "the worker need not allocate an obsolete base terrain mesh");
-  for (const key of Object.keys(original) as (keyof typeof original)[]) {
-    if (key !== "terrain")
-      assert.deepEqual(streamlined[key], original[key],
-        `the optimized detail worker must preserve ${key} geometry exactly`);
+test("S009 only omits base terrain when canonical natural replacement actually exists", async () => {
+  const { rebuildNaturalSurface } = await import("../src/natural-surface-mesh.ts");
+  const { registerContinuityPatch } = await import("../src/continuity-runtime.ts");
+  const empty = { positions:new Float32Array(), normals:new Float32Array(),
+    colors:new Uint8Array(), indices:new Uint32Array() };
+  const cases = [
+    { tile:tileForPosition(villages[0].x,villages[0].z,10), replaces:true },
+    { tile:tileAt(13,4096,4096), replaces:false },
+  ];
+  for (const {tile,replaces} of cases) {
+    const original = buildTile(tile), expected = rebuildNaturalSurface(tile,original.terrain);
+    registerContinuityPatch(tile.minX+tile.size/2,tile.minZ+tile.size/2);
+    const preflight = rebuildNaturalSurface(tile,empty);
+    assert.equal(preflight.replaced,replaces,
+      "fixture must cover both adaptive replacement and mandatory coarse fallback");
+    assert.equal(preflight.replaced,expected.replaced);
+    const optimized = buildTile(tile,{skipBaseTerrain:preflight.replaced});
+    if (preflight.replaced) {
+      assert.equal(optimized.terrain.positions.length,0,
+        "only adaptive detail tiles avoid the disposable base surface");
+      optimized.terrain=preflight.geometry;
+      original.terrain=expected.geometry;
+    }
+    assert.deepEqual(optimized,original,
+      "all output terrain/roads/water/structures and mandatory fallback stay byte-identical");
   }
-  const expected = rebuildNaturalSurface(tile, original.terrain);
-  const actual = rebuildNaturalSurface(tile, streamlined.terrain);
-  assert.ok(expected.replaced && actual.replaced,
-    "skip is legal only when the canonical adaptive surface replaces the whole ground mesh");
-  assert.deepEqual(actual.geometry, expected.geometry,
-    "rendered terrain, water, material colors, normal and skirt vertices stay byte-identical");
 });
 
 test("Alderwick retains legal S004 morphology across tile ownership", async () => {
