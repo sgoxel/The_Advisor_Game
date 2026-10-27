@@ -426,8 +426,24 @@ function natureSites(place: Place) {
   for (const site of [...fishing, ...woodland, ...maintenance]) standArea(anchors, site, 2.5);
   return anchors.nature = { fishing, woodland, maintenance };
 }
+/** Select the identical nearest three as stable distance-sort, without sorting
+ * and allocating a full settlement-wide garden/market list for every resident. */
+export function threeNearestOffsets<T extends Offset>(candidates: readonly T[], home: Offset): T[] {
+  const closest: { site: T; distance: number }[] = [];
+  for (const site of candidates) {
+    const distance = Math.hypot(site.eastM - home.eastM, site.northM - home.northM);
+    let slot = 0;
+    // Equal distances retain original SEED site order, matching stable Array.sort.
+    while (slot < closest.length && closest[slot].distance <= distance) slot++;
+    if (slot >= 3) continue;
+    closest.splice(slot, 0, { site, distance });
+    if (closest.length > 3) closest.pop();
+  }
+  return closest.map(entry => entry.site);
+}
 function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
-  const anchors = settlementAnchors(place), nearby = [...(kind === "garden" ? anchors.gardens : anchors.markets)].sort((a,b) => Math.hypot(a.eastM-foundation.homeOffset.eastM,a.northM-foundation.homeOffset.northM)-Math.hypot(b.eastM-foundation.homeOffset.eastM,b.northM-foundation.homeOffset.northM)).slice(0,3);
+  const anchors = settlementAnchors(place),
+    nearby = threeNearestOffsets(kind === "garden" ? anchors.gardens : anchors.markets, foundation.homeOffset);
   return nearby[digest(`${foundation.code}/${kind}`) % nearby.length] ?? { ...(kind === "garden" ? anchors.plaza : anchors.market), id: `${place.code}/${kind.toUpperCase()}`, label: kind === "garden" ? "Town square" : "Market" };
 }
 function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
