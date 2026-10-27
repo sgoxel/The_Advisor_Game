@@ -30,7 +30,8 @@ type Sample = {
   y: number;
   tint: readonly number[];
   wet: string;
-  shoreDistance: number;
+  /** Only read on tiles with a real major wet/dry boundary. */
+  shoreDistance?: number;
   material: string;
 };
 
@@ -90,7 +91,6 @@ export function rebuildNaturalSurface(
     if (cache.size >= NATURAL_MESH_LIMITS.samples)
       throw new RangeError("Natural mesh sample cap exceeded");
     const surface = finalSurfaceRenderChannelsAt(x, z),
-      macro = macroSampleAt(sourceToLonLat(x, z)),
       wet = surface.water.kind,
       value = {
         x,
@@ -99,11 +99,18 @@ export function rebuildNaturalSurface(
         tint: terrainTint(x, z,32,undefined,0,false),
         material: surface.groundMaterial,
         wet,
-        shoreDistance: macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
       };
     cache.set(key, value);
     return value;
   };
+
+  // Computing full macro mountain/coast data is expensive and is only used
+  // for adaptive coast subdivision when a tile really straddles major water.
+  // A cached sample must still return the identical exact canonical distance
+  // when its first lookup happens after the 8x8 boundary probe.
+  const shoreDistance = (point: Sample): number =>
+    point.shoreDistance ?? (point.shoreDistance =
+      macroSampleAt(sourceToLonLat(point.x, point.z)).coastDistanceRad * SOURCE_PRESENTATION_RADIUS);
 
   let majorBoundary = false,
     initialWet: string | undefined;
@@ -282,7 +289,7 @@ export function rebuildNaturalSurface(
       nearCoast =
         majorBoundary &&
         [a, b, c, d, middle].some(
-          (s) => s.wet === "none" && Math.abs(s.shoreDistance) <= size * Math.SQRT2 + 8,
+          (s) => s.wet === "none" && Math.abs(shoreDistance(s)) <= size * Math.SQRT2 + 8,
         ),
       road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) < size * Math.SQRT2 / 2 + 12),
       // The worker uses this mesh instead of the coarse ground refinement at
