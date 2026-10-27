@@ -336,7 +336,7 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "reverse travel cannot bypass the same narrow physical crossing");
 });
 
-test("long lawful routes reject wide obstacles early without skipping any one-metre crossing", () => {
+test("continuous walking segments reject long routes early without skipping any one-metre crossing", () => {
   const origin = { eastM: 0, northM: 0 }, destination = { eastM: 3200, northM: 0 };
   let calls = 0;
   assert.equal(continuousWalkableOffsetSegment(origin, destination, point => {
