@@ -12,16 +12,19 @@ import type { ResidentQueryJob } from "./resident-query.ts";
 let residentSimulation: Promise<import("./simulation.ts").LazySimulation> | undefined;
 self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   if (event.data.kind === "residents") {
-    const job = event.data;
+    const job = event.data, started = performance.now();
     try {
       residentSimulation ??= import("./simulation.ts").then(({ LazySimulation }) => new LazySimulation());
       const simulation = await residentSimulation, { places } = await import("./geography.ts"),
         place = places.find(place => place.code === job.placeCode);
       if (!place) throw new Error("Unknown resident settlement");
+      const preparedAt = performance.now();
       simulation.setFocus(place);
       simulation.advance(job.tick);
       const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true);
-      self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query });
+      const completedAt = performance.now();
+      self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query,
+        residentTiming: { preparationMs: preparedAt - started, queryMs: completedAt - preparedAt } });
     } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
     return;
   }
