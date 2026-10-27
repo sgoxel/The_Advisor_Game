@@ -301,7 +301,7 @@ function dispatchResidentQuery() {
     const now = performance.now();
     if (firstResidentDispatchSinceWorkersMs === null) firstResidentDispatchSinceWorkersMs = now - workerStartedAt;
     residentPhaseTimings.dispatch(job.id, job.key, now);
-    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
+    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers, !!job.actors);
     const count = shards.length;
     residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
       assignments: new Map(shards.map(shard => [shard.workerId, shard.shardIndex])),
