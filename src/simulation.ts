@@ -1019,6 +1019,71 @@ function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Of
   return best;
 }
 
+/**
+ * Indexed min-priority frontier for canonical street routing. Identical to
+ * scanning an insertion-ordered array with strict '<' score comparison:
+ * equal scores retain their original OPEN insertion order, while a reopened
+ * node gets a fresh order. Score decreases never change that tie order.
+ * No camera, elapsed time, SEED mutation or random ordering is involved.
+ */
+export class StableStreetFrontier {
+  private heap: { id: number; score: number; order: number }[] = [];
+  private indices = new Map<number, number>();
+  private nextOrder = 0;
+  get size() { return this.heap.length; }
+  private before(a: { score: number; order: number }, b: { score: number; order: number }) {
+    return a.score < b.score || (a.score === b.score && a.order < b.order);
+  }
+  private swap(a: number, b: number) {
+    const left = this.heap[a], right = this.heap[b];
+    this.heap[a] = right; this.heap[b] = left;
+    this.indices.set(left.id, b); this.indices.set(right.id, a);
+  }
+  private up(start: number) {
+    for (let i = start; i > 0;) {
+      const parent = Math.floor((i - 1) / 2);
+      if (!this.before(this.heap[i], this.heap[parent])) break;
+      this.swap(i, parent);
+      i = parent;
+    }
+  }
+  private down(start: number) {
+    for (let i = start; ;) {
+      const left = i * 2 + 1, right = left + 1;
+      let best = i;
+      if (left < this.size && this.before(this.heap[left], this.heap[best])) best = left;
+      if (right < this.size && this.before(this.heap[right], this.heap[best])) best = right;
+      if (best === i) break;
+      this.swap(i, best);
+      i = best;
+    }
+  }
+  set(id: number, score: number) {
+    const index = this.indices.get(id);
+    if (index !== undefined) {
+      const previous = this.heap[index].score;
+      this.heap[index].score = score;
+      if (score < previous) this.up(index);
+      else if (score > previous) this.down(index);
+    } else {
+      const at = this.size;
+      this.heap.push({ id, score, order: this.nextOrder++ });
+      this.indices.set(id, at);
+      this.up(at);
+    }
+  }
+  take(): number {
+    if (!this.size) throw new RangeError("empty street frontier");
+    const first = this.heap[0].id, last = this.heap.pop()!;
+    this.indices.delete(first);
+    if (this.size) {
+      this.heap[0] = last;
+      this.indices.set(last.id, 0);
+      this.down(0);
+    }
+    return first;
+  }
+}
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
   // Surface, enclosure and street links are bidirectional. Resolve the same
@@ -1064,9 +1129,9 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       path = [from, graph.nodes[start], to];
     } else {
       const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
-        open = [start], openSet = new Set<number>([start]),
+        frontier = new StableStreetFrontier(),
         // Heuristic depends only on immutable graph nodes and the fixed goal.
-        // Each open-set scan keeps insertion-order ties and exact path choice.
+        // The indexed frontier preserves the prior insertion-order tie rule.
         heuristic = new Map<number, number>(),
         h = (id: number) => {
           const cached = heuristic.get(id);
@@ -1076,14 +1141,9 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
           heuristic.set(id, distance);
           return distance;
         };
-      while (open.length) {
-        let bestIndex = 0, bestScore = cost.get(open[0])! + h(open[0]);
-        for (let i = 1; i < open.length; i++) {
-          const score = cost.get(open[i])! + h(open[i]);
-          if (score < bestScore) { bestIndex = i; bestScore = score; }
-        }
-        const current = open.splice(bestIndex, 1)[0];
-        openSet.delete(current);
+      frontier.set(start, h(start));
+      while (frontier.size) {
+        const current = frontier.take();
         if (current === goal) break;
         graph.edges[current].forEach((next, i) => {
           // A nonimproving edge cannot enter the path, regardless of whether its
@@ -1098,7 +1158,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
           }
           if (!legal) return;
           cost.set(next, tentative); cameFrom.set(next, current);
-          if (!openSet.has(next)) { open.push(next); openSet.add(next); }
+          frontier.set(next, tentative + h(next));
         });
       }
       if (cost.has(goal)) {
