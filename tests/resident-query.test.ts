@@ -144,6 +144,12 @@ test("cold S009 resident queries split only across already idle workers and reus
     { workerId: 1, shardIndex: 0, count: 2 },
     { workerId: 3, shardIndex: 1, count: 2 },
   ], "two idle workers divide expensive cold SEED and legal route work without starting new workers");
+  assert.deepEqual(residentWorkerShardPlan([3, 1], new Set(), true), [
+    { workerId: 1, shardIndex: 0, count: 1 },
+  ], "first legal actor selection is invariant to extra idle workers");
+  assert.deepEqual(residentWorkerShardPlan([1, 3], new Set([3]), true), [
+    { workerId: 3, shardIndex: 0, count: 1 },
+  ], "actor queries reuse one warmed worker without changing their global early-stop behavior");
   assert.deepEqual(residentWorkerShardPlan([3, 1, 4]), [
     { workerId: 1, shardIndex: 0, count: 2 },
     { workerId: 3, shardIndex: 1, count: 2 },
@@ -240,25 +246,6 @@ test("parallel population shards reproduce the single-worker query in stable ord
   assert.deepEqual(mergeResidentQueries(shards, 7, rank).residents, expected.slice(0, 7));
 });
 
-
-test("two-worker first-actor queries retain exactly the canonical single-worker real residents", () => {
-  const place = villages[0], simulation = new LazySimulation(), tick = 36274242, limit = 8, radius = 10;
-  simulation.setFocus(place);
-  simulation.advance(tick);
-  const expected = simulation.focusedResidents(place.x, place.z, radius, limit, undefined, true);
-  const order = new Map([...villages, ...cities].map(p => [p.id, residentOrderFor(p)]));
-  const results = [0, 1].map(index => {
-    const residents = simulation.focusedResidents(place.x, place.z, radius, limit,
-      { index, count: 2 }, true);
-    return { residents, query: simulation.stats.query };
-  });
-  const merged = mergeResidentQueries(results, limit, resident =>
-    order.get(resident.settlement)!(resident.index));
-  assert.deepEqual(merged.residents.map(resident => resident.code),
-    expected.slice().sort((a, b) => residentOrderFor(place)(a.index) - residentOrderFor(place)(b.index))
-      .map(resident => resident.code),
-    "parallel evaluation must not replace or omit the original first canonical actors");
-});
 
 test("snapshot readiness expires with the realm clock even when the camera stays still", () => {
   const queue = new ResidentQueryQueue(48);
