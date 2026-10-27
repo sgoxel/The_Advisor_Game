@@ -41,12 +41,15 @@ test("S009 lightweight standing-roster seeds equal full canonical resident found
   for (const place of [villages[0], cities[0]]) {
     for (const index of [0, 1, 7, 31, 79, ...(place.kind === "city" ? [240, 2399] : [])]) {
       const compact = residentStandSeedFor(place, index),
-        full = residentFoundationAt(place, index);
-      assert.deepEqual(compact, {
-        code: full.code, role: full.role, ageGroup: full.ageGroup,
-        guardShift: full.guardShift, traits: full.traits,
-        homeOffset: full.homeOffset, workOffset: full.workOffset,
-      }, `${place.code}/${index} preserves identical dailyPlan and SEED standing anchors`);
+        full = residentFoundationAt(place, index),
+        expected = {
+          code: full.code, role: full.role, ageGroup: full.ageGroup,
+          guardShift: full.guardShift, traits: full.traits,
+          homeOffset: full.homeOffset, workOffset: full.workOffset,
+        };
+      assert.deepEqual(compact, expected, `${place.code}/${index} preserves exact cold SEED anchors`);
+      assert.deepEqual(residentStandSeedFor(place, index), expected,
+        `${place.code}/${index} preserves exact warm dailyPlan facts`);
     }
   }
 });
