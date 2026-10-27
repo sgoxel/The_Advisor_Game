@@ -157,10 +157,18 @@ export function streamingMemoryBytesForDevice(deviceClass: StreamingDeviceClass,
 }
 
 /**
- * The viewport budget for this device: enough generation slots to keep every worker of the pool
- * busy, and a tile cache sized to the device's memory.
+ * Device-class admission is a single bound for generating + ready-to-upload jobs.
+ * A high-core worker pool may idle; it must never enlarge the 4/6/8 shared cap.
+ * The memory policy is independent (owned by WP-S009-003-001).
  */
-export function streamingBudgetForPool(width: number, height: number, workers: number, deviceMemoryGB?: number): StreamingBudget {
+export function streamingBudgetForPool(width: number, height: number, _workers: number, deviceMemoryGB?: number): StreamingBudget {
   const budget = streamingBudgetForViewport(width, height), bytes = streamingMemoryBytesForDevice(budget.deviceClass, deviceMemoryGB);
-  return { ...budget, generationReady: Math.max(budget.generationReady, workers + 2), cacheTrimStartBytes: bytes, combinedBytes: bytes, cpuBytes: bytes, gpuBytes: bytes };
+  return { ...budget, cacheTrimStartBytes: bytes, combinedBytes: bytes, cpuBytes: bytes, gpuBytes: bytes };
+}
+
+/** Optional prefetch must leave one budget slot AND one idle worker for newly
+ * requested on-screen tiles or authoritative resident facts. Urgent work uses
+ * the full device budget; this helper never changes SEED contents or priority. */
+export function canPrefetchStreamingJob(inFlight: number, ready: number, idleWorkers: number, budget: StreamingBudget): boolean {
+  return idleWorkers > 1 && inFlight + ready < budget.generationReady - 1;
 }

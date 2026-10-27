@@ -111,6 +111,7 @@ import {
   withinStreamingBudget,
   shouldTrimStreamingCache,
   streamingMemoryReservationFits,
+  canPrefetchStreamingJob,
   generationWorkerCount,
   streamingBudgetForPool,
   UPLOAD_FRAME_BUDGET_MS,
@@ -294,7 +295,7 @@ function dispatchResidentQuery() {
 }
 const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
 let readyWorkers = 0;
-/** Jobs in flight plus generated meshes waiting for upload; enough to keep every worker busy. */
+/** Shared device-class admission for tile generation + meshes awaiting upload. */
 const generationLimit = () => streamingBudget.generationReady;
 const layers = { structures: true, nature: true, grid: false };
 let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
@@ -1042,14 +1043,15 @@ function processStreaming(material: pc.StandardMaterial) {
     }
   }
   {
-    // Fill every idle worker: urgent on-screen work first (skipping tiles already being built),
-    // then background prefetch around the player.
+    // Fill up to the shared cap with urgent on-screen work (skipping already-built tiles).
+    // Optional prefetch must reserve one idle worker and one slot for a new focus/inspect.
     const cachedOrPending={has:(key:string)=>cachedKeys.has(key)||pending.has(key)};
     while(!captureStreamingQuiesced && idleWorkers.length && inFlight+uploads.length<generationLimit()){
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
       else if (ready && !lodTransition && measuredStreamingFps >= 30 &&
+        canPrefetchStreamingJob(inFlight,uploads.length,idleWorkers.length,streamingBudget) &&
         !residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect) prefetchNext(root);
       if(inFlight===before)break;
     }
