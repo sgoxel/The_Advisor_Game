@@ -1363,9 +1363,9 @@ export function buildPropForTest(feature: any, tileSize = 8): Record<keyof Layer
 }
 
 /** S004 detail overlay: semantic settlement identity is owned by world.ts; geometry only visualizes it. */
-export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
+export function buildTile(tile: Tile, options: { terrainOnly?: boolean; skipBaseTerrain?: boolean } = {}): TileGeometry {
   if (options.terrainOnly) return buildTerrainOnly(tile);
-  const result = coreBuildTile(tile),
+  const result = coreBuildTile(tile, { skipBaseTerrain: options.skipBaseTerrain }),
     layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder() },
     all = Object.values(layers), originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
