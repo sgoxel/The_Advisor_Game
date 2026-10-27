@@ -66,6 +66,8 @@ test('town props: café terraces keep the door clear and inn terraces keep the p
     for (let i = 0; i < g.positions.length; i += 3) {
       const x = g.positions[i], y = g.positions[i + 1], z = g.positions[i + 2];
       if (z > 4.5 + .45 && y < 2.0) assert.ok(Math.abs(x) >= .8, `${shop}: prop at door x=${x.toFixed(2)} z=${z.toFixed(2)}`);
+      if (z > 4.5 + .7 && y > 1.8 && y < 2.85)
+        assert.ok(Math.abs(x) >= .94, `${shop}: overhead awning hides owned door at x=${x.toFixed(2)} y=${y.toFixed(2)} z=${z.toFixed(2)}`);
     }
   }
   for (const [w, d] of [[17, 19], [13, 16]]) {
