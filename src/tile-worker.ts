@@ -6,9 +6,12 @@ import { refineTileSurfacePresentation } from "./surface-refinement.ts";
 import { rebuildNaturalSurface, NATURAL_MESH_LIMITS } from "./natural-surface-mesh.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import { tileJobKey, type TileJob } from "./streaming-coverage.ts";
-import { continuityTelemetry } from "./continuity-runtime.ts";
+import { continuityTelemetry, registerContinuityPatch } from "./continuity-runtime.ts";
 import { loadAssetMeshes } from "./asset-meshes.ts";
 import type { ResidentQueryJob } from "./resident-query.ts";
+// The adaptive builder never mutates this disposable empty fallback mesh.
+const emptyTerrain = { positions:new Float32Array(), normals:new Float32Array(),
+  colors:new Uint8Array(), indices:new Uint32Array() };
 let residentSimulation: Promise<import("./simulation.ts").LazySimulation> | undefined;
 self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   if (event.data.kind === "residents") {
@@ -34,17 +37,27 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   }
   const job = event.data, tile = job.tile, jobKey = tileJobKey(job), started = performance.now();
   try {
-    const base = buildTile(tile, {terrainOnly:job.kind==='coverage',
-      // Every supported detail tile below this bound replaces the coarse
-      // surface in rebuildNaturalSurface; avoid paying for discarded mesh.
-      skipBaseTerrain:job.kind==='detail' && tile.size<=NATURAL_MESH_LIMITS.maximumTile}), baseDone = performance.now();
-    let natural = {replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0};
-    let data = base;
-    if(job.kind==='detail'){
-      const rebuilt = rebuildNaturalSurface(tile,base.terrain);base.terrain=rebuilt.geometry;natural=rebuilt;
-      data=refineTileSurfacePresentation(tile,base,natural.replaced);
+    let base: ReturnType<typeof buildTile>, natural = {replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0};
+    let baseMs: number;
+    if (job.kind === 'detail') {
+      // Original detail building registered this canonical region before the
+      // adaptive pass. Keep that order and retain coarse ground when replacement
+      // is unnecessary; plain tiles must never become blank.
+      registerContinuityPatch(tile.minX+tile.size/2,tile.minZ+tile.size/2);
+      const proposed = rebuildNaturalSurface(tile, emptyTerrain);
+      natural = proposed;
+      const buildStarted = performance.now();
+      base = buildTile(tile, {skipBaseTerrain:proposed.replaced});
+      baseMs = performance.now()-buildStarted;
+      if (proposed.replaced) base.terrain = proposed.geometry;
+    } else {
+      const buildStarted = performance.now();
+      base = buildTile(tile, {terrainOnly:true});
+      baseMs = performance.now()-buildStarted;
     }
-    const groundDone=performance.now();
+    const data = job.kind === 'detail'
+      ? refineTileSurfacePresentation(tile,base,natural.replaced) : base;
+    const groundDone = performance.now();
     let vegetation;
     if(job.kind==='detail'){vegetation=buildVegetationGeometry(tile);data.nature=vegetation.geometry;}
     if(job.kind==='detail'){ appendCriticalSiteGeometry(tile,data); appendWildernessGeometry(tile,data); }
@@ -54,7 +67,7 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       if (g.uvs) transfer.push(g.uvs.buffer);
     }
     self.postMessage({tile,data,precision,kind:job.kind,jobKey,vegetation:vegetation?.telemetry,continuity:continuityTelemetry(),
-      timing:{baseMs:baseDone-started,groundRefinementMs:groundDone-baseDone,decorationMs:performance.now()-groundDone,totalMs:performance.now()-started},
+      timing:{baseMs,groundRefinementMs:groundDone-started-baseMs,decorationMs:performance.now()-groundDone,totalMs:performance.now()-started},
       natural:{replaced:natural.replaced,leaves:natural.leaves,samples:natural.samples,cpuScratchBytesEstimated:natural.cpuScratchBytesEstimated}}, {transfer});
   } catch(error){self.postMessage({tile,kind:job.kind,jobKey,error:String(error)});}
 };
