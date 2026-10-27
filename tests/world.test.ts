@@ -48,6 +48,9 @@ import {
 } from "../src/travel.ts";
 import { LazySimulation, summaryAt, residentAt, populationOf } from "../src/simulation.ts";
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
+import { composeFinalSurface } from "../src/final-surface.ts";
+import { finalSurfaceDebugAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+
 
 
 test("real front-wall doorstep approaches never enter a house or jump to a side street", () => {
@@ -473,4 +476,35 @@ test('all actual domestic settlement departures share stems below 45 degrees',()
   const d=az(origins.get(id)!,rays[i])-az(origins.get(id)!,rays[j]),angle=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))*180/Math.PI;
   assert.ok(angle>=45-1e-6,`${id}: unmerged actual departure ${angle}`);
  }
+});
+
+test("S009 final surface shortcut preserves original legal slope and traversal across canonical anchors", () => {
+  const anchors = [
+    ...villages.slice(0, 3).map(({ x, z }) => ({ x, z })),
+    ...MACRO_PLAN.lakes.slice(0, 2).map(({ center }) => lonLatToSource(center.lon, center.lat)),
+    ...MACRO_PLAN.continents.slice(0, 2).map(({ center }) => lonLatToSource(center.lon, center.lat)),
+    lonLatToSource(0, Math.PI / 2),
+  ];
+  let wetBlocked = 0;
+  for (const { x, z } of anchors) {
+    const debug = finalSurfaceDebugAt(x, z);
+    const original = composeFinalSurface(debug.base, debug.modifiers);
+    const slope = finalSurfaceLocalSlopeAt(x, z);
+    const walkable = original.water.kind === "none"
+      ? original.walkable && (original.deckHeight !== null || slope < .68)
+      : original.deckHeight !== null && original.walkable;
+    const traversal = !walkable ? "blocked" :
+      (original.traversal === "open" && slope > .15) ||
+      (original.traversal === "road" && slope > .08) ? "difficult" : original.traversal;
+    assert.deepEqual(
+      [debug.final.walkable, debug.final.traversal],
+      [walkable, traversal],
+      `same pre-optimization truth at ${x},${z}`,
+    );
+    if (original.water.kind !== "none" && original.deckHeight === null) {
+      wetBlocked++;
+      assert.equal(debug.final.traversal, "blocked");
+    }
+  }
+  assert.ok(wetBlocked > 0, "canonical water without a lawful bridge remains blocked");
 });
