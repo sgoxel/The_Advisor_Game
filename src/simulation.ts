@@ -502,10 +502,18 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
     case "guard-officer": return service("guard-office");
     case "farmer": return index < SERVICE_ROLES.length || !anchors.fieldsSites.length ? service("farmstead") : pick(anchors.fieldsSites, "FIELD");
     case "laborer": {
-      const habitat = natureSites(place), sites = character.startsWith("fisherman") ? habitat.fishing : /^(hunter|woodcutter|herbalist)/.test(character) ? habitat.woodland : [];
-      // One ordinary, SEED-selected town labourer maintains a bridge only
-      // when its far bank and entire legal approach have been verified.
-      // Other trades retain their immutable seeded site selection.
+      const fishing = character.startsWith("fisherman"),
+        woodland = /^(hunter|woodcutter|herbalist)/.test(character),
+        // Only this original first SEED labourer could be reassigned to real
+        // bridge upkeep; all other ordinary labourers always used fields/home.
+        maintenanceCandidate = place.kind === "village" && index === firstMaintenanceLaborerFor(place);
+      // Habitat lookup is expensive: it builds verified final-surface routes.
+      // Do not do it for a generic field worker who cannot use any habitat,
+      // but never skip it for the canonical bridge candidate or nature trades.
+      if (!fishing && !woodland && !maintenanceCandidate)
+        return anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
+      const habitat = natureSites(place),
+        sites = fishing ? habitat.fishing : woodland ? habitat.woodland : [];
       const firstLaborer = habitat.maintenance.length ? firstMaintenanceLaborerFor(place) : undefined;
       if (index === firstLaborer) return habitat.maintenance[0];
       return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
