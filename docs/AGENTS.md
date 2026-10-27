@@ -43,6 +43,7 @@ CHECK FIRST → ACT ON THE ACTIVE WP → VERIFY SUFFICIENTLY → RELEASE USEFUL 
 
 - An incomplete ACTIVE WP continues across runs and may require multiple independently releasable corrections. Do not impose an arbitrary count of attempts, screenshots, iterations, or runs. A previous failure or elapsed time does not by itself make a WP impossible or authorize switching it.
 - On each run, re-evaluate persistent unresolved acceptance items against **current code and actual evidence**. Mark a previously reported problem resolved only when the evidence proves it; distinguish reproduced, unverified, stale, and solved findings.
+- Periodically triage older open Issues and recurring failures without adopting them: verify the latest source/evidence, de-duplicate superseded claims, and record the observed failure, root cause or uncertainty, smallest actionable correction/check, acceptance proof, existing owner and status. This evidence-only triage is allowed while another WP is ACTIVE; it does not authorize implementing or claiming a second WP. Do not add commentary when existing issue evidence and actions are already current.
 - Turn each still-relevant failure into an actionable next step: exact failing behavior/fixture, SEED or Simulation authority, smallest scoped source change, focused assertion or required visual proof, and deployment status. Prioritize actual game improvements over diagnostic or process work.
 - Implement and release the smallest safe incremental improvement once essential startup, SEED, Simulation, focused release checks, and build pass. Keep the WP Issue OPEN and ownership unchanged until all acceptance criteria, real visual evidence where required, and exact deployed-main verification pass. Deployment is not WP completion.
 - Never restart a valid running test solely because it is slow, duplicate passing validation without a relevant change, create endless retries, or let optional diagnostics block a ready release. Each individual job and run must have a finite end condition. If no useful current-run action remains while independent checks finish, record the accurate pending state and resume the **same ACTIVE WP** in the next run.
@@ -69,7 +70,7 @@ At every run:
 1. Identify Agent identity.
 2. Follow the latest explicit user WP assignment, if any.
 3. Otherwise continue the incomplete ACTIVE WP.
-4. Do NOT search for, claim, or work on another WP while it remains incomplete.
+4. Do NOT claim or implement another WP while it remains incomplete. Read-only triage and actionable evidence updates for older unresolved Issues are allowed under the continuous reassessment rule, without changing ownership or ACTIVE WP.
 
 If multiple unfinished same-Agent claims exist, use:
 1. Latest explicit user assignment.
