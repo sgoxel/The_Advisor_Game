@@ -264,6 +264,20 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
     }
     return best;
   };
+  // The real immutable street graph records its occupied bucket bounds once.
+  // A remote habitat outside the original 40-ring scan must remain unconnected
+  // without performing any thousands-of-empty-grid-lookups search.
+  const boundedGrid = new Map(grid);
+  let remoteBucketReads = 0;
+  boundedGrid.get = (key: string) => {
+    remoteBucketReads++;
+    return Map.prototype.get.call(boundedGrid, key) as number[] | undefined;
+  };
+  const boundedGraph = { ...graph, grid: boundedGrid,
+    gridBounds: { minX: -26, maxX: 25, minZ: -26, maxZ: 25 } };
+  const remote = { eastM: 5000, northM: -5000 };
+  assert.equal(nearestNode(boundedGraph, remote), originalSquareScan(remote));
+  assert.equal(remoteBucketReads, 0, "proved-out-of-range routes never scan empty street buckets");
   for (const offset of [
     { eastM: 0, northM: 0 },
     { eastM: 30, northM: -15 },
@@ -272,8 +286,8 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
     { eastM: -300, northM: -290 },
     { eastM: 500, northM: 500 },
   ]) {
-    assert.equal(nearestNode(graph, offset), originalSquareScan(offset),
-      "perimeter traversal must retain the original nearest vertex and deterministic ties");
+    assert.equal(nearestNode(boundedGraph, offset), originalSquareScan(offset),
+      "bounded perimeter traversal must retain the original nearest vertex and deterministic ties");
   }
 });
 
