@@ -274,6 +274,8 @@ export function showNpcPopup(resident: Resident, tick: number) {
             advicePendingCode === resident.code ? "disabled" : ""}>
           ${resident.route.startsWith("ARRIVED:")
             ? "Suggest returning to owned home · resident decides"
+            : resident.route.startsWith("SITE VISIT:")
+              ? "Ask to return before site arrival · resident decides"
             : resident.route.startsWith("HOME RETURN:")
               ? "Returning to owned home on verified streets"
               : resident.route.startsWith("HOME:")
