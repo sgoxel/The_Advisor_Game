@@ -586,7 +586,9 @@ export function residentStandSeedFor(
     throw new RangeError(`Resident index ${index} is outside ${place.code}`);
   const code = `${place.code}/RESIDENT/${index}`,
     full = residentFoundationCache.get(code);
-  if (full) return full;
+  if (full) return { code: full.code, role: full.role, ageGroup: full.ageGroup,
+    guardShift: full.guardShift, traits: full.traits,
+    homeOffset: full.homeOffset, workOffset: full.workOffset };
   const seeded = residentSpatialFactsAt(place, index, exteriorPlan);
   return { code: seeded.code, role: seeded.role, ageGroup: seeded.character.age,
     guardShift: seeded.assignment?.shift,
