@@ -43,6 +43,18 @@ export function residentWorkerShardPlan(
   return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
 }
 
+/** Reuse the resident worker's expensive cold index when other workers can
+ * still perform terrain jobs. Never withhold the only idle worker from mandatory
+ * terrain: fall back to previous LIFO selection if all available are warmed.
+ * This only chooses which existing worker gets a job, never what SEED builds. */
+export function terrainWorkerIndexAvoidingWarmResident(
+  idleWorkerIds: readonly number[], warmResidentWorkerIds: ReadonlySet<number>,
+): number {
+  for (let i = idleWorkerIds.length - 1; i >= 0; i--)
+    if (!warmResidentWorkerIds.has(idleWorkerIds[i])) return i;
+  return idleWorkerIds.length - 1;
+}
+
 /** Initial actor queries must return authoritative SEED facts before a cold
  * worker evaluates dozens of individually resolved doors and street routes.
  * Keep the first eight in the same deterministic spatial order; no resident
