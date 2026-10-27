@@ -931,11 +931,11 @@ export function continuousWalkableOffsetSegment(
     return walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
       northM: from.northM + (to.northM - from.northM) * t });
   };
-  // Rejected multi-kilometre doglegs dominate cold lawful route replay.
-  // Probe a subset of the *same exact one-metre positions* before the full
-  // pass: a confirmed blocked point is decisive. Every successful segment
-  // still checks every original metre once, including a narrow wet cut.
-  const stride = steps > 128 ? Math.max(2, Math.ceil(steps / 32)) : 1;
+  // Rejected off-street doglegs also recur at 40–128 m during cold
+  // civilian overnight replay. Probe at most ~16 of the *same exact*
+  // one-metre positions first, not a coarser substitute for validation.
+  // Successful routes still check every original metre exactly once.
+  const stride = steps > 32 ? Math.max(2, Math.ceil(steps / 16)) : 1;
   if (stride > 1) {
     for (let i = 0; i <= steps; i += stride) if (!check(i)) return false;
     if (steps % stride && !check(steps)) return false;

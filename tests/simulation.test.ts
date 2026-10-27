@@ -439,6 +439,26 @@ test("continuous walking segments reject long routes early without skipping any 
     "reverse travel must not bypass the identical narrow cut");
 });
 
+test("medium blocked overnight detours reject early but still require every legal metre", () => {
+  const start = { eastM: 0, northM: 0 }, end = { eastM: 96, northM: 0 };
+  let checked = 0;
+  assert.equal(continuousWalkableOffsetSegment(start, end, point => {
+    checked++;
+    return point.eastM < 44 || point.eastM > 52;
+  }), false, "a real blocked middle cut must reject an off-street detour");
+  assert.ok(checked <= 16, "a medium blocked detour must not incur its full metre scan");
+  const accepted = new Set<number>();
+  assert.equal(continuousWalkableOffsetSegment(start, end, point => {
+    accepted.add(point.eastM);
+    return true;
+  }), true);
+  assert.equal(accepted.size, 97, "a permitted 96 m walk checks all 97 exact original samples");
+  assert.equal(continuousWalkableOffsetSegment(start, end, point => point.eastM !== 47), false,
+    "one-metre water missed by early probes must still prevent passage");
+  assert.equal(continuousWalkableOffsetSegment(end, start, point => point.eastM !== 47), false,
+    "reversing a medium corridor cannot legalize the same blocked metre");
+});
+
 test("S006 residents traverse only authoritative bridge decks and stand at deck elevation", () => {
   const bridge = finalSurfaceEvidenceAnchors().bridge,
     surface = finalSurfaceAt(bridge.x, bridge.z);
