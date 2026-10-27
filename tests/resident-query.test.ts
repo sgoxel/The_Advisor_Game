@@ -54,6 +54,23 @@ test("S009 lightweight standing-roster seeds equal full canonical resident found
   }
 });
 
+test("S009 reused cold spatial seeds preserve exact resident identities across settlements", () => {
+  const samples = [villages[0], cities[0], cities[1], villages[0], cities[0]];
+  for (const place of samples) {
+    for (const index of [0, 31, 79, ...(place.kind === "city" ? [2399] : [])]) {
+      const standing = residentStandSeedFor(place, index),
+        foundation = residentFoundationAt(place, index);
+      assert.equal(standing.code, foundation.code, "SEED code cannot cross into another settlement");
+      assert.equal(standing.role, foundation.role);
+      assert.equal(standing.ageGroup, foundation.ageGroup);
+      assert.equal(standing.guardShift, foundation.guardShift);
+      assert.deepEqual(standing.traits, foundation.traits);
+      assert.deepEqual(standing.homeOffset, foundation.homeOffset, "shared home is the original canonical lot");
+      assert.deepEqual(standing.workOffset, foundation.workOffset, "shared work is the original SEED post");
+    }
+  }
+});
+
 test("S009 cached neighbourhood sites retain seeded garden/market and exact home-offset keys", () => {
   for (const place of [villages[0], cities[0]]) {
     for (const index of [0, 1, 31, 79, ...(place.kind === "city" ? [240, 2399] : [])]) {
