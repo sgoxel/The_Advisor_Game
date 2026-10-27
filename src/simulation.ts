@@ -306,8 +306,12 @@ function outdoorSiteLegal(place: Place, offset: Offset) {
 function natureSites(place: Place) {
   const anchors = settlementAnchors(place);
   if (anchors.nature) return anchors.nature;
-  const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place),
-    streetPoints = plan.streets.flatMap(street => street.points.map(point => offsetForSource(place, point.x, point.z)));
+  const fishing: ActivitySite[] = [], woodland: ActivitySite[] = [], plan = settlementExteriorFor(place);
+  // A streetless plan must stay unreachable, even when the gate corridor is dry.
+  // Convert/scan street vertices only if no verified gate corridor reaches the
+  // habitat; most dry routes need neither costly scan.
+  const hasStreetPoints = plan.streets.some(street => street.points.length > 0);
+  let streetPoints: Offset[] | undefined;
   // An exterior bank is not a reachable workplace merely because it is dry
   // from a gate. First prove that the actual internal SEED streets can reach
   // that gate from the town square. Resolve at most two approaches, once per
@@ -316,13 +320,16 @@ function natureSites(place: Place) {
     .map(gate => offsetForSource(place, gate.x, gate.z))
     .filter(gate => streetPath(place, anchors.plaza, gate, false) !== null);
   const reachable = (point: Offset) => {
-    const start = streetPoints.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
-    if (!start) return false;
+    if (!hasStreetPoints) return false;
     // Most real field/shore work is directly accessible outside a SEED gate.
     // Validate those corridors against continuous metre-spaced final-surface
     // ground/decks first, without running a whole-graph A* for every candidate.
     for (const gate of connectedGates)
       if (legalStreetSegment(place, gate, point)) return true;
+    const points = streetPoints ??= plan.streets.flatMap(street =>
+      street.points.map(p => offsetForSource(place, p.x, p.z)));
+    const start = points.reduce<Offset | undefined>((best, p) => !best || Math.hypot(p.eastM-point.eastM,p.northM-point.northM) < Math.hypot(best.eastM-point.eastM,best.northM-point.northM) ? p : best, undefined);
+    if (!start) return false;
     // Cheap coarse negative only: a wet direct chord is not proof that the
     // same SEED site is unreachable via a real road bridge. Do not run the
     // expensive bridge-road query at every ordinarily dry candidate.
@@ -354,12 +361,16 @@ function natureSites(place: Place) {
       point = { eastM: Math.cos(angle) * radius, northM: Math.sin(angle) * radius },
       ll = canonicalOffset(place, point.eastM, point.northM), source = lonLatToSource(ll.lon, ll.lat), surface = finalSurfaceAt(source.x, source.z);
     if (!surface.walkable || surface.water.kind !== "none" || surface.groundHeight <= .1 || (surface.reservedUse && surface.reservedUse !== place.code)) continue;
-    if (surface.vegetationDensityScale > .5 && climateSampleAt(ll, surface.groundHeight).forestFamily && woodland.length < 8 && reachable(point))
+    // One point may qualify for woodland and shore work: reuse its identical
+    // gate/bridge/final-surface verdict without repeating any route search.
+    let verified: boolean | undefined;
+    const reachableOnce = () => verified ??= reachable(point);
+    if (surface.vegetationDensityScale > .5 && climateSampleAt(ll, surface.groundHeight).forestFamily && woodland.length < 8 && reachableOnce())
       woodland.push({ ...point, id: `${place.code}/WOODLAND/${i}`, label: "Working in the woodland" });
     if (fishing.length < 8 && [0, 1, 2, 3, 4, 5, 6, 7].some(n => {
       const near = canonicalOffset(place, point.eastM + Math.cos(n * Math.PI / 4) * 12, point.northM + Math.sin(n * Math.PI / 4) * 12), p = lonLatToSource(near.lon, near.lat);
       return finalSurfaceAt(p.x, p.z).water.kind !== "none";
-    }) && reachable(point)) fishing.push({ ...point, id: `${place.code}/SHORE/${i}`, label: "Fishing from the bank" });
+    }) && reachableOnce()) fishing.push({ ...point, id: `${place.code}/SHORE/${i}`, label: "Fishing from the bank" });
   }
   // Ordinary labour includes upkeep of physically existing bridges. A far
   // bank is work only when a real SEED gate connects to an actual wet deck
