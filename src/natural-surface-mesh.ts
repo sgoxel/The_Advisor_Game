@@ -3,6 +3,7 @@ import { nearbyLandforms } from './wilderness-terrain.ts';
 import { sourceUnitsPerMetreAt } from './physical-scale.ts';
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
+import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { places, roads, roadDistanceAt } from "./geography.ts";
@@ -88,7 +89,7 @@ export function rebuildNaturalSurface(
     if (cached) return cached;
     if (cache.size >= NATURAL_MESH_LIMITS.samples)
       throw new RangeError("Natural mesh sample cap exceeded");
-    const surface = finalSurfaceAt(x, z),
+    const surface = finalSurfaceRenderChannelsAt(x, z),
       macro = macroSampleAt(sourceToLonLat(x, z)),
       wet = surface.water.kind,
       value = {
