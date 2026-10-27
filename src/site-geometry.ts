@@ -36,7 +36,7 @@ export class SiteBuilder {
 
   // Author objects in physical metres around an immutable SEED site.
   // Render vertices must use source units: raw metre sizes inflated ruins
-  // about 153 times and hid the real visitor behind giant walls.
+  // over 15 times north–south and hid the real visitor behind giant walls.
   private originX = 0;
   private originY = 0;
   private originZ = 0;
