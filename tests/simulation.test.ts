@@ -38,6 +38,7 @@ import {
   residentStreetPathKey,
   validatedResidentRoadPolyline,
   residentViewQuery,
+  threeNearestOffsets,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -82,6 +83,24 @@ test("bounded resident foundation reuse does not rebuild SEED identity on a warm
     "route reconstruction must not evict the active village foundation");
   assert.throws(() => residentFoundationAt(place, populationOf(place)), RangeError,
     "bounded caching must not make an invalid resident index valid");
+});
+
+test("resident inspector can resolve facts with stable bounded nearest-site selection", () => {
+  const sites = Array.from({ length: 256 }, (_, i) => ({
+    eastM: (i % 16 - 8) * 12, northM: (Math.floor(i / 16) - 8) * 9, id: `GARDEN/${i}`,
+  }));
+  // Reproduce the previous stable full-sort oracle, including ties and original order.
+  for (const home of [{ eastM: 0, northM: 0 }, { eastM: 49, northM: -32 },
+    { eastM: -55, northM: 78 }, { eastM: 1, northM: 1 }]) {
+    const oracle = [...sites].sort((a, b) =>
+      Math.hypot(a.eastM - home.eastM, a.northM - home.northM) -
+      Math.hypot(b.eastM - home.eastM, b.northM - home.northM)).slice(0, 3);
+    assert.deepEqual(threeNearestOffsets(sites, home), oracle,
+      "bounded top three must preserve every canonical nearest-site choice");
+  }
+  assert.deepEqual(threeNearestOffsets([], { eastM: 0, northM: 0 }), []);
+  assert.deepEqual(threeNearestOffsets(sites.slice(0, 2), { eastM: 0, northM: 0 }),
+    [...sites.slice(0, 2)].sort((a, b) => Math.hypot(a.eastM, a.northM) - Math.hypot(b.eastM, b.northM)));
 });
 
 test("resident inspector can resolve facts with one shared cold exterior plan", () => {
