@@ -40,7 +40,8 @@ test("resident first-fact latency separates queue waiting, cold preparation and 
   metrics.offer("town-a", 100);
   metrics.offer("town-a", 110);
   metrics.dispatch(1, "town-a", 140);
-  metrics.complete(1, true, 360, { preparationMs: 65, queryMs: 120, indexBuildMs: 85 }, false);
+  metrics.complete(1, true, 360, { preparationMs: 65, queryMs: 120, indexBuildMs: 85,
+    candidateLookupMs: 90, foundationMs: 3, doorMs: 4, scheduleMs: 13, groundingMs: 2 }, false);
   const report = metrics.summary();
   assert.equal(report.offerToDispatchMs.latest, 40);
   assert.equal(report.dispatchToResponseMs.latest, 220);
@@ -49,6 +50,11 @@ test("resident first-fact latency separates queue waiting, cold preparation and 
   assert.equal(report.coldWorkerQueryWallMs.latest, 120);
   assert.equal(report.workerIndexBuildWallMs.latest, 85);
   assert.equal(report.workerNonIndexQueryWallMs.latest, 35);
+  assert.equal(report.workerCandidateLookupWallMs.latest, 90);
+  assert.equal(report.workerResidentFoundationWallMs.latest, 3);
+  assert.equal(report.workerResidentDoorWallMs.latest, 4);
+  assert.equal(report.workerResidentScheduleWallMs.latest, 13);
+  assert.equal(report.workerResidentGroundingWallMs.latest, 2);
   assert.equal(report.warmWorkerQueryWallMs.samples, 0);
   assert.equal(report.firstAcceptedViewMs, 260);
   assert.equal(report.accepted, 1);
@@ -89,5 +95,7 @@ test("clearing a view does not turn a delayed worker answer into an authoritativ
   assert.equal(metrics.summary().workerPreparationWallMs.samples, 0);
   assert.equal(metrics.summary().workerIndexBuildWallMs.samples, 0);
   assert.equal(metrics.summary().workerNonIndexQueryWallMs.samples, 0);
+  assert.equal(metrics.summary().workerResidentDoorWallMs.samples, 0);
+  assert.equal(metrics.summary().workerResidentScheduleWallMs.samples, 0);
   assert.equal(metrics.summary().firstAcceptedViewMs, null);
 });

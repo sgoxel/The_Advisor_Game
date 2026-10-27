@@ -54,6 +54,11 @@ export class ResidentQueryPhaseSamples {
   readonly workerQueryWallMs = new BoundedTimingSamples();
   readonly workerIndexBuildWallMs = new BoundedTimingSamples();
   readonly workerNonIndexQueryWallMs = new BoundedTimingSamples();
+  readonly workerCandidateLookupWallMs = new BoundedTimingSamples();
+  readonly workerResidentFoundationWallMs = new BoundedTimingSamples();
+  readonly workerResidentDoorWallMs = new BoundedTimingSamples();
+  readonly workerResidentScheduleWallMs = new BoundedTimingSamples();
+  readonly workerResidentGroundingWallMs = new BoundedTimingSamples();
   readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
   readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
   private offered?: { key: string; at: number };
@@ -79,7 +84,8 @@ export class ResidentQueryPhaseSamples {
 
   complete(
     id: number, accepted: boolean, at: number,
-    workerPhases?: { preparationMs?: number; queryMs?: number; indexBuildMs?: number },
+    workerPhases?: { preparationMs?: number; queryMs?: number; indexBuildMs?: number;
+      candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; groundingMs?: number },
     wasWarm = false,
   ): void {
     if (!this.active || this.active.id !== id || !Number.isFinite(at) || at < this.active.at) return;
@@ -88,6 +94,13 @@ export class ResidentQueryPhaseSamples {
     this.workerPreparationWallMs.record(workerPhases?.preparationMs);
     this.workerQueryWallMs.record(workerPhases?.queryMs);
     this.workerIndexBuildWallMs.record(workerPhases?.indexBuildMs);
+    // Candidate lookup includes spatial index construction; do not add it to
+    // workerIndexBuildWallMs when interpreting per-query wall-clock totals.
+    this.workerCandidateLookupWallMs.record(workerPhases?.candidateLookupMs);
+    this.workerResidentFoundationWallMs.record(workerPhases?.foundationMs);
+    this.workerResidentDoorWallMs.record(workerPhases?.doorMs);
+    this.workerResidentScheduleWallMs.record(workerPhases?.scheduleMs);
+    this.workerResidentGroundingWallMs.record(workerPhases?.groundingMs);
     // Includes canonical resident evaluation and any non-index query work.
     if (workerPhases?.queryMs !== undefined && workerPhases.indexBuildMs !== undefined)
       this.workerNonIndexQueryWallMs.record(Math.max(0, workerPhases.queryMs - workerPhases.indexBuildMs));
@@ -116,6 +129,11 @@ export class ResidentQueryPhaseSamples {
       workerQueryWallMs: this.workerQueryWallMs.summary(),
       workerIndexBuildWallMs: this.workerIndexBuildWallMs.summary(),
       workerNonIndexQueryWallMs: this.workerNonIndexQueryWallMs.summary(),
+      workerCandidateLookupWallMs: this.workerCandidateLookupWallMs.summary(),
+      workerResidentFoundationWallMs: this.workerResidentFoundationWallMs.summary(),
+      workerResidentDoorWallMs: this.workerResidentDoorWallMs.summary(),
+      workerResidentScheduleWallMs: this.workerResidentScheduleWallMs.summary(),
+      workerResidentGroundingWallMs: this.workerResidentGroundingWallMs.summary(),
       coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
       warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),
       accepted: this.accepted,
