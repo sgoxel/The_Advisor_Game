@@ -807,10 +807,23 @@ export function continuousWalkableOffsetSegment(
 ): boolean {
   const length = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
   const steps = Math.max(1, Math.ceil(length));
-  for (let i = 0; i <= steps; i++) {
+  const check = (i: number) => {
     const t = i / steps;
-    if (!walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
-      northM: from.northM + (to.northM - from.northM) * t })) return false;
+    return walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
+      northM: from.northM + (to.northM - from.northM) * t });
+  };
+  // Rejected multi-kilometre doglegs dominate cold lawful route replay.
+  // Probe a subset of the *same exact one-metre positions* before the full
+  // pass: a confirmed blocked point is decisive. Every successful segment
+  // still checks every original metre once, including a narrow wet cut.
+  const stride = steps > 128 ? Math.max(2, Math.ceil(steps / 32)) : 1;
+  if (stride > 1) {
+    for (let i = 0; i <= steps; i += stride) if (!check(i)) return false;
+    if (steps % stride && !check(steps)) return false;
+  }
+  for (let i = 0; i <= steps; i++) {
+    if (stride > 1 && (i % stride === 0 || i === steps)) continue;
+    if (!check(i)) return false;
   }
   return true;
 }
