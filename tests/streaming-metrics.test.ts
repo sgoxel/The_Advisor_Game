@@ -32,3 +32,58 @@ test("small timing windows and capacity bounds remain well-defined", () => {
   for (const capacity of [0, -1, 1.5, 10_001, Infinity, NaN])
     assert.throws(() => new BoundedTimingSamples(capacity), RangeError);
 });
+
+import { ResidentQueryPhaseSamples } from "../src/streaming-metrics.ts";
+
+test("resident first-fact latency separates queue waiting, cold preparation and worker query", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  metrics.offer("town-a", 100);
+  metrics.offer("town-a", 110);
+  metrics.dispatch(1, "town-a", 140);
+  metrics.complete(1, true, 360, { preparationMs: 65, queryMs: 120 }, false);
+  const report = metrics.summary();
+  assert.equal(report.offerToDispatchMs.latest, 40);
+  assert.equal(report.dispatchToResponseMs.latest, 220);
+  assert.equal(report.acceptedResponseMs.latest, 220);
+  assert.equal(report.workerPreparationWallMs.latest, 65);
+  assert.equal(report.coldWorkerQueryWallMs.latest, 120);
+  assert.equal(report.warmWorkerQueryWallMs.samples, 0);
+  assert.equal(report.firstAcceptedViewMs, 260);
+  assert.equal(report.accepted, 1);
+});
+
+test("old-camera and aged-tick answers are counted but never classified as accepted", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  metrics.offer("town-a", 100);
+  metrics.dispatch(1, "town-a", 120);
+  metrics.offer("town-b", 130);
+  metrics.complete(1, false, 200, { queryMs: 50 }, false);
+  metrics.dispatch(2, "town-b", 220);
+  metrics.complete(2, false, 270, { queryMs: 40 }, true);
+  metrics.offer("town-b", 275);
+  metrics.dispatch(3, "town-b", 280);
+  metrics.complete(3, true, 290, { queryMs: 8 }, true);
+  const report = metrics.summary();
+  assert.equal(report.offerToDispatchMs.samples, 3);
+  assert.equal(report.staleViewOrCleared, 1);
+  assert.equal(report.staleTick, 1);
+  assert.equal(report.staleResponseMs.samples, 2);
+  assert.equal(report.acceptedResponseMs.samples, 1);
+  assert.equal(report.firstAcceptedViewMs, 160, "latest view first offered at 130");
+  assert.equal(report.coldWorkerQueryWallMs.samples, 1);
+  assert.equal(report.warmWorkerQueryWallMs.samples, 2);
+  assert.equal(report.offerToDispatchMs.latest, 5, "accepted query has fresh clock-visible offer");
+});
+
+test("clearing a view does not turn a delayed worker answer into an authoritative fact", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  metrics.offer("old-view", 10);
+  metrics.dispatch(7, "old-view", 20);
+  metrics.clearPending();
+  metrics.complete(7, false, 40);
+  metrics.complete(7, true, 60);
+  assert.equal(metrics.summary().accepted, 0);
+  assert.equal(metrics.summary().staleViewOrCleared, 1);
+  assert.equal(metrics.summary().workerPreparationWallMs.samples, 0);
+  assert.equal(metrics.summary().firstAcceptedViewMs, null);
+});
