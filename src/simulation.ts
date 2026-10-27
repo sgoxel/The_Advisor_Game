@@ -863,12 +863,24 @@ export function nearestLegalStreetNode(
     cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell),
     rings = Math.min(40, Math.ceil(maxDistance / graph.cell) + 1),
     candidates: { id: number; distance: number }[] = [];
-  for (let dx = -rings; dx <= rings; dx++) for (let dz = -rings; dz <= rings; dz++)
-    for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
-      if (id === nearest) continue;
-      const d = distance(graph.nodes[id]);
-      if (d <= maxDistance) candidates.push({ id, distance: d });
+  const consider = (id: number) => {
+    if (id === nearest) return;
+    const d = distance(graph.nodes[id]);
+    if (d <= maxDistance) candidates.push({ id, distance: d });
+  };
+  // Remote sparse searches can cover thousands of empty grid buckets.
+  // Iterate only occupied buckets when cheaper, retaining the exact old
+  // square boundary and deterministic distance/id candidate ordering.
+  if (graph.grid.size * 2 < (2 * rings + 1) ** 2) {
+    for (const [key, ids] of graph.grid) {
+      const [x, z] = key.split("/").map(Number);
+      if (Math.abs(x - cx) > rings || Math.abs(z - cz) > rings) continue;
+      for (const id of ids) consider(id);
     }
+  } else {
+    for (let dx = -rings; dx <= rings; dx++) for (let dz = -rings; dz <= rings; dz++)
+      for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) consider(id);
+  }
   candidates.sort((a, b) => a.distance - b.distance || a.id - b.id);
   for (const candidate of candidates.slice(0, 16))
     if (legal(offset, graph.nodes[candidate.id])) return candidate.id;
