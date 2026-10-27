@@ -309,6 +309,8 @@ test('cafés: parasols shade the terrace tables, inside the terrace and clear of
       if (Math.abs(y - 2.3) < 1e-6 && z > front + 1) apexes.add(Math.round(x * 100));
     }
     assert.ok(apexes.size >= 2, `café ${w} m v${variant}: ${apexes.size} parasols`);
+    assert.ok([...apexes].every(x => Math.abs(x) >= 170),
+      `café ${w} m v${variant}: a canopy is centered over the owned home entrance`);
   }
 });
 

@@ -1143,8 +1143,12 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
   if (!restaurant) {
     // Café parasols in a plain seeded cloth (restaurants keep striped ones): one per table, one shared over the paired tables
     // of a wide café; each canopy's inner rim stays >= .85 m from the door axis (8-gon extent r cos 22.5°).
-    const parasol = pick(r, CLOTHS)[0], spots = wide ? [-1.8, 2] : xs;
-    for (const x of spots) addUmbrella(f, x, z, Math.min(wide && x > 0 ? 1.05 : .95, (Math.abs(x) - .85) / Math.cos(Math.PI / 8)), [parasol, parasol]);
+    // A privately owned house may also host a café. Keep the authentic
+    // central SEED home entrance and its line of sight free of overhead
+    // parasols; tables remain on the terrace, while wide façades retain two
+    // smaller umbrellas at the sides. No ownership/layout decisions change.
+    const parasol = pick(r, CLOTHS)[0], spots = wide ? [-2.6, 2.6] : xs;
+    for (const x of spots) addUmbrella(f, x, z, wide ? .65 : .48, [parasol, parasol]);
   }
   if (restaurant) {
     const board = sub(f, 1.1, front + 1.9);
