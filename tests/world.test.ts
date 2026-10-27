@@ -53,6 +53,36 @@ import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
 import { terrainTint } from "../src/geometry-core.ts";
 
+import { climateSampleAt } from "../src/climate.ts";
+
+test("S009 climate reuses the exact canonical macro recipe without changing seeded material", () => {
+  const anchors = [
+    ...villages.slice(0, 5).map(p => ({ x: p.x, z: p.z })),
+    ...roads.slice(0, 5).map(p => ({ x: p.fromX, z: p.fromZ })),
+    ...MACRO_PLAN.lakes.slice(0, 3).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    ...MACRO_PLAN.continents.slice(0, 3).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    { x: 0, z: -SOURCE_PRESENTATION_WIDTH / 4 },
+    { x: 0, z: SOURCE_PRESENTATION_WIDTH / 4 },
+    { x: SOURCE_PRESENTATION_WIDTH / 2, z: 0 },
+    { x: -SOURCE_PRESENTATION_WIDTH / 2, z: 0 },
+    { x: SOURCE_PRESENTATION_WIDTH / 2 - 0.01, z: 1410 },
+    { x: -SOURCE_PRESENTATION_WIDTH / 2 + 0.01, z: 1410 },
+  ];
+  for (const { x, z } of anchors) {
+    const position = sourceToLonLat(x, z);
+    const expected = climateSampleAt(position);
+    const reused = climateSampleAt(position, undefined, macroSampleAt(position));
+    assert.deepEqual(reused, expected, `canonical climate at ${x}/${z}`);
+    // The render calls still resolve exactly identical pigments on this SEED.
+    const surface = finalSurfaceRenderChannelsAt(x, z);
+    assert.deepEqual(
+      terrainTint(x, z, 32, undefined, 0, false, surface),
+      terrainTint(x, z, 32, undefined, 0, false),
+      `canonical pigment at ${x}/${z}`,
+    );
+  }
+});
+
 test("S009 emitted mesh tint reuses identical SEED final-surface channels", () => {
   // All values are actual canonical coordinates, including wet coast/lake,
   // dry settlement/road and polar samples. Renderer reuse changes no pigment.
