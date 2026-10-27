@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1988,7 +1988,10 @@ async function start() {
         visibleDoor = dx >= 90 && dx <= innerWidth - 90 &&
           dy >= 100 && dy <= innerHeight - 120 &&
           (selectedResidentMarker.hidden ||
-            Math.hypot(dx - selectedResidentScreen.x, dy - selectedResidentScreen.y) > 48);
+            // A label anchored at the same SEED door as the selected person's
+            // feet must not cover their real 2D body (head distance was wrong).
+            ownedDoorLabelClearOfResident(
+              { x: dx, y: dy }, selectedResidentGroundScreen, selectedResidentScreen));
       if (visibleDoor) {
         const transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -190%)`;
         if (transform !== markedDoorTransform) {
