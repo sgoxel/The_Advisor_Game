@@ -2311,6 +2311,7 @@ export class LazySimulation {
     shard?: { index: number; count: number },
     prioritizeActors = false,
     phases?: ResidentEvaluationPhases,
+    onFirstValidated?: (resident: Resident) => void,
   ) {
     this.lastResidentIndexBuildMs = 0;
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
@@ -2336,7 +2337,7 @@ export class LazySimulation {
       returnedResidents: 0,
     };
     const visible: Resident[] = [], indoorOrUnresolved: Resident[] = [];
-    let exhausted = false;
+    let exhausted = false, firstValidated = false;
     // Do not eagerly build every nearby settlement's entire resident index.
     // The first bounded view can fill its canonical quota in one settlement;
     // later settlements then contribute no residents and need no cold index.
@@ -2356,6 +2357,12 @@ export class LazySimulation {
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
+        // This is a complete SEED/Simulation/ground/route fact, not a guessed
+        // candidate. The final deterministic actor/inspector batch is untouched.
+        if (!firstValidated && onFirstValidated) {
+          firstValidated = true;
+          onFirstValidated(resident);
+        }
         if (prioritizeActors && (!resident.grounded || resident.indoors)) indoorOrUnresolved.push(resident);
         else visible.push(resident);
         if (visible.length >= limit) break;
