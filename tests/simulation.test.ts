@@ -220,7 +220,7 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
 
 
 
-test("indexed street frontier exactly matches insertion-order route score selection", () => {
+test("resident street connectors indexed frontier exactly matches insertion-order route score selection", () => {
   const frontier = new StableStreetFrontier();
   const reference: { id: number; score: number }[] = [];
   const put = (id: number, score: number) => {
