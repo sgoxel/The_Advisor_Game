@@ -27,7 +27,8 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       // Optional instrumentation only in resident worker queries; zero
       // influence on canonical positions, routing or authoritative results.
       const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, groundingMs: 0, evaluated: 0 };
-      const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true, phases);
+      const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true, phases,
+        first => self.postMessage({ kind: "resident-first-fact", id: job.id, shard: job.shard?.index, resident: first }));
       const completedAt = performance.now();
       self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query,
         residentTiming: { preparationMs: preparedAt - started, queryMs: completedAt - preparedAt,
