@@ -133,11 +133,13 @@ export function residentActorPickDistance(
   return Math.hypot(x - cx, y - cy);
 }
 
-/** One in-flight job, latest camera request wins. Stale clock/view results never
- * become a visible snapshot; the next request reuses the worker's warm caches. */
+/** At most two bounded requests: an obsolete in-flight camera query may
+ * finish while the latest view uses another already-idle worker. Each query's
+ * actor ordering and Simulation validations stay inside its own worker.
+ * Responses are accepted only for the current view/clock, never by arrival order. */
 export class ResidentQueryQueue {
   private desired?: ResidentQuery;
-  private flight?: ResidentQueryJob;
+  private readonly flights = new Map<number, ResidentQueryJob>();
   private sequence = 0;
   private snapshot?: ResidentQueryJob & ResidentQueryResult;
   private maxAgeTicks: number;
@@ -152,7 +154,7 @@ export class ResidentQueryQueue {
     this.desired = query;
   }
   clear() { this.desired = undefined; this.snapshot = undefined; }
-  get busy() { return !!this.flight; }
+  get busy() { return this.flights.size > 0; }
   readyFor(key: string | undefined, tick = this.desired?.tick) {
     return !!key && this.snapshot?.key === key && tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }
@@ -160,18 +162,32 @@ export class ResidentQueryQueue {
   get current() {
     return this.ready ? this.snapshot : undefined;
   }
-  take(): ResidentQueryJob | undefined {
-    if (this.flight || !this.desired || (this.current?.tick === this.desired.tick)) return;
-    return this.flight = { ...this.desired, kind: "residents", id: ++this.sequence };
+  take(allowLatestBesideObsolete = false): ResidentQueryJob | undefined {
+    if (!this.desired || this.current?.tick === this.desired.tick) return;
+    if (this.flights.size >= (allowLatestBesideObsolete ? 2 : 1)) return;
+    // Never duplicate a still-computing view; bounded overtaking is only for
+    // a different focus, never for a newer tick at the same expensive focus.
+    if ([...this.flights.values()].some(job => job.key === this.desired!.key)) return;
+    const job: ResidentQueryJob = { ...this.desired, kind: "residents", id: ++this.sequence };
+    this.flights.set(job.id, job);
+    return job;
   }
   complete(id: number, result: ResidentQueryResult, currentTick = this.desired?.tick) {
-    if (this.flight?.id !== id) return false;
-    const finished = this.flight;
-    this.flight = undefined;
+    const finished = this.flights.get(id);
+    if (!finished) return false;
+    this.flights.delete(id);
     if (finished.key !== this.desired?.key || currentTick === undefined || Math.abs(currentTick - finished.tick) > this.maxAgeTicks) return false;
     this.snapshot = { ...finished, ...result };
     return true;
   }
+}
+
+/** Count only actually running resident shards in the shared streaming queue.
+ * Planned but not yet submitted shards cannot consume a worker slot. */
+export function activeResidentWorkers(batches: Iterable<{ count: number; completed: Set<number>; unsent: Set<number> }>): number {
+  let occupied = 0;
+  for (const batch of batches) occupied += batch.count - batch.completed.size - batch.unsent.size;
+  return occupied;
 }
 
 /** Reconstruct the same stable first-N query order regardless of worker completion order. */

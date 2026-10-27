@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -288,34 +288,52 @@ function offerResidentQuery(query: ResidentQuery) {
   residentPhaseTimings.offer(query.key, now);
   residentQueries.offer(query);
 }
-let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; assignments: Map<number, number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
+type ResidentBatch = {
+  job: ResidentQueryJob; unsent: Set<number>; assignments: Map<number, number>;
+  results: ResidentQueryResult[]; completed: Set<number>; count: number;
+};
+const residentBatches = new Map<number, ResidentBatch>();
+/** Tiles, ready uploads and active resident shards share the same device admission. */
+const residentRunningWorkers = () => activeResidentWorkers(residentBatches.values());
+const generationReadyInUse = () => inFlight + uploads.length + residentRunningWorkers();
 function dispatchResidentQuery() {
-  // Inspect once coherent terrain exists; optional fine meshes may still stream.
-  // A started batch must finish its remaining shards after a camera change so
-  // the stale job retires and the newest canonical query can take its place.
-  // Initial coherent terrain remains usable while optional detail for a new zoom refines.
-  if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, !!residentBatch)) return;
-  if (!residentBatch) {
-    const job = residentQueries.take();
-    if (!job) return;
-    const now = performance.now();
-    if (firstResidentDispatchSinceWorkersMs === null) firstResidentDispatchSinceWorkersMs = now - workerStartedAt;
-    residentPhaseTimings.dispatch(job.id, job.key, now);
-    const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers, !!job.actors);
-    const count = shards.length;
-    residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
-      assignments: new Map(shards.map(shard => [shard.workerId, shard.shardIndex])),
-      results: [], completed: new Set() };
+  // A stale camera query can finish while the latest focus takes an idle
+  // worker; each independent job retains its original actor/Simulation order.
+  if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, residentBatches.size > 0)) return;
+  if (!selectionDirty && ready) {
+    const available = generationLimit() - generationReadyInUse();
+    if (available > 0) {
+      const job = residentQueries.take(true);
+      if (job) {
+        const selected = residentWorkerShardPlan(
+          idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers, !!job.actors,
+        ).slice(0, available);
+        const shards = selected.map((shard, shardIndex) => ({ workerId: shard.workerId, shardIndex }));
+        const count = shards.length, now = performance.now();
+        if (firstResidentDispatchSinceWorkersMs === null) firstResidentDispatchSinceWorkersMs = now - workerStartedAt;
+        residentPhaseTimings.dispatch(job.id, job.key, now);
+        residentBatches.set(job.id, { job, count,
+          unsent: new Set(shards.map(shard => shard.workerId)),
+          assignments: new Map(shards.map(shard => [shard.workerId, shard.shardIndex])),
+          results: [], completed: new Set() });
+      }
+    }
   }
-  // Stable population shards reuse each existing worker's caches. Terrain still
-  // owns the UI thread's submission/upload budget; no extra workers are created.
+  // Late obsolete responses cannot become visible; newer unsent shards
+  // take priority without interrupting an occupied worker.
   for (let index = idleWorkers.length - 1; index >= 0; index--) {
     const worker = idleWorkers[index], workerId = workers.indexOf(worker);
-    if (!residentBatch.unsent.delete(workerId)) continue;
-    const shardIndex = residentBatch.assignments.get(workerId)!;
+    let batch: ResidentBatch | undefined;
+    for (const candidate of residentBatches.values())
+      if (candidate.unsent.has(workerId)) batch = candidate;
+    if (!batch) continue;
+    batch.unsent.delete(workerId);
     idleWorkers.splice(index, 1);
-    worker.postMessage({ ...residentBatch.job, shard: { index: shardIndex, count: residentBatch.count } });
+    worker.postMessage({ ...batch.job, shard: {
+      index: batch.assignments.get(workerId)!, count: batch.count,
+    } });
   }
+  maxGenerationReadyObserved = Math.max(maxGenerationReadyObserved, generationReadyInUse());
 }
 const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
 let readyWorkers = 0;
@@ -908,7 +926,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   const job = {tile,kind}, key = tileJobKey(job);
   if (tileCache.has(key) || pending.has(key)) return;
   // Each idle worker takes one job; priorities are recomputed every frame, never queued FIFO.
-  if (!idleWorkers.length || inFlight + uploads.length >= generationLimit()) return;
+  if (!idleWorkers.length || generationReadyInUse() >= generationLimit()) return;
   const surfaceBytes=globe?globe.stats.textureWidth*globe.stats.textureHeight*4:0,
     readyBytes=uploads.reduce((sum,job)=>sum+estimateGeometryBytes(job.data),0),
     cpuBytes=cachedGeometryBytes+readyBytes+surfaceBytes+continuityCpuBytes(),
@@ -916,7 +934,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   if(!streamingMemoryReservationFits(cpuBytes,gpuBytes,NATURAL_WORKER_SCRATCH_RESERVE_BYTES,streamingBudget))return;
   pending.add(key);
   inFlight++;
-  maxGenerationReadyObserved = Math.max(maxGenerationReadyObserved, inFlight + uploads.length);
+  maxGenerationReadyObserved = Math.max(maxGenerationReadyObserved, generationReadyInUse());
   if(kind === "detail")detailGenerationJobs++;else coverageGenerationJobs++;
   const workerIndex = terrainWorkerIndexAvoidingWarmResident(
     idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
@@ -1079,12 +1097,12 @@ function processStreaming(material: pc.StandardMaterial) {
     // Fill up to the shared cap with urgent on-screen work (skipping already-built tiles).
     // Optional prefetch must reserve one idle worker and one slot for a new focus/inspect.
     const cachedOrPending={has:(key:string)=>cachedKeys.has(key)||pending.has(key)};
-    while(!captureStreamingQuiesced && idleWorkers.length && inFlight+uploads.length<generationLimit()){
+    while(!captureStreamingQuiesced && idleWorkers.length && generationReadyInUse()<generationLimit()){
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
       else if (ready && !lodTransition && measuredStreamingFps >= 30 &&
-        canPrefetchStreamingJob(inFlight,uploads.length,idleWorkers.length,streamingBudget) &&
+        canPrefetchStreamingJob(inFlight+residentRunningWorkers(),uploads.length,idleWorkers.length,streamingBudget) &&
         !residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect) prefetchNext(root);
       if(inFlight===before)break;
     }
@@ -1682,12 +1700,13 @@ async function start() {
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
         const wasWarm = warmedResidentWorkers.has(workers.indexOf(worker));
         warmedResidentWorkers.add(workers.indexOf(worker));
-        if (residentBatch && residentBatch.job.id === event.data.id && !residentBatch.completed.has(event.data.shard)) {
+        const residentBatch = residentBatches.get(event.data.id);
+        if (residentBatch && !residentBatch.completed.has(event.data.shard)) {
           residentBatch.completed.add(event.data.shard);
           residentBatch.results.push(event.data);
           if (residentBatch.completed.size === residentBatch.count) {
             const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
-            residentBatch = undefined;
+            residentBatches.delete(residentBatch.job.id);
             const accepted = residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())));
             const answeredAt = performance.now();
             residentPhaseTimings.complete(event.data.id, accepted, answeredAt, event.data.residentTiming, wasWarm);
@@ -2556,7 +2575,7 @@ async function start() {
             cachedPatches: tileCache.size,
             pendingGeneration: inFlight,
             readyUploads: uploads.length,
-            generationReady: inFlight + uploads.length,
+            generationReady: generationReadyInUse(),
             cacheHits,
             cacheMisses,
             evictions,
@@ -2578,7 +2597,7 @@ async function start() {
             poleStops: poleStopCount,
             withinBudget: withinStreamingBudget(
               {
-                generationReady: inFlight + uploads.length,
+                generationReady: generationReadyInUse(),
                 activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
                 cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
@@ -2595,7 +2614,7 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
-          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length,worldMeshes:app.scene.layers.getLayerById(pc.LAYERID_WORLD)?.meshInstances.length ?? -1,worldCulled:app.scene.layers.getLayerById(pc.LAYERID_WORLD)?.getCulledInstances(camera.camera!.camera).opaque.length ?? -1,cameraLayers:[...camera.camera!.layers],nearClip:camera.camera!.nearClip,farClip:camera.camera!.farClip,cameraPosition:camera.getPosition().toString(),flatRootEnabled:flatRoot.enabled},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight + (residentBatch ? residentBatch.count - residentBatch.completed.size - residentBatch.unsent.size : 0), pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length,worldMeshes:app.scene.layers.getLayerById(pc.LAYERID_WORLD)?.meshInstances.length ?? -1,worldCulled:app.scene.layers.getLayerById(pc.LAYERID_WORLD)?.getCulledInstances(camera.camera!.camera).opaque.length ?? -1,cameraLayers:[...camera.camera!.layers],nearClip:camera.camera!.nearClip,farClip:camera.camera!.farClip,cameraPosition:camera.getPosition().toString(),flatRootEnabled:flatRoot.enabled},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, generationWorkers, readyWorkers, busyWorkers: inFlight + residentRunningWorkers(), pixelRatio: app.graphicsDevice.maxPixelRatio, nativePixelRatio: devicePixelRatio, deviceMemoryGB: deviceMemoryGB ?? null, cacheBudgetMB: Math.round(streamingBudget.cacheTrimStartBytes / 1e6), lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
           simulation: { ...simulation.stats, residentWorkerBusy: residentQueries.busy, residentSnapshotReady: residentViewReady, residentSnapshotTick: residentQueries.current?.tick ?? null },
           settled:
             residentViewReady &&
