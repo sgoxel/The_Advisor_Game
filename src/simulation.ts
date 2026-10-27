@@ -452,10 +452,23 @@ export function threeNearestOffsets<T extends Offset>(candidates: readonly T[], 
   }
   return closest.map(entry => entry.site);
 }
-function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
+/** These immutable SEED destinations are requested repeatedly by cold spatial
+ * indexing, standing-slot rosters and prior-day routine replay. Cache the exact
+ * home offset as well as resident identity: an alternate legally resolved door
+ * must never inherit a different starting home's selected site. Bounded across
+ * settlements; no actor state, routing verdict or sampled surface is cached. */
+const neighbourhoodSiteCache = new Map<string, ActivitySite>();
+export function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
+  const key = `${foundation.code}|${kind}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
+    cached = neighbourhoodSiteCache.get(key);
+  if (cached) return cached;
   const anchors = settlementAnchors(place),
-    nearby = threeNearestOffsets(kind === "garden" ? anchors.gardens : anchors.markets, foundation.homeOffset);
-  return nearby[digest(`${foundation.code}/${kind}`) % nearby.length] ?? { ...(kind === "garden" ? anchors.plaza : anchors.market), id: `${place.code}/${kind.toUpperCase()}`, label: kind === "garden" ? "Town square" : "Market" };
+    nearby = threeNearestOffsets(kind === "garden" ? anchors.gardens : anchors.markets, foundation.homeOffset),
+    selected = nearby[digest(`${foundation.code}/${kind}`) % nearby.length] ?? { ...(kind === "garden" ? anchors.plaza : anchors.market), id: `${place.code}/${kind.toUpperCase()}`, label: kind === "garden" ? "Town square" : "Market" };
+  neighbourhoodSiteCache.set(key, selected);
+  if (neighbourhoodSiteCache.size > 4096)
+    neighbourhoodSiteCache.delete(neighbourhoodSiteCache.keys().next().value!);
+  return selected;
 }
 function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
   return neighbourhoodSite(place, foundation, "garden");
