@@ -1047,7 +1047,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
           // A nonimproving edge cannot enter the path, regardless of whether its
           // physical surface is legal. Do not sample every metre needlessly.
           const tentative = cost.get(current)! + graph.weights[current][i];
-          if (tentative >= (cost.get(next) ?? Infinity)) return;
+          if (!(tentative < (cost.get(next) ?? Infinity))) return;
           const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
           let legal = graph.legalEdges.get(edgeKey);
           if (legal === undefined) {
