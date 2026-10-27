@@ -572,7 +572,7 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
 /** Exact immutable fields required for spatial indexing, before the character
  * is actually inspected. Building all 2,400 full biographies per cold city
  * query needlessly computes names, birthdays, appearance and traits. */
-function residentSpatialFactsAt(
+function uncachedResidentSpatialFactsAt(
   place: Place, index: number,
   exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
 ) {
@@ -586,6 +586,24 @@ function residentSpatialFactsAt(
     homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
     workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
   return { code, role, index, assignment, character, homeOffset, workOffset };
+}
+/** Shared immutable per-resident home/work facts used by both the cold
+ * spatial index and the standing-slot roster. The first traversal computes
+ * each exact SEED-derived offset once; subsequent views never cache actor
+ * positions, route legality, or simulation-time decisions. */
+const residentSpatialFactsCache = new Map<string, ReturnType<typeof uncachedResidentSpatialFactsAt>>();
+function residentSpatialFactsAt(
+  place: Place, index: number,
+  exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
+) {
+  const code = `${place.code}/RESIDENT/${index}`,
+    cached = residentSpatialFactsCache.get(code);
+  if (cached) return cached;
+  const facts = uncachedResidentSpatialFactsAt(place, index, exteriorPlan);
+  residentSpatialFactsCache.set(code, facts);
+  if (residentSpatialFactsCache.size > 3200)
+    residentSpatialFactsCache.delete(residentSpatialFactsCache.keys().next().value!);
+  return facts;
 }
 
 /** Standing-slot rankings need canonical role, traits and anchor offsets, not
