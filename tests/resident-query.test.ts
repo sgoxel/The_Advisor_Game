@@ -241,6 +241,25 @@ test("parallel population shards reproduce the single-worker query in stable ord
 });
 
 
+test("two-worker first-actor queries retain exactly the canonical single-worker real residents", () => {
+  const place = villages[0], simulation = new LazySimulation(), tick = 36274242, limit = 8, radius = 10;
+  simulation.setFocus(place);
+  simulation.advance(tick);
+  const expected = simulation.focusedResidents(place.x, place.z, radius, limit, undefined, true);
+  const order = new Map([...villages, ...cities].map(p => [p.id, residentOrderFor(p)]));
+  const results = [0, 1].map(index => {
+    const residents = simulation.focusedResidents(place.x, place.z, radius, limit,
+      { index, count: 2 }, true);
+    return { residents, query: simulation.stats.query };
+  });
+  const merged = mergeResidentQueries(results, limit, resident =>
+    order.get(resident.settlement)!(resident.index));
+  assert.deepEqual(merged.residents.map(resident => resident.code),
+    expected.slice().sort((a, b) => residentOrderFor(place)(a.index) - residentOrderFor(place)(b.index))
+      .map(resident => resident.code),
+    "parallel evaluation must not replace or omit the original first canonical actors");
+});
+
 test("snapshot readiness expires with the realm clock even when the camera stays still", () => {
   const queue = new ResidentQueryQueue(48);
   queue.offer(request()); const job = queue.take()!;
