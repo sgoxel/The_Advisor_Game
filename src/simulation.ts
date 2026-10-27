@@ -1161,6 +1161,11 @@ export function validatedResidentRoadPolyline(
  * exterior livelihood. Called only after local street/dry-detour failure.
  * No source road or water span gets a free pass: every segment uses the
  * same final-surface and enclosure validator as ordinary resident walking. */
+// Bridge discoveries and evictions invalidate transportNetwork.bridges' array
+// identity. Reuse road membership only for that exact immutable snapshot;
+// a global unversioned Set would miss newly discovered SEED bridge roads.
+let residentBridgeSnapshot: typeof transportNetwork.bridges | undefined;
+let residentBridgeRoadCodes = new Set<string>();
 function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Offset[] | null {
   const distance = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
   if (distance < 300 || distance > 5200) return null;
@@ -1169,10 +1174,14 @@ function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Of
     scale = sourceUnitsPerMetreAt(source.z),
     radius = Math.min(16_384, Math.max(10, Math.max(scale.x, scale.z) * (distance * .7 + 600)));
   const roads = transportRoadsNear(source.x, source.z, radius, 6),
-    actualBridgeRoads = new Set(transportNetwork.bridges.map(bridge => bridge.roadCode));
+    currentBridges = transportNetwork.bridges;
+  if (currentBridges !== residentBridgeSnapshot) {
+    residentBridgeSnapshot = currentBridges;
+    residentBridgeRoadCodes = new Set(currentBridges.map(bridge => bridge.roadCode));
+  }
   let best: Offset[] | null = null, bestDistance = Infinity;
   for (const road of roads) {
-    if (!actualBridgeRoads.has(road.code) || road.centerline.length > 32) continue;
+    if (!residentBridgeRoadCodes.has(road.code) || road.centerline.length > 32) continue;
     const points = road.centerline.map(point => offsetForSource(place, point.x, point.z)),
       candidate = validatedResidentRoadPolyline(from, to, points,
         (a, b) => legalStreetSegment(place, a, b));
