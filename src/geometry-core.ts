@@ -374,12 +374,16 @@ export function terrainTint(
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
-export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGeometry {
+export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrain?:boolean} = {}): TileGeometry {
   if (!options.terrainOnly) registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
   const terrain = new Builder(),
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
+  // Detail workers replace this coarse mesh with the complete canonical adaptive
+  // natural surface. Skip only the disposable terrain pass; retain all sites,
+  // structures, canonical registration and other layers unmodified.
+  if (!options.skipBaseTerrain) {
   // Prepared-surface refinement is owned by the common worker adapter.
   const resolution = Math.min(options.terrainOnly ? 8 : 16, t.size / 2),
     step = t.size / resolution;
@@ -494,6 +498,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
     waterTint(t.minX + t.size, t.minZ + t.size),
     waterTint(t.minX + t.size, t.minZ),
   );
+  }
   if (t.size <= 512 && !options.terrainOnly)
     // Settlement plots with physical metre sizes (widthM) are drawn by geometry.ts; never as legacy 18-unit fields.
     for (const f of featuresFor(t).filter(feature => feature.kind !== "keep" && feature.kind !== "well" && !(feature.kind === "field" && (feature as { widthM?: number }).widthM !== undefined))) {
