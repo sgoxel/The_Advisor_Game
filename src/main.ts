@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -918,7 +918,9 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   inFlight++;
   maxGenerationReadyObserved = Math.max(maxGenerationReadyObserved, inFlight + uploads.length);
   if(kind === "detail")detailGenerationJobs++;else coverageGenerationJobs++;
-  idleWorkers.pop()!.postMessage(job);
+  const workerIndex = terrainWorkerIndexAvoidingWarmResident(
+    idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
+  idleWorkers.splice(workerIndex, 1)[0].postMessage(job);
 }
 function refreshSelection() {
   // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
