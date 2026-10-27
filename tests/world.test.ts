@@ -78,7 +78,7 @@ test("S009 constant surface pigments keep the exact seeded lake, river and road 
       expected = fall?.f.kind === "waterfall" && Math.abs(fall.b) < 6
         ? [211, 232, 228] : [76, 128, 148];
       uniformWater++;
-    } else if (surface.groundMaterial === "Road") {
+    } else if (surface.water.kind === "none" && surface.groundMaterial === "Road") {
       expected = [112, 92, 62];
     }
     if (!expected) continue;
