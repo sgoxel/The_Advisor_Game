@@ -1977,7 +1977,13 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
       sharedProjection.set(key, projected);
       return projected;
     },
-    sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep].map(projectShared);
+    sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep].map(projectShared),
+    // Public anchors are shared by every resident in this settlement. Their
+    // exact enclosing rectangle needs constructing only once per cold index.
+    sharedMinX = Math.min(...sharedPoints.map(point => point.x)),
+    sharedMaxX = Math.max(...sharedPoints.map(point => point.x)),
+    sharedMinZ = Math.min(...sharedPoints.map(point => point.z)),
+    sharedMaxZ = Math.max(...sharedPoints.map(point => point.z));
   for (let index = 0; index < population; index++) {
     // Shard assignments are exact resident-index congruences. In a cold worker,
     // do not construct thousands of unrelated immutable homes, work sites or
@@ -1990,20 +1996,18 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
       // resolved here; never materialize all household doors for indexing.
       guardDoor = foundation.role === "guard" ? resolvedSettlementHomeDoorFor(place, index) : undefined,
       resolvedGuardHome = guardDoor ? offsetForSource(place, guardDoor.x, guardDoor.z) : undefined,
-      points = [
-        relativeSourceForOffset(place, foundation.homeOffset),
-        ...(resolvedGuardHome ? [relativeSourceForOffset(place, resolvedGuardHome)] : []),
-        projectShared(foundation.workOffset),
-        ...sharedPoints,
-        projectShared(gardenSite(place, foundation)),
-        projectShared(neighbourhoodSite(place, foundation, "market")),
-      ],
-      // Street routes can bend away from the straight line between places: pad the box.
+      home = relativeSourceForOffset(place, foundation.homeOffset),
+      guardHome = resolvedGuardHome ? relativeSourceForOffset(place, resolvedGuardHome) : undefined,
+      work = projectShared(foundation.workOffset),
+      garden = projectShared(gardenSite(place, foundation)),
+      market = projectShared(neighbourhoodSite(place, foundation, "market")),
+      // Identical exact extrema to the original all-points reduction, without
+      // creating eight-point arrays and four map arrays for every SEED resident.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
-      minX = Math.min(...points.map((point) => point.x)) - pad,
-      maxX = Math.max(...points.map((point) => point.x)) + pad,
-      minZ = Math.min(...points.map((point) => point.z)) - pad,
-      maxZ = Math.max(...points.map((point) => point.z)) + pad,
+      minX = Math.min(home.x, guardHome?.x ?? Infinity, work.x, sharedMinX, garden.x, market.x) - pad,
+      maxX = Math.max(home.x, guardHome?.x ?? -Infinity, work.x, sharedMaxX, garden.x, market.x) + pad,
+      minZ = Math.min(home.z, guardHome?.z ?? Infinity, work.z, sharedMinZ, garden.z, market.z) - pad,
+      maxZ = Math.max(home.z, guardHome?.z ?? -Infinity, work.z, sharedMaxZ, garden.z, market.z) + pad,
       bx0 = Math.floor(minX / RESIDENT_BUCKET_SOURCE),
       bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),
