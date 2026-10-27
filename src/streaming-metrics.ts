@@ -20,8 +20,8 @@ export class BoundedTimingSamples {
     this.values = new Float64Array(capacity);
   }
 
-  record(milliseconds: number): void {
-    if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
+  record(milliseconds: number | null | undefined): void {
+    if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds) || milliseconds < 0) return;
     this.values[this.next] = milliseconds;
     this.next = (this.next + 1) % this.values.length;
     this.count = Math.min(this.count + 1, this.values.length);
