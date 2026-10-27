@@ -338,6 +338,27 @@ test("feature identity survives LOD changes and adjacent tile ownership is uniqu
   assert.ok(mesh.terrain.positions.length > 0);
 });
 
+test("S009 replaced-detail tiles skip only discarded base terrain, preserving every emitted layer", async () => {
+  const { rebuildNaturalSurface, NATURAL_MESH_LIMITS } = await import("../src/natural-surface-mesh.ts");
+  const tile = tileAt(13, 4096, 4096);
+  assert.ok(tile.size <= NATURAL_MESH_LIMITS.maximumTile);
+  const original = buildTile(tile), streamlined = buildTile(tile, { skipBaseTerrain: true });
+  assert.ok(original.terrain.positions.length > 0);
+  assert.equal(streamlined.terrain.positions.length, 0,
+    "the worker need not allocate an obsolete base terrain mesh");
+  for (const key of Object.keys(original) as (keyof typeof original)[]) {
+    if (key !== "terrain")
+      assert.deepEqual(streamlined[key], original[key],
+        `the optimized detail worker must preserve ${key} geometry exactly`);
+  }
+  const expected = rebuildNaturalSurface(tile, original.terrain);
+  const actual = rebuildNaturalSurface(tile, streamlined.terrain);
+  assert.ok(expected.replaced && actual.replaced,
+    "skip is legal only when the canonical adaptive surface replaces the whole ground mesh");
+  assert.deepEqual(actual.geometry, expected.geometry,
+    "rendered terrain, water, material colors, normal and skirt vertices stay byte-identical");
+});
+
 test("Alderwick retains legal S004 morphology across tile ownership", async () => {
   const { villages } = await import("../src/geography.ts");
   const { canonicalSettlementPopulation } = await import("../src/settlement-exterior.ts");
