@@ -383,16 +383,31 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
   // Prepared-surface refinement is owned by the common worker adapter.
   const resolution = Math.min(options.terrainOnly ? 8 : 16, t.size / 2),
     step = t.size / resolution;
-  const coveragePoints = new Map<string,Point>(), coverageTints = new Map<string,RGB>();
+  // Each emitted grid coordinate has one exact SEED surface and one pigment.
+  // The cache lives only for this tile build, with at most the bounded grid's
+  // unique vertices; it never becomes world or Simulation authority.
+  const gridSamples = new Map<string, {
+    point: Point;
+    surface: ReturnType<typeof finalSurfaceRenderChannelsAt>;
+    tint?: RGB;
+  }>();
   const point = (px:number,pz:number):Point => {
-    if(!options.terrainOnly)return [px,finalSurfaceRenderChannelsAt(px,pz).groundHeight,pz];
-    const key=`${px}/${pz}`;let p=coveragePoints.get(key);
-    if(!p){const surface=finalSurfaceRenderChannelsAt(px,pz);p=[px,surface.water.kind==='none'?surface.groundHeight:surface.water.level,pz];coveragePoints.set(key,p);}return p;
+    const key = `${px}/${pz}`, cached = gridSamples.get(key);
+    if (cached) return cached.point;
+    const surface = finalSurfaceRenderChannelsAt(px,pz),
+      p: Point = [px, options.terrainOnly && surface.water.kind !== 'none'
+        ? surface.water.level : surface.groundHeight, pz];
+    gridSamples.set(key, { point: p, surface });
+    return p;
   };
   const tintAt = (p:Point):RGB => {
-    if(!options.terrainOnly)return terrainTint(p[0],p[2],t.size,p[1]);
-    const key=`${p[0]}/${p[2]}`;let tint=coverageTints.get(key);
-    if(!tint){tint=terrainTint(p[0],p[2],t.size,p[1],step,false);coverageTints.set(key,tint);}return tint;
+    // Every tint vertex was constructed by point() above: preserve the exact
+    // original height, footprint and road flags for both tile kinds.
+    const sampled = gridSamples.get(`${p[0]}/${p[2]}`)!;
+    return sampled.tint ?? (sampled.tint = terrainTint(
+      p[0], p[2], t.size, p[1], options.terrainOnly ? step : 0,
+      !options.terrainOnly, sampled.surface,
+    ));
   };
   // Refine only sharp material boundaries. Four bounded subdivision levels keep
   // thin shore margins from being stretched across an entire coarse quad.
