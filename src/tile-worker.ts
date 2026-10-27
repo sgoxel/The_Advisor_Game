@@ -3,7 +3,7 @@ import { appendCriticalSiteGeometry } from "./site-geometry.ts";
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
-import { rebuildNaturalSurface } from "./natural-surface-mesh.ts";
+import { rebuildNaturalSurface, NATURAL_MESH_LIMITS } from "./natural-surface-mesh.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import { tileJobKey, type TileJob } from "./streaming-coverage.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
@@ -34,7 +34,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   }
   const job = event.data, tile = job.tile, jobKey = tileJobKey(job), started = performance.now();
   try {
-    const base = buildTile(tile, {terrainOnly:job.kind==='coverage'}), baseDone = performance.now();
+    const base = buildTile(tile, {terrainOnly:job.kind==='coverage',
+      // Every supported detail tile below this bound replaces the coarse
+      // surface in rebuildNaturalSurface; avoid paying for discarded mesh.
+      skipBaseTerrain:job.kind==='detail' && tile.size<=NATURAL_MESH_LIMITS.maximumTile}), baseDone = performance.now();
     let natural = {replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0};
     let data = base;
     if(job.kind==='detail'){
