@@ -119,10 +119,19 @@ export type QueryStats = {
   returnedResidents: number;
 };
 
+type ResidentBucketBounds = { bx0: number; bx1: number; bz0: number; bz1: number };
 type ResidentSpatialIndex = {
-  buckets: Map<string, number[]>;
+  // Equivalent to inserting every resident in all cells of its SEED-derived
+  // bounding rectangle, without allocating those potentially thousands of
+  // string-keyed cells for each cold city query.
+  bounds: ResidentBucketBounds[];
   population: number;
 };
+/** Exact bucket-rectangle intersection; preserves all original candidates. */
+export function residentBucketBoundsOverlap(a: ResidentBucketBounds, b: ResidentBucketBounds): boolean {
+  return a.bx0 <= b.bx1 && a.bx1 >= b.bx0 &&
+    a.bz0 <= b.bz1 && a.bz1 >= b.bz0;
+}
 
 const SERVICE_ROLES: readonly ResidentRole[] = [
   "innkeeper",
@@ -426,8 +435,24 @@ function natureSites(place: Place) {
   for (const site of [...fishing, ...woodland, ...maintenance]) standArea(anchors, site, 2.5);
   return anchors.nature = { fishing, woodland, maintenance };
 }
+/** Select the identical nearest three as stable distance-sort, without sorting
+ * and allocating a full settlement-wide garden/market list for every resident. */
+export function threeNearestOffsets<T extends Offset>(candidates: readonly T[], home: Offset): T[] {
+  const closest: { site: T; distance: number }[] = [];
+  for (const site of candidates) {
+    const distance = Math.hypot(site.eastM - home.eastM, site.northM - home.northM);
+    let slot = 0;
+    // Equal distances retain original SEED site order, matching stable Array.sort.
+    while (slot < closest.length && closest[slot].distance <= distance) slot++;
+    if (slot >= 3) continue;
+    closest.splice(slot, 0, { site, distance });
+    if (closest.length > 3) closest.pop();
+  }
+  return closest.map(entry => entry.site);
+}
 function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">, kind: "garden" | "market"): ActivitySite {
-  const anchors = settlementAnchors(place), nearby = [...(kind === "garden" ? anchors.gardens : anchors.markets)].sort((a,b) => Math.hypot(a.eastM-foundation.homeOffset.eastM,a.northM-foundation.homeOffset.northM)-Math.hypot(b.eastM-foundation.homeOffset.eastM,b.northM-foundation.homeOffset.northM)).slice(0,3);
+  const anchors = settlementAnchors(place),
+    nearby = threeNearestOffsets(kind === "garden" ? anchors.gardens : anchors.markets, foundation.homeOffset);
   return nearby[digest(`${foundation.code}/${kind}`) % nearby.length] ?? { ...(kind === "garden" ? anchors.plaza : anchors.market), id: `${place.code}/${kind.toUpperCase()}`, label: kind === "garden" ? "Town square" : "Market" };
 }
 function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
@@ -1803,7 +1828,7 @@ function relativeSourceForOffset(
   };
 }
 function residentIndexFor(place: Place): ResidentSpatialIndex {
-  const buckets = new Map<string, number[]>(),
+  const bounds: ResidentBucketBounds[] = [],
     population = populationOf(place),
     anchors = settlementAnchors(place),
     // One final SEED border/lot reconciliation per cold spatial index.
@@ -1852,15 +1877,9 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
       bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),
       bz1 = Math.floor(maxZ / RESIDENT_BUCKET_SOURCE);
-    for (let bz = bz0; bz <= bz1; bz++)
-      for (let bx = bx0; bx <= bx1; bx++) {
-        const key = `${bx}/${bz}`,
-          bucket = buckets.get(key);
-        if (bucket) bucket.push(index);
-        else buckets.set(key, [index]);
-      }
+    bounds.push({ bx0, bx1, bz0, bz1 });
   }
-  return { buckets, population };
+  return { bounds, population };
 }
 
 export class LazySimulation {
@@ -2049,13 +2068,13 @@ export class LazySimulation {
       bx1 = Math.floor((relativeX + radius) / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor((relativeZ - radius) / RESIDENT_BUCKET_SOURCE),
       bz1 = Math.floor((relativeZ + radius) / RESIDENT_BUCKET_SOURCE),
-      found = new Set<number>();
-    for (let bz = bz0; bz <= bz1; bz++)
-      for (let bx = bx0; bx <= bx1; bx++)
-        for (const resident of index.buckets.get(`${bx}/${bz}`) ?? [])
-          found.add(resident);
+      search: ResidentBucketBounds = { bx0, bx1, bz0, bz1 },
+      found: number[] = [];
+    for (let resident = 0; resident < index.bounds.length; resident++)
+      if (residentBucketBoundsOverlap(index.bounds[resident], search))
+        found.push(resident);
     const rank = residentOrderFor(place);
-    return [...found].sort((a, b) => rank(a) - rank(b));
+    return found.sort((a, b) => rank(a) - rank(b));
   }
 
   private updateInspector(visible: Resident[], query: QueryStats) {
