@@ -1023,13 +1023,14 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       path = [from, graph.nodes[start], to];
     } else {
       const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
-        open = [start],
+        open = [start], openSet = new Set<number>([start]),
         h = (id: number) => Math.hypot(graph.nodes[id].eastM - graph.nodes[goal].eastM, graph.nodes[id].northM - graph.nodes[goal].northM);
       while (open.length) {
         let bestIndex = 0;
         for (let i = 1; i < open.length; i++)
           if (cost.get(open[i])! + h(open[i]) < cost.get(open[bestIndex])! + h(open[bestIndex])) bestIndex = i;
         const current = open.splice(bestIndex, 1)[0];
+        openSet.delete(current);
         if (current === goal) break;
         graph.edges[current].forEach((next, i) => {
           const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
@@ -1042,7 +1043,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
           const tentative = cost.get(current)! + graph.weights[current][i];
           if (tentative < (cost.get(next) ?? Infinity)) {
             cost.set(next, tentative); cameFrom.set(next, current);
-            if (!open.includes(next)) open.push(next);
+            if (!openSet.has(next)) { open.push(next); openSet.add(next); }
           }
         });
       }
