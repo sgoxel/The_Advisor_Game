@@ -24,7 +24,8 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true);
       const completedAt = performance.now();
       self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query,
-        residentTiming: { preparationMs: preparedAt - started, queryMs: completedAt - preparedAt } });
+        residentTiming: { preparationMs: preparedAt - started, queryMs: completedAt - preparedAt,
+          indexBuildMs: simulation.residentIndexBuildMs } });
     } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
     return;
   }
