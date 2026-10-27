@@ -99,3 +99,22 @@ test("clearing a view does not turn a delayed worker answer into an authoritativ
   assert.equal(metrics.summary().workerResidentScheduleWallMs.samples, 0);
   assert.equal(metrics.summary().firstAcceptedViewMs, null);
 });
+
+test("overlapping resident timings stay attached to their own request IDs", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  metrics.offer("old-town", 10);
+  metrics.dispatch(1, "old-town", 20);
+  metrics.offer("new-town", 25);
+  metrics.dispatch(2, "new-town", 30);
+  metrics.complete(2, true, 50, { queryMs: 18, scheduleMs: 7 }, true);
+  metrics.complete(1, false, 100, { queryMs: 60, scheduleMs: 11 }, false);
+  const s = metrics.summary();
+  assert.equal(s.accepted, 1);
+  assert.equal(s.staleViewOrCleared, 1);
+  assert.equal(s.acceptedResponseMs.latest, 20);
+  assert.equal(s.staleResponseMs.latest, 80);
+  assert.equal(s.firstAcceptedViewMs, 25);
+  assert.equal(s.workerResidentScheduleWallMs.samples, 2, "late older result retains its own observational phases");
+  metrics.complete(1, true, 101);
+  assert.equal(metrics.summary().accepted, 1, "duplicate completions cannot mutate statistics");
+});
