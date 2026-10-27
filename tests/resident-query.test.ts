@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
-import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor } from "../src/simulation.ts";
+import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
@@ -50,6 +50,27 @@ test("S009 lightweight standing-roster seeds equal full canonical resident found
       assert.deepEqual(compact, expected, `${place.code}/${index} preserves exact cold SEED anchors`);
       assert.deepEqual(residentStandSeedFor(place, index), expected,
         `${place.code}/${index} preserves exact warm dailyPlan facts`);
+    }
+  }
+});
+
+test("S009 cached neighbourhood sites retain seeded garden/market and exact home-offset keys", () => {
+  for (const place of [villages[0], cities[0]]) {
+    for (const index of [0, 1, 31, 79, ...(place.kind === "city" ? [240, 2399] : [])]) {
+      const foundation = residentStandSeedFor(place, index);
+      for (const kind of ["market", "garden"] as const) {
+        const original = neighbourhoodSite(place, foundation, kind);
+        assert.deepEqual(neighbourhoodSite(place, foundation, kind), original,
+          "repeated pure SEED site selection may reuse the same exact site");
+        const alternative = { ...foundation, homeOffset: {
+          eastM: foundation.homeOffset.eastM + 90, northM: foundation.homeOffset.northM - 45,
+        } };
+        const alternateResult = neighbourhoodSite(place, alternative, kind);
+        assert.deepEqual(neighbourhoodSite(place, alternative, kind), alternateResult,
+          "a separately resolved home offset has a separately cached canonical destination");
+        assert.deepEqual(neighbourhoodSite(place, foundation, kind), original,
+          "alternate home requests cannot change the original resident's selected site");
+      }
     }
   }
 });
