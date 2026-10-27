@@ -68,6 +68,25 @@ export function residentLabelRightOfActor(x: number, width: number, height: numb
   return x < width - 260 && !(height > width && x >= width * .36);
 }
 
+/** The owned-door label is a DOM overlay, not physical geometry. Suppress
+ * it anywhere along the original resident's *actual projected body*; checking
+ * only head-to-door distance hid the returning 2D resident behind the label
+ * while its canonical feet were exactly on the doorway. No actor movement. */
+export function ownedDoorLabelClearOfResident(
+  door: { x: number; y: number },
+  feet: { x: number; y: number },
+  head: { x: number; y: number },
+  clearancePx = 48,
+): boolean {
+  const values = [door.x, door.y, feet.x, feet.y, head.x, head.y, clearancePx];
+  if (!values.every(Number.isFinite) || clearancePx < 0) return false;
+  const dx = head.x - feet.x, dy = head.y - feet.y, lengthSq = dx * dx + dy * dy;
+  const t = lengthSq > 0
+    ? Math.max(0, Math.min(1, ((door.x - feet.x) * dx + (door.y - feet.y) * dy) / lengthSq))
+    : 0;
+  return Math.hypot(door.x - feet.x - dx * t, door.y - feet.y - dy * t) > clearancePx;
+}
+
 /** Keep only the actually inspected, grounded actor visible while a new nearby
  * population snapshot is pending. It cannot invent a resident or move one
  * into view; a distant pan, indoor state or blocked ground revokes the hold. */
