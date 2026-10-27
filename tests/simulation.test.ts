@@ -217,6 +217,26 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
   }
 });
 
+
+
+test("resident street connectors preserve sparse-grid legal picks without changing blocked routes", () => {
+  const cell = 12, nodes = [
+    { eastM: 300, northM: 0 }, { eastM: 306, northM: 0 },
+    { eastM: 307, northM: 0 }, { eastM: 310, northM: 0 },
+    ...Array.from({ length: 36 }, (_, i) => ({ eastM: 1000 + i * 48, northM: -1200 - i * 72 })),
+  ];
+  const grid = new Map<string, number[]>();
+  nodes.forEach((point, id) => {
+    const key = `${Math.floor(point.eastM / cell)}/${Math.floor(point.northM / cell)}`;
+    grid.set(key, [...(grid.get(key) ?? []), id]);
+  });
+  const origin = { eastM: 0, northM: 0 }, graph = { nodes, grid, cell };
+  assert.equal(nearestNode(graph, origin), 0, "far seeded road still uses the same closest vertex");
+  assert.equal(nearestLegalStreetNode(graph, origin, (_from, to) => to.eastM >= 306), 1,
+    "sparse occupied-bucket iteration preserves legal distance/id order");
+  assert.equal(nearestLegalStreetNode(graph, origin, () => false), -1,
+    "skipping empty cells never invents a legal street approach");
+});
 test("resident street connectors choose a nearby legal vertex, never an unverified chord", () => {
   const cell = 12, nodes = [
     { eastM: 2, northM: 0 }, // physically nearest, but blocked by a wall
