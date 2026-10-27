@@ -139,23 +139,33 @@ test("resident facts dispatch after initial ready without waiting for later zoom
     "an occupied worker is never double-dispatched");
 });
 
-test("cold S006 resident query reuses one stable worker without duplicate index builds", () => {
+test("cold S009 resident queries split only across already idle workers and reuse warm shards", () => {
   assert.deepEqual(residentWorkerShardPlan([3, 1]), [
-    { workerId: 1, shardIndex: 0, count: 1 },
-  ], "first use builds one canonical settlement index, leaving other idle workers for terrain");
-  assert.deepEqual(residentWorkerShardPlan([1, 3], new Set([3])), [
+    { workerId: 1, shardIndex: 0, count: 2 },
+    { workerId: 3, shardIndex: 1, count: 2 },
+  ], "two idle workers divide expensive cold SEED and legal route work without starting new workers");
+  assert.deepEqual(residentWorkerShardPlan([3, 1, 4]), [
+    { workerId: 1, shardIndex: 0, count: 2 },
+    { workerId: 3, shardIndex: 1, count: 2 },
+  ], "extra idle worker remains available for terrain");
+  assert.deepEqual(residentWorkerShardPlan([3, 1], new Set([3])), [
     { workerId: 3, shardIndex: 0, count: 1 },
-  ], "prefer an idle worker with an already reconstructed resident index");
+  ], "one warmed worker retains the full index rather than rebuilding half an index");
+  assert.deepEqual(residentWorkerShardPlan([3, 1, 4], new Set([3, 1])), [
+    { workerId: 1, shardIndex: 0, count: 2 },
+    { workerId: 3, shardIndex: 1, count: 2 },
+  ], "two warmed workers retain their exact original shard and cache mapping");
   assert.deepEqual(residentWorkerShardPlan([2]), [
     { workerId: 2, shardIndex: 0, count: 1 },
-  ], "one available worker answers the whole bounded query");
+  ], "one-worker devices still answer the complete canonical query");
   assert.deepEqual(residentWorkerShardPlan([1, 2], new Set([9])), [
-    { workerId: 1, shardIndex: 0, count: 1 },
-  ], "a warmed but occupied worker never blocks the next legitimate query");
+    { workerId: 1, shardIndex: 0, count: 2 },
+    { workerId: 2, shardIndex: 1, count: 2 },
+  ], "an occupied warmed worker never delays a cold legal query");
   assert.deepEqual(residentWorkerShardPlan([3, 3, -1]), [
     { workerId: 3, shardIndex: 0, count: 1 },
   ], "duplicate or invalid worker indices never create unanswered shards");
-  assert.deepEqual(residentWorkerShardPlan([]), [], "no available worker starts a batch");
+  assert.deepEqual(residentWorkerShardPlan([]), [], "no idle worker starts a batch");
 });
 
 test("terrain prefers cold idle workers, preserving warm resident index without starving mandatory tiles", () => {
