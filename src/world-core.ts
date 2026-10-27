@@ -547,6 +547,15 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   return result;
 }
 
+/** Render-only channels use the same composed SEED surface, without four
+ * metre-grade probes that cannot affect ground height, material or water.
+ * Never use this query for collision, picking, routing or Simulation.
+ * Full finalSurfaceAt remains authoritative; do not cache partial verdicts. */
+export function finalSurfaceRenderChannelsAt(x: number, z: number):
+  Pick<FinalSurface, "groundHeight" | "groundMaterial" | "water"> {
+  return finalSurfaceCache.get(surfaceCacheKey(x, z)) ?? composePointAt(x, z).final;
+}
+
 /** Material-only canonical query for bounded presentation-boundary refinement.
  * Unlike finalSurfaceAt this avoids five slope probes for each edge search. */
 export function finalSurfaceGroundMaterialAt(x: number, z: number) {
