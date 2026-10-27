@@ -29,18 +29,22 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
-/** A cold population query builds the settlement index inside its worker.
- * Sharding it onto several cold terrain workers duplicates that expensive
- * SEED-only construction and competes with urgent terrain. Prefer an idle
- * worker that has already served a resident query; otherwise choose the
- * lowest stable idle ID. One query owns one worker/index, with no new workers. */
+/** Split expensive cold legal resident reconstruction across at most two
+ * already-idle workers. Each shard builds only its own SEED index (the spatial
+ * index supports exact congruence partitions) and all original route/surface
+ * checks still execute. Prefer warm resident workers so subsequent queries
+ * reuse the same shard indexes; a lone warm worker keeps its full-index cache.
+ * No workers are created and one-worker devices retain their original path. */
 export function residentWorkerShardPlan(
   idleWorkerIds: readonly number[], warmedWorkerIds: ReadonlySet<number> = new Set(),
 ) {
   const idle = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
     .sort((a, b) => a - b);
-  const workerId = idle.find(id => warmedWorkerIds.has(id)) ?? idle[0];
-  return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
+  const warm = idle.filter(id => warmedWorkerIds.has(id));
+  const selected = (warm.length ? warm : idle).slice(0, 2);
+  return selected.map((workerId, shardIndex) => ({
+    workerId, shardIndex, count: selected.length,
+  }));
 }
 
 /** Reuse the resident worker's expensive cold index when other workers can
