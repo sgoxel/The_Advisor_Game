@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { appendCriticalSiteGeometry } from "../src/site-geometry.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
 import type { Geometry, TileGeometry } from "../src/geometry.ts";
 import {
   countries,
@@ -361,13 +362,25 @@ test("focused ruin and shrine meshes have deterministic visible silhouettes with
     const first = build(), again = build();
     assert.ok(first.summary.codes.includes(site.code), `${kind} mesh missing`);
     assert.ok(first.triangles > 0 && first.triangles < 600, `${kind} exceeds close-detail budget`);
-    const y = [...first.positions].filter((_, index) => index % 3 === 1);
-    assert.ok(Math.max(...y) - Math.min(...y) > 5, `${kind} silhouette is too flat`);
+    // The mesh renderer uses source units, but the landmark is authored in
+    // real metres like adjacent homes and the original SEED resident.
+    // Earlier assertions used raw source units, allowing >1km-high walls.
+    const scale = sourceUnitsPerMetreAt(site.z),
+      v = Float64Array.from(first.positions, (value, index) =>
+        index % 3 === 0 ? value / scale.x :
+        index % 3 === 1 ? value / metresToSource(1) : value / scale.z),
+      y = [...v].filter((_, index) => index % 3 === 1),
+      heightM = Math.max(...y) - Math.min(...y),
+      horizontalM = Math.max(...v.filter((_, index) => index % 3 !== 1).map(Math.abs));
+    assert.ok(heightM > 5 && heightM < 14,
+      `${kind} must be a human-scale 3D landmark, got ${heightM}m`);
+    assert.ok(horizontalM < 20,
+      `${kind} may not grow kilometre-wide or block the SEED arrival: ${horizontalM}m`);
     if (kind === "ruin") {
       // The original 4.8×4.5 m roof obscured the actual SEED visitor at
       // the nearby site arrival. Keep high walls, not a solid high roof.
       let largestHighRoofTriangleM2 = 0;
-      const v = first.positions, minY = Math.min(...y);
+      const minY = Math.min(...y);
       for (let i = 0; i < v.length; i += 9) {
         if (v[i + 1] < minY + 5 ||
             Math.max(v[i + 1], v[i + 4], v[i + 7]) -
