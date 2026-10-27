@@ -39,6 +39,7 @@ import {
   validatedResidentRoadPolyline,
   residentViewQuery,
   threeNearestOffsets,
+  residentBucketBoundsOverlap,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -83,6 +84,44 @@ test("bounded resident foundation reuse does not rebuild SEED identity on a warm
     "route reconstruction must not evict the active village foundation");
   assert.throws(() => residentFoundationAt(place, populationOf(place)), RangeError,
     "bounded caching must not make an invalid resident index valid");
+});
+
+test("resident inspector can resolve facts with identical compact cold spatial candidates", () => {
+  // Original index inserted every resident into every 4-source-unit bucket in
+  // its rectangle, then unioned all query buckets. Compare that exact oracle
+  // against compact rectangle intersections, including negatives/boundaries.
+  const bounds = Array.from({ length: 160 }, (_, index) => {
+    const bx0 = (index * 13) % 29 - 14, bz0 = (index * 17) % 31 - 15;
+    return { bx0, bx1: bx0 + (index * 3) % 18,
+      bz0, bz1: bz0 + (index * 7) % 15 };
+  });
+  const buckets = new Map<string, Set<number>>();
+  for (let index = 0; index < bounds.length; index++) {
+    const b = bounds[index];
+    for (let bz = b.bz0; bz <= b.bz1; bz++)
+      for (let bx = b.bx0; bx <= b.bx1; bx++) {
+        const key = `${bx}/${bz}`, group = buckets.get(key) ?? new Set<number>();
+        group.add(index);
+        buckets.set(key, group);
+      }
+  }
+  const queries = [
+    { bx0: -14, bx1: -14, bz0: -15, bz1: -15 },
+    { bx0: -8, bx1: 2, bz0: -4, bz1: 8 },
+    { bx0: 0, bx1: 0, bz0: 0, bz1: 0 },
+    { bx0: 20, bx1: 40, bz0: 21, bz1: 32 },
+    { bx0: 100, bx1: 110, bz0: 100, bz1: 110 },
+  ];
+  for (const query of queries) {
+    const old = new Set<number>();
+    for (let bz = query.bz0; bz <= query.bz1; bz++)
+      for (let bx = query.bx0; bx <= query.bx1; bx++)
+        for (const id of buckets.get(`${bx}/${bz}`) ?? []) old.add(id);
+    const compact = bounds.flatMap((bounds, index) =>
+      residentBucketBoundsOverlap(bounds, query) ? [index] : []);
+    assert.deepEqual(compact, [...old].sort((a, b) => a - b),
+      "all candidate SEED resident IDs match original inclusive bucket union");
+  }
 });
 
 test("resident inspector can resolve facts with stable bounded nearest-site selection", () => {
