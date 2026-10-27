@@ -1146,7 +1146,9 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
   if (w < 4.4) return;
   const restaurant = shop === "restaurant", z = front + 1.3, wide = w >= 6.2,
     xs = restaurant ? [-Math.min(1.95, w / 2 - .5), Math.min(1.95, w / 2 - .5)] : wide ? [-1.8, 1.4, 2.6] : [-Math.min(1.75, w / 2 - .55), Math.min(1.75, w / 2 - .55)];
-  for (const x of xs) addTableSet(f, x, z, 2, r, { theta0: 0, tableR: restaurant ? .4 : .34, umbrellaR: restaurant ? 1.1 : undefined });
+  // Restaurant table umbrellas must also keep the same owned door axis
+  // clear; their former 1.1 m crowns projected across the central aisle.
+  for (const x of xs) addTableSet(f, x, z, 2, r, { theta0: 0, tableR: restaurant ? .4 : .34, umbrellaR: restaurant ? .75 : undefined });
   if (!restaurant) {
     // Café parasols in a plain seeded cloth (restaurants keep striped ones): one per table, one shared over the paired tables
     // of a wide café; each canopy's inner rim stays >= .85 m from the door axis (8-gon extent r cos 22.5°).
