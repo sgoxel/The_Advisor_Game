@@ -448,7 +448,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           d,
           [d[0], d[1] - 12, d[2]],
           [a[0], a[1] - 12, a[2]],
-          terrainTint(ax, az, t.size, a[1]),
+          tintAt(a),
         );
       if (z === resolution - 1 && !options.terrainOnly)
         terrain.quad(
@@ -456,7 +456,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           b,
           [b[0], b[1] - 12, b[2]],
           [c[0], c[1] - 12, c[2]],
-          terrainTint(ax, az, t.size, c[1]),
+          tintAt(c),
         );
       if (x === 0 && !options.terrainOnly)
         terrain.quad(
@@ -464,7 +464,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           a,
           [a[0], a[1] - 12, a[2]],
           [b[0], b[1] - 12, b[2]],
-          terrainTint(ax, az, t.size, b[1]),
+          tintAt(b),
         );
       if (x === resolution - 1 && !options.terrainOnly)
         terrain.quad(
@@ -472,7 +472,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           c,
           [c[0], c[1] - 12, c[2]],
           [d[0], d[1] - 12, d[2]],
-          terrainTint(ax, az, t.size, d[1]),
+          tintAt(d),
         );
     }
   // The water/ice plane is presentation-only and sits beneath land. Sample the same
