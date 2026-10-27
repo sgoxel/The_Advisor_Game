@@ -61,7 +61,7 @@ test("S009 tile grid surface/tint reuse preserves both original mesh sampling pa
   // corner already cached the point but recomputed the tint's surface. Reusing
   // the exact same SEED channels must preserve all ground/water heights and
   // pigment values at their unchanged grid coordinates and footprint widths.
-  for (const tile of [tileAt(8, 128, 128), tileAt(11, 1024, 1024), tileAt(8, 128, 1)]) {
+  for (const tile of [tileAt(8, 128, 128), tileAt(11, 1024, 1024), tileAt(8, 128, 64)]) {
     for (const terrainOnly of [false, true]) {
       const resolution = Math.min(terrainOnly ? 8 : 16, tile.size / 2),
         step = tile.size / resolution;
