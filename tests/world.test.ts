@@ -14,6 +14,7 @@ import {
   selectTiles,
   tileAt,
   tileForPosition,
+  finalSurfaceEvidenceAnchors,
   WORLD_SEED,
   WORLD_MIN,
   MAX_LEVEL,
@@ -27,7 +28,10 @@ import {
   roads,
   roadJunctions,
   roadNetworkTelemetry,
+  roadDistanceAt,
 } from "../src/geography.ts";
+import { siteAccessRoads } from "../src/sites.ts";
+import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
@@ -56,6 +60,35 @@ import { terrainTint } from "../src/geometry-core.ts";
 
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt } from "../src/wilderness-terrain.ts";
+
+
+test("S009 adaptive clipped road fragments reuse canonical metric identity without changing distances", () => {
+  const allRoads = [...roads, ...siteAccessRoads],
+    byLine = new Map(allRoads
+      .filter(road => road.centerline && road.centerline.length > 1)
+      .map(road => [road.centerline!, road] as const)),
+    bridge = finalSurfaceEvidenceAnchors().bridge;
+  let reused = 0, checked = 0;
+  for (const focus of [villages[0], bridge]) for (const level of [9, 11]) {
+    const tile = tileForPosition(focus.x, focus.z, level);
+    for (const fragment of roadFragmentsInBounds(allRoads, tile.minX, tile.minZ, tile.size)) {
+      const source = fragment.centerline ? byLine.get(fragment.centerline) ?? fragment : fragment;
+      if (source !== fragment) reused++;
+      for (const point of [
+        { x: tile.minX + tile.size / 2, z: tile.minZ + tile.size / 2 },
+        { x: fragment.fromX, z: fragment.fromZ },
+        { x: fragment.toX + SOURCE_PRESENTATION_WIDTH, z: fragment.toZ },
+      ]) {
+        assert.equal(roadDistanceAt(point.x, point.z, fragment),
+          roadDistanceAt(point.x, point.z, source),
+          "canonical road and tile fragment must preserve exact seam-safe polyline distance");
+        checked++;
+      }
+    }
+  }
+  assert.ok(reused > 0, "real world adaptive tiles must exercise canonical polyline metric reuse");
+  assert.ok(checked > 0);
+});
 
 test("S009 tile grid surface/tint reuse preserves both original mesh sampling paths", () => {
   // Each original detail corner used a fresh composed surface; each coverage

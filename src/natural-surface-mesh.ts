@@ -19,6 +19,12 @@ import {
 // Both road registries are immutable SEED foundations; sharing their original
 // concatenation avoids rebuilding an identical array for every detail tile.
 const canonicalSurfaceRoads = [...roads, ...siteAccessRoads];
+// A clipped fragment retains its source's complete immutable centerline.
+// Reuse the canonical Road as roadDistanceAt's WeakMap key instead of rebuilding
+// the *same full-polyline metric list* for every throwaway tile fragment.
+const canonicalDistanceRoadByLine = new Map(canonicalSurfaceRoads
+  .filter(road => road.centerline && road.centerline.length > 1)
+  .map(road => [road.centerline!, road] as const));
 
 export const NATURAL_MESH_LIMITS = Object.freeze({
   maximumTile: 2048,
@@ -78,7 +84,8 @@ export function rebuildNaturalSurface(
     preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(canonicalSurfaceRoads, tile.minX, tile.minZ, tile.size)]
       .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
-          r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12)) : [],
+          r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12))
+      .map(r => r.centerline ? canonicalDistanceRoadByLine.get(r.centerline) ?? r : r) : [],
     preparedPlace = tile.size <= 512 && places.some(p =>
       Math.hypot(wrapSourceX(p.x - tile.minX - tile.size / 2), p.z - tile.minZ - tile.size / 2) <
         (p.kind === 'city' ? 510 : 170) + tile.size * Math.SQRT2 / 2),
