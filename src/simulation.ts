@@ -6,7 +6,7 @@ import { characterForRole, type CharacterAge, type CharacterSex } from "./charac
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
-import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeAnchorFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
@@ -124,7 +124,9 @@ type ResidentSpatialIndex = {
   // Equivalent to inserting every resident in all cells of its SEED-derived
   // bounding rectangle, without allocating those potentially thousands of
   // string-keyed cells for each cold city query.
-  bounds: ResidentBucketBounds[];
+  // Sparse at original SEED indices when a worker owns only one shard.
+  // An absent bound is not a resident and can never become a candidate.
+  bounds: (ResidentBucketBounds | undefined)[];
   population: number;
 };
 /** Exact bucket-rectangle intersection; preserves all original candidates. */
@@ -554,6 +556,25 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
   }
 }
 
+/** Exact immutable fields required for spatial indexing, before the character
+ * is actually inspected. Building all 2,400 full biographies per cold city
+ * query needlessly computes names, birthdays, appearance and traits. */
+function residentSpatialFactsAt(
+  place: Place, index: number,
+  exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
+) {
+  const code = `${place.code}/RESIDENT/${index}`,
+    role = residentRoleFor(place, index),
+    assignment = guardAssignmentFor(place, index),
+    waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
+    character = characterForRole(role, digest(`${code}/CHARACTER`),
+      waterContext === "coast" || waterContext === "freshwater-lake"),
+    homeLot = settlementHomeAnchorFor(place, index, exteriorPlan),
+    homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
+    workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
+  return { code, role, index, assignment, character, homeOffset, workOffset };
+}
+
 /** Expensive immutable SEED identities are shared by the spatial index, standing-slot
  * roster and route evaluation. Cache data, never a mutable Simulation position.
  * The bounded cache only changes reconstruction cost, not identity or output. */
@@ -569,17 +590,10 @@ export function residentFoundationAt(
   const code = `${place.code}/RESIDENT/${index}`;
   const cached = residentFoundationCache.get(code);
   if (cached) return cached;
-  const variant = digest(code),
-    role = residentRoleFor(place, index),
-    assignment = guardAssignmentFor(place, index),
-    homeBuilding = `${place.code}/RESIDENCE/${index}`,
-    waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
-    character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
-    // Stable SEED lot for population indexing; resolving rendered doors is
-    // expensive and belongs to bounded per-resident evaluation, not full rosters.
-    homeLot = settlementHomeFor(place, index, exteriorPlan).candidates[0],
-    homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
-    workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
+  const { role, assignment, character, homeOffset, workOffset } =
+      residentSpatialFactsAt(place, index, exteriorPlan),
+    variant = digest(code),
+    homeBuilding = `${place.code}/RESIDENCE/${index}`;
   const foundation: ResidentFoundation = {
     code,
     name: personName(code, character.sex, place.continent),
@@ -1840,8 +1854,8 @@ function relativeSourceForOffset(
     z: source.z - place.z,
   };
 }
-function residentIndexFor(place: Place): ResidentSpatialIndex {
-  const bounds: ResidentBucketBounds[] = [],
+function residentIndexFor(place: Place, shard?: { index: number; count: number }): ResidentSpatialIndex {
+  const bounds: (ResidentBucketBounds | undefined)[] = [],
     population = populationOf(place),
     anchors = settlementAnchors(place),
     // One final SEED border/lot reconciliation per cold spatial index.
@@ -1865,8 +1879,12 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
     },
     sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep].map(projectShared);
   for (let index = 0; index < population; index++) {
+    // Shard assignments are exact resident-index congruences. In a cold worker,
+    // do not construct thousands of unrelated immutable homes, work sites or
+    // canonical projections only to discard them after index construction.
+    if (shard && index % shard.count !== shard.index) continue;
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
-    const foundation = residentFoundationAt(place, index, exteriorPlan),
+    const foundation = residentSpatialFactsAt(place, index, exteriorPlan),
       // A guard whose assigned frontage was physically blocked may own a
       // different legal SEED spare lot. Only the small fixed watch roster is
       // resolved here; never materialize all household doors for indexing.
@@ -1890,7 +1908,7 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
       bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),
       bz1 = Math.floor(maxZ / RESIDENT_BUCKET_SOURCE);
-    bounds.push({ bx0, bx1, bz0, bz1 });
+    bounds[index] = { bx0, bx1, bz0, bz1 };
   }
   return { bounds, population };
 }
@@ -2061,20 +2079,25 @@ export class LazySimulation {
     if (button) button.disabled = false;
   }
 
-  private indexFor(place: Place) {
-    let index = this.residentIndexes.get(place.code);
+  private indexFor(place: Place, shard?: { index: number; count: number }) {
+    const key = shard ? `${place.code}|SHARD/${shard.index}/${shard.count}` : place.code;
+    let index = this.residentIndexes.get(key);
     if (!index) {
       const started = performance.now();
-      index = residentIndexFor(place);
+      index = residentIndexFor(place, shard);
       this.lastResidentIndexBuildMs += performance.now() - started;
-      this.residentIndexes.set(place.code, index);
+      this.residentIndexes.set(key, index);
+      // At most eight active shards per device, plus one unsharded inspector.
+      // Eviction changes only disposable derived indexes, never SEED identity.
+      while (this.residentIndexes.size > 16)
+        this.residentIndexes.delete(this.residentIndexes.keys().next().value!);
       this.residentIndexBuilds++;
     }
     return index;
   }
 
-  private residentCandidates(place: Place, x: number, z: number, radius: number) {
-    const index = this.indexFor(place),
+  private residentCandidates(place: Place, x: number, z: number, radius: number, shard?: { index: number; count: number }) {
+    const index = this.indexFor(place, shard),
       relativeX = wrapSourceX(x - place.x),
       relativeZ = z - place.z,
       bx0 = Math.floor((relativeX - radius) / RESIDENT_BUCKET_SOURCE),
@@ -2083,9 +2106,10 @@ export class LazySimulation {
       bz1 = Math.floor((relativeZ + radius) / RESIDENT_BUCKET_SOURCE),
       search: ResidentBucketBounds = { bx0, bx1, bz0, bz1 },
       found: number[] = [];
-    for (let resident = 0; resident < index.bounds.length; resident++)
-      if (residentBucketBoundsOverlap(index.bounds[resident], search))
-        found.push(resident);
+    for (let resident = 0; resident < index.bounds.length; resident++) {
+      const bounds = index.bounds[resident];
+      if (bounds && residentBucketBoundsOverlap(bounds, search)) found.push(resident);
+    }
     const rank = residentOrderFor(place);
     return found.sort((a, b) => rank(a) - rank(b));
   }
@@ -2206,7 +2230,7 @@ export class LazySimulation {
     // Preserve the exact original place/candidate ordering and legal checks.
     for (const place of settlements) {
       const candidateStarted = phases ? performance.now() : 0;
-      const candidates = this.residentCandidates(place, x, z, radius)
+      const candidates = this.residentCandidates(place, x, z, radius, shard)
         .filter(index => !shard || index % shard.count === shard.index);
       if (phases) phases.candidateLookupMs += performance.now() - candidateStarted;
       query.candidateResidents += candidates.length;

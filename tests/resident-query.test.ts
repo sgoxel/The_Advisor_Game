@@ -1,8 +1,41 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { LazySimulation, residentOrderFor } from "../src/simulation.ts";
+import { villages, cities, type Place } from "../src/geography.ts";
+import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("S009 resident cold index builds only the shard while retaining all original SEED candidates and order", () => {
+  const place = villages[0], simulation = new LazySimulation();
+  type Shard = { index: number; count: number };
+  const candidates = (shard?: Shard) =>
+    (simulation as unknown as { residentCandidates: (place: Place, x: number, z: number,
+      radius: number, shard?: Shard) => number[] }).residentCandidates(place, place.x, place.z, 32, shard);
+  const expected = candidates();
+  const rank = residentOrderFor(place);
+  for (const count of [1, 2, 3, 4, 6, 8]) {
+    const partitions = Array.from({ length: count }, (_, index) => candidates({ index, count }));
+    for (let index = 0; index < count; index++)
+      assert.ok(partitions[index].every(id => id % count === index),
+        "shard index never manufactures another worker's resident");
+    const combined = partitions.flat().sort((a, b) => rank(a) - rank(b));
+    assert.deepEqual(combined, expected, `complete SEED candidate parity across ${count} worker shards`);
+    assert.equal(new Set(combined).size, combined.length, "every SEED resident belongs to one shard");
+  }
+});
+
+test("S009 fast resident home anchor exactly matches canonical full-home plot", () => {
+  for (const place of [villages[0], cities[0]]) {
+    const plan = settlementExteriorFor(place);
+    for (const index of [0, 1, 7, 31, 79]) {
+      const expected = settlementHomeFor(place, index, plan).candidates[0],
+        actual = settlementHomeAnchorFor(place, index, plan);
+      assert.deepEqual(actual, expected, `resident ${place.code}/${index} retains exact home`);
+    }
+  }
+});
 
 test("a fixed Fantasy tick cannot move an original resident off the legal route", () => {
   const absoluteTick = 268295, scale = 24;

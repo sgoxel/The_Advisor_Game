@@ -107,6 +107,24 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
   };
 }
 
+/** The spatial population index only needs the SEED home's first canonical
+ * candidate, never its other fifteen visual/collision fallback candidates.
+ * This computes exactly settlementHomeFor(place,index,plan).candidates[0]
+ * without allocating the full plot or unused fallback coordinates. */
+export function settlementHomeAnchorFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPoint {
+  const population = canonicalSettlementPopulation(place);
+  if (!Number.isInteger(index) || index < 0 || index >= population)
+    throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
+  if (!suppliedPlan) settlementExteriorFor(place);
+  const lot = settlementLotFor(place, index),
+    house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, place.kind === "city"),
+    shift = (house.depthM - lot.nominalDepthM) * .5;
+  return {
+    x: wrapSourceX(lot.x + lot.out.x * shift),
+    z: lot.z + lot.out.z * shift,
+  };
+}
+
 /** Vacant frontage is SEED-canonical. A guard may use it only if their own
  * lot has no valid door; no occupied lot is silently reassigned. */
 export function settlementSpareHomeFor(place: Place, index: number, ordinal: number,
