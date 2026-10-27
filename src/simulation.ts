@@ -800,11 +800,18 @@ function standTableFor(place: Place): StandTable {
   const exteriorPlan = settlementExteriorFor(place);
   const users = new Map<string, [number, number][]>();
   for (let index = 0; index < populationOf(place); index++) {
-    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, best = new Map<string, number>();
+    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
+      // Every occurrence of the same routine anchor has one immutable SEED
+      // ground. Merge its lowest original kind rank before the expensive
+      // site/coordinate lookup; duplicate day entries add no new ground.
+      byAnchor = new Map<RoutineAnchor, number>(), best = new Map<string, number>();
     for (const [day, weekday] of [[0, 0], [6, 6]]) for (const entry of dailyPlan(subject, foundation.traits, day, weekday)) {
       if (entry.indoors || entry.anchor === "home") continue;
-      const ground = anchors.areas.get(coordKey(anchorOffset(place, foundation, entry.anchor)));
-      if (ground) best.set(ground.key, Math.min(best.get(ground.key) ?? 99, KIND_RANK[entry.kind] ?? 9));
+      byAnchor.set(entry.anchor, Math.min(byAnchor.get(entry.anchor) ?? 99, KIND_RANK[entry.kind] ?? 9));
+    }
+    for (const [anchor, rank] of byAnchor) {
+      const ground = anchors.areas.get(coordKey(anchorOffset(place, foundation, anchor)));
+      if (ground) best.set(ground.key, Math.min(best.get(ground.key) ?? 99, rank));
     }
     for (const [key, rank] of best) { const list = users.get(key); if (list) list.push([rank, index]); else users.set(key, [[rank, index]]); }
   }
