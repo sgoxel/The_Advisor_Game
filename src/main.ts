@@ -1788,6 +1788,7 @@ async function start() {
     const result = await simulation.considerAdvisorSiteVisit(code);
     if (result.started) {
       saveSiteVisits();
+      residentPhaseTimings.clearPending();
       residentQueries.clear();
       lastSimulationRealSecond = -1;
     }
@@ -1843,7 +1844,6 @@ async function start() {
       if (query) {
         offerResidentQuery(query);
       } else {
-        residentPhaseTimings.clearPending();
         residentPhaseTimings.clearPending();
         residentQueries.clear();
       }
