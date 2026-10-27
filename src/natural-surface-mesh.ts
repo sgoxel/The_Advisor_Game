@@ -28,7 +28,8 @@ type Sample = {
   x: number;
   z: number;
   y: number;
-  tint: readonly number[];
+  /** Computed only when a sampled point becomes a rendered vertex. */
+  tint?: readonly number[];
   wet: string;
   /** Only read on tiles with a real major wet/dry boundary. */
   shoreDistance?: number;
@@ -96,7 +97,6 @@ export function rebuildNaturalSurface(
         x,
         z,
         y: wet === "none" ? surface.groundHeight : surface.water.level + 0.0025,
-        tint: terrainTint(x, z,32,undefined,0,false),
         material: surface.groundMaterial,
         wet,
       };
@@ -111,6 +111,11 @@ export function rebuildNaturalSurface(
   const shoreDistance = (point: Sample): number =>
     point.shoreDistance ?? (point.shoreDistance =
       macroSampleAt(sourceToLonLat(point.x, point.z)).coastDistanceRad * SOURCE_PRESENTATION_RADIUS);
+
+  // The early 8x8 shoreline probe and unused adaptive samples never emit
+  // vertices; defer their identical SEED-derived tint until vertex emission.
+  const tint = (point: Sample): readonly number[] =>
+    point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false));
 
   let majorBoundary = false,
     initialWet: string | undefined;
@@ -136,7 +141,7 @@ export function rebuildNaturalSurface(
     vertexIndices.set(key, index);
     positions.push(p.x - originX, p.y, p.z - originZ);
     normals.push(0, 0, 0);
-    colors.push(...p.tint, p.material === "Road" && p.wet === "none" ? 255 : 0);
+    colors.push(...tint(p), p.material === "Road" && p.wet === "none" ? 255 : 0);
     uvs.push(
       p.x / SOURCE_PRESENTATION_WIDTH + 0.5,
       Math.max(0, Math.min(1, 0.5 + (2 * p.z) / SOURCE_PRESENTATION_WIDTH)),
