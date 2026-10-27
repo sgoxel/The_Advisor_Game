@@ -1496,6 +1496,13 @@ export function provablyLateWithoutStreetSearch(from: Offset, to: Offset, remain
   return directMetres > 1e-6 && (remainingSeconds < 60 ||
     directMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
 }
+/** An unchanged anchor cannot create a prior-day trip or unresolved return.
+ * This exact negative check precedes any standing-slot/physical route work. */
+export function routineHasAnchorChange(plan: readonly { anchor: string }[]): boolean {
+  for (let i = 1; i < plan.length; i++)
+    if (plan[i].anchor !== plan[i - 1].anchor) return true;
+  return false;
+}
 function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
   const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
     key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
@@ -1504,6 +1511,12 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   const plan = dailyPlan({ code: foundation.code, role: foundation.role,
     ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, foundation.traits,
     priorDay, localWeekday(priorTick, lon));
+  if (!routineHasAnchorChange(plan)) {
+    civilianOvernightRisk.set(key, false);
+    while (civilianOvernightRisk.size > 16384)
+      civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
+    return false;
+  }
   // A lawful final homeward route is NOT proof the resident reached its
   // scheduled origin: an earlier failed leg may have left them elsewhere.
   // Prove each distinct anchor reached its physical stop before the following
@@ -1545,7 +1558,7 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
     civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
   return risk;
 }
-function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true): ScheduledResidentState {
+function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true, phases?: ResidentEvaluationPhases): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
@@ -1562,8 +1575,14 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
       !replayOvernight ? false : !plan[0].indoors),
     previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
   let previousDay: ScheduledResidentState | undefined;
-  if (replayOvernight && (foundation.role === "guard" || foundation.index < SERVICE_ROLES.length ||
-      civilianReturnAtRisk(place, foundation, tick - second - 1))) {
+  const fixedRoster = foundation.role === "guard" || foundation.index < SERVICE_ROLES.length;
+  let needsHistory = replayOvernight && fixedRoster;
+  if (replayOvernight && !fixedRoster) {
+    const riskStarted = phases ? performance.now() : 0;
+    needsHistory = civilianReturnAtRisk(place, foundation, tick - second - 1);
+    if (phases) phases.overnightRiskMs += performance.now() - riskStarted;
+  }
+  if (needsHistory) {
     previousDay = overnightPositions.get(previousKey);
     if (!previousDay) {
       previousDay = scheduleAt(place, foundation, tick - second - 1, false);
@@ -1775,6 +1794,7 @@ export type ResidentEvaluationPhases = {
   foundationMs: number;
   doorMs: number;
   scheduleMs: number;
+  overnightRiskMs: number;
   groundingMs: number;
   evaluated: number;
 };
@@ -1792,7 +1812,7 @@ export function residentAt(place: Place, index: number, tick: number, phases?: R
     homeOffset = door ? offsetForSource(place, door.x, door.z) : seeded.homeOffset,
     foundation = door ? { ...seeded, homeOffset,
       workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
-    schedule = scheduleAt(place, foundation, tick),
+    schedule = scheduleAt(place, foundation, tick, true, phases),
     scheduleDone = phases ? performance.now() : 0,
     location = legalPosition(place, schedule.offset.eastM, schedule.offset.northM),
     groundingDone = phases ? performance.now() : 0,
