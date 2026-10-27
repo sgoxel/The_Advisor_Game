@@ -43,7 +43,7 @@ export class BoundedTimingSamples {
 /**
  * Observation-only resident query phases. Keys are canonical requested views;
  * clock and wall-time samples never participate in SEED or Simulation decisions.
- * Exactly one worker query can be in flight; latest camera offer wins.
+ * Up to two queries may overlap; request IDs prevent stale completions stealing a newer sample.
  */
 export class ResidentQueryPhaseSamples {
   readonly offerToDispatchMs = new BoundedTimingSamples();
@@ -62,7 +62,7 @@ export class ResidentQueryPhaseSamples {
   readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
   readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
   private offered?: { key: string; at: number };
-  private active?: { id: number; key: string; at: number; offeredAt?: number };
+  private readonly active = new Map<number, { key: string; at: number; offeredAt?: number }>();
   private accepted = 0;
   private staleViewOrCleared = 0;
   private staleTick = 0;
@@ -79,7 +79,7 @@ export class ResidentQueryPhaseSamples {
     if (!Number.isInteger(id) || !key || !Number.isFinite(at) || at < 0) return;
     const offeredAt = this.offered?.key === key ? this.offered.at : undefined;
     if (offeredAt !== undefined) this.offerToDispatchMs.record(at - offeredAt);
-    this.active = { id, key, at, offeredAt };
+    this.active.set(id, { key, at, offeredAt });
   }
 
   complete(
@@ -88,8 +88,10 @@ export class ResidentQueryPhaseSamples {
       candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; groundingMs?: number },
     wasWarm = false,
   ): void {
-    if (!this.active || this.active.id !== id || !Number.isFinite(at) || at < this.active.at) return;
-    const elapsed = at - this.active.at;
+    const active = this.active.get(id);
+    if (!active || !Number.isFinite(at) || at < active.at) return;
+    this.active.delete(id);
+    const elapsed = at - active.at;
     this.dispatchToResponseMs.record(elapsed);
     this.workerPreparationWallMs.record(workerPhases?.preparationMs);
     this.workerQueryWallMs.record(workerPhases?.queryMs);
@@ -108,15 +110,14 @@ export class ResidentQueryPhaseSamples {
     if (accepted) {
       this.acceptedResponseMs.record(elapsed);
       this.accepted++;
-      if (this.firstAcceptedViewMs === null && this.active.offeredAt !== undefined)
-        this.firstAcceptedViewMs = at - this.active.offeredAt;
-      if (this.offered?.key === this.active.key) this.offered = undefined;
+      if (this.firstAcceptedViewMs === null && active.offeredAt !== undefined)
+        this.firstAcceptedViewMs = at - active.offeredAt;
+      if (this.offered?.key === active.key) this.offered = undefined;
     } else {
       this.staleResponseMs.record(elapsed);
-      if (!this.offered || this.offered.key !== this.active.key) this.staleViewOrCleared++;
+      if (!this.offered || this.offered.key !== active.key) this.staleViewOrCleared++;
       else this.staleTick++;
     }
-    this.active = undefined;
   }
 
   summary() {
