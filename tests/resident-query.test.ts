@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -123,6 +123,18 @@ test("cold S006 resident query reuses one stable worker without duplicate index 
     { workerId: 3, shardIndex: 0, count: 1 },
   ], "duplicate or invalid worker indices never create unanswered shards");
   assert.deepEqual(residentWorkerShardPlan([]), [], "no available worker starts a batch");
+});
+
+test("terrain prefers cold idle workers, preserving warm resident index without starving mandatory tiles", () => {
+  const select = terrainWorkerIndexAvoidingWarmResident;
+  assert.equal(select([], new Set([1])), -1);
+  assert.equal(select([2, 0, 1], new Set()), 2, "ordinary cold-only queue remains LIFO");
+  assert.equal(select([2, 0, 1], new Set([1])), 1, "leave the warmed resident worker idle when a cold worker is free");
+  assert.equal(select([4, 2, 7, 1], new Set([1, 7])), 1, "prefer latest eligible cold worker");
+  assert.equal(select([7, 1], new Set([7, 1])), 1, "all-warm workers still serve urgent terrain");
+  assert.equal(select([1], new Set([1])), 0, "a single warm worker cannot block terrain");
+  assert.deepEqual(residentWorkerShardPlan([1, 4], new Set([1])), [{ workerId: 1, shardIndex: 0, count: 1 }],
+    "preserved warm worker is preferred for the next real resident query");
 });
 
 test("camera navigation rejects the old town and dispatches only the latest view", () => {
