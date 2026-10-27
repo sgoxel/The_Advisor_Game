@@ -39,3 +39,81 @@ export class BoundedTimingSamples {
     return { samples: this.count, latest: this.last, p50: quantile(.5), p95: quantile(.95), p99: quantile(.99) };
   }
 }
+
+/**
+ * Observation-only resident query phases. Keys are canonical requested views;
+ * clock and wall-time samples never participate in SEED or Simulation decisions.
+ * Exactly one worker query can be in flight; latest camera offer wins.
+ */
+export class ResidentQueryPhaseSamples {
+  readonly offerToDispatchMs = new BoundedTimingSamples();
+  readonly dispatchToResponseMs = new BoundedTimingSamples();
+  readonly acceptedResponseMs = new BoundedTimingSamples();
+  readonly staleResponseMs = new BoundedTimingSamples();
+  readonly workerPreparationWallMs = new BoundedTimingSamples();
+  readonly workerQueryWallMs = new BoundedTimingSamples();
+  readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
+  readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
+  private offered?: { key: string; at: number };
+  private active?: { id: number; key: string; at: number; offeredAt?: number };
+  private accepted = 0;
+  private staleViewOrCleared = 0;
+  private staleTick = 0;
+  private firstAcceptedViewMs: number | null = null;
+
+  offer(key: string, at: number): void {
+    if (!key || !Number.isFinite(at) || at < 0) return;
+    if (!this.offered || this.offered.key !== key) this.offered = { key, at };
+  }
+
+  clearPending(): void { this.offered = undefined; }
+
+  dispatch(id: number, key: string, at: number): void {
+    if (!Number.isInteger(id) || !key || !Number.isFinite(at) || at < 0) return;
+    const offeredAt = this.offered?.key === key ? this.offered.at : undefined;
+    if (offeredAt !== undefined) this.offerToDispatchMs.record(at - offeredAt);
+    this.active = { id, key, at, offeredAt };
+  }
+
+  complete(
+    id: number, accepted: boolean, at: number,
+    workerPhases?: { preparationMs?: number; queryMs?: number },
+    wasWarm = false,
+  ): void {
+    if (!this.active || this.active.id !== id || !Number.isFinite(at) || at < this.active.at) return;
+    const elapsed = at - this.active.at;
+    this.dispatchToResponseMs.record(elapsed);
+    this.workerPreparationWallMs.record(workerPhases?.preparationMs);
+    this.workerQueryWallMs.record(workerPhases?.queryMs);
+    (wasWarm ? this.warmWorkerQueryWallMs : this.coldWorkerQueryWallMs).record(workerPhases?.queryMs);
+    if (accepted) {
+      this.acceptedResponseMs.record(elapsed);
+      this.accepted++;
+      if (this.firstAcceptedViewMs === null && this.active.offeredAt !== undefined)
+        this.firstAcceptedViewMs = at - this.active.offeredAt;
+      if (this.offered?.key === this.active.key) this.offered = undefined;
+    } else {
+      this.staleResponseMs.record(elapsed);
+      if (!this.offered || this.offered.key !== this.active.key) this.staleViewOrCleared++;
+      else this.staleTick++;
+    }
+    this.active = undefined;
+  }
+
+  summary() {
+    return {
+      offerToDispatchMs: this.offerToDispatchMs.summary(),
+      dispatchToResponseMs: this.dispatchToResponseMs.summary(),
+      acceptedResponseMs: this.acceptedResponseMs.summary(),
+      staleResponseMs: this.staleResponseMs.summary(),
+      workerPreparationWallMs: this.workerPreparationWallMs.summary(),
+      workerQueryWallMs: this.workerQueryWallMs.summary(),
+      coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
+      warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),
+      accepted: this.accepted,
+      staleViewOrCleared: this.staleViewOrCleared,
+      staleTick: this.staleTick,
+      firstAcceptedViewMs: this.firstAcceptedViewMs,
+    };
+  }
+}

@@ -118,7 +118,7 @@ import {
   type StreamingBudget,
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
-import { BoundedTimingSamples } from "./streaming-metrics.ts";
+import { BoundedTimingSamples, ResidentQueryPhaseSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
@@ -218,11 +218,13 @@ const frameIntervalSamples = new BoundedTimingSamples();
 const cpuUpdateSamples = new BoundedTimingSamples();
 const workerGenerationSamples = new BoundedTimingSamples();
 const uploadSamples = new BoundedTimingSamples();
-const residentQuerySamples = new BoundedTimingSamples();
+const residentPhaseTimings = new ResidentQueryPhaseSamples();
 const residentPickSamples = new BoundedTimingSamples();
 let firstResidentQueryOfferedAt: number | null = null;
 let firstResidentFactMs: number | null = null;
-let residentQueryDispatchedAt: number | null = null;
+let firstCoherentTerrainSinceWorkersMs: number | null = null;
+let firstResidentOfferSinceWorkersMs: number | null = null;
+let firstResidentDispatchSinceWorkersMs: number | null = null;
 let maxGenerationReadyObserved = 0;
 let surfaceDetail = 1;
 let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
@@ -279,6 +281,13 @@ function residentRequestForView(tick: number, limit: number, actors: boolean): R
     key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}|${actors}`;
   return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick, actors };
 }
+function offerResidentQuery(query: ResidentQuery) {
+  const now = performance.now();
+  if (firstResidentQueryOfferedAt === null) firstResidentQueryOfferedAt = now;
+  if (firstResidentOfferSinceWorkersMs === null) firstResidentOfferSinceWorkersMs = now - workerStartedAt;
+  residentPhaseTimings.offer(query.key, now);
+  residentQueries.offer(query);
+}
 let residentBatch: { job: ResidentQueryJob; unsent: Set<number>; assignments: Map<number, number>; results: ResidentQueryResult[]; completed: Set<number>; count: number } | undefined;
 function dispatchResidentQuery() {
   // Inspect once coherent terrain exists; optional fine meshes may still stream.
@@ -289,7 +298,9 @@ function dispatchResidentQuery() {
   if (!residentBatch) {
     const job = residentQueries.take();
     if (!job) return;
-    residentQueryDispatchedAt = performance.now();
+    const now = performance.now();
+    if (firstResidentDispatchSinceWorkersMs === null) firstResidentDispatchSinceWorkersMs = now - workerStartedAt;
+    residentPhaseTimings.dispatch(job.id, job.key, now);
     const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
     const count = shards.length;
     residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
@@ -1043,6 +1054,8 @@ function processStreaming(material: pc.StandardMaterial) {
     else record.entity.enabled=enabledFine.has(key);
     if(record.entity.enabled)record.used=revision;
   }
+  if (coverageComplete && firstCoherentTerrainSinceWorkersMs === null)
+    firstCoherentTerrainSinceWorkersMs = performance.now() - workerStartedAt;
   if (coverageComplete && !ready) {
     ready = true;
     setLoadingProgress(100);
@@ -1055,8 +1068,7 @@ function processStreaming(material: pc.StandardMaterial) {
     if (mode.inspect) {
       const request = residentRequestForView(simulation.tick, residentQueryLimitForView(mode.actors), mode.actors);
       if (request) {
-        if (firstResidentQueryOfferedAt === null) firstResidentQueryOfferedAt = performance.now();
-        residentQueries.offer(request);
+        offerResidentQuery(request);
       }
       dispatchResidentQuery();
     }
@@ -1666,6 +1678,7 @@ async function start() {
       if (event.data.kind === "residents") {
         idleWorkers.push(worker);
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
+        const wasWarm = warmedResidentWorkers.has(workers.indexOf(worker));
         warmedResidentWorkers.add(workers.indexOf(worker));
         if (residentBatch && residentBatch.job.id === event.data.id && !residentBatch.completed.has(event.data.shard)) {
           residentBatch.completed.add(event.data.shard);
@@ -1673,9 +1686,10 @@ async function start() {
           if (residentBatch.completed.size === residentBatch.count) {
             const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
             residentBatch = undefined;
-            if (residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())))) {
-              const answeredAt = performance.now();
-              if (residentQueryDispatchedAt !== null) residentQuerySamples.record(answeredAt - residentQueryDispatchedAt);
+            const accepted = residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())));
+            const answeredAt = performance.now();
+            residentPhaseTimings.complete(event.data.id, accepted, answeredAt, event.data.residentTiming, wasWarm);
+            if (accepted) {
               if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
                 firstResidentFactMs = answeredAt - firstResidentQueryOfferedAt;
               residentResultReady();
@@ -1761,6 +1775,7 @@ async function start() {
   if (pendingSiteVisitHistory !== undefined) {
     void simulation.restoreSiteVisitHistory(pendingSiteVisitHistory).then(restored => {
       if (restored) {
+        residentPhaseTimings.clearPending();
         residentQueries.clear();
         lastSimulationRealSecond = -1;
       }
@@ -1773,6 +1788,7 @@ async function start() {
     const result = await simulation.considerAdvisorSiteVisit(code);
     if (result.started) {
       saveSiteVisits();
+      residentPhaseTimings.clearPending();
       residentQueries.clear();
       lastSimulationRealSecond = -1;
     }
@@ -1826,9 +1842,11 @@ async function start() {
       const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined;
       const previousSnapshot = residentQueries.current;
       if (query) {
-        if (firstResidentQueryOfferedAt === null) firstResidentQueryOfferedAt = performance.now();
-        residentQueries.offer(query);
-      } else residentQueries.clear();
+        offerResidentQuery(query);
+      } else {
+        residentPhaseTimings.clearPending();
+        residentQueries.clear();
+      }
       const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
       // The terrain worker returns immutable routine facts. Reconcile any
       // independently accepted visit here with the main Simulation event
@@ -2518,7 +2536,15 @@ async function start() {
             gpuFrameMs: null,
             workerMs: { ...workerGenerationSamples.summary(), completed: workerGenerationSamples.samples },
             uploadMs: { ...uploadSamples.summary(), uploadsThisFrame },
-            residentQueryMs: residentQuerySamples.summary(),
+            residentQueryMs: residentPhaseTimings.acceptedResponseMs.summary(),
+            residentQueryPhases: residentPhaseTimings.summary(),
+            residentStartupMilestonesMs: {
+              workerReady: workerStartupMs || null,
+              coherentTerrainFromWorkerStart: firstCoherentTerrainSinceWorkersMs,
+              firstResidentOfferFromWorkerStart: firstResidentOfferSinceWorkersMs,
+              firstResidentDispatchFromWorkerStart: firstResidentDispatchSinceWorkersMs,
+              firstAcceptedResidentFactFromFirstOffer: firstResidentFactMs,
+            },
             residentPickMs: residentPickSamples.summary(),
             firstResidentFactMs,
             residentFactStatus: !residentRequest ? "not-requested" : residentViewReady ? "ready" : !ready ? "pending-world" : residentQueries.busy ? "pending-worker" : "pending-dispatch",
