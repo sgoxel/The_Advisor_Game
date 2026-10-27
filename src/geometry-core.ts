@@ -222,7 +222,8 @@ export function terrainTint(
     macro = macroSampleAt(position),
     surface = sampledSurface ?? finalSurfaceRenderChannelsAt(x, z),
     elevation = elevationM ?? surface.groundHeight,
-    sample = climateSampleAt(position, elevation);
+    // The climate and tint share the same SEED macro sample at this position.
+    sample = climateSampleAt(position, elevation, macro);
 
   // Hydrology and prepared ground come from the composed surface, never from a
   // parallel river/road/settlement hit test in presentation code.
