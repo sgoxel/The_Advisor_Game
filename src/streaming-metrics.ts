@@ -52,6 +52,8 @@ export class ResidentQueryPhaseSamples {
   readonly staleResponseMs = new BoundedTimingSamples();
   readonly workerPreparationWallMs = new BoundedTimingSamples();
   readonly workerQueryWallMs = new BoundedTimingSamples();
+  readonly workerIndexBuildWallMs = new BoundedTimingSamples();
+  readonly workerNonIndexQueryWallMs = new BoundedTimingSamples();
   readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
   readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
   private offered?: { key: string; at: number };
@@ -77,7 +79,7 @@ export class ResidentQueryPhaseSamples {
 
   complete(
     id: number, accepted: boolean, at: number,
-    workerPhases?: { preparationMs?: number; queryMs?: number },
+    workerPhases?: { preparationMs?: number; queryMs?: number; indexBuildMs?: number },
     wasWarm = false,
   ): void {
     if (!this.active || this.active.id !== id || !Number.isFinite(at) || at < this.active.at) return;
@@ -85,6 +87,10 @@ export class ResidentQueryPhaseSamples {
     this.dispatchToResponseMs.record(elapsed);
     this.workerPreparationWallMs.record(workerPhases?.preparationMs);
     this.workerQueryWallMs.record(workerPhases?.queryMs);
+    this.workerIndexBuildWallMs.record(workerPhases?.indexBuildMs);
+    // Includes canonical resident evaluation and any non-index query work.
+    if (workerPhases?.queryMs !== undefined && workerPhases.indexBuildMs !== undefined)
+      this.workerNonIndexQueryWallMs.record(Math.max(0, workerPhases.queryMs - workerPhases.indexBuildMs));
     (wasWarm ? this.warmWorkerQueryWallMs : this.coldWorkerQueryWallMs).record(workerPhases?.queryMs);
     if (accepted) {
       this.acceptedResponseMs.record(elapsed);
@@ -108,6 +114,8 @@ export class ResidentQueryPhaseSamples {
       staleResponseMs: this.staleResponseMs.summary(),
       workerPreparationWallMs: this.workerPreparationWallMs.summary(),
       workerQueryWallMs: this.workerQueryWallMs.summary(),
+      workerIndexBuildWallMs: this.workerIndexBuildWallMs.summary(),
+      workerNonIndexQueryWallMs: this.workerNonIndexQueryWallMs.summary(),
       coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
       warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),
       accepted: this.accepted,
