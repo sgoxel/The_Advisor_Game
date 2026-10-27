@@ -1695,6 +1695,23 @@ async function start() {
         idleWorkers.push(worker);
         return;
       }
+      if (event.data.kind === "resident-first-fact") {
+        const batch = residentBatches.get(event.data.id);
+        // Preview does not make this worker idle or finish a shard. Final
+        // actor membership and all streaming admission remain unchanged.
+        if (batch && !batch.completed.has(event.data.shard) &&
+            residentQueries.acceptsPreview(event.data.id, Math.max(simulation.tick, clock.tickAt(Date.now())))) {
+          const first = simulation.projectResidentView([event.data.resident as Resident], batch.job.tick, batch.job);
+          if (first.length) {
+            simulation.acceptResidentQuery(first, {
+              settlements: 1, candidateResidents: 1, evaluatedResidents: 1, returnedResidents: first.length,
+            });
+            if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
+              firstResidentFactMs = performance.now() - firstResidentQueryOfferedAt;
+          }
+        }
+        return;
+      }
       if (event.data.kind === "residents") {
         idleWorkers.push(worker);
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
