@@ -97,6 +97,17 @@ test("resident inspector can resolve facts with one shared cold exterior plan", 
   assert.equal(actor.homeEntrance, indexed.homeEntrance);
 });
 
+test("resident evaluation instrumentation preserves the same authoritative actor and legal route", () => {
+  const place = villages[11], tick = at(15, WORKDAY), sample = 61,
+    phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, groundingMs: 0, evaluated: 0 };
+  const profiled = residentAt(place, sample, tick, phases),
+    ordinary = residentAt(place, sample, tick);
+  assert.deepEqual(profiled, ordinary, "observational profiling cannot change seeded actor identity or legal movement");
+  assert.equal(phases.evaluated, 1);
+  for (const value of [phases.foundationMs, phases.doorMs, phases.scheduleMs, phases.groundingMs])
+    assert.ok(Number.isFinite(value) && value >= 0, "worker phase timing is finite nonnegative wall time");
+});
+
 test("resident inspector off-screen status is stable and carries the same SEED identity", () => {
   const sample = { index: 6, role: "guard-officer" } as const;
   assert.equal(residentShortLabel(sample), "Resident 7 · guard officer");
