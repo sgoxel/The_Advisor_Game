@@ -836,7 +836,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; border: Offset[]; gates: Offset[]; cell: number };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -868,7 +868,18 @@ function streetGraphFor(place: Place): StreetGraph {
       previous = id;
     }
   });
-  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(),
+  // The canonical street graph is immutable after construction. Its occupied-cell
+  // bounds prove a remote habitat has no vertex in the finite 40-ring search;
+  // avoid thousands of empty bucket lookups without changing any legal route.
+  const gridBounds = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+  for (const key of grid.keys()) {
+    const split = key.indexOf("/"), x = Number(key.slice(0, split)), z = Number(key.slice(split + 1));
+    gridBounds.minX = Math.min(gridBounds.minX, x);
+    gridBounds.maxX = Math.max(gridBounds.maxX, x);
+    gridBounds.minZ = Math.min(gridBounds.minZ, z);
+    gridBounds.maxZ = Math.max(gridBounds.maxZ, z);
+  }
+  const graph = { nodes, edges, weights, grid, gridBounds, legalEdges: new Map<string, boolean>(),
     nearestLegal: new Map<string, number>(),
     border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
     gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
@@ -882,6 +893,10 @@ function streetGraphFor(place: Place): StreetGraph {
 export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">, offset: Offset) {
   let best = -1, bestDistance = Infinity;
   const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
+  if (!graph.grid.size) return -1;
+  const bounds = (graph as Partial<StreetGraph>).gridBounds;
+  if (bounds && (cx + 39 < bounds.minX || cx - 39 > bounds.maxX ||
+    cz + 39 < bounds.minZ || cz - 39 > bounds.maxZ)) return -1;
   for (let ring = 0; ring < 40; ring++) {
     // Visit exactly the same perimeter buckets, in the same dx/dz order,
     // without scanning (and rejecting) the growing square's interior.
