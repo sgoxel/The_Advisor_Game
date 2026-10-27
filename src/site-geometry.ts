@@ -1,7 +1,8 @@
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { elevationToRenderY } from "./render-frame.ts";
 import { nearbyCriticalSites } from "./sites.ts";
-import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "./planet.ts";
+import { wrapSourceX } from "./planet.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { heightAt, type Tile } from "./world.ts";
 
 type Point = readonly [number, number, number];
@@ -33,16 +34,35 @@ export class SiteBuilder {
     this.triangle(a, c, d, tint);
   }
 
+  // Author objects in physical metres around an immutable SEED site.
+  // Render vertices must use source units: raw metre sizes inflated ruins
+  // about 153 times and hid the real visitor behind giant walls.
+  private originX = 0;
+  private originY = 0;
+  private originZ = 0;
+  private scaleX = metresToSource(1);
+  private scaleZ = metresToSource(1);
+
+  at(x: number, y: number, z: number, sourceZ: number) {
+    const scale = sourceUnitsPerMetreAt(sourceZ);
+    this.originX = x;
+    this.originY = y;
+    this.originZ = z;
+    this.scaleX = scale.x;
+    this.scaleZ = scale.z;
+  }
+
   box(x: number, y: number, z: number, w: number, h: number, d: number, tint: Tint) {
-    const ax = x - w / 2,
-      bx = x + w / 2,
-      az = z - d / 2,
-      bz = z + d / 2,
-      top = y + h;
-    this.quad([ax, y, az], [ax, top, az], [bx, top, az], [bx, y, az], tint);
-    this.quad([bx, y, bz], [bx, top, bz], [ax, top, bz], [ax, y, bz], tint);
-    this.quad([ax, y, bz], [ax, top, bz], [ax, top, az], [ax, y, az], tint);
-    this.quad([bx, y, az], [bx, top, az], [bx, top, bz], [bx, y, bz], tint);
+    const ax = this.originX + (x - w / 2) * this.scaleX,
+      bx = this.originX + (x + w / 2) * this.scaleX,
+      az = this.originZ + (z - d / 2) * this.scaleZ,
+      bz = this.originZ + (z + d / 2) * this.scaleZ,
+      bottom = this.originY + metresToSource(y),
+      top = bottom + metresToSource(h);
+    this.quad([ax, bottom, az], [ax, top, az], [bx, top, az], [bx, bottom, az], tint);
+    this.quad([bx, bottom, bz], [bx, top, bz], [ax, top, bz], [ax, bottom, bz], tint);
+    this.quad([ax, bottom, bz], [ax, top, bz], [ax, top, az], [ax, bottom, az], tint);
+    this.quad([bx, bottom, az], [bx, top, az], [bx, top, bz], [bx, bottom, bz], tint);
     this.quad([ax, top, az], [ax, top, bz], [bx, top, bz], [bx, top, az], tint);
   }
 
@@ -114,6 +134,8 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
       darkStone: Tint = [77, 87, 87],
       accent: Tint = [221, 191, 115];
     codes.push(site.code);
+    structures.at(localX, y, localZ, site.z);
+    detail.at(localX, y, localZ, site.z);
 
     if (site.kind === "ruin") {
       const towerHeight = 7.2 + (variant % 4) * 0.7;
@@ -121,42 +143,40 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
       // arrival. Its tall silhouette remains, but broken masonry walls leave
       // the 3D world and original SEED resident visible at Hero distance.
       // All positions are presentation-only; site/road/Simulation stay fixed.
-      const towerX = localX - 3.4, towerZ = localZ - 2.8;
-      structures.box(towerX - 2, y - .2, towerZ, .4, towerHeight, 4.2, stone);
-      structures.box(towerX + 2, y - .2, towerZ, .4, towerHeight * .72, 4.2, stone);
-      structures.box(towerX, y - .2, towerZ - 1.9, 4.4, towerHeight * .8, .4, stone);
-      structures.box(towerX - 1.3, y - .2, towerZ + 1.9, 1.8, towerHeight * .65, .4, darkStone);
+      const towerX = -3.4, towerZ = -2.8;
+      structures.box(towerX - 2, -.2, towerZ, .4, towerHeight, 4.2, stone);
+      structures.box(towerX + 2, -.2, towerZ, .4, towerHeight * .72, 4.2, stone);
+      structures.box(towerX, -.2, towerZ - 1.9, 4.4, towerHeight * .8, .4, stone);
+      structures.box(towerX - 1.3, -.2, towerZ + 1.9, 1.8, towerHeight * .65, .4, darkStone);
       // The legal arrival is site-centred. Keep the north approach from the
       // default Hero camera visibly open instead of walling the character
       // behind an opaque masonry slab. Shift only disposable ruin fragments;
       // neither SEED site nor the real route/door location changes.
-      structures.box(localX + 6.5, y - 0.15, localZ + 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
-      structures.box(localX + 5.7, y - 0.15, localZ - 0.6, 1.15, 3.2, 6.8, darkStone);
-      structures.box(localX - 6.5, y - 0.1, localZ + 5.4, 5.2, 1.55, 1.0, darkStone);
+      structures.box(6.5, -0.15, 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
+      structures.box(5.7, -0.15, -0.6, 1.15, 3.2, 6.8, darkStone);
+      structures.box(-6.5, -0.1, 5.4, 5.2, 1.55, 1.0, darkStone);
     } else {
       const stones = 5 + (variant % 2);
       for (let index = 0; index < stones; index++) {
         const angle = (index / stones) * Math.PI * 2 + ((variant % 17) / 17) * 0.35,
           radius = 5.2 + (index % 2) * 0.7;
         structures.box(
-          localX + Math.cos(angle) * radius,
-          y - 0.15,
-          localZ + Math.sin(angle) * radius,
+          Math.cos(angle) * radius, -0.15,
+          Math.sin(angle) * radius,
           1.4,
           5.2 + ((variant >>> (index % 12)) & 1) * 1.3,
           1.4,
           stone,
         );
         structures.box(
-          localX + Math.cos(angle) * radius,
-          y + 5.05 + ((variant >>> (index % 12)) & 1) * 1.3,
-          localZ + Math.sin(angle) * radius,
+          Math.cos(angle) * radius, 5.05 + ((variant >>> (index % 12)) & 1) * 1.3,
+          Math.sin(angle) * radius,
           1.7, 0.65, 1.7, accent,
         );
       }
-      structures.box(localX, y - 0.08, localZ, 3.1, 1.1, 2.6, accent);
-      structures.box(localX, y + 1.0, localZ, 1.3, 2.6, 1.3, darkStone);
-      structures.box(localX, y + 3.6, localZ, 1.5, 0.55, 1.5, accent);
+      structures.box(0, -0.08, 0, 3.1, 1.1, 2.6, accent);
+      structures.box(0, 1.0, 0, 1.3, 2.6, 1.3, darkStone);
+      structures.box(0, 3.6, 0, 1.5, 0.55, 1.5, accent);
     }
 
     if (tile.size <= 32) {
@@ -165,9 +185,8 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
         const angle = (index / rubble) * Math.PI * 2 + (variant % 31) * 0.07,
           radius = 3.5 + ((variant >>> (index % 16)) % 4);
         detail.box(
-          localX + Math.cos(angle) * radius,
-          y - 0.05,
-          localZ + Math.sin(angle) * radius,
+          Math.cos(angle) * radius, -0.05,
+          Math.sin(angle) * radius,
           0.65 + (index % 2) * 0.35,
           0.45 + (index % 3) * 0.25,
           0.7 + ((index + 1) % 2) * 0.4,
