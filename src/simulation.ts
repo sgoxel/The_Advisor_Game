@@ -556,6 +556,25 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
   }
 }
 
+/** Exact immutable fields required for spatial indexing, before the character
+ * is actually inspected. Building all 2,400 full biographies per cold city
+ * query needlessly computes names, birthdays, appearance and traits. */
+function residentSpatialFactsAt(
+  place: Place, index: number,
+  exteriorPlan?: ReturnType<typeof settlementExteriorFor>,
+) {
+  const code = `${place.code}/RESIDENT/${index}`,
+    role = residentRoleFor(place, index),
+    assignment = guardAssignmentFor(place, index),
+    waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
+    character = characterForRole(role, digest(`${code}/CHARACTER`),
+      waterContext === "coast" || waterContext === "freshwater-lake"),
+    homeLot = settlementHomeAnchorFor(place, index, exteriorPlan),
+    homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
+    workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
+  return { code, role, index, assignment, character, homeOffset, workOffset };
+}
+
 /** Expensive immutable SEED identities are shared by the spatial index, standing-slot
  * roster and route evaluation. Cache data, never a mutable Simulation position.
  * The bounded cache only changes reconstruction cost, not identity or output. */
@@ -571,17 +590,10 @@ export function residentFoundationAt(
   const code = `${place.code}/RESIDENT/${index}`;
   const cached = residentFoundationCache.get(code);
   if (cached) return cached;
-  const variant = digest(code),
-    role = residentRoleFor(place, index),
-    assignment = guardAssignmentFor(place, index),
-    homeBuilding = `${place.code}/RESIDENCE/${index}`,
-    waterContext = politicalSettlementSiteById.get(place.id)?.waterContext,
-    character = characterForRole(role, digest(`${code}/CHARACTER`), waterContext === "coast" || waterContext === "freshwater-lake"),
-    // Stable SEED lot for population indexing; resolving rendered doors is
-    // expensive and belongs to bounded per-resident evaluation, not full rosters.
-    homeLot = settlementHomeAnchorFor(place, index, exteriorPlan),
-    homeOffset = offsetForSource(place, homeLot.x, homeLot.z),
-    workOffset = workOffsetFor(place, index, role, assignment, homeOffset, character.key);
+  const { role, assignment, character, homeOffset, workOffset } =
+      residentSpatialFactsAt(place, index, exteriorPlan),
+    variant = digest(code),
+    homeBuilding = `${place.code}/RESIDENCE/${index}`;
   const foundation: ResidentFoundation = {
     code,
     name: personName(code, character.sex, place.continent),
@@ -1872,7 +1884,7 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
     // canonical projections only to discard them after index construction.
     if (shard && index % shard.count !== shard.index) continue;
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
-    const foundation = residentFoundationAt(place, index, exteriorPlan),
+    const foundation = residentSpatialFactsAt(place, index, exteriorPlan),
       // A guard whose assigned frontage was physically blocked may own a
       // different legal SEED spare lot. Only the small fixed watch roster is
       // resolved here; never materialize all household doors for indexing.
