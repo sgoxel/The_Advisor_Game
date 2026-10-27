@@ -751,11 +751,15 @@ export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
   let best = -1, bestDistance = Infinity;
   const cx = Math.floor(offset.eastM / graph.cell), cz = Math.floor(offset.northM / graph.cell);
   for (let ring = 0; ring < 40; ring++) {
-    for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
-      if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
-      for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
-        const d = Math.hypot(graph.nodes[id].eastM - offset.eastM, graph.nodes[id].northM - offset.northM);
-        if (d < bestDistance) { best = id; bestDistance = d; }
+    // Visit exactly the same perimeter buckets, in the same dx/dz order,
+    // without scanning (and rejecting) the growing square's interior.
+    for (let dx = -ring; dx <= ring; dx++) {
+      const isSide = Math.abs(dx) === ring;
+      for (let dz = -ring; dz <= ring; dz += isSide ? 1 : 2 * ring) {
+        for (const id of graph.grid.get(`${cx + dx}/${cz + dz}`) ?? []) {
+          const d = Math.hypot(graph.nodes[id].eastM - offset.eastM, graph.nodes[id].northM - offset.northM);
+          if (d < bestDistance) { best = id; bestDistance = d; }
+        }
       }
     }
     if (best >= 0 && bestDistance <= ring * graph.cell) break;
