@@ -54,6 +54,41 @@ import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 import { terrainTint } from "../src/geometry-core.ts";
 
 import { climateSampleAt } from "../src/climate.ts";
+import { landformAt } from "../src/wilderness-terrain.ts";
+
+test("S009 constant surface pigments keep the exact seeded lake, river and road colours", () => {
+  const anchors = [
+    ...MACRO_PLAN.lakes.slice(0, 6).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    ...MACRO_PLAN.continents.slice(0, 3).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    ...roads.slice(0, 15).flatMap(p => [
+      { x: p.fromX, z: p.fromZ },
+      { x: p.toX, z: p.toZ },
+    ]),
+    ...villages.slice(0, 5).map(p => ({ x: p.x, z: p.z })),
+  ];
+  let uniformWater = 0;
+  for (const { x, z } of anchors) {
+    const surface = finalSurfaceRenderChannelsAt(x, z);
+    let expected: number[] | undefined;
+    if (surface.water.kind === "lake") {
+      expected = [70, 124, 151];
+      uniformWater++;
+    } else if (surface.water.kind === "river") {
+      const fall = landformAt(x, z);
+      expected = fall?.f.kind === "waterfall" && Math.abs(fall.b) < 6
+        ? [211, 232, 228] : [76, 128, 148];
+      uniformWater++;
+    } else if (surface.water.kind === "none" && surface.groundMaterial === "Road") {
+      expected = [112, 92, 62];
+    }
+    if (!expected) continue;
+    assert.deepEqual(terrainTint(x, z, 32, undefined, 0, true, surface), expected,
+      `SEED material at ${x}/${z}`);
+    assert.deepEqual(terrainTint(x, z, 32, undefined, 0, true), expected,
+      `uncached SEED material at ${x}/${z}`);
+  }
+  assert.ok(uniformWater > 0, "seeded fixture must verify actual natural water pigments");
+});
 
 test("S009 climate reuses the exact canonical macro recipe without changing seeded material", () => {
   const anchors = [
