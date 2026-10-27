@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -254,6 +254,45 @@ test("camera navigation rejects the old town and dispatches only the latest view
   assert.equal(queue.busy, true);
   assert.equal(queue.complete(latest.id, result), true);
   assert.equal(queue.current?.key, "town-c");
+});
+
+test("S009 latest resident focus can pass one obsolete query without altering actor choice", () => {
+  const queue = new ResidentQueryQueue(48);
+  queue.offer(request("obsolete")); const old = queue.take()!;
+  queue.offer(request("latest")); const newer = queue.take(true)!;
+  assert.ok(newer.id > old.id, "new view gets a distinct deterministic job identity");
+  assert.equal(queue.take(true), undefined, "never duplicate the same running view");
+  assert.equal(queue.complete(newer.id, result), true, "current view may finish before stale work");
+  assert.equal(queue.current?.key, "latest");
+  assert.equal(queue.complete(old.id, result), false, "late obsolete response cannot replace newer truth");
+  assert.equal(queue.current?.key, "latest", "out-of-order completion retains the accepted focus");
+  assert.equal(queue.busy, false);
+});
+
+test("S009 two-flight bound retains the newest requested camera during rapid pans", () => {
+  const queue = new ResidentQueryQueue(48);
+  queue.offer(request("first")); const first = queue.take()!;
+  queue.offer(request("second")); const second = queue.take(true)!;
+  queue.offer(request("final"));
+  assert.equal(queue.take(true), undefined, "two occupied workers cannot create a third batch");
+  assert.equal(queue.complete(second.id, result), false, "already-obsolete second camera is rejected");
+  const final = queue.take(true)!;
+  assert.equal(final.key, "final", "free worker is used for the latest, not an intermediate view");
+  assert.equal(queue.complete(final.id, result), true);
+  assert.equal(queue.complete(first.id, result), false);
+  assert.equal(queue.current?.key, "final");
+});
+
+test("S009 shared queue counts active resident shards, never merely reserved shards", () => {
+  const batches = [
+    { count: 2, completed: new Set([0]), unsent: new Set<number>() },
+    { count: 2, completed: new Set<number>(), unsent: new Set([1]) },
+  ];
+  assert.equal(activeResidentWorkers(batches), 2);
+  batches[0].completed.add(1);
+  assert.equal(activeResidentWorkers(batches), 1, "finished work frees shared admission");
+  batches[1].unsent.delete(1);
+  assert.equal(activeResidentWorkers(batches), 2, "submitting a shard consumes exactly one slot");
 });
 
 test("slow cold reconstruction warms caches but must catch up to the unchanged realm clock", () => {
