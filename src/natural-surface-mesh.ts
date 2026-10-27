@@ -16,6 +16,10 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 
+// Both road registries are immutable SEED foundations; sharing their original
+// concatenation avoids rebuilding an identical array for every detail tile.
+const canonicalSurfaceRoads = [...roads, ...siteAccessRoads];
+
 export const NATURAL_MESH_LIMITS = Object.freeze({
   maximumTile: 2048,
   leaves: 16384,
@@ -71,7 +75,7 @@ export function rebuildNaturalSurface(
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
         : [],
-    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds([...roads, ...siteAccessRoads], tile.minX, tile.minZ, tile.size)]
+    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(canonicalSurfaceRoads, tile.minX, tile.minZ, tile.size)]
       .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
           r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12)) : [],
