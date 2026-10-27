@@ -155,6 +155,13 @@ export class ResidentQueryQueue {
   }
   clear() { this.desired = undefined; this.snapshot = undefined; }
   get busy() { return this.flights.size > 0; }
+  /** A first fact may update inspection, but cannot complete/release its worker
+   * or alter the canonical final batch. Ignore superseded camera/tick messages. */
+  acceptsPreview(id: number, currentTick = this.desired?.tick) {
+    const flight = this.flights.get(id);
+    return !!flight && flight.key === this.desired?.key &&
+      currentTick !== undefined && Math.abs(currentTick - flight.tick) <= this.maxAgeTicks;
+  }
   readyFor(key: string | undefined, tick = this.desired?.tick) {
     return !!key && this.snapshot?.key === key && tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }

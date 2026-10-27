@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
@@ -88,6 +89,24 @@ test("S009 adaptive clipped road fragments reuse canonical metric identity witho
   }
   assert.ok(reused > 0, "real world adaptive tiles must exercise canonical polyline metric reuse");
   assert.ok(checked > 0);
+});
+
+test("S009 first validated resident preview never completes or accepts a stale worker shard", () => {
+  const q = new ResidentQueryQueue(120, 60),
+    request = { key: "start-village", placeCode: "start", x: 12, z: 18, radius: 5, limit: 8, tick: 300 };
+  q.offer(request);
+  const first = q.take()!;
+  assert.ok(q.acceptsPreview(first.id, 300));
+  assert.equal(q.busy, true, "the resident shard continues until the full deterministic batch");
+  q.offer({ ...request, key: "new-focus", tick: 300 });
+  assert.equal(q.acceptsPreview(first.id, 300), false, "a pan must reject the prior view's preview");
+  q.offer(request);
+  assert.equal(q.acceptsPreview(first.id, 421), false, "expired Simulation time rejects late preview");
+  assert.ok(q.acceptsPreview(first.id, 300));
+  const empty = { residents: [], query: { settlements: 1, candidateResidents: 1, evaluatedResidents: 1, returnedResidents: 0 } };
+  assert.ok(q.complete(first.id, empty, 300), "only the actual full batch completes its flight");
+  assert.equal(q.acceptsPreview(first.id, 300), false);
+  assert.equal(q.busy, false);
 });
 
 test("S009 tile grid surface/tint reuse preserves both original mesh sampling paths", () => {

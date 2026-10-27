@@ -177,6 +177,18 @@ test("resident inspector off-screen status is stable and carries the same SEED i
   assert.equal(residentShortLabel(sample, false), "Resident 7 · guard officer", "return to view clears the status");
 });
 
+test("resident inspector can resolve facts with early fully validated SEED resident callback and unchanged final order", () => {
+  const place = villages[0], simulation = new LazySimulation();
+  simulation.setFocus(place);
+  simulation.advance(at(9, WORKDAY));
+  const observed: string[] = [];
+  const residents = simulation.focusedResidents(place.x, place.z, 8, 8, undefined, false, undefined,
+    resident => observed.push(resident.code));
+  assert.ok(residents.length > 0, "fixture must produce authoritative residents");
+  assert.deepEqual(observed, [residents[0].code],
+    "first fact must be fully resolved, once only, and agree with the final ordered resident batch");
+});
+
 test("resident inspector can resolve facts and close-up actors independently of optional scenery", () => {
   assert.deepEqual(residentViewQuery(48, true, false), { actors: false, inspect: true },
     "village-scale inspection must not wait for terrain or meshes");
