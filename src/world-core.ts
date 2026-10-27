@@ -526,7 +526,14 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   finalSurfaceModifierCandidates += point.candidateCount;
   finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.candidateCount);
 
-  const slope = finalSurfaceLocalSlopeAt(x, z),
+  // Blocked ground cannot become traversable from its grade, wet ground
+  // without a deck remains blocked, and a bridge uses its legal deck rather
+  // than the underlying terrain slope. Four neighbouring final-surface
+  // compositions are required only for ordinary dry, potentially walkable
+  // ground. Preserve the exact old grade and traversal rules in that case.
+  const needsSlope = point.final.walkable && point.final.deckHeight === null &&
+    point.final.water.kind === "none";
+  const slope = needsSlope ? finalSurfaceLocalSlopeAt(x, z) : 0,
     walkable =
       point.final.water.kind === "none"
         ? point.final.walkable && (point.final.deckHeight!==null || slope < .68)
