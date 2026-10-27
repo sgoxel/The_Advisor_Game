@@ -1130,8 +1130,15 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
     top = Math.min(2.65, wallHeight - .12), low = top - .3, aw = Math.max(1.2, Math.min(w - .6, 5.2)), bands = 5, below = pt(f, 0, 0, front + .4);
   for (let k = 0; k < bands; k++) {
     const x0 = -aw / 2 + k * aw / bands, x1 = x0 + aw / bands, tint = k % 2 ? stripe : cloth;
-    polygon(f.b, [pt(f, x0, top, front + .02), pt(f, x1, top, front + .02), pt(f, x1, low, front + .92), pt(f, x0, low, front + .92)], below, tint);
-    polygon(f.b, [pt(f, x0, low - .15, front + .92), pt(f, x1, low - .15, front + .92), pt(f, x1, low, front + .92), pt(f, x0, low, front + .92)], pt(f, (x0 + x1) / 2, low, front), tint);
+    // Even with a real doorway, an unbroken *overhead* café awning hid
+    // the original returning resident at the canonical owned front wall.
+    // Keep shade at the sides, opening a 1.9 m clear sightline/entrance
+    // in the centre. This changes only disposable close-LOD cloth mesh.
+    for (const [left, right] of [[x0, Math.min(x1, -.95)], [Math.max(x0, .95), x1]]) {
+      if (right - left < .08) continue;
+      polygon(f.b, [pt(f, left, top, front + .02), pt(f, right, top, front + .02), pt(f, right, low, front + .92), pt(f, left, low, front + .92)], below, tint);
+      polygon(f.b, [pt(f, left, low - .15, front + .92), pt(f, right, low - .15, front + .92), pt(f, right, low, front + .92), pt(f, left, low, front + .92)], pt(f, (left + right) / 2, low, front), tint);
+    }
   }
   const signX = -(w / 2 - .15);
   cuboid(f, signX, low - .08, front + .31, .04, .04, .62, IRON);
@@ -1139,7 +1146,9 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
   if (w < 4.4) return;
   const restaurant = shop === "restaurant", z = front + 1.3, wide = w >= 6.2,
     xs = restaurant ? [-Math.min(1.95, w / 2 - .5), Math.min(1.95, w / 2 - .5)] : wide ? [-1.8, 1.4, 2.6] : [-Math.min(1.75, w / 2 - .55), Math.min(1.75, w / 2 - .55)];
-  for (const x of xs) addTableSet(f, x, z, 2, r, { theta0: 0, tableR: restaurant ? .4 : .34, umbrellaR: restaurant ? 1.1 : undefined });
+  // Restaurant table umbrellas must also keep the same owned door axis
+  // clear; their former 1.1 m crowns projected across the central aisle.
+  for (const x of xs) addTableSet(f, x, z, 2, r, { theta0: 0, tableR: restaurant ? .4 : .34, umbrellaR: restaurant ? .75 : undefined });
   if (!restaurant) {
     // Café parasols in a plain seeded cloth (restaurants keep striped ones): one per table, one shared over the paired tables
     // of a wide café; each canopy's inner rim stays >= .85 m from the door axis (8-gon extent r cos 22.5°).
