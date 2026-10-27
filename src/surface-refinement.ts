@@ -6,7 +6,7 @@ import { roads, type Road } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
-import { finalSurfaceAt, type Tile } from "./world.ts";
+import { finalSurfaceAt, finalSurfaceRenderChannelsAt, type Tile } from "./world.ts";
 
 /**
  * Fine presentation refinement for player-relevant prepared/water boundaries.
@@ -227,7 +227,7 @@ function hasWaterBoundary(tile: Tile) {
     dry = false;
   for (let z = 0; z <= 4; z++)
     for (let x = 0; x <= 4; x++) {
-      const surface = finalSurfaceAt(
+      const surface = finalSurfaceRenderChannelsAt(
         tile.minX + (tile.size * x) / 4,
         tile.minZ + (tile.size * z) / 4,
       );
@@ -251,20 +251,39 @@ function addGroundRefinement(
   refineRoadBank: boolean,
 ) {
   if (!resolution) return;
-  const step = tile.size / resolution;
+  const step = tile.size / resolution,
+    // Memoize disposable presentation samples only within this one tile.
+    // Exact coordinates are never rounded or used for Simulation authority.
+    surfaceCache = new Map<string, ReturnType<typeof finalSurfaceRenderChannelsAt>>(),
+    tintCache = new Map<string, ReturnType<typeof terrainTint>>();
+  const keyFor = (x: number, z: number) => `${x}/${z}`;
+  const renderAt = (x: number, z: number) => {
+    const key = keyFor(x, z), cached = surfaceCache.get(key);
+    if (cached) return cached;
+    const surface = finalSurfaceRenderChannelsAt(x, z);
+    surfaceCache.set(key, surface);
+    return surface;
+  };
+  const tintAt = (x: number, z: number) => {
+    const key = keyFor(x, z), cached = tintCache.get(key);
+    if (cached) return cached;
+    const tint = terrainTint(x, z);
+    tintCache.set(key, tint);
+    return tint;
+  };
   const emit = (ax: number, az: number, size: number, depth: number): void => {
     const samples = [
-      finalSurfaceAt(ax, az),
-      finalSurfaceAt(ax, az + size),
-      finalSurfaceAt(ax + size, az + size),
-      finalSurfaceAt(ax + size, az),
+      renderAt(ax, az),
+      renderAt(ax, az + size),
+      renderAt(ax + size, az + size),
+      renderAt(ax + size, az),
     ];
     // Only road-adjacent shore cells need finer triangles at a bridge landing.
     // The previous full-size wet/dry quad could stretch a dry triangular
     // bank across the river. Bound subdivision to two additional levels;
     // each vertex still samples exactly the same final SEED surface.
     if (refineRoadBank && depth < 2) {
-      const centre = finalSurfaceAt(ax + size / 2, az + size / 2).water.kind,
+      const centre = renderAt(ax + size / 2, az + size / 2).water.kind,
         wet = samples.map(surface => surface.water.kind !== "none");
       if (wet.some(value => value !== wet[0]) ||
           wet.some(value => value !== (centre !== "none"))) {
@@ -283,7 +302,7 @@ function addGroundRefinement(
       [ax + size, samples[3].groundHeight + GROUND_EPSILON, az],
     ];
     if (Math.max(...points.map(point => point[1])) <= 0.05) return;
-    const tints = points.map(point => terrainTint(point[0], point[2])) as RGB[];
+    const tints = points.map(point => tintAt(point[0], point[2])) as RGB[];
     pushQuad(extra, tile, points[0], points[1], points[2], points[3],
       tints[0], tints[1], tints[2], tints[3]);
   };
