@@ -29,18 +29,24 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
-/** A cold population query builds the settlement index inside its worker.
- * Sharding it onto several cold terrain workers duplicates that expensive
- * SEED-only construction and competes with urgent terrain. Prefer an idle
- * worker that has already served a resident query; otherwise choose the
- * lowest stable idle ID. One query owns one worker/index, with no new workers. */
+/** Split ordinary cold resident facts across at most two existing idle
+ * workers; each owns exactly its own SEED index and legal route checks.
+ * Actor queries retain a single worker: their early-stop rule prioritizes
+ * real outdoor residents, and independently stopped shards would change
+ * which canonical actors appear depending on transient worker availability.
+ * This preserves deterministic selection until exact actor-stage fan-out can
+ * reconstruct that global stop rule. No new workers or direct actor actions. */
 export function residentWorkerShardPlan(
   idleWorkerIds: readonly number[], warmedWorkerIds: ReadonlySet<number> = new Set(),
+  prioritizeActors = false,
 ) {
   const idle = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
     .sort((a, b) => a - b);
-  const workerId = idle.find(id => warmedWorkerIds.has(id)) ?? idle[0];
-  return workerId === undefined ? [] : [{ workerId, shardIndex: 0, count: 1 }];
+  const warm = idle.filter(id => warmedWorkerIds.has(id));
+  const selected = (warm.length ? warm : idle).slice(0, prioritizeActors ? 1 : 2);
+  return selected.map((workerId, shardIndex) => ({
+    workerId, shardIndex, count: selected.length,
+  }));
 }
 
 /** Reuse the resident worker's expensive cold index when other workers can
