@@ -3,7 +3,8 @@ import { landformAt } from './wilderness-terrain.ts';
 import {elevationToRenderY} from "./render-frame.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
-import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
+import { continuitySurfaceAt as finalSurfaceAt, registerContinuityPatch } from "./continuity-runtime.ts";
+import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import { roads as geographyRoads } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
 import { forestTextureFor } from "./forest-texture.ts";
@@ -216,7 +217,7 @@ export function terrainTint(
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    surface = finalSurfaceAt(x, z),
+    surface = finalSurfaceRenderChannelsAt(x, z),
     elevation = elevationM ?? surface.groundHeight,
     sample = climateSampleAt(position, elevation);
 
@@ -371,9 +372,9 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
     step = t.size / resolution;
   const coveragePoints = new Map<string,Point>(), coverageTints = new Map<string,RGB>();
   const point = (px:number,pz:number):Point => {
-    if(!options.terrainOnly)return [px,heightAt(px,pz),pz];
+    if(!options.terrainOnly)return [px,finalSurfaceRenderChannelsAt(px,pz).groundHeight,pz];
     const key=`${px}/${pz}`;let p=coveragePoints.get(key);
-    if(!p){const surface=finalSurfaceAt(px,pz);p=[px,surface.water.kind==='none'?surface.groundHeight:surface.water.level,pz];coveragePoints.set(key,p);}return p;
+    if(!p){const surface=finalSurfaceRenderChannelsAt(px,pz);p=[px,surface.water.kind==='none'?surface.groundHeight:surface.water.level,pz];coveragePoints.set(key,p);}return p;
   };
   const tintAt = (p:Point):RGB => {
     if(!options.terrainOnly)return terrainTint(p[0],p[2],t.size,p[1]);
@@ -450,7 +451,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
   // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
   const waterTint = (x: number, z: number): RGB => {
     // Visible water follows the final hydrology channel even beneath bridge decks.
-    if (finalSurfaceAt(x, z).water.kind !== "none") return terrainTint(x, z);
+    if (finalSurfaceRenderChannelsAt(x, z).water.kind !== "none") return terrainTint(x, z);
     const position = sourceToLonLat(x, z);
     return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
       smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
@@ -691,7 +692,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
   // natural soil so zoom can hide roads without new meshes or authority changes.
   for(let v=0;v<terrain.p.length/3;v++){
     const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];
-    const road=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";
+    const road=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceRenderChannelsAt(x,z).groundMaterial==="Road";
     if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
     terrain.c[c+3]=road?255:0;
   }
