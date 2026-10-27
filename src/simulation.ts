@@ -457,6 +457,23 @@ function residentRoleFor(place: Place, index: number): ResidentRole {
     digest(`${place.code}/RESIDENT/${index}/ROLE`) % CITIZEN_ROLES.length
   ];
 }
+/** The designated bridge-maintenance labourer is immutable SEED identity.
+ * Resolve its first eligible slot once per settlement rather than rescanning
+ * up to 74 seeded roles for every other labourer's workplace during cold
+ * spatial-index construction. Cache only the seed-derived index, never actor state. */
+const firstMaintenanceLaborerByPlace = new Map<string, number | undefined>();
+function firstMaintenanceLaborerFor(place: Place): number | undefined {
+  if (firstMaintenanceLaborerByPlace.has(place.code)) return firstMaintenanceLaborerByPlace.get(place.code);
+  const limit = Math.min(80, populationOf(place));
+  let first: number | undefined;
+  for (let i = SERVICE_ROLES.length; i < limit; i++) {
+    if (residentRoleFor(place, i) === "laborer") { first = i; break; }
+  }
+  firstMaintenanceLaborerByPlace.set(place.code, first);
+  while (firstMaintenanceLaborerByPlace.size > 8)
+    firstMaintenanceLaborerByPlace.delete(firstMaintenanceLaborerByPlace.keys().next().value!);
+  return first;
+}
 /** The real building or plot where a resident works. */
 function workOffsetFor(place: Place, index: number, role: ResidentRole, assignment: GuardAssignment | undefined, home: Offset, character: string): Offset {
   const anchors = settlementAnchors(place), pick = <T>(list: readonly T[], salt: string) => list[digest(`${place.code}/RESIDENT/${index}/${salt}`) % list.length];
@@ -478,11 +495,7 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
       // One ordinary, SEED-selected town labourer maintains a bridge only
       // when its far bank and entire legal approach have been verified.
       // Other trades retain their immutable seeded site selection.
-      const firstLaborer = habitat.maintenance.length
-        ? Array.from({ length: Math.min(80, populationOf(place)) - SERVICE_ROLES.length },
-            (_, i) => i + SERVICE_ROLES.length)
-            .find(i => residentRoleFor(place, i) === "laborer")
-        : undefined;
+      const firstLaborer = habitat.maintenance.length ? firstMaintenanceLaborerFor(place) : undefined;
       if (index === firstLaborer) return habitat.maintenance[0];
       return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
     }
