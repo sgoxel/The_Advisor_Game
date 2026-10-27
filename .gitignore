@@ -50,3 +50,6 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+# Local character generation tool (projects, models, logs); not part of the game build
+/tools/character-studio/
