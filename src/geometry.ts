@@ -1195,11 +1195,43 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3],
       urban = Boolean(feature.urban), bodyHeight = feature.house?.wallHeightM ?? 2.8,
       roofHeight = .55, roofOverhang = .4;
-    structures.boxYaw(x, y - .05, z, width, bodyHeight, depth, yaw, wall);
+    if (close) {
+      // The SEED-owned entrance is centred on the physical front (+Z) wall.
+      // A solid facade with a dark decal hid the ORIGINAL resident at the
+      // final door station. Cut a real, human-sized opening at close LOD;
+      // preserve the wall/roof silhouette, owned position and Simulation.
+      const gap = Math.min(1.35, width * .3), height = Math.min(2.2, bodyHeight - .3),
+        thickness = .22, sideWidth = (width - gap) / 2;
+      const shell = (lx: number, lz: number, w: number, h: number, d: number, bottom = y - .05) => {
+        const p = offsetLocal(x, z, yaw, lx, lz);
+        structures.boxYaw(p.x, bottom, p.z, w, h, d, yaw, wall);
+      };
+      shell(0, -depth / 2 + thickness / 2, width, bodyHeight, thickness);
+      for (const side of [-1, 1]) {
+        shell(side * (width / 2 - thickness / 2), 0, thickness, bodyHeight, depth);
+        shell(side * (gap / 2 + sideWidth / 2), depth / 2 - thickness / 2,
+          sideWidth, bodyHeight, thickness);
+      }
+      shell(0, depth / 2 - thickness / 2, gap, bodyHeight - height, thickness, y + height);
+      // The recessed dark door is behind the real approach, not a coplanar
+      // painted rectangle in front of the arriving resident's 2D body/feet.
+      const inside = offsetLocal(x, z, yaw, 0, depth / 2 - .34);
+      detail.boxYaw(inside.x, y + .03, inside.z, gap - .12, height - .12, .07, yaw, color(55, 43, 34));
+      for (const side of [-1, 1]) {
+        const jamb = offsetLocal(x, z, yaw, side * (gap / 2 + .045), depth / 2 + .015);
+        detail.boxYaw(jamb.x, y, jamb.z, .09, height + .07, .085, yaw, color(107, 75, 49));
+      }
+    } else {
+      structures.boxYaw(x, y - .05, z, width, bodyHeight, depth, yaw, wall);
+    }
     structures.boxYaw(x, y + bodyHeight - .06, z, width + roofOverhang, roofHeight, depth + roofOverhang, yaw, roof);
     if (tileSize <= 32) {
-      const front = offsetLocal(x, z, yaw, 0, depth * .5 + .03), chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
-      detail.boxYaw(front.x, y + .03, front.z, .9, 2.05, .09, yaw, color(78, 56, 40));
+      const chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
+      if (!close) {
+        // Distant LOD retains the cheap opaque house and a readable door.
+        const front = offsetLocal(x, z, yaw, 0, depth * .5 + .06);
+        detail.boxYaw(front.x, y + .03, front.z, .9, 2.05, .09, yaw, color(78, 56, 40));
+      }
       detail.boxYaw(chimney.x, y + bodyHeight, chimney.z, .34, urban ? 1.05 : .78, .34, yaw, color(108, 102, 91));
     }
     if (close && (feature.shop === "cafe" || feature.shop === "restaurant")) addShopFront(frameOf(closeDetail, yaw), width, depth, bodyHeight, feature.shop, variant);
