@@ -118,6 +118,7 @@ import {
   type StreamingBudget,
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
+import { BoundedTimingSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
@@ -212,6 +213,17 @@ function setLoadingProgress(percent: number) {
   $("loading-text").textContent = LOAD_MESSAGES[Math.min(LOAD_MESSAGES.length - 1, Math.floor(next / (100 / LOAD_MESSAGES.length)))];
 }
 let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<string,number> = {};
+// Fixed-size performance samples; percentile sorting occurs only in the on-demand state getter.
+const frameIntervalSamples = new BoundedTimingSamples();
+const cpuUpdateSamples = new BoundedTimingSamples();
+const workerGenerationSamples = new BoundedTimingSamples();
+const uploadSamples = new BoundedTimingSamples();
+const residentQuerySamples = new BoundedTimingSamples();
+const residentPickSamples = new BoundedTimingSamples();
+let firstResidentQueryOfferedAt: number | null = null;
+let firstResidentFactMs: number | null = null;
+let residentQueryDispatchedAt: number | null = null;
+let maxGenerationReadyObserved = 0;
 let surfaceDetail = 1;
 let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
 type CachedTile = {
@@ -277,6 +289,7 @@ function dispatchResidentQuery() {
   if (!residentBatch) {
     const job = residentQueries.take();
     if (!job) return;
+    residentQueryDispatchedAt = performance.now();
     const shards = residentWorkerShardPlan(idleWorkers.map(worker => workers.indexOf(worker)), warmedResidentWorkers);
     const count = shards.length;
     residentBatch = { job, count, unsent: new Set(shards.map(shard => shard.workerId)),
@@ -892,6 +905,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   if(!streamingMemoryReservationFits(cpuBytes,gpuBytes,NATURAL_WORKER_SCRATCH_RESERVE_BYTES,streamingBudget))return;
   pending.add(key);
   inFlight++;
+  maxGenerationReadyObserved = Math.max(maxGenerationReadyObserved, inFlight + uploads.length);
   if(kind === "detail")detailGenerationJobs++;else coverageGenerationJobs++;
   idleWorkers.pop()!.postMessage(job);
 }
@@ -956,6 +970,7 @@ function processStreaming(material: pc.StandardMaterial) {
   }
   if (!next) break;
   {
+    const uploadJobStarted = performance.now();
     const bytes = estimateGeometryBytes(next.data);
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
@@ -990,6 +1005,7 @@ function processStreaming(material: pc.StandardMaterial) {
       );
     }
     pending.delete(next.jobKey);
+    uploadSamples.record(performance.now() - uploadJobStarted);
   }
   }
   const root = tileAt(0,0,0), cachedKeys = tileCache;
@@ -1038,7 +1054,10 @@ function processStreaming(material: pc.StandardMaterial) {
     const mode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready);
     if (mode.inspect) {
       const request = residentRequestForView(simulation.tick, residentQueryLimitForView(mode.actors), mode.actors);
-      if (request) residentQueries.offer(request);
+      if (request) {
+        if (firstResidentQueryOfferedAt === null) firstResidentQueryOfferedAt = performance.now();
+        residentQueries.offer(request);
+      }
       dispatchResidentQuery();
     }
   }
@@ -1654,7 +1673,13 @@ async function start() {
           if (residentBatch.completed.size === residentBatch.count) {
             const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
             residentBatch = undefined;
-            if (residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())))) residentResultReady();
+            if (residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())))) {
+              const answeredAt = performance.now();
+              if (residentQueryDispatchedAt !== null) residentQuerySamples.record(answeredAt - residentQueryDispatchedAt);
+              if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
+                firstResidentFactMs = answeredAt - firstResidentQueryOfferedAt;
+              residentResultReady();
+            }
           }
         }
         return;
@@ -1662,6 +1687,7 @@ async function start() {
       inFlight--;
       idleWorkers.push(worker);
       lastGenerationTiming=event.data.timing||{};
+      workerGenerationSamples.record(event.data.timing?.totalMs);
       continuityBytesByWorker.set(worker, event.data.continuity?.cpuBytesEstimated || 0);
       continuityWorkerBytes = [...continuityBytesByWorker.values()].reduce((sum, bytes) => sum + bytes, 0);
       continuityWorkerState = event.data.continuity;
@@ -1710,6 +1736,7 @@ async function start() {
   const hasResidentMesh = (actor: pc.Entity) => (actor.findComponents("render") as pc.RenderComponent[])
     .some(render => render.enabled && render.entity.enabled && render.meshInstances.length > 0);
   pickResidentAt = (clientX: number, clientY: number) => {
+    const pickStarted = performance.now();
     // Project each visible sprite's feet and head to the screen and test the click against
     // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
     const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top,
@@ -1725,6 +1752,7 @@ async function start() {
       const distance = residentActorPickDistance(x, y, feet, head);
       if (distance !== null && distance < bestDistance) { best = resident; bestDistance = distance; }
     }
+    residentPickSamples.record(performance.now() - pickStarted);
     return best;
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
@@ -1764,6 +1792,7 @@ async function start() {
   let resolutionFrames = 0, resolutionSeconds = 0;
   app.on("update", (dt: number) => {
     if (rendererState.phase === "lost") return;
+    const cpuUpdateStarted = performance.now();
     // Adaptive resolution: average the frame time, decide every couple of seconds.
     resolutionFrames++; resolutionSeconds += dt;
     if (resolutionSeconds >= RESOLUTION_DECISION_SECONDS) {
@@ -1796,8 +1825,10 @@ async function start() {
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
       const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined;
       const previousSnapshot = residentQueries.current;
-      if (query) residentQueries.offer(query);
-      else residentQueries.clear();
+      if (query) {
+        if (firstResidentQueryOfferedAt === null) firstResidentQueryOfferedAt = performance.now();
+        residentQueries.offer(query);
+      } else residentQueries.clear();
       const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
       // The terrain worker returns immutable routine facts. Reconcile any
       // independently accepted visit here with the main Simulation event
@@ -2247,6 +2278,8 @@ async function start() {
       statsElapsed = 0;
       frames = 0;
     }
+    frameIntervalSamples.record(dt * 1000);
+    cpuUpdateSamples.record(performance.now() - cpuUpdateStarted);
   });
   // Only the genuine screenshot-tool session can briefly quiesce geometry
   // uploads and worker prefetch while continuing normal GPU frames, actor
@@ -2479,6 +2512,17 @@ async function start() {
             backend: device.deviceType,
             deviceClass: streamingBudget.deviceClass,
             budget: { ...streamingBudget },
+            // CPU update excludes GPU/browser paint; frame interval is scheduling cadence.
+            cpuUpdateMs: cpuUpdateSamples.summary(),
+            frameIntervalMs: frameIntervalSamples.summary(),
+            gpuFrameMs: null,
+            workerMs: { ...workerGenerationSamples.summary(), completed: workerGenerationSamples.samples },
+            uploadMs: { ...uploadSamples.summary(), uploadsThisFrame },
+            residentQueryMs: residentQuerySamples.summary(),
+            residentPickMs: residentPickSamples.summary(),
+            firstResidentFactMs,
+            residentFactStatus: !residentRequest ? "not-requested" : residentViewReady ? "ready" : !ready ? "pending-world" : residentQueries.busy ? "pending-worker" : "pending-dispatch",
+            maxGenerationReadyObserved,
             activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
             preparedPatches: uploads.length,
             cachedPatches: tileCache.size,
