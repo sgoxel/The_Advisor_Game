@@ -29,19 +29,21 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
-/** Split expensive cold legal resident reconstruction across at most two
- * already-idle workers. Each shard builds only its own SEED index (the spatial
- * index supports exact congruence partitions) and all original route/surface
- * checks still execute. Prefer warm resident workers so subsequent queries
- * reuse the same shard indexes; a lone warm worker keeps its full-index cache.
- * No workers are created and one-worker devices retain their original path. */
+/** Split ordinary cold resident facts across at most two existing idle
+ * workers; each owns exactly its own SEED index and legal route checks.
+ * Actor queries retain a single worker: their early-stop rule prioritizes
+ * real outdoor residents, and independently stopped shards would change
+ * which canonical actors appear depending on transient worker availability.
+ * This preserves deterministic selection until exact actor-stage fan-out can
+ * reconstruct that global stop rule. No new workers or direct actor actions. */
 export function residentWorkerShardPlan(
   idleWorkerIds: readonly number[], warmedWorkerIds: ReadonlySet<number> = new Set(),
+  prioritizeActors = false,
 ) {
   const idle = [...new Set(idleWorkerIds.filter(id => Number.isInteger(id) && id >= 0))]
     .sort((a, b) => a - b);
   const warm = idle.filter(id => warmedWorkerIds.has(id));
-  const selected = (warm.length ? warm : idle).slice(0, 2);
+  const selected = (warm.length ? warm : idle).slice(0, prioritizeActors ? 1 : 2);
   return selected.map((workerId, shardIndex) => ({
     workerId, shardIndex, count: selected.length,
   }));
