@@ -218,31 +218,40 @@ export function terrainTint(
   // avoids a second expensive final-surface query for every emitted vertex.
   sampledSurface?: ReturnType<typeof finalSurfaceRenderChannelsAt>,
 ): [number, number, number] {
+  const surface = sampledSurface ?? finalSurfaceRenderChannelsAt(x, z);
+  // These SEED-owned materials have fixed colours. Resolve the canonical
+  // surface first, and avoid expensive macro/climate fields for a result that
+  // cannot use them. Nonuniform shoreline/water blends still use full climate.
+  if (surface.water.kind === "river" && !featureFootprintSource) {
+    const fall = landformAt(x, z);
+    return fall?.f.kind === "waterfall" && Math.abs(fall.b) < 6
+      ? color(211, 232, 228)
+      : color(76, 128, 148);
+  }
+  const lakeLandform = surface.water.kind === "lake" && featureFootprintSource > 0
+    ? landformAt(x, z) : undefined;
+  if (surface.water.kind === "lake" && !lakeLandform) return [...TERRAIN_PALETTE.lake];
+  if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")
+    return color(112, 92, 62);
+
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    surface = sampledSurface ?? finalSurfaceRenderChannelsAt(x, z),
     elevation = elevationM ?? surface.groundHeight,
-    // The climate and tint share the same SEED macro sample at this position.
     sample = climateSampleAt(position, elevation, macro);
 
-  // Hydrology and prepared ground come from the composed surface, never from a
-  // parallel river/road/settlement hit test in presentation code.
-  if (surface.water.kind === "river" && !featureFootprintSource) {
-    const fall=landformAt(x,z);
-    return fall?.f.kind==='waterfall'&&Math.abs(fall.b)<6?color(211,232,228):color(76,128,148);
-  }
-  if(surface.water.kind==='lake'){
-    const local=featureFootprintSource>0?landformAt(x,z):undefined;
-    if(local){
-      const coverage=Math.min(1,(local.f.radiusM*2/(featureFootprintSource*CANONICAL_METRES_PER_SOURCE_UNIT))**2*.65),
-        ground=sample.forestFamily==='conifer-boreal'?TERRAIN_PALETTE['conifer-forest']:sample.forestFamily?TERRAIN_PALETTE['temperate-forest']:TERRAIN_PALETTE.grassland;
-      return blendColor(ground,TERRAIN_PALETTE.lake,coverage);
+  // Any lake with a nearby landform still needs its exact canonical forest
+  // family to blend local land and water; it was not short-circuited above.
+  if (surface.water.kind === "lake") {
+    if (lakeLandform) {
+      const coverage = Math.min(1, (lakeLandform.f.radiusM * 2 /
+        (featureFootprintSource * CANONICAL_METRES_PER_SOURCE_UNIT)) ** 2 * .65),
+        ground = sample.forestFamily === "conifer-boreal"
+          ? TERRAIN_PALETTE["conifer-forest"]
+          : sample.forestFamily ? TERRAIN_PALETTE["temperate-forest"] : TERRAIN_PALETTE.grassland;
+      return blendColor(ground, TERRAIN_PALETTE.lake, coverage);
     }
     return [...TERRAIN_PALETTE.lake];
   }
-
-  if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")
-    return color(112, 92, 62);
 
   // Identical coordinate inputs give identical albedo at every mesh LOD.
   // Filtering detail belongs to presentation, not a size-dependent palette.
