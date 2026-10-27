@@ -32,6 +32,7 @@ import {
   residentShortLabel,
   nearestNode,
   nearestLegalStreetNode,
+  StableStreetFrontier,
   legalOpenGroundDetour,
   exteriorGroundCorridor,
   residentStreetPathKey,
@@ -218,6 +219,36 @@ test("street ring perimeter scan preserves distant nearest-node and tie choices"
 });
 
 
+
+test("resident street connectors indexed frontier exactly matches insertion-order route score selection", () => {
+  const frontier = new StableStreetFrontier();
+  const reference: { id: number; score: number }[] = [];
+  const put = (id: number, score: number) => {
+    const entry = reference.find(item => item.id === id);
+    if (entry) entry.score = score;
+    else reference.push({ id, score });
+    frontier.set(id, score);
+    assert.equal(frontier.size, reference.length);
+  };
+  const take = () => {
+    let best = 0;
+    for (let i = 1; i < reference.length; i++)
+      if (reference[i].score < reference[best].score) best = i;
+    const expected = reference.splice(best, 1)[0].id;
+    assert.equal(frontier.take(), expected, "exact prior strict-less tie and re-open order");
+    assert.equal(frontier.size, reference.length);
+  };
+  // Deterministic sequence exercises equal scores, decreasing/increasing
+  // existing scores, arbitrary reopenings and many heap index exchanges.
+  for (let step = 0; step < 800; step++) {
+    const id = (step * 17 + 3) % 41;
+    const score = (step * 23) % 19;
+    put(id, score);
+    if (step % 3 === 0) take();
+  }
+  while (reference.length) take();
+  assert.throws(() => frontier.take(), RangeError);
+});
 
 test("resident street connectors preserve sparse-grid legal picks without changing blocked routes", () => {
   const cell = 12, nodes = [
