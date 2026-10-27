@@ -56,6 +56,33 @@ import { terrainTint } from "../src/geometry-core.ts";
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt } from "../src/wilderness-terrain.ts";
 
+test("S009 tile grid surface/tint reuse preserves both original mesh sampling paths", () => {
+  // Each original detail corner used a fresh composed surface; each coverage
+  // corner already cached the point but recomputed the tint's surface. Reusing
+  // the exact same SEED channels must preserve all ground/water heights and
+  // pigment values at their unchanged grid coordinates and footprint widths.
+  for (const tile of [tileAt(8, 128, 128), tileAt(11, 1024, 1024), tileAt(8, 128, 1)]) {
+    for (const terrainOnly of [false, true]) {
+      const resolution = Math.min(terrainOnly ? 8 : 16, tile.size / 2),
+        step = tile.size / resolution;
+      for (const ix of [0, 1, resolution])
+        for (const iz of [0, 1, resolution]) {
+          const x = tile.minX + ix * step, z = tile.minZ + iz * step,
+            channels = finalSurfaceRenderChannelsAt(x, z),
+            y = terrainOnly && channels.water.kind !== "none"
+              ? channels.water.level : channels.groundHeight,
+            footprint = terrainOnly ? step : 0,
+            expected = terrainTint(x, z, tile.size, y, footprint, !terrainOnly),
+            reused = terrainTint(x, z, tile.size, y, footprint, !terrainOnly, channels);
+          assert.deepEqual(reused, expected,
+            `same SEED pigment at ${tile.key} ${ix}/${iz} coverage=${terrainOnly}`);
+          assert.deepEqual(finalSurfaceRenderChannelsAt(x, z), channels,
+            "tile grid tint must not change canonical surface authority");
+        }
+    }
+  }
+});
+
 test("S009 constant surface pigments keep the exact seeded lake, river and road colours", () => {
   const anchors = [
     ...MACRO_PLAN.lakes.slice(0, 6).map(p => lonLatToSource(p.center.lon, p.center.lat)),
