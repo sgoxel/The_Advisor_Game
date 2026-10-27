@@ -51,6 +51,28 @@ import { LazySimulation, summaryAt, residentAt, populationOf } from "../src/simu
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
 
+import { terrainTint } from "../src/geometry-core.ts";
+
+test("S009 emitted mesh tint reuses identical SEED final-surface channels", () => {
+  // All values are actual canonical coordinates, including wet coast/lake,
+  // dry settlement/road and polar samples. Renderer reuse changes no pigment.
+  const anchors = [
+    ...villages.slice(0, 3).map(p => ({ x: p.x, z: p.z })),
+    ...roads.slice(0, 3).map(p => ({ x: p.fromX, z: p.fromZ })),
+    ...MACRO_PLAN.lakes.slice(0, 2).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    ...MACRO_PLAN.continents.slice(0, 2).map(p => lonLatToSource(p.center.lon, p.center.lat)),
+    lonLatToSource(0, Math.PI / 2),
+  ];
+  for (const { x, z } of anchors) {
+    const channels = finalSurfaceRenderChannelsAt(x, z);
+    const before = terrainTint(x, z, 32, undefined, 0, false);
+    const reused = terrainTint(x, z, 32, undefined, 0, false, channels);
+    assert.deepEqual(reused, before, `same canonical pigment at ${x}/${z}`);
+    assert.deepEqual(finalSurfaceRenderChannelsAt(x, z), channels,
+      "render-only channel reuse cannot modify SEED composition");
+  }
+});
+
 test("S009 render-only mesh channels match canonical water, height and material without changing legal traversal", () => {
   const anchors = [
     ...villages.slice(0, 3).map(place => ({ x: place.x, z: place.z })),

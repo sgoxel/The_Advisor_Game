@@ -34,6 +34,8 @@ type Sample = {
   /** Only read on tiles with a real major wet/dry boundary. */
   shoreDistance?: number;
   material: string;
+  /** Same canonical composed channels already queried to create this sample. */
+  surface: ReturnType<typeof finalSurfaceRenderChannelsAt>;
 };
 
 /**
@@ -99,6 +101,7 @@ export function rebuildNaturalSurface(
         y: wet === "none" ? surface.groundHeight : surface.water.level + 0.0025,
         material: surface.groundMaterial,
         wet,
+        surface,
       };
     cache.set(key, value);
     return value;
@@ -115,7 +118,7 @@ export function rebuildNaturalSurface(
   // The early 8x8 shoreline probe and unused adaptive samples never emit
   // vertices; defer their identical SEED-derived tint until vertex emission.
   const tint = (point: Sample): readonly number[] =>
-    point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false));
+    point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false,point.surface));
 
   let majorBoundary = false,
     initialWet: string | undefined;

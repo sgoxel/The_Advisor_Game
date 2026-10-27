@@ -214,10 +214,13 @@ export function terrainTint(
   elevationM?: number,
   featureFootprintSource = 0,
   showRoads = true,
+  // Mesh sampling already owns these exact composed channels; reusing them
+  // avoids a second expensive final-surface query for every emitted vertex.
+  sampledSurface?: ReturnType<typeof finalSurfaceRenderChannelsAt>,
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    surface = finalSurfaceRenderChannelsAt(x, z),
+    surface = sampledSurface ?? finalSurfaceRenderChannelsAt(x, z),
     elevation = elevationM ?? surface.groundHeight,
     sample = climateSampleAt(position, elevation);
 
