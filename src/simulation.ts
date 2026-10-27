@@ -1663,10 +1663,22 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
     // Previously each residentFoundationAt() called settlementExteriorFor()
     // and repeated the same village border reconciliation thousands of times.
     exteriorPlan = settlementExteriorFor(place),
-    // Four common public anchors are independent of the resident index.
-    // Reuse exact canonical projections while leaving per-resident points intact.
-    sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep]
-      .map(offset => relativeSourceForOffset(place, offset));
+    // Only immutable, reusable place/work offsets share conversions within
+    // this one cold index build. Distinct resident homes and guard overrides
+    // retain their exact authoritative projection, without rounding.
+    sharedProjection = new Map<string, ReturnType<typeof relativeSourceForOffset>>(),
+    projectShared = (offset: Offset) => {
+      const key = `${offset.eastM}/${offset.northM}`,
+        cached = sharedProjection.get(key);
+      if (cached) return cached;
+      const projected = relativeSourceForOffset(place, offset);
+      // Bound disposable index-build scratch; no cross-country cache or SEED state.
+      if (sharedProjection.size >= 4096)
+        sharedProjection.delete(sharedProjection.keys().next().value!);
+      sharedProjection.set(key, projected);
+      return projected;
+    },
+    sharedPoints = [anchors.inn, anchors.market, anchors.plaza, anchors.keep].map(projectShared);
   for (let index = 0; index < population; index++) {
     // A resident can be anywhere on the corridors between its own places and the public ones it visits.
     const foundation = residentFoundationAt(place, index, exteriorPlan),
@@ -1676,11 +1688,12 @@ function residentIndexFor(place: Place): ResidentSpatialIndex {
       guardDoor = foundation.role === "guard" ? resolvedSettlementHomeDoorFor(place, index) : undefined,
       resolvedGuardHome = guardDoor ? offsetForSource(place, guardDoor.x, guardDoor.z) : undefined,
       points = [
-        ...[foundation.homeOffset, ...(resolvedGuardHome ? [resolvedGuardHome] : []), foundation.workOffset]
-          .map(offset => relativeSourceForOffset(place, offset)),
+        relativeSourceForOffset(place, foundation.homeOffset),
+        ...(resolvedGuardHome ? [relativeSourceForOffset(place, resolvedGuardHome)] : []),
+        projectShared(foundation.workOffset),
         ...sharedPoints,
-        ...[gardenSite(place, foundation), neighbourhoodSite(place, foundation, "market")]
-          .map(offset => relativeSourceForOffset(place, offset)),
+        projectShared(gardenSite(place, foundation)),
+        projectShared(neighbourhoodSite(place, foundation, "market")),
       ],
       // Street routes can bend away from the straight line between places: pad the box.
       pad = (place.kind === "city" ? 90 : 45) / CANONICAL_METRES_PER_SOURCE_UNIT,
