@@ -1504,10 +1504,23 @@ export function residentShortLabel(resident: Pick<Resident, "index" | "role">, o
   return `Resident ${resident.index + 1} · ${resident.role.replaceAll("-", " ")}${outsideView ? " · off-screen" : ""}`;
 }
 
+/** Observational per-query worker totals; never used to schedule or validate an actor. */
+export type ResidentEvaluationPhases = {
+  candidateLookupMs: number;
+  foundationMs: number;
+  doorMs: number;
+  scheduleMs: number;
+  groundingMs: number;
+  evaluated: number;
+};
+
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
-export function residentAt(place: Place, index: number, tick: number): Resident {
+export function residentAt(place: Place, index: number, tick: number, phases?: ResidentEvaluationPhases): Resident {
+  const started = phases ? performance.now() : 0;
   const seeded = residentFoundationAt(place, index),
+    foundationDone = phases ? performance.now() : 0,
     door = resolvedSettlementHomeDoorFor(place, index),
+    doorDone = phases ? performance.now() : 0,
     // The character stands at the same resolved front-wall door as the house
     // renderer/inspector. Keep this lazy: registry and spatial-index builds must
     // never resolve every home's geometry just to query population identity.
@@ -1515,10 +1528,19 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
     foundation = door ? { ...seeded, homeOffset,
       workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
     schedule = scheduleAt(place, foundation, tick),
+    scheduleDone = phases ? performance.now() : 0,
     location = legalPosition(place, schedule.offset.eastM, schedule.offset.northM),
+    groundingDone = phases ? performance.now() : 0,
     grounded = !!door && location.grounded,
     blockedReason = !door ? "assigned house has no legally resolved doorway"
       : !location.grounded ? "scheduled position has no legal ground" : undefined;
+  if (phases) {
+    phases.foundationMs += foundationDone - started;
+    phases.doorMs += doorDone - foundationDone;
+    phases.scheduleMs += scheduleDone - doorDone;
+    phases.groundingMs += groundingDone - scheduleDone;
+    phases.evaluated++;
+  }
   return {
     ...foundation,
     ...location,
@@ -1946,6 +1968,7 @@ export class LazySimulation {
     limit = DEFAULT_VISIBLE_LIMIT,
     shard?: { index: number; count: number },
     prioritizeActors = false,
+    phases?: ResidentEvaluationPhases,
   ) {
     this.lastResidentIndexBuildMs = 0;
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
@@ -1977,15 +2000,17 @@ export class LazySimulation {
     // later settlements then contribute no residents and need no cold index.
     // Preserve the exact original place/candidate ordering and legal checks.
     for (const place of settlements) {
+      const candidateStarted = phases ? performance.now() : 0;
       const candidates = this.residentCandidates(place, x, z, radius)
         .filter(index => !shard || index % shard.count === shard.index);
+      if (phases) phases.candidateLookupMs += performance.now() - candidateStarted;
       query.candidateResidents += candidates.length;
       for (const index of candidates) {
         if (prioritizeActors && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
           exhausted = true;
           break;
         }
-        const resident = residentAt(place, index, this.tick);
+        const resident = residentAt(place, index, this.tick, phases);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
