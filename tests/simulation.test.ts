@@ -22,6 +22,7 @@ import {
   legalEnclosureSegment,
   timedWalkOnPath,
   unfinishedOrBlockedOvernightReturn,
+  provablyLateWithoutStreetSearch,
   walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -645,6 +646,29 @@ test("same-door indoor work needs no invented street commute", () => {
   assert.equal(resident.travelProgress, undefined, "no one-minute phantom commute");
   assert.ok(greatCircleDistance(resident.position, sourceToLonLat(doorway.x, doorway.z)) < 0.1,
     "actual artisan stays at the same owned entrance");
+});
+
+test("prior-day earliest-arrival proof never skips a possibly lawful timely route", () => {
+  const at = { eastM: 0, northM: 0 };
+  assert.equal(provablyLateWithoutStreetSearch(at, at, -1), false,
+    "stationary same-door actions remain valid even at zero remaining time");
+  assert.equal(provablyLateWithoutStreetSearch(at, { eastM: 1, northM: 0 }, 59), true,
+    "nonzero trips require the same minimum 60 fantasy seconds as timed walking");
+  assert.equal(provablyLateWithoutStreetSearch(at, { eastM: 1, northM: 0 }, 60), false);
+  for (const to of [
+    { eastM: 0, northM: 0 },
+    { eastM: 1, northM: 0 },
+    { eastM: 60, northM: 0 },
+    { eastM: 700, northM: 300 },
+    { eastM: -500, northM: -900 },
+  ]) for (const remaining of [-1, 0, 30, 59, 60, 120, 800, 3600]) {
+    const straight = [at, to];
+    if (provablyLateWithoutStreetSearch(at, to, remaining))
+      assert.ok(unfinishedOrBlockedOvernightReturn(straight, remaining),
+        "proven-late optimistic straight path must match actual timed walker");
+  }
+  assert.equal(provablyLateWithoutStreetSearch(at, { eastM: 100, northM: 0 }, 500), false,
+    "all potentially timely routes retain full final-surface/street/bridge checking");
 });
 
 test("walk windows keep the corners of the legal street path", () => {
