@@ -336,6 +336,28 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "reverse travel cannot bypass the same narrow physical crossing");
 });
 
+test("long lawful routes reject wide obstacles early without skipping any one-metre crossing", () => {
+  const origin = { eastM: 0, northM: 0 }, destination = { eastM: 3200, northM: 0 };
+  let calls = 0;
+  assert.equal(continuousWalkableOffsetSegment(origin, destination, point => {
+    calls++;
+    return point.eastM < 1450 || point.eastM > 1750;
+  }), false, "a large unbridged cut must reject the exact SEED corridor");
+  assert.ok(calls < 100, "a blocked long candidate must not trigger thousands of expensive final-surface checks");
+
+  let visited = new Set<number>();
+  assert.equal(continuousWalkableOffsetSegment(origin, destination, point => {
+    visited.add(point.eastM);
+    return true;
+  }), true);
+  assert.equal(visited.size, 3201, "an accepted route must still validate every original 1 m position");
+  const narrowCut = (point: typeof origin) => point.eastM !== 1573;
+  assert.equal(continuousWalkableOffsetSegment(origin, destination, narrowCut), false,
+    "a single-metre water gap between the coarse probes must still block travel");
+  assert.equal(continuousWalkableOffsetSegment(destination, origin, narrowCut), false,
+    "reverse travel must not bypass the identical narrow cut");
+});
+
 test("S006 residents traverse only authoritative bridge decks and stand at deck elevation", () => {
   const bridge = finalSurfaceEvidenceAnchors().bridge,
     surface = finalSurfaceAt(bridge.x, bridge.z);
