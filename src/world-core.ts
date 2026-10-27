@@ -526,7 +526,12 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   finalSurfaceModifierCandidates += point.candidateCount;
   finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.candidateCount);
 
-  const slope = finalSurfaceLocalSlopeAt(x, z),
+  // Four authoritative slope-height probes cannot affect a blocked point or
+  // a deck traversal: only an unbridged, walkable dry surface uses slope for
+  // its movement grade and traversal class. Keep all original probes there.
+  const needsSlope = point.final.water.kind === "none" &&
+    point.final.walkable && point.final.deckHeight === null,
+    slope = needsSlope ? finalSurfaceLocalSlopeAt(x, z) : 0,
     walkable =
       point.final.water.kind === "none"
         ? point.final.walkable && (point.final.deckHeight!==null || slope < .68)
