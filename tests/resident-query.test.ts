@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView } from "../src/resident-query.ts";
-import { LazySimulation, residentOrderFor } from "../src/simulation.ts";
+import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
@@ -33,6 +33,20 @@ test("S009 fast resident home anchor exactly matches canonical full-home plot", 
       const expected = settlementHomeFor(place, index, plan).candidates[0],
         actual = settlementHomeAnchorFor(place, index, plan);
       assert.deepEqual(actual, expected, `resident ${place.code}/${index} retains exact home`);
+    }
+  }
+});
+
+test("S009 lightweight standing-roster seeds equal full canonical resident foundations", () => {
+  for (const place of [villages[0], cities[0]]) {
+    for (const index of [0, 1, 7, 31, 79, ...(place.kind === "city" ? [240, 2399] : [])]) {
+      const compact = residentStandSeedFor(place, index),
+        full = residentFoundationAt(place, index);
+      assert.deepEqual(compact, {
+        code: full.code, role: full.role, ageGroup: full.ageGroup,
+        guardShift: full.guardShift, traits: full.traits,
+        homeOffset: full.homeOffset, workOffset: full.workOffset,
+      }, `${place.code}/${index} preserves identical dailyPlan and SEED standing anchors`);
     }
   }
 });
