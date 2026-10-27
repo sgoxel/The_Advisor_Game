@@ -1421,6 +1421,14 @@ const civilianOvernightRisk = new Map<string, boolean>();
 export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | null, remainingSeconds: number): boolean {
   return !path || timedWalkOnPath(path, remainingSeconds).progress < 1;
 }
+/** An optimistic straight line is a strict lower bound on every legal street
+ * route. If even that line cannot finish in time, do not run a costly street
+ * search. All possibly timely routes still get full Simulation validation. */
+export function provablyLateWithoutStreetSearch(from: Offset, to: Offset, remainingSeconds: number): boolean {
+  const directMetres = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
+  return directMetres > 1e-6 && (remainingSeconds < 60 ||
+    directMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
+}
 function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
   const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
     key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
@@ -1441,17 +1449,22 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
     const next = plan[i];
     if (next.anchor === plan[i - 1].anchor) continue;
     const to = standingSpot(place, foundation, next.anchor,
-      anchorOffset(place, foundation, next.anchor), !next.indoors),
-      route = routinePath(place, from, to,
-        fieldEntry(place, foundation, fromAnchor),
-        fieldEntry(place, foundation, next.anchor));
+      anchorOffset(place, foundation, next.anchor), !next.indoors);
     let nextDeparture = DAY_SECONDS;
     for (let j = i + 1; j < plan.length; j++)
       if (plan[j].anchor !== plan[j - 1].anchor) {
         nextDeparture = plan[j].start;
         break;
       }
-    if (unfinishedOrBlockedOvernightReturn(route, nextDeparture - next.start - 1)) {
+    const remainingSeconds = nextDeparture - next.start - 1;
+    if (provablyLateWithoutStreetSearch(from, to, remainingSeconds)) {
+      risk = true;
+      break;
+    }
+    const route = routinePath(place, from, to,
+      fieldEntry(place, foundation, fromAnchor),
+      fieldEntry(place, foundation, next.anchor));
+    if (unfinishedOrBlockedOvernightReturn(route, remainingSeconds)) {
       risk = true;
       break;
     }
