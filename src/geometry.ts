@@ -10,6 +10,7 @@ import {
 import { featuresFor, type Tile } from "./world.ts";
 import { elevationToRenderY } from "./render-frame.ts";
 import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
+import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { assetFor, type AssetMesh } from "./asset-meshes.ts";
@@ -93,7 +94,7 @@ function buildTerrainOnly(tile: Tile): TileGeometry {
     const key = `${px}/${pz}`;
     let value = coveragePoints.get(key);
     if (!value) {
-      const surface = finalSurfaceAt(px, pz);
+      const surface = finalSurfaceRenderChannelsAt(px, pz);
       value = [px, surface.water.kind === "none" ? surface.groundHeight : surface.water.level, pz];
       coveragePoints.set(key, value);
     }
