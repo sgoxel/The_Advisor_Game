@@ -20,6 +20,7 @@ import {
   streamingMemoryReservationFits,
   streamingBudgetForViewport,
   withinStreamingBudget,
+  canPrefetchStreamingJob,
 } from "../src/streaming.ts";
 
 const localView = (x: number, z: number): View => ({
@@ -134,9 +135,28 @@ test("tile generation uses every spare core, limited only by device memory", asy
   for (const [width, height] of [[390, 844], [1024, 768], [1440, 900]]) {
     const base = streamingBudgetForViewport(width, height);
     assert.equal(streamingBudgetForPool(width, height, 1).generationReady, base.generationReady, "a single worker keeps the viewport budget");
-    assert.equal(streamingBudgetForPool(width, height, 11).generationReady, Math.max(base.generationReady, 13), "a large pool gets a slot per worker plus two uploads");
+    for (const workers of [1, 4, 11, 64])
+      assert.equal(streamingBudgetForPool(width, height, workers).generationReady, base.generationReady, "high-core pools must not raise the 4/6/8 generating+ready ceiling");
     const memory = { cacheTrimStartBytes: 0, combinedBytes: 0, cpuBytes: 0, gpuBytes: 0 };
-    assert.deepEqual({ ...streamingBudgetForPool(width, height, 11), generationReady: 0, ...memory }, { ...base, generationReady: 0, ...memory }, "the pool changes only job slots and memory");
+    assert.deepEqual({ ...streamingBudgetForPool(width, height, 11), generationReady: 0, ...memory }, { ...base, generationReady: 0, ...memory }, "the worker count changes neither job slots nor canonical geometry");
+  }
+});
+
+test("urgent work owns the shared generating+ready cap while optional prefetch leaves a free slot and worker", () => {
+  for (const [width,height,limit] of [[390,844,4],[1024,768,6],[1440,900,8]] as const) {
+    const budget=streamingBudgetForViewport(width,height);
+    assert.equal(budget.generationReady,limit);
+    for (let generating=0;generating<=limit;generating++) {
+      const ready=limit-generating;
+      assert.equal(withinStreamingBudget({generationReady:generating+ready,activePatches:0,cachedPatches:0,cpuBytes:0,gpuBytes:0},budget),true);
+      assert.equal(withinStreamingBudget({generationReady:generating+ready+1,activePatches:0,cachedPatches:0,cpuBytes:0,gpuBytes:0},budget),false);
+      assert.equal(canPrefetchStreamingJob(generating,ready,11,budget),false,"a full ready+generating queue never admits prefetch");
+    }
+    assert.equal(canPrefetchStreamingJob(0,0,2,budget),true,"optional work may use idle capacity");
+    assert.equal(canPrefetchStreamingJob(limit-2,0,2,budget),true,"prefetch stops before consuming the reserved slot");
+    assert.equal(canPrefetchStreamingJob(limit-1,0,2,budget),false,"reserve one job slot for focus or inspect");
+    assert.equal(canPrefetchStreamingJob(0,0,1,budget),false,"one idle worker is reserved for canonical work");
+    assert.equal(canPrefetchStreamingJob(0,limit-1,2,budget),false,"ready uploads count against the same cap");
   }
 });
 
