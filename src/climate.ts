@@ -266,12 +266,18 @@ function terrainFor(
  * already have a local mesh height; semantic identity deliberately ignores it.
  * Macro relief is the single canonical elevation input for this climate authority.
  */
-export function climateSampleAt(position: LonLat, _presentationElevationM?: number): ClimateSample {
+export function climateSampleAt(
+  position: LonLat,
+  _presentationElevationM?: number,
+  // The terrain renderer already evaluated this exact canonical macro recipe.
+  // Reuse it for climate without mutating SEED data or skipping climate terms.
+  sampledMacro?: ReturnType<typeof macroSampleAt>,
+): ClimateSample {
   const canonical = {
       lon: normalizeLongitude(position.lon),
       lat: clampLatitude(position.lat),
     },
-    macro = macroSampleAt(canonical),
+    macro = sampledMacro ?? macroSampleAt(canonical),
     elevation = Math.max(0, macro.reliefM),
     latitude01 = Math.abs(canonical.lat) / (Math.PI / 2),
     continentality = clamp01(Math.max(0, macro.coastDistanceRad) / 0.12),
