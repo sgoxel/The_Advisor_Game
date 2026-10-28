@@ -519,6 +519,29 @@ test("medium blocked overnight detours reject early but still require every lega
     "reversing a medium corridor cannot legalize the same blocked metre");
 });
 
+test("continuous walking segments prioritize original central cut without losing any legal metre", () => {
+  const start = { eastM: 0, northM: 0 }, end = { eastM: 96, northM: 0 };
+  let checks = 0;
+  assert.equal(continuousWalkableOffsetSegment(start, end, point => {
+    checks++;
+    return point.eastM < 44 || point.eastM > 52;
+  }), false, "a real central cut still blocks the original exact corridor");
+  assert.equal(checks, 1, "a central blocked stride position needs only one final-surface probe");
+  for (const length of [33, 34, 96, 97, 3200]) {
+    const visited: number[] = [], count = Math.ceil(length);
+    assert.equal(continuousWalkableOffsetSegment(start, { eastM: length, northM: 0 }, point => {
+      visited.push(Math.round(point.eastM * count / length));
+      return true;
+    }), true);
+    assert.deepEqual(visited.sort((a, b) => a - b),
+      Array.from({ length: count + 1 }, (_, i) => i),
+      "all original one-metre-or-finer positions must be checked exactly once");
+  }
+  assert.equal(continuousWalkableOffsetSegment(start, end,
+    point => point.eastM !== 47), false,
+    "a narrow off-stride cut still rejects a walk rather than becoming an invented crossing");
+});
+
 test("S006 residents traverse only authoritative bridge decks and stand at deck elevation", () => {
   const bridge = finalSurfaceEvidenceAnchors().bridge,
     surface = finalSurfaceAt(bridge.x, bridge.z);

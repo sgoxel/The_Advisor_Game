@@ -963,7 +963,13 @@ export function continuousWalkableOffsetSegment(
   // Successful routes still check every original metre exactly once.
   const stride = steps > 32 ? Math.max(2, Math.ceil(steps / 16)) : 1;
   if (stride > 1) {
-    for (let i = 0; i <= steps; i += stride) if (!check(i)) return false;
+    // An interior cut is common on rejected overnight doglegs. Probe a
+    // central original stride position first; the full validator still visits
+    // each exact metre once on every accepted path, without coarser samples.
+    const middle = Math.floor(Math.floor(steps / stride) / 2) * stride;
+    if (!check(middle)) return false;
+    for (let i = 0; i <= steps; i += stride)
+      if (i !== middle && !check(i)) return false;
     if (steps % stride && !check(steps)) return false;
   }
   for (let i = 0; i <= steps; i++) {
