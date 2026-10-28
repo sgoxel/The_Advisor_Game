@@ -1085,7 +1085,7 @@ test("civilian midnight replay is gated by an actual blocked or overlong return"
     "same-door arrivals never need a phantom commute");
 });
 
-test("overnight deadline-only check agrees with the authoritative timed walker", () => {
+test("civilian midnight replay is gated: overnight deadline-only check agrees with the authoritative timed walker", () => {
   const origin = { eastM: 0, northM: 0 };
   const paths: { eastM: number; northM: number }[][] = [
     [], [origin], [origin, origin],
