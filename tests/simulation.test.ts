@@ -1085,6 +1085,21 @@ test("civilian midnight replay is gated by an actual blocked or overlong return"
     "same-door arrivals never need a phantom commute");
 });
 
+test("civilian midnight replay is gated: overnight deadline-only check agrees with the authoritative timed walker", () => {
+  const origin = { eastM: 0, northM: 0 };
+  const paths: { eastM: number; northM: number }[][] = [
+    [], [origin], [origin, origin],
+    [origin, { eastM: 1, northM: 0 }],
+    [origin, { eastM: 30, northM: 40 }, { eastM: 180, northM: 40 }],
+    [origin, { eastM: 80, northM: -70 }, { eastM: 80, northM: 0 }, origin],
+  ];
+  for (const path of paths)
+    for (const remaining of [-Infinity, -1, 0, 59.9999999, 60, 60.0000001, 120, 300, 3600, Infinity, NaN])
+      assert.equal(unfinishedOrBlockedOvernightReturn(path, remaining),
+        timedWalkOnPath(path, remaining).progress < 1,
+        `deadline-only decision differs from authoritative walker: ${JSON.stringify({ path, remaining })}`);
+});
+
 test("ordinary civilian identity and real ground persist across local midnight", () => {
   const trimmed = villages.find(place => place.code.includes("/CITY/6/VILLAGE/1"));
   assert.ok(trimmed, "retain the physically trimmed road village");
