@@ -243,12 +243,15 @@ export function rebuildNaturalSurface(
     const ia = vertex(a, group), ib = vertex(b, group), ic = vertex(c, group);
     // Preserve ordered indexed-normal sums without allocating a fresh
     // three-element array for every emitted adaptive triangle.
-    for (let vertex = 0; vertex < 3; vertex++) {
-      const index = vertex === 0 ? ia : vertex === 1 ? ib : ic;
-      normals[index * 3] += nx;
-      normals[index * 3 + 1] += ny;
-      normals[index * 3 + 2] += nz;
-    }
+    normals[ia * 3] += nx;
+    normals[ia * 3 + 1] += ny;
+    normals[ia * 3 + 2] += nz;
+    normals[ib * 3] += nx;
+    normals[ib * 3 + 1] += ny;
+    normals[ib * 3 + 2] += nz;
+    normals[ic * 3] += nx;
+    normals[ic * 3 + 1] += ny;
+    normals[ic * 3 + 2] += nz;
     indices.push(ia, ib, ic);
   };
   // Both shoreline and road-cut caches use default-sort lexicographic keys.
