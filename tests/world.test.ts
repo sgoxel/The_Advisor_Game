@@ -61,8 +61,29 @@ import { terrainTint } from "../src/geometry-core.ts";
 
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
-import { naturalSurfaceAt } from "../src/hydrology.ts";
+import { naturalSurfaceAt, naturalElevationAt } from "../src/hydrology.ts";
 
+
+test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {
+  // Independent elevation API stays the reference after per-query macro
+  // reuse. River-bank grading is intentionally excluded from this fixture.
+  let checked = 0;
+  const samples = [
+    ...villages.slice(0, 16).map(({ x, z }) => ({ x, z })),
+    ...[-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dz => ({
+      x: dx * SOURCE_PRESENTATION_WIDTH / 4,
+      z: dz * SOURCE_PRESENTATION_WIDTH / 16,
+    }))),
+  ];
+  for (const { x, z } of samples) {
+    const surface = naturalSurfaceAt(x, z);
+    if (surface.water.kind !== "none" || surface.freshwaterDistanceSource < 20) continue;
+    assert.equal(surface.groundHeight, naturalElevationAt(x, z),
+      "dry canonical water-free material must retain exact elevation");
+    checked++;
+  }
+  assert.ok(checked > 0, "fixture must exercise at least one dry-land station");
+});
 
 test("S009 fast featureless-tile water probe preserves fully composed SEED water", () => {
   // Composition never changes base water, including a river deck and the
