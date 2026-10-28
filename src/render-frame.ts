@@ -84,11 +84,17 @@ function recomputeNormals(geometry: Geometry) {
     nx /= length;
     ny /= length;
     nz /= length;
-    for (const index of [ia, ib, ic]) {
-      normals[index] = nx;
-      normals[index + 1] = ny;
-      normals[index + 2] = nz;
-    }
+    // Preserve triangle index order without allocating a three-entry array
+    // for every triangle in worker-side ENU normal recomputation.
+    normals[ia] = nx;
+    normals[ia + 1] = ny;
+    normals[ia + 2] = nz;
+    normals[ib] = nx;
+    normals[ib + 1] = ny;
+    normals[ib + 2] = nz;
+    normals[ic] = nx;
+    normals[ic + 1] = ny;
+    normals[ic + 2] = nz;
   }
 }
 
