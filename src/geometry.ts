@@ -34,25 +34,24 @@ class Builder {
     this.triangleGradient(a, b, c, tint, tint, tint);
   }
   triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
-    const o = this.origin, transform = (p: Point): Point => [o.x + p[0] * o.sx, o.y + p[1] * o.sy, o.z + p[2] * o.sz];
-    [a, b, c] = [transform(a), transform(b), transform(c)];
-    // Reuse the exact transformed triangle and cross-product order without
-    // temporary edge/normal arrays or a fresh normal map for every vertex.
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2],
-      vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2],
+    // Preserve exact transformed coordinates and cross-product operation order
+    // while avoiding per-triangle point arrays, closures and temporary vectors.
+    const o = this.origin,
+      ax = o.x + a[0] * o.sx, ay = o.y + a[1] * o.sy, az = o.z + a[2] * o.sz,
+      bx = o.x + b[0] * o.sx, by = o.y + b[1] * o.sy, bz = o.z + b[2] * o.sz,
+      cx = o.x + c[0] * o.sx, cy = o.y + c[1] * o.sy, cz = o.z + c[2] * o.sz,
+      ux = bx - ax, uy = by - ay, uz = bz - az,
+      vx = cx - ax, vy = cy - ay, vz = cz - az,
       nx = uy * vz - uz * vy,
       ny = uz * vx - ux * vz,
       nz = ux * vy - uy * vx,
       length = Math.hypot(nx, ny, nz) || 1,
       normalX = nx / length, normalY = ny / length, normalZ = nz / length,
       start = this.p.length / 3;
-    for (let index = 0; index < 3; index++) {
-      const point = index === 0 ? a : index === 1 ? b : c;
-      const tint = index === 0 ? tintA : index === 1 ? tintB : tintC;
-      this.p.push(...point);
-      this.n.push(normalX, normalY, normalZ);
-      this.c.push(...tint, 255);
-    }
+    this.p.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+    this.n.push(normalX, normalY, normalZ, normalX, normalY, normalZ, normalX, normalY, normalZ);
+    this.c.push(tintA[0], tintA[1], tintA[2], 255,
+      tintB[0], tintB[1], tintB[2], 255, tintC[0], tintC[1], tintC[2], 255);
     this.i.push(start, start + 1, start + 2);
   }
   quad(a: Point, b: Point, c: Point, d: Point, tint: RGB) { this.triangle(a, b, c, tint); this.triangle(a, c, d, tint); }
