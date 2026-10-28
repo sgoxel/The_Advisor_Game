@@ -843,3 +843,42 @@ test('all actual domestic settlement departures share stems below 45 degrees',()
   assert.ok(angle>=45-1e-6,`${id}: unmerged actual departure ${angle}`);
  }
 });
+
+
+test("S009 bounded road polyline rejects only impossible Z extents, preserving exact SEED distance", () => {
+  // Independent pre-optimization reference: scan every canonical segment in
+  // order, including seam wrapping and each segment's own latitude metric.
+  const reference = (x: number, z: number, road: (typeof roads)[number], limit: number) => {
+    const points = road.centerline && road.centerline.length > 1 ? road.centerline
+      : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
+    let distance = limit, found = false;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i],
+        scale = Math.cos(sourceToLonLat(a.x, a.z).lat),
+        dx = wrapSourceX(b.x - a.x) * scale, dz = b.z - a.z,
+        minZ = Math.min(a.z, b.z), maxZ = Math.max(a.z, b.z);
+      if (z < minZ - distance || z > maxZ + distance) continue;
+      const qx = wrapSourceX(x - a.x) * scale, qz = z - a.z;
+      if (qx < Math.min(0, dx) - distance || qx > Math.max(0, dx) + distance) continue;
+      const length = dx * dx + dz * dz,
+        t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0,
+        candidate = Math.hypot(qx - dx * t, qz - dz * t);
+      if (candidate <= distance) { distance = candidate; found = true; }
+    }
+    return found ? distance : Infinity;
+  };
+  for (const road of [roads[0], roads[Math.floor(roads.length / 2)], roads[roads.length - 1], siteAccessRoads[0]]) {
+    if (!road) continue;
+    const points = road.centerline && road.centerline.length > 1 ? road.centerline
+      : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
+    for (const anchor of [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]]) {
+      for (const dz of [-512, -1, 0, 512])
+        for (const dx of [0, 11, SOURCE_PRESENTATION_WIDTH])
+          for (const limit of [2, 24, Infinity]) {
+            const x = anchor.x + dx, z = anchor.z + dz;
+            assert.equal(roadDistanceAt(x, z, road, limit), reference(x, z, road, limit),
+              `SEED road ${road.code} x=${x} z=${z} limit=${limit}`);
+          }
+    }
+  }
+});
