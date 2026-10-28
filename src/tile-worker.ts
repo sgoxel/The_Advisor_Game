@@ -15,7 +15,7 @@ const emptyTerrain = { positions:new Float32Array(), normals:new Float32Array(),
 let residentSimulation: Promise<import("./simulation.ts").LazySimulation> | undefined;
 self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   if (event.data.kind === "residents") {
-    const job = event.data, started = performance.now();
+    const job = event.data, started = performance.now(), workerReceiveEpochMs = performance.timeOrigin + started;
     try {
       residentSimulation ??= import("./simulation.ts").then(({ LazySimulation }) => new LazySimulation());
       const simulation = await residentSimulation, { places } = await import("./geography.ts"),
@@ -29,10 +29,11 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, groundingMs: 0, evaluated: 0 };
       const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true, phases,
         first => self.postMessage({ kind: "resident-first-fact", id: job.id, shard: job.shard?.index, resident: first }));
-      const completedAt = performance.now();
+      const completedAt = performance.now(), workerSendEpochMs = performance.timeOrigin + completedAt;
       self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index, residents, query: simulation.stats.query,
         residentTiming: { preparationMs: preparedAt - started, queryMs: completedAt - preparedAt,
-          indexBuildMs: simulation.residentIndexBuildMs, ...phases } });
+          indexBuildMs: simulation.residentIndexBuildMs, ...phases,
+          mainSentEpochMs: job.mainSentEpochMs, workerReceiveEpochMs, workerSendEpochMs } });
     } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
     return;
   }

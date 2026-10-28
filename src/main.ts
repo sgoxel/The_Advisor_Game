@@ -330,7 +330,7 @@ function dispatchResidentQuery() {
     if (!batch) continue;
     batch.unsent.delete(workerId);
     idleWorkers.splice(index, 1);
-    worker.postMessage({ ...batch.job, shard: {
+    worker.postMessage({ ...batch.job, mainSentEpochMs: performance.timeOrigin + performance.now(), shard: {
       index: batch.assignments.get(workerId)!, count: batch.count,
     } });
   }
@@ -1716,6 +1716,7 @@ async function start() {
       if (event.data.kind === "residents") {
         idleWorkers.push(worker);
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
+        residentPhaseTimings.recordTransport(event.data.residentTiming, performance.timeOrigin + performance.now());
         const wasWarm = warmedResidentWorkers.has(workers.indexOf(worker));
         warmedResidentWorkers.add(workers.indexOf(worker));
         const residentBatch = residentBatches.get(event.data.id);

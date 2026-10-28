@@ -145,3 +145,20 @@ test("separate bounded coverage/detail worker stages expose honest p95 without c
   assert.equal(phases.summary().detail.totalMs.samples, 300, "stage timing ring remains bounded");
   assert.equal(phases.summary().coverage.totalMs.samples, 2, "detail work does not contaminate coverage p95");
 });
+
+test("resident transport phases distinguish worker queue and return delivery without inventing timings", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  assert.equal(metrics.summary().mainSendToWorkerMs.samples, 0);
+  metrics.recordTransport({ mainSentEpochMs: 100, workerReceiveEpochMs: 130, workerSendEpochMs: 190 }, 260);
+  let report = metrics.summary();
+  assert.equal(report.mainSendToWorkerMs.latest, 30);
+  assert.equal(report.workerReceiveToSendMs.latest, 60);
+  assert.equal(report.workerSendToMainMs.latest, 70);
+  assert.equal(report.mainSendToResponseMs.latest, 160);
+  metrics.recordTransport({ mainSentEpochMs: 300, workerReceiveEpochMs: 290, workerSendEpochMs: 400 }, 500);
+  metrics.recordTransport({ mainSentEpochMs: 300, workerReceiveEpochMs: 400 }, 500);
+  metrics.recordTransport({ mainSentEpochMs: 300, workerReceiveEpochMs: 400, workerSendEpochMs: 450 }, 449);
+  report = metrics.summary();
+  assert.equal(report.mainSendToResponseMs.samples, 1, "invalid or partial cross-thread epochs never imply zero latency");
+  assert.equal(report.accepted, 0, "observations cannot accept a resident or mutate Simulation");
+});
