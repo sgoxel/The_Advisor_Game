@@ -559,11 +559,15 @@ function addRoadAndBridgeRibbons(
  * Resample only the visible alias-prone prepared/water areas. Query work and
  * geometry remain bounded by tile size and intersecting road support.
  */
-export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry, preserveGround = false): TileGeometry {
+export function refineTileSurfacePresentation(
+  tile: Tile, data: TileGeometry, preserveGround = false, canonicalWaterBoundary4?: boolean,
+): TileGeometry {
   // Coarse fallback/globe coverage must not materialize every fine road station.
   if (tile.size > 64) return data;
   const matches = shiftedRoadsIntersecting(tile),
-    waterBoundary = hasWaterBoundary(tile),
+    // Adaptive natural surface already sampled the exact same 25 coordinates
+    // in its canonical 8x8 probe. Standalone callers retain the full check.
+    waterBoundary = canonicalWaterBoundary4 ?? hasWaterBoundary(tile),
     resolution = refinementResolutionForTile(tile, matches.length > 0, waterBoundary);
   if (!resolution && !matches.length) return data;
 
