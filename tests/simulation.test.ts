@@ -24,6 +24,7 @@ import {
   unfinishedOrBlockedOvernightReturn,
   provablyLateWithoutStreetSearch,
   routineHasProvablyLateLeg,
+  routineHasBlockedOrigin,
   provablyLateWithStandingBounds,
   walkWindowOnPath,
   lastReachableRoutineStop,
@@ -98,6 +99,72 @@ test("resident inspector can resolve facts: S009 blocked endpoints preflight wit
   assert.equal(continuousWalkableOffsetSegment(preciseFrom, preciseTo,
     p => p.eastM !== preciseFrom.eastM), false,
     "all lawful segments must validate the exact origin at t=0");
+});
+
+test("resident inspector can resolve facts: S009 overnight blocked origins short-circuit only impossible chains", () => {
+  const a = { eastM: 2.5, northM: -3 }, b = { eastM: 18, northM: 9 },
+    c = { eastM: -28.5, northM: 71 };
+  const goal = { eastM: 90, northM: 100 };
+  const legs = [{ from: a, to: goal }, { from: b, to: goal },
+    { from: c, to: goal }], visited: number[] = [];
+  assert.equal(routineHasBlockedOrigin(legs, p => {
+    visited.push(p.eastM);
+    return p !== b;
+  }), true, "a later blocked origin invalidates the chain without validating earlier routes");
+  assert.deepEqual(visited, [a.eastM, b.eastM],
+    "stop after the first definitive failure; unrelated later legs need no surface checks");
+  visited.length = 0;
+  assert.equal(routineHasBlockedOrigin(legs, p => {
+    visited.push(p.eastM);
+    return true;
+  }), false, "all walkable origins remain uncertain and need original street validation");
+  assert.deepEqual(visited, [a.eastM, b.eastM, c.eastM]);
+  assert.equal(routineHasBlockedOrigin([], () => false), false,
+    "an empty chain cannot manufacture a travel failure");
+  assert.equal(continuousWalkableOffsetSegment(a, b,
+    p => p.eastM !== a.eastM || p.northM !== a.northM), false,
+    "an exact t=0 origin is mandatory for forward-ordered street segments");
+
+  const fieldFrom = { eastM: 20, northM: 0 },
+    fieldTo = { eastM: 90, northM: 0 },
+    reverseCoreEntry = { eastM: -10, northM: 0 },
+    forwardCoreEntry = { eastM: 30, northM: 0 };
+  assert.equal(routineHasBlockedOrigin([{
+    from: fieldFrom, to: fieldTo, toEntry: reverseCoreEntry,
+  }], () => false), false,
+  "destination-only field entry reverses the core: exact caller origin is not proven sampled");
+  assert.equal(routineHasBlockedOrigin([{
+    from: fieldFrom, to: fieldTo, toEntry: forwardCoreEntry,
+  }], () => false), true,
+  "forward core and ordinary fallback both sample the exact caller origin");
+
+  const reverseFrom = { eastM: 91.01459183919955, northM: 0 },
+    reverseTo = { eastM: -564.3661591839741, northM: 0 },
+    seenReverse: number[] = [];
+  assert.equal(routineHasBlockedOrigin([{ from: reverseFrom, to: reverseTo }], point => {
+    seenReverse.push(point.eastM);
+    return point === reverseTo;
+  }), false, "reverse original start is uncertain; exact normalized lower end is walkable");
+  assert.deepEqual(seenReverse, [reverseTo.eastM]);
+  seenReverse.length = 0;
+  assert.equal(routineHasBlockedOrigin([{ from: reverseFrom, to: reverseTo }], point => {
+    seenReverse.push(point.eastM);
+    return false;
+  }), true, "blocked exact lower endpoint invalidates a reversed ordinary street leg");
+  assert.deepEqual(seenReverse, [reverseTo.eastM]);
+  seenReverse.length = 0;
+  assert.equal(routineHasBlockedOrigin([{
+    from: reverseFrom, to: reverseTo, fromEntry: { eastM: 5, northM: 1 },
+  }], point => {
+    seenReverse.push(point.eastM);
+    return false;
+  }), false, "reverse field-entry travel remains uncertain and must run full physical checks");
+  assert.deepEqual(seenReverse, [], "do not reject an unproven t=1 field endpoint");
+  assert.notEqual(reverseTo.eastM + (reverseFrom.eastM - reverseTo.eastM),
+    reverseFrom.eastM, "the original t=1 sample can differ by one ULP");
+  assert.equal(continuousWalkableOffsetSegment(reverseTo, reverseFrom,
+    p => p.eastM !== reverseFrom.eastM), true,
+    "the original reversed path can remain physically sampled-legal");
 });
 
 test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {

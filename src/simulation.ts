@@ -1642,6 +1642,32 @@ export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | nul
     progress = Math.max(0, Math.min(1, remainingSeconds / durationSeconds));
   return progress < 1;
 }
+/** Street routing normalizes endpoint strings. Its lower endpoint is always
+ * sampled at exact t=0, whereas the higher endpoint's interpolated t=1 can
+ * differ by one ULP. A blocked lower endpoint is therefore impossible for
+ * an ordinary route in either caller direction. A field entry may avoid that
+ * exact endpoint, so only its forward caller origin remains a safe proof. */
+export function routineHasBlockedOrigin<T extends Offset>(
+  legs: readonly { from: T; to: T; fromEntry?: Offset; toEntry?: Offset }[],
+  walkable: (point: T) => boolean,
+): boolean {
+  for (const leg of legs) {
+    const fromId = `${leg.from.eastM},${leg.from.northM}`,
+      toId = `${leg.to.eastM},${leg.to.northM}`;
+    if (compareText(fromId, toId) <= 0) {
+      // A destination-only field connector may reverse the *core* street
+      // route even when its fallback is forward. Its caller origin is then
+      // sampled at t=1, not necessarily at the exact original coordinate.
+      // A source field connector instead samples the exact origin at t=0.
+      const coreChecksOrigin = !!leg.fromEntry || !leg.toEntry ||
+        compareText(fromId, `${leg.toEntry.eastM},${leg.toEntry.northM}`) <= 0;
+      if (coreChecksOrigin && !walkable(leg.from)) return true;
+    } else if (!leg.fromEntry && !leg.toEntry && !walkable(leg.to)) {
+      return true;
+    }
+  }
+  return false;
+}
 /** An optimistic straight line is a strict lower bound on every legal street
  * route. If even that line cannot finish in time, do not run a costly street
  * search. All possibly timely routes still get full Simulation validation. */
@@ -1702,6 +1728,11 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   // deadline, the overnight chain is at risk before any settlement-wide slot
   // roster or metre-sampled street graph is constructed. No uncertain leg
   // is accepted by this inexpensive proof.
+  const originWalkable = (origin: Offset) => {
+    const position = canonicalOffset(place, origin.eastM, origin.northM),
+      source = lonLatToSource(position.lon, position.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  };
   const anchors = settlementAnchors(place);
   const shiftBound = (anchor: RoutineAnchor, base: Offset, indoors: boolean) =>
     indoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")
@@ -1746,6 +1777,7 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   type DeadlineLeg = {
     fromAnchor: RoutineAnchor; toAnchor: RoutineAnchor;
     from: Offset; to: Offset; remainingSeconds: number;
+    fromEntry?: Offset; toEntry?: Offset;
   };
   const legs: DeadlineLeg[] = [];
   let fromAnchor = plan[0].anchor,
@@ -1763,15 +1795,19 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
         break;
       }
     legs.push({ fromAnchor, toAnchor: next.anchor, from, to,
-      remainingSeconds: nextDeparture - next.start - 1 });
+      remainingSeconds: nextDeparture - next.start - 1,
+      fromEntry: fieldEntry(place, foundation, fromAnchor),
+      toEntry: fieldEntry(place, foundation, next.anchor) });
     from = to;
     fromAnchor = next.anchor;
   }
-  let risk = routineHasProvablyLateLeg(legs);
+  // Check each street leg's actual normalized t=0 point before any earlier
+  // path search. A reverse field-entry leg remains uncertain and is skipped.
+  let risk = routineHasProvablyLateLeg(legs) ||
+    routineHasBlockedOrigin(legs, originWalkable);
   if (!risk) for (const leg of legs) {
     const route = routinePath(place, leg.from, leg.to,
-      fieldEntry(place, foundation, leg.fromAnchor),
-      fieldEntry(place, foundation, leg.toAnchor));
+      leg.fromEntry, leg.toEntry);
     if (unfinishedOrBlockedOvernightReturn(route, leg.remainingSeconds)) {
       risk = true;
       break;
