@@ -9,6 +9,7 @@ import { drainageRecipes } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
+import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
   const place= villages[0], tile=tileForPosition(place.x,place.z,10);
@@ -139,4 +140,31 @@ test("shoreline skirts do not hang above the real crossing water", () => {
     wetSkirts++;
   }
   assert.ok(wetSkirts>0);
+});
+
+test("reuses the exact canonical 4x4 water-boundary verdict from the adaptive 8x8 samples", () => {
+  const crossing = finalSurfaceEvidenceAnchors().bridge;
+  const drainage = drainageRecipes[0].points[Math.floor(drainageRecipes[0].points.length / 2)];
+  const tiles = [
+    tileForPosition(villages[0].x, villages[0].z, 14),
+    tileForPosition(crossing.x, crossing.z, 14),
+    tileForPosition(drainage.x, drainage.z, 14),
+  ];
+  // The source-coordinate wrap must not change which exact physical samples
+  // count as water. Reuse the same four-by-four probe as the old call path.
+  tiles.push({ ...tiles[1], minX: tiles[1].minX + SOURCE_PRESENTATION_WIDTH });
+  for (const tile of tiles) {
+    let wet = false, dry = false;
+    for (let z = 0; z <= 4; z++)
+      for (let x = 0; x <= 4; x++) {
+        const water = finalSurfaceRenderChannelsAt(
+          tile.minX + tile.size * x / 4, tile.minZ + tile.size * z / 4,
+        ).water.kind;
+        if (water === "none") dry = true;
+        else wet = true;
+      }
+    const natural = rebuildNaturalSurface(tile, buildTile(tile).terrain);
+    assert.equal(natural.waterBoundary4, wet && dry,
+      `tile ${tile.key} must retain the original composed-surface water boundary`);
+  }
 });
