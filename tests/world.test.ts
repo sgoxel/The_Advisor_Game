@@ -6,6 +6,7 @@ import {
   cellAt,
   finalSurfaceAt,
   finalSurfaceRenderChannelsAt,
+  finalSurfaceTelemetry,
   cellSeed,
   regionSeed,
   districtSeed,
@@ -87,6 +88,39 @@ test("S009 terrain coverage reuses exact canonical surface for every vertex tint
       );
     }
   }
+});
+
+
+test("S009 immutable composed point reuse preserves exact slope, bridge and render authority", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    bridge,
+    ...villages.slice(0, 3).map(({ x, z }) => ({ x: x + 0.125, z: z + 0.375 })),
+    { x: 0.8125, z: 0.1875 },
+  ];
+  for (const { x, z } of samples) {
+    // Exercise the render-first order that formerly recomposed everything
+    // during the next full legal check, including its four slope probes.
+    const render = finalSurfaceRenderChannelsAt(x, z);
+    const ground = finalSurfaceAt(x, z);
+    assert.deepEqual({
+      groundHeight: render.groundHeight, groundMaterial: render.groundMaterial,
+      water: render.water, vegetationDensityScale: render.vegetationDensityScale,
+    }, {
+      groundHeight: ground.groundHeight, groundMaterial: ground.groundMaterial,
+      water: ground.water, vegetationDensityScale: ground.vegetationDensityScale,
+    });
+    const repeated = finalSurfaceRenderChannelsAt(x, z);
+    assert.deepEqual(repeated, render);
+    assert.deepEqual(finalSurfaceAt(x, z), ground,
+      "cached composition must never change full walkability, traversal or bridge ownership");
+  }
+  const state = finalSurfaceTelemetry();
+  assert.ok(state.composedCacheHits > 0,
+    "second render or overlapping legal queries must reuse identical immutable composition");
+  assert.ok(state.composedCacheSize <= state.composedCacheLimit,
+    "composed surface cache must remain memory-bounded");
+  assert.equal(state.composedCacheBytesEstimated, state.composedCacheSize * 1024);
 });
 
 test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {
