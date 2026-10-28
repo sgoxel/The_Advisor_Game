@@ -1348,7 +1348,10 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       if (cost.has(goal)) {
         const route: Offset[] = [];
         for (let node: number | undefined = goal; node !== undefined; node = cameFrom.get(node))
-          route.unshift(graph.nodes[node]);
+          route.push(graph.nodes[node]);
+        // Backtracking is destination-first. Reverse once instead of shifting
+        // every preceding point on each hop; retain identical canonical nodes.
+        route.reverse();
         path = [from, ...route, to];
       }
     }
