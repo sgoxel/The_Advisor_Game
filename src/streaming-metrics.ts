@@ -109,6 +109,10 @@ export class ResidentQueryPhaseSamples {
   readonly workerReceiveToSendMs = new BoundedTimingSamples();
   readonly workerSendToMainMs = new BoundedTimingSamples();
   readonly mainSendToResponseMs = new BoundedTimingSamples();
+  // Cross-context epochs may not share a valid order in clock-controlled
+  // browser captures. Never discard valid local-clock spans with them.
+  private invalidCrossClockSamples = 0;
+  private lastSignedCrossClockMs: { mainToWorker: number; workerToMain: number } | null = null;
   private offered?: { key: string; at: number };
   private readonly active = new Map<number, { key: string; at: number; offeredAt?: number }>();
   private accepted = 0;
@@ -135,11 +139,19 @@ export class ResidentQueryPhaseSamples {
     const { mainSentEpochMs: sent, workerReceiveEpochMs: arrived, workerSendEpochMs: replied } = timing;
     if (sent === undefined || arrived === undefined || replied === undefined || mainReceivedEpochMs === undefined ||
         ![sent, arrived, replied, mainReceivedEpochMs].every(Number.isFinite) ||
-        sent < 0 || arrived < sent || replied < arrived || mainReceivedEpochMs < replied) return;
-    this.mainSendToWorkerMs.record(arrived - sent);
-    this.workerReceiveToSendMs.record(replied - arrived);
-    this.workerSendToMainMs.record(mainReceivedEpochMs - replied);
-    this.mainSendToResponseMs.record(mainReceivedEpochMs - sent);
+        sent < 0 || arrived < 0 || replied < 0 || mainReceivedEpochMs < 0) return;
+    // The worker's own clock always measures actual worker execution; the
+    // main clock always measures send-to-response. Never lose either because
+    // an external test clock offsets the separate performance origins.
+    if (replied >= arrived) this.workerReceiveToSendMs.record(replied - arrived);
+    if (mainReceivedEpochMs >= sent) this.mainSendToResponseMs.record(mainReceivedEpochMs - sent);
+    this.lastSignedCrossClockMs = { mainToWorker: arrived - sent, workerToMain: mainReceivedEpochMs - replied };
+    // A cross-clock interval is a measured latency only if *all* event
+    // boundaries are ordered; negative intervals must not turn into zeros.
+    if (arrived >= sent && replied >= arrived && mainReceivedEpochMs >= replied) {
+      this.mainSendToWorkerMs.record(arrived - sent);
+      this.workerSendToMainMs.record(mainReceivedEpochMs - replied);
+    } else this.invalidCrossClockSamples++;
   }
 
   dispatch(id: number, key: string, at: number): void {
@@ -210,6 +222,8 @@ export class ResidentQueryPhaseSamples {
       workerReceiveToSendMs: this.workerReceiveToSendMs.summary(),
       workerSendToMainMs: this.workerSendToMainMs.summary(),
       mainSendToResponseMs: this.mainSendToResponseMs.summary(),
+      invalidCrossClockSamples: this.invalidCrossClockSamples,
+      lastSignedCrossClockMs: this.lastSignedCrossClockMs,
       accepted: this.accepted,
       staleViewOrCleared: this.staleViewOrCleared,
       staleTick: this.staleTick,
