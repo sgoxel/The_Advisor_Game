@@ -929,6 +929,25 @@ export function streetTopologyComponents(edges: readonly (readonly number[])[]):
   return components;
 }
 
+// Wall/gate legality is a SEED exterior fact, not a street-graph lookup.
+// A failed field connector or overnight leg must not build every street node
+// merely to check the original identical enclosure polygons. Keep the same
+// canonical offsets and a bounded immutable working set.
+const settlementEnclosures = new Map<string, { border: Offset[]; gates: Offset[] }>();
+function enclosureFor(place: Place) {
+  const cached = settlementEnclosures.get(place.code);
+  if (cached) return cached;
+  const plan = settlementExteriorFor(place),
+    enclosure = {
+      border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
+      gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)),
+    };
+  settlementEnclosures.set(place.code, enclosure);
+  while (settlementEnclosures.size > 8)
+    settlementEnclosures.delete(settlementEnclosures.keys().next().value!);
+  return enclosure;
+}
+
 function streetGraphFor(place: Place): StreetGraph {
   const cached = streetGraphs.get(place.code);
   if (cached) return cached;
@@ -964,11 +983,11 @@ function streetGraphFor(place: Place): StreetGraph {
     gridBounds.minZ = Math.min(gridBounds.minZ, z);
     gridBounds.maxZ = Math.max(gridBounds.maxZ, z);
   }
+  const { border, gates } = enclosureFor(place);
   const graph = { nodes, edges, weights, components: streetTopologyComponents(edges), grid, gridBounds,
     legalEdges: new Map<string, boolean>(),
     nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[]>(),
-    border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
-    gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
+    border, gates, cell };
   streetGraphs.set(place.code, graph);
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
   return graph;
@@ -1123,7 +1142,7 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
       streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
     return false;
   }
-  const { border, gates } = streetGraphFor(place),
+  const { border, gates } = enclosureFor(place),
     legal = legalEnclosureSegment(from, to, border, gates) &&
       // Every original interpolated one-metre coordinate is still sampled.
       // Reuse its exact immutable SEED verdict across overlapping street,
