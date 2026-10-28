@@ -6,7 +6,7 @@ import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world
 import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, naturalWaterKindAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { places, roads, roadDistanceAt } from "./geography.ts";
+import { nearbyPlaces, roads, roadDistanceAt } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
 import { roadFragmentsInBounds } from "./continuity-corridor.ts";
 import {
@@ -101,7 +101,13 @@ export function rebuildNaturalSurface(
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
           r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12))
       .map(r => r.centerline ? canonicalDistanceRoadByLine.get(r.centerline) ?? r : r) : [],
-    preparedPlace = tile.size <= 512 && places.some(p =>
+    // At tile.size <= 512 the largest possible settlement reach is
+    // 510 + 512 * sqrt(2)/2 < 873 source units. Geography's immutable
+    // seam-aware 2048-unit buckets include every possible positive match
+    // in their 3x3 neighbourhood. Preserve the exact original predicate
+    // and SEED result, without scanning every settlement in the world for
+    // every ordinary detail tile.
+    preparedPlace = tile.size <= 512 && nearbyPlaces(tile.minX + tile.size / 2, tile.minZ + tile.size / 2).some(p =>
       Math.hypot(wrapSourceX(p.x - tile.minX - tile.size / 2), p.z - tile.minZ - tile.size / 2) <
         (p.kind === 'city' ? 510 : 170) + tile.size * Math.SQRT2 / 2),
     cache = new Map<string, Sample>(),
