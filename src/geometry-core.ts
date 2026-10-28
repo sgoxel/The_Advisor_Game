@@ -726,8 +726,13 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
   // natural soil so zoom can hide roads without new meshes or authority changes.
   for(let v=0;v<terrain.p.length/3;v++){
     const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];
-    const road=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceRenderChannelsAt(x,z).groundMaterial==="Road";
-    if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
+    const candidate=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62;
+    // Road-mask detection already loads the canonical composed surface. Pass
+    // that exact sample to the albedo routine instead of composing it twice
+    // for every retained road vertex in this worker tile.
+    const roadSurface=candidate?finalSurfaceRenderChannelsAt(x,z):undefined;
+    const road=roadSurface?.groundMaterial==="Road";
+    if(road){const tint=terrainTint(x,z,32,undefined,0,false,roadSurface);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
     terrain.c[c+3]=road?255:0;
   }
   for (const builder of [terrain, structures, nature, detail])
