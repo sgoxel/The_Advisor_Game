@@ -111,14 +111,21 @@ const minutes = (code: string, salt: string, span: number) => Math.floor(unit(`$
  * consecutive days join without jumps. Variation comes from role, age, weekday,
  * personality and the day's mood; the same inputs always give the same plan.
  */
-export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: number, weekday: number): Activity[] {
+export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: number, weekday: number, standingOnly = false): Activity[] {
   const { code, role, ageGroup } = subject, p = traits.personality,
-    d = (salt: string, span: number) => minutes(code, `${salt}/${day}`, span),
+    // Standing-slot ranks depend only on kind, anchor and indoor status.
+    // Do not compute the many seeded *clock minute* rolls for a roster query.
+    // Those rolls do not select an anchor or activity kind.
+    d = (salt: string, span: number) => standingOnly ? 0 : minutes(code, `${salt}/${day}`, span),
     morningMood = moodAt(code, traits, day, weekday, 8 * HOUR).value,
     eveningMood = moodAt(code, traits, day, weekday, 19 * HOUR).value,
     restDay = weekday === 6,
     plan: Activity[] = [],
-    add = (kind: ActivityKind, anchor: RoutineAnchor, start: number, task: string, indoors: boolean) => plan.push({ kind, anchor, start: clamp(Math.round(start), 0, 24 * HOUR - MINUTE), task, indoors });
+    add = (kind: ActivityKind, anchor: RoutineAnchor, start: number, task: string, indoors: boolean) => {
+      if (standingOnly) {
+        if (!indoors && anchor !== "home") plan.push({ kind, anchor, start: 0, task: "", indoors: false });
+      } else plan.push({ kind, anchor, start: clamp(Math.round(start), 0, 24 * HOUR - MINUTE), task, indoors });
+    };
 
   if (role === "guard") {
     // Twelve-hour watches: day shift 06-18, night shift 18-06, sleep in the other half.
@@ -143,7 +150,7 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
       add("commute", "home", 20.5 * HOUR + d("HOMEWARD", 40), "Walking home", false);
       add("sleep", "home", 21.5 * HOUR + d("SLEEP", 50), "Sleeping", true);
     }
-    return plan.sort((a, b) => a.start - b.start);
+    return standingOnly ? plan : plan.sort((a, b) => a.start - b.start);
   }
 
   // Waking: farmers at first light, the diligent earlier, elders later; rest day lie-in.
@@ -200,7 +207,16 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
   }
   const bedtime = ageGroup === "elder" ? 21 : role === "innkeeper" ? 23.2 : 21.8 + p.sociability * 1.1 - p.diligence * .4;
   add("sleep", "home", Math.max(bedtime * HOUR + d("SLEEP", 30), (plan[plan.length - 1]?.start ?? 0) + 25 * MINUTE), "Sleeping", true);
-  return plan.sort((a, b) => a.start - b.start);
+  return standingOnly ? plan : plan.sort((a, b) => a.start - b.start);
+}
+
+/** Deterministic roster-only view of the SAME day planner. Outdoor ranks do
+ * not depend on event times or indoor activities, so omit their expensive
+ * minute hashes, materialization and sort while preserving every actual
+ * outdoor (kind, anchor) occurrence in planner insertion order. Never use
+ * these partial entries to schedule or move an actor. */
+export function dailyStandingActivities(subject: RoutineSubject, traits: ResidentTraits, day: number, weekday: number): Activity[] {
+  return dailyPlan(subject, traits, day, weekday, true);
 }
 
 /** The plan entry active at a second of the day (plans always start at 00:00). */
