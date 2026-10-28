@@ -1964,7 +1964,8 @@ function relativeSourceForOffset(
   };
 }
 function residentIndexFor(place: Place, shard?: { index: number; count: number },
-  onCandidate?: (index: number, bounds: ResidentBucketBounds) => boolean): ResidentSpatialIndex {
+  onCandidate?: (index: number, bounds: ResidentBucketBounds) => boolean,
+  stopAfterIndexed?: (index: number, bounds: ResidentBucketBounds) => boolean): ResidentSpatialIndex {
   const bounds: (ResidentBucketBounds | undefined)[] = [],
     population = populationOf(place),
     anchors = settlementAnchors(place),
@@ -1997,7 +1998,7 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
   // Cold first-fact queries visit identities in their final rotated SEED
   // order. A fully resolved first resident can be reported before unrelated
   // residents finish indexing, while the final index remains complete.
-  const rotatedStart = onCandidate ? digest(`${place.code}/VISIBLE_START`) % population : 0;
+  const rotatedStart = onCandidate || stopAfterIndexed ? digest(`${place.code}/VISIBLE_START`) % population : 0;
   let previewResolved = false;
   for (let order = 0; order < population; order++) {
     const index = (rotatedStart + order) % population;
@@ -2031,6 +2032,10 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
     const bound = bounds[index] = { bx0, bx1, bz0, bz1 };
     if (onCandidate && !previewResolved)
       previewResolved = onCandidate(index, bound);
+    // Cold actor presentation needs no more than the canonical first bounded
+    // batch. Stop construction only for a transient scan, never cache a partial
+    // spatial index or omit any legal check on a returned resident.
+    if (stopAfterIndexed?.(index, bound)) break;
   }
   return { bounds, population };
 }
@@ -2357,6 +2362,60 @@ export class LazySimulation {
     // Preserve the exact original place/candidate ordering and legal checks.
     for (const place of settlements) {
       const candidateStarted = phases ? performance.now() : 0;
+      const key = shard ? `${place.code}|SHARD/${shard.index}/${shard.count}` : place.code;
+      if (prioritizeActors && !this.residentIndexes.has(key)) {
+        // The first visible street actors must not wait for an entire 2,400-
+        // resident cold index. Visit the SAME rotated SEED ranking in-place,
+        // with exact spatial bounds and residentAt route/ground validation.
+        // A cold partial scan is disposable: normal indexes stay complete.
+        const relativeX = wrapSourceX(x - place.x),
+          relativeZ = z - place.z,
+          search: ResidentBucketBounds = {
+            bx0: Math.floor((relativeX - radius) / RESIDENT_BUCKET_SOURCE),
+            bx1: Math.floor((relativeX + radius) / RESIDENT_BUCKET_SOURCE),
+            bz0: Math.floor((relativeZ - radius) / RESIDENT_BUCKET_SOURCE),
+            bz1: Math.floor((relativeZ + radius) / RESIDENT_BUCKET_SOURCE),
+          };
+        const started = performance.now();
+        const scanned = residentIndexFor(place, shard, undefined, (index, bounds) => {
+          if (!residentBucketBoundsOverlap(bounds, search)) return false;
+          query.candidateResidents++;
+          if (!residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+            exhausted = true;
+            return true;
+          }
+          const resident = residentAt(place, index, this.tick, phases);
+          query.evaluatedResidents++;
+          this.residentEvaluationsSinceAdvance++;
+          if (sourceDistance(resident.x, resident.z, x, z) <= radius) {
+            if (!firstValidated && onFirstValidated) {
+              firstValidated = true;
+              onFirstValidated(resident);
+            }
+            if (!resident.grounded || resident.indoors) indoorOrUnresolved.push(resident);
+            else visible.push(resident);
+          }
+          if (visible.length >= limit ||
+              !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+            exhausted = true;
+            return true;
+          }
+          return false;
+        });
+        this.lastResidentIndexBuildMs += performance.now() - started;
+        if (!exhausted) {
+          // A sparse camera can inspect every resident without hitting the
+          // actor quota. That scan *is* a complete canonical spatial index:
+          // retain it instead of cold-rebuilding the entire roster next tick.
+          this.residentIndexes.set(key, scanned);
+          while (this.residentIndexes.size > 16)
+            this.residentIndexes.delete(this.residentIndexes.keys().next().value!);
+          this.residentIndexBuilds++;
+        }
+        if (phases) phases.candidateLookupMs += performance.now() - candidateStarted;
+        if (exhausted) break;
+        continue;
+      }
       // Cold query: publish the first canonical, fully validated fact in final
       // rank order before completing unrelated immutable spatial bounds.
       // Reuse each early evaluation once the normal full batch resumes.
