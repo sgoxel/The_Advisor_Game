@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { terrainTint, buildTile } from '../src/geometry.ts';
 import { globeSurfaceColor } from '../src/globe-surface.ts';
 import { roadRepresentationAtScale, roadVisibleAtScale, localDetailWeight, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
-import { tileAt, tileForPosition, heightAt } from '../src/world.ts';
+import { tileAt, tileForPosition, heightAt, finalSurfaceRenderChannelsAt, finalSurfaceEvidenceAnchors } from '../src/world.ts';
+import { siteAccessRoads } from '../src/sites.ts';
 import { lonLatToFlat } from '../src/planet.ts';
 import { polarBoundaryAt } from '../src/climate.ts';
 
@@ -16,6 +17,27 @@ test('all tile sizes share exact canonical material albedo, including roads and 
     assert.deepEqual(globeSurfaceColor(p.x,p.z), [...new Uint8Array(terrainTint(p.x,p.z,32,undefined,0,false))]);
   }
 });
+test('S009 road-mask albedo reuses the exact composed surface without color changes', () => {
+  const branch = siteAccessRoads[0];
+  assert.ok(branch.centerline && branch.centerline.length > 1);
+  const stations = branch.centerline;
+  const midpoints = stations.slice(1).map((point, i) => ({
+    x: stations[i].x + (point.x - stations[i].x) / 2,
+    z: stations[i].z + (point.z - stations[i].z) / 2,
+  }));
+  const dryRoad = midpoints.find(({x,z}) => finalSurfaceRenderChannelsAt(x,z).groundMaterial === 'Road');
+  assert.ok(dryRoad, 'a real SEED-defined site-access road remains in this parity fixture');
+  const { bridge } = finalSurfaceEvidenceAnchors();
+  for (const {x,z} of [dryRoad, stations[0], stations[stations.length-1], bridge]) {
+    const canonical = finalSurfaceRenderChannelsAt(x,z);
+    assert.deepEqual(
+      terrainTint(x,z,32,undefined,0,false,canonical),
+      terrainTint(x,z,32,undefined,0,false),
+      'road-mask color must not change when the already-tested surface is reused',
+    );
+  }
+});
+
 test('continuous detail filtering has compatible endpoints and bounded transition', () => {
   assert.equal(localDetailWeight(70),1);
   assert.equal(localDetailWeight(900),1);
