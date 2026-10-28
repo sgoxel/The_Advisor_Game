@@ -1,0 +1,58 @@
+name: S009 feature-free water probe source-matched evidence
+on:
+  push:
+    branches: [agent1/wp-s009-001-water-probe-metrics-20261028]
+    paths: ['.github/workflows/agent1-s009-water-probe-metrics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: s009-water-probe-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  road-index-metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: Original screenshot-tool cold and warm real resident evidence
+        shell: bash
+        run: |
+          npm run preview -- --port 4174 >/tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:120000;shot:cold-facts;eval:window.advisorWorld.setHalfHeight(22);wait:15000;shot:warm-facts'
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 960s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s009-water-probe-metrics --name resident-water-probe --profile fullhd-landscape --renderer webgl2 --fixed-time-ms 1792874335750 --initial-ready-only --timeout 180 --steps "$STEPS"
+      - name: Print measured worker, upload and first-resident samples
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          file=pathlib.Path('test-results/s009-water-probe-metrics/capture.json')
+          if not file.exists():
+              print('Capture missing; worker p95, upload p95 and first facts PENDING')
+          else:
+              for entry in json.loads(file.read_text()):
+                  perf=entry.get('performance') or {}
+                  print('CAPTURE',entry.get('file'),'backend',entry.get('backend'),'viewport',entry.get('viewport'))
+                  for key in sorted(perf):
+                      if any(t in key.lower() for t in ('worker','upload','resident','generation','queue','first','transport')):
+                          print(key, json.dumps(perf.get(key),separators=(',',':'))[:12000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s009-water-probe-metrics
+          path: test-results/s009-water-probe-metrics/
+          if-no-files-found: warn
