@@ -196,6 +196,27 @@ test("resident inspector can resolve facts with early fully validated SEED resid
     "the early callback cannot abandon the complete canonical spatial index");
 });
 
+test("resident inspector can resolve facts for cold actors in exact completed-index order", () => {
+  const place = villages[0], tick = at(9, WORKDAY),
+    cold = new LazySimulation(), indexed = new LazySimulation();
+  cold.setFocus(place); cold.advance(tick);
+  indexed.setFocus(place); indexed.advance(tick);
+  // A fully indexed comparator retains the original canonical selection.
+  indexed.focusedResidents(place.x, place.z, 8, 8, undefined, false);
+  assert.equal(indexed.stats.residentIndexBuilds, 1);
+  const previews: ReturnType<typeof residentAt>[] = [];
+  const first = cold.focusedResidents(place.x, place.z, 8, 2, undefined, true, undefined,
+    resident => previews.push(resident));
+  const expected = indexed.focusedResidents(place.x, place.z, 8, 2, undefined, true);
+  assert.ok(first.length > 0, "actual settled SEED village must have inspectable actors");
+  assert.deepEqual(first, expected, "bounded cold scan cannot change a resident, order, route or ground verdict");
+  assert.equal(previews.length, 1, "only one fully validated preview is published");
+  assert.deepEqual(previews[0], residentAt(place, previews[0].index, tick),
+    "early first fact must have the complete original Simulation ground and route validation");
+  assert.ok(cold.stats.query.evaluatedResidents <= 4,
+    "limit-two outdoor scan must never evaluate more than four real residents");
+});
+
 test("resident inspector can resolve facts and close-up actors independently of optional scenery", () => {
   assert.deepEqual(residentViewQuery(48, true, false), { actors: false, inspect: true },
     "village-scale inspection must not wait for terrain or meshes");

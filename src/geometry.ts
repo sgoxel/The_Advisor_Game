@@ -36,13 +36,22 @@ class Builder {
   triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
     const o = this.origin, transform = (p: Point): Point => [o.x + p[0] * o.sx, o.y + p[1] * o.sy, o.z + p[2] * o.sz];
     [a, b, c] = [transform(a), transform(b), transform(c)];
-    const u = b.map((value, index) => value - a[index]), v = c.map((value, index) => value - a[index]),
-      normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], length = Math.hypot(...normal) || 1,
-      start = this.p.length / 3, points = [a, b, c], tints = [tintA, tintB, tintC];
-    for (let index = 0; index < points.length; index++) {
-      this.p.push(...points[index]);
-      this.n.push(...normal.map((value) => value / length));
-      this.c.push(...tints[index], 255);
+    // Reuse the exact transformed triangle and cross-product order without
+    // temporary edge/normal arrays or a fresh normal map for every vertex.
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2],
+      vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2],
+      nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx,
+      length = Math.hypot(nx, ny, nz) || 1,
+      normalX = nx / length, normalY = ny / length, normalZ = nz / length,
+      start = this.p.length / 3;
+    for (let index = 0; index < 3; index++) {
+      const point = index === 0 ? a : index === 1 ? b : c;
+      const tint = index === 0 ? tintA : index === 1 ? tintB : tintC;
+      this.p.push(...point);
+      this.n.push(normalX, normalY, normalZ);
+      this.c.push(...tint, 255);
     }
     this.i.push(start, start + 1, start + 2);
   }
