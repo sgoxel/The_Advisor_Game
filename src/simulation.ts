@@ -818,11 +818,30 @@ export function orderedResidentIndicesByStandingRank(list: readonly (readonly [n
   return ordered;
 }
 
+/** Compact rank/index pairs in the canonical resident order avoid allocating a
+ * separate two-number tuple for every standing-ground membership. The stable
+ * 0–9 counting order remains exactly rank, then ascending resident index. */
+export function orderedPackedResidentIndicesByStandingRank(pairs: readonly number[]): Uint32Array {
+  if (pairs.length % 2) throw new RangeError("Standing rank/index pairs must be complete");
+  const next = new Uint32Array(10);
+  for (let i = 0; i < pairs.length; i += 2) next[pairs[i]]++;
+  let start = 0;
+  for (let rank = 0; rank < next.length; rank++) {
+    const count = next[rank];
+    next[rank] = start;
+    start += count;
+  }
+  const ordered = new Uint32Array(pairs.length / 2);
+  for (let i = 0; i < pairs.length; i += 2) ordered[next[pairs[i]]++] = pairs[i + 1];
+  return ordered;
+}
+
 function standTableFor(place: Place): StandTable {
   const anchors = settlementAnchors(place);
   if (anchors.stand) return anchors.stand;
   const exteriorPlan = settlementExteriorFor(place);
-  const users = new Map<string, [number, number][]>();
+  // Flat rank/index pairs avoid thousands of short-lived arrays on a cold city roster.
+  const users = new Map<string, number[]>();
   for (let index = 0; index < populationOf(place); index++) {
     const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
       // Every occurrence of the same routine anchor has one immutable SEED
@@ -837,15 +856,15 @@ function standTableFor(place: Place): StandTable {
       const ground = anchors.areas.get(coordKey(anchorOffset(place, foundation, anchor)));
       if (ground) best.set(ground.key, Math.min(best.get(ground.key) ?? 99, rank));
     }
-    for (const [key, rank] of best) { const list = users.get(key); if (list) list.push([rank, index]); else users.set(key, [[rank, index]]); }
+    for (const [key, rank] of best) { const list = users.get(key); if (list) list.push(rank, index); else users.set(key, [rank, index]); }
   }
   const slotOf = new Map<string, number>(), total = new Map<string, number>();
   for (const [key, list] of users) {
     // The population loop appended resident indexes in ascending order.
     // Ten integer activity ranks permit a stable linear pass without sorting.
-    const ordered = orderedResidentIndicesByStandingRank(list);
+    const ordered = orderedPackedResidentIndicesByStandingRank(list);
     ordered.forEach((index, slot) => slotOf.set(`${key}|${index}`, slot));
-    total.set(key, list.length);
+    total.set(key, ordered.length);
   }
   return anchors.stand = { slotOf, total };
 }
