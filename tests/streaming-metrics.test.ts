@@ -120,3 +120,24 @@ test("overlapping resident timings stay attached to their own request IDs", () =
   metrics.complete(1, true, 101);
   assert.equal(metrics.summary().accepted, 1, "duplicate completions cannot mutate statistics");
 });
+
+test("separate bounded coverage/detail worker stages expose honest p95 without changing work", async () => {
+  const { TileWorkerPhaseSamples } = await import("../src/streaming-metrics.ts");
+  const phases = new TileWorkerPhaseSamples();
+  assert.equal(phases.summary().coverage.totalMs.p95, null);
+  phases.record("residents", { totalMs: 9000 });
+  phases.record("coverage", { baseMs: 3, groundRefinementMs: 4, decorationMs: 1, totalMs: 8 });
+  phases.record("coverage", { baseMs: 4, groundRefinementMs: 5, decorationMs: 2, totalMs: 11 });
+  phases.record("detail", { baseMs: 20, groundRefinementMs: 80, decorationMs: 40, totalMs: 140 });
+  phases.record("detail", { baseMs: NaN, groundRefinementMs: -1, decorationMs: Infinity });
+  const summary = phases.summary();
+  assert.deepEqual(summary.coverage.totalMs, { samples: 2, latest: 11, p50: 8, p95: 11, p99: 11 });
+  assert.equal(summary.coverage.baseMs.p95, 4);
+  assert.equal(summary.detail.groundRefinementMs.p95, 80);
+  assert.equal(summary.detail.totalMs.p95, 140);
+  assert.equal(summary.detail.baseMs.samples, 1, "invalid stage data may not produce a fake zero");
+  assert.equal(summary.coverage.totalMs.samples, 2, "unrelated resident jobs never count as tiles");
+  for (let i = 0; i < 320; i++) phases.record("detail", { totalMs: i });
+  assert.equal(phases.summary().detail.totalMs.samples, 300, "stage timing ring remains bounded");
+  assert.equal(phases.summary().coverage.totalMs.samples, 2, "detail work does not contaminate coverage p95");
+});
