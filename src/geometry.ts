@@ -132,7 +132,16 @@ function buildTerrainOnly(tile: Tile): TileGeometry {
         Math.max(ca[1], cb[1], cc[1], cd[1]) - Math.min(ca[1], cb[1], cc[1], cd[1]),
         Math.max(ca[2], cb[2], cc[2], cd[2]) - Math.min(ca[2], cb[2], cc[2], cd[2]),
       );
-    if (depth < 4 && range > 10) {
+    // Temporary broad coverage must be cheap enough to hand the worker back
+    // for authoritative resident queries and complete tile detail. Four
+    // refinement levels could turn each 8x8 preview into 16,384 quads.
+    // Keep one level for dry colour transitions and an extra level where
+    // water/ground semantics differ; the detailed mesh remains unchanged.
+    const waterKind = coveragePoints.get(`${a[0]}/${a[2]}`)!.surface.water.kind,
+      waterBoundary = coveragePoints.get(`${b[0]}/${b[2]}`)!.surface.water.kind !== waterKind ||
+        coveragePoints.get(`${c[0]}/${c[2]}`)!.surface.water.kind !== waterKind ||
+        coveragePoints.get(`${d[0]}/${d[2]}`)!.surface.water.kind !== waterKind;
+    if (depth < (waterBoundary ? 2 : 1) && range > 10) {
       const half = size / 2;
       coverageQuad(x, z, half, depth + 1); coverageQuad(x + half, z, half, depth + 1);
       coverageQuad(x, z + half, half, depth + 1); coverageQuad(x + half, z + half, half, depth + 1);
