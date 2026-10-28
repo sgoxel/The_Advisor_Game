@@ -5,7 +5,7 @@ import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSe
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 import { continuousWalkableOffsetSegment, residentEndpointWalkable, legalPosition } from "../src/simulation.ts";
-import { dailyPlan, dailyStandingActivities, traitsFor, type RoutineSubject } from "../src/routines.ts";
+import { dailyPlan, dailyStandingActivities, personalityFor, traitsFor, type RoutineSubject } from "../src/routines.ts";
 
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
@@ -500,6 +500,11 @@ test("S009 roster-only daily activities preserve every canonical outdoor rank an
                 .map(entry => `${entry.kind}/${entry.anchor}`).sort();
           assert.deepEqual(normalize(reduced), normalize(original),
             `${role} ${ageGroup} shift ${guardShift} day ${day}/${weekday}`);
+          const personality = personalityFor(subject.code, role);
+          assert.deepEqual(personality, traits.personality,
+            "lean SEED personality must equal the full immutable trait calculation");
+          assert.deepEqual(normalize(dailyStandingActivities(subject, { personality }, day, weekday)),
+            normalize(original), "lean personality must preserve full standing-slot ranks");
           assert.ok(reduced.every(entry => !entry.indoors && entry.anchor !== "home"));
           fullEntries += original.length;
           standingEntries += reduced.length;
