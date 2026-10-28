@@ -1,10 +1,25 @@
 // Shared Mixamo playback. Source files stay in Studio; reusable clips load once.
 const manifests=new Map(),clipCache=new Map(),trackCache=new Map();
 const legacy={Hips:'Hips',Spine:'Spine1',Head:'Head','Arm.L':'LeftArm','Forearm.L':'LeftForeArm','Arm.R':'RightArm','Forearm.R':'RightForeArm','Thigh.L':'LeftUpLeg','Shin.L':'LeftLeg','Thigh.R':'RightUpLeg','Shin.R':'RightLeg'};
-export async function loadPack(base=document.baseURI){
+export function animationProfile(character={}){
+ const explicit=typeof character==='string'?character:character.animationProfile||character.animation_profile||character.export?.animationProfile;
+ if(['female','male','action-adventure'].includes(explicit))return explicit;
+ const text=(typeof character==='object'?[character.height_preset,character.name,character.key].filter(Boolean).join(' '):String(character)).replaceAll('_',' ').toLowerCase();
+ if(/female|woman|girl/.test(text))return 'female';
+ return 'male';
+}
+export async function loadPack(base=document.baseURI,profile='action-adventure'){
  const url=new URL('animations/action-adventure/manifest.json',base).href;
  if(!manifests.has(url))manifests.set(url,fetch(url).then(r=>{if(!r.ok)throw Error('Animation pack unavailable');return r.json();}).catch(e=>{manifests.delete(url);throw e;}));
- return manifests.get(url);
+ const original=await manifests.get(url);
+ if(profile==='action-adventure')return original;
+ if(!['female','male'].includes(profile))throw Error('Invalid locomotion profile');
+ const selected=new URL(`animations/basic-locomotion/${profile}/manifest.json`,base).href;
+ if(!manifests.has(selected))manifests.set(selected,fetch(selected).then(r=>{if(!r.ok)throw Error(profile+' locomotion pack unavailable');return r.json();}).then(primary=>{
+  const clips=new Map(original.clips.map(entry=>[entry.id,{...entry,sourceProfile:'action-adventure'}]));for(const entry of primary.clips)clips.set(entry.id,entry);
+  const merged={...primary,clips:[...clips.values()]};for(const id of Object.values(merged.defaults))if(!clips.has(id))throw Error('Missing default animation '+id);return merged;
+ }).catch(e=>{manifests.delete(selected);throw e;}));
+ return manifests.get(selected);
 }
 async function loadClip(entry,base){
  const url=new URL(entry.url,base).href;
@@ -62,11 +77,11 @@ function compile(pc,model,joints,clip,inPlace){
  }
  const track=new pc.AnimTrack(clip.id,clip.duration,inputs,outputs,curves);trackCache.set(signature,track);return track;
 }
-export async function attachPack(pc,app,model,{base=document.baseURI,inPlace=true,onStatus=()=>{}}={}){
+export async function attachPack(pc,app,model,{base=document.baseURI,inPlace=true,onStatus=()=>{},profile='action-adventure'}={}){
  const joints=inspectRig(pc,model),hip=joints.find(j=>j.source==='Hips');
  if(!hip||!joints.some(j=>j.source==='LeftArm'))return null;
  const rest=joints.map(j=>({node:j.node,position:j.position,rotation:j.rotation}));
- const pack=await loadPack(base);if(model._destroying||model._destroyed)return null;
+ const pack=await loadPack(base,profile);if(model._destroying||model._destroyed)return null;
  const entries=new Map(pack.clips.map(entry=>[entry.id,entry]));
  let alive=true,requested='',paused=false,rate=1,manual=false,mode='tpose',generation=0;
  const resetBones=()=>{for(const j of rest){j.node.setLocalPosition(j.position);j.node.setLocalRotation(j.rotation);}};
@@ -103,7 +118,7 @@ export async function attachPack(pc,app,model,{base=document.baseURI,inPlace=tru
   speed(value){rate=Math.max(.25,Math.min(2,Number(value)||1));model.anim.speed=paused?0:rate;},
   async inPlace(value){if(inPlace===value)return;inPlace=value;assigned.clear();return play(requested||'tpose',0);},
   reset(){paused=false;return play('tpose',0);},
-  snapshot(){return {supported:true,motion:mode,playing:!paused,bones:joints.length,time:model.anim?.baseLayer?.activeStateCurrentTime||0,
+  snapshot(){return {supported:true,profile:pack.profile||'action-adventure',sourceProfile:entries.get(mode)?.sourceProfile||'action-adventure',sourceSha256:entries.get(mode)?.sourceSha256,motion:mode,playing:!paused,bones:joints.length,time:model.anim?.baseLayer?.activeStateCurrentTime||0,
     hips:hip.node.getLocalPosition().toString(),root:model.getLocalPosition().toString(),
     transforms:Object.fromEntries(joints.map(j=>[j.source,j.node.getLocalRotation().toString()]))};},
   destroy(){alive=false;generation++;model.removeComponent('anim');resetBones();},

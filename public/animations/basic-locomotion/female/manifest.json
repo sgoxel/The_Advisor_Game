@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "profile": "female",
+  "name": "Female Basic Locomotion",
+  "source": "User-supplied FBX files",
+  "clips": [
+    {
+      "id": "idle",
+      "name": "Female \u00b7 Idle",
+      "url": "animations/basic-locomotion/female/idle.json",
+      "duration": 8.333333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle.fbx",
+      "sourceSha256": "90a0c464e7692151e06814ef907d2a5be8f4b350912957066eb1ec54803f7852",
+      "sourceProfile": "female",
+      "rootTravelM": 0.0
+    },
+    {
+      "id": "jumping-up",
+      "name": "Female \u00b7 Jump",
+      "url": "animations/basic-locomotion/female/jumping-up.json",
+      "duration": 1.666667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "jump.fbx",
+      "sourceSha256": "71699f9ef6731672f8e85c70c574dbea2c01bdeba3274049b3efa9b194822d6c",
+      "sourceProfile": "female",
+      "rootTravelM": 0.0
+    },
+    {
+      "id": "left-strafe-walking",
+      "name": "Female \u00b7 Left Strafe Walk",
+      "url": "animations/basic-locomotion/female/left-strafe-walking.json",
+      "duration": 0.933333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "left strafe walk.fbx",
+      "sourceSha256": "067e212d225b75248420c31d1270c8669adddde731f68b71892abab55859d5bd",
+      "sourceProfile": "female",
+      "rootTravelM": 1.737052
+    },
+    {
+      "id": "left-strafe",
+      "name": "Female \u00b7 Left Strafe",
+      "url": "animations/basic-locomotion/female/left-strafe.json",
+      "duration": 0.666667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "left strafe.fbx",
+      "sourceSha256": "89869d162846a260873716a86f9e74102a60e169515072a52bb0690cd54187ef",
+      "sourceProfile": "female",
+      "rootTravelM": 2.301691
+    },
+    {
+      "id": "left-turn-2",
+      "name": "Female \u00b7 Left Turn (2)",
+      "url": "animations/basic-locomotion/female/left-turn-2.json",
+      "duration": 1.166667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "left turn (2).fbx",
+      "sourceSha256": "63544cf2661b4f0881edef806ddc78542115414dae1d693aa8354ea724a862c2",
+      "sourceProfile": "female",
+      "rootTravelM": 5e-06
+    },
+    {
+      "id": "left-turn",
+      "name": "Female \u00b7 Left Turn",
+      "url": "animations/basic-locomotion/female/left-turn.json",
+      "duration": 1.166667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "left turn.fbx",
+      "sourceSha256": "d743c8fb6cc2214d5b5f64499c437f66cc0d67511eeab47739615e54125106d0",
+      "sourceProfile": "female",
+      "rootTravelM": 0.006224
+    },
+    {
+      "id": "right-strafe-walking",
+      "name": "Female \u00b7 Right Strafe Walk",
+      "url": "animations/basic-locomotion/female/right-strafe-walking.json",
+      "duration": 0.933333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "right strafe walk.fbx",
+      "sourceSha256": "890d13075318dbdf993f85afda1105bd2d63b1c58073527095367da86ec30081",
+      "sourceProfile": "female",
+      "rootTravelM": 1.73581
+    },
+    {
+      "id": "right-strafe",
+      "name": "Female \u00b7 Right Strafe",
+      "url": "animations/basic-locomotion/female/right-strafe.json",
+      "duration": 0.666667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "right strafe.fbx",
+      "sourceSha256": "04d9ccc492941650856b9b30d2ec01dc1956b1b2039eef1cb148b7eb005598d5",
+      "sourceProfile": "female",
+      "rootTravelM": 2.30169
+    },
+    {
+      "id": "right-turn-2",
+      "name": "Female \u00b7 Right Turn (2)",
+      "url": "animations/basic-locomotion/female/right-turn-2.json",
+      "duration": 1.166667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "right turn (2).fbx",
+      "sourceSha256": "2054ed29c35317a99334d4d5306ee0a92fb053d480f8a2e5d02dd12f339acc51",
+      "sourceProfile": "female",
+      "rootTravelM": 0.0
+    },
+    {
+      "id": "right-turn",
+      "name": "Female \u00b7 Right Turn",
+      "url": "animations/basic-locomotion/female/right-turn.json",
+      "duration": 1.166667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "right turn.fbx",
+      "sourceSha256": "2bbe7ce4f9757f4e45f3c75db4e69866ad34fee57444a98c93ea1946e3767c2f",
+      "sourceProfile": "female",
+      "rootTravelM": 0.006228
+    },
+    {
+      "id": "running",
+      "name": "Female \u00b7 Running",
+      "url": "animations/basic-locomotion/female/running.json",
+      "duration": 0.7,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "running.fbx",
+      "sourceSha256": "b75918f23f4fd1331e9ae0e2714411f2ae88b0efdb65deadc139854a6fa4538f",
+      "sourceProfile": "female",
+      "rootTravelM": 2.519544
+    },
+    {
+      "id": "walking",
+      "name": "Female \u00b7 Walking",
+      "url": "animations/basic-locomotion/female/walking.json",
+      "duration": 0.966667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "walking.fbx",
+      "sourceSha256": "c866a12a24e5f1e26f4a11b35e65fd190cb1acde1003b784ec3cf3ab0fc1e9f4",
+      "sourceProfile": "female",
+      "rootTravelM": 1.547111
+    }
+  ],
+  "defaults": {
+    "idle": "idle",
+    "walk": "walking",
+    "run": "running"
+  },
+  "fallbackPack": "animations/action-adventure/manifest.json",
+  "fallbacks": []
+}

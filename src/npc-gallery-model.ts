@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { npcModels } from './npc-models.ts';
-import { attachPack, type PackController } from '../public/animations/action-adventure/player.js';
+import { attachPack, animationProfile, type PackController } from '../public/animations/action-adventure/player.js';
 
 /** Gallery-only model loading keeps the world's resident presentation independent. */
 export async function loadGalleryCharacter(app: pc.AppBase) {
@@ -52,7 +52,7 @@ export async function loadGalleryCharacter(app: pc.AppBase) {
       actor.tags.remove('animation-ready');
       actor.tags.remove('animation-unavailable');
       // The neutral export shares downloaded clips; horizontal root travel stays in place.
-      void attachPack(pc, app, model, { inPlace: true }).then(async player => {
+      void attachPack(pc, app, model, { inPlace: true, profile:animationProfile({...entry,key}) }).then(async player => {
         if (!player) { actor.tags.add('animation-unavailable'); return; }
         if (models.get(actor) !== model) { player.destroy(); return; }
         players.set(actor, player);

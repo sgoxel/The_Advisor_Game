@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "profile": "male",
+  "name": "Male Basic Locomotion",
+  "source": "User-supplied FBX files",
+  "clips": [
+    {
+      "id": "idle",
+      "name": "Male \u00b7 Idle",
+      "url": "animations/basic-locomotion/male/idle.json",
+      "duration": 8.066667,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "idle.fbx",
+      "sourceSha256": "e0ee8b75d7b18968771057c53fa777e799f04a349e89fb96a34bc73f75d781ff",
+      "sourceProfile": "male",
+      "rootTravelM": 0.002574
+    },
+    {
+      "id": "jumping-up",
+      "name": "Male \u00b7 Jump",
+      "url": "animations/basic-locomotion/male/jumping-up.json",
+      "duration": 2.166667,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "jump.fbx",
+      "sourceSha256": "2c24e93f495379996b3189d51c522d398fe63b92291429e2f54426a3c05ad496",
+      "sourceProfile": "male",
+      "rootTravelM": 0.0
+    },
+    {
+      "id": "left-strafe-walking",
+      "name": "Male \u00b7 Left Strafe Walking",
+      "url": "animations/basic-locomotion/male/left-strafe-walking.json",
+      "duration": 1.033333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "left strafe walking.fbx",
+      "sourceSha256": "028ba694ab059024e1bcdb4ba4693d4d18cd92449d9da281489f7b295cf8afba",
+      "sourceProfile": "male",
+      "rootTravelM": 1.70838
+    },
+    {
+      "id": "left-turn",
+      "name": "Male \u00b7 Left Turn 90",
+      "url": "animations/basic-locomotion/male/left-turn.json",
+      "duration": 0.9,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "left turn 90.fbx",
+      "sourceSha256": "4db173276440961bc0a7e920445fbe42f527202dbe7874836edf7f74191ddf58",
+      "sourceProfile": "male",
+      "rootTravelM": 0.006691
+    },
+    {
+      "id": "right-strafe-walking",
+      "name": "Male \u00b7 Right Strafe Walking",
+      "url": "animations/basic-locomotion/male/right-strafe-walking.json",
+      "duration": 1.033333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "right strafe walking.fbx",
+      "sourceSha256": "91ea5af1e58b5edb61bfc88fed08bbeaabfb6f55f797659896f17147857eadfa",
+      "sourceProfile": "male",
+      "rootTravelM": 1.70838
+    },
+    {
+      "id": "right-turn",
+      "name": "Male \u00b7 Right Turn 90",
+      "url": "animations/basic-locomotion/male/right-turn.json",
+      "duration": 0.933333,
+      "loop": false,
+      "bones": 65,
+      "sourceFile": "right turn 90.fbx",
+      "sourceSha256": "2a72f73f9b1132bc06f413ab05325b9e65af702c78f16c609621922bb54800da",
+      "sourceProfile": "male",
+      "rootTravelM": 0.005145
+    },
+    {
+      "id": "walking",
+      "name": "Male \u00b7 Walking",
+      "url": "animations/basic-locomotion/male/walking.json",
+      "duration": 1.033333,
+      "loop": true,
+      "bones": 65,
+      "sourceFile": "walking.fbx",
+      "sourceSha256": "c8a23374ddebc33b4765ca2dcbe238c0e4787ac1b6c11c7ea8b8504ef8dcb603",
+      "sourceProfile": "male",
+      "rootTravelM": 1.646444
+    }
+  ],
+  "defaults": {
+    "idle": "idle",
+    "walk": "walking",
+    "run": "running"
+  },
+  "fallbackPack": "animations/action-adventure/manifest.json",
+  "fallbacks": [
+    "running"
+  ]
+}

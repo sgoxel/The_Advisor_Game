@@ -26,7 +26,7 @@ async function start() {
   camera.addComponent('camera', { fov: 32, nearClip: .01, farClip: 100, clearColor: new pc.Color(.086, .137, .118) });
   app.root.addChild(camera);
   const light = new pc.Entity('Studio light');
-  light.addComponent('light', { type: 'directional', intensity: 1.3 });
+  light.addComponent('light', { type: 'directional', intensity: 1.3, castShadows:true, shadowResolution:1024, shadowDistance:8, shadowBias:.2, normalOffsetBias:.02 });
   light.setEulerAngles(40, -30, 0);
   app.root.addChild(light);
   const factory = await loadGalleryCharacter(app);
