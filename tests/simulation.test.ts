@@ -41,6 +41,7 @@ import {
   residentViewQuery,
   threeNearestOffsets,
   residentBucketBoundsOverlap,
+  orderedResidentIndicesByStandingRank,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -55,6 +56,25 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {
+  // The population scan appends canonical indexes in ascending order. Its
+  // original comparator sorts first by activity rank (0–9), then by index.
+  for (const n of [0, 1, 2, 3, 12, 101, 480, 2400])
+    for (let mode = 0; mode < 6; mode++) {
+      const list: [number, number][] = Array.from({ length: n }, (_, i) => [
+        mode === 0 ? 0 : mode === 1 ? 9 : mode === 2 ? i % 10 :
+          mode === 3 ? 9 - i % 10 : mode === 4 ? (i * i + 3) % 10 :
+            (i * 7 + (i >> 2)) % 10,
+        i * 3 + 1,
+      ]);
+      const expected = [...list].sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, index]) => index);
+      assert.deepEqual([...orderedResidentIndicesByStandingRank(list)], expected,
+        `same SEED slots for population ${n} distribution ${mode}`);
+      assert.deepEqual(list.map(([, index]) => index), Array.from({ length: n }, (_, i) => i * 3 + 1),
+        "never mutate original canonical resident enumeration");
+    }
+});
 
 test("the roster and seeded population exclude child characters and deleted sprites", () => {
   for (const type of Object.values(CHARACTER_TYPES)) {
