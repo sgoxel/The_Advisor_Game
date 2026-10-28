@@ -24,6 +24,7 @@ import {
   unfinishedOrBlockedOvernightReturn,
   provablyLateWithoutStreetSearch,
   routineHasProvablyLateLeg,
+  provablyLateWithStandingBounds,
   walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -457,6 +458,29 @@ test("resident street connectors at dense SEED junctions find later legal nodes 
     return false;
   }), -1, "a failed real ground/gate check cannot turn proximity into a lawful path");
   assert.ok(blockedChecks <= 17, "even a fully blocked dense junction cannot trigger an unbounded scan");
+});
+
+test("civilian midnight replay is gated: SEED standing radii conservatively prove late commutes", () => {
+  const from = { eastM: 0, northM: 0 }, to = { eastM: 260, northM: 0 };
+  // Every real standing slot is within four SEED area radii of its anchor.
+  // A positive proof must survive even the closest permitted displacement.
+  assert.equal(provablyLateWithStandingBounds(from, to, 20, 30, 65), true,
+    "even the closest legal slots are farther than the available walk");
+  for (const a of [-20, -10, 0, 10, 20])
+    for (const b of [-30, -15, 0, 15, 30]) {
+      const actualFrom = { eastM: a, northM: 0 },
+        actualTo = { eastM: to.eastM + b, northM: 0 };
+      assert.equal(provablyLateWithoutStreetSearch(actualFrom, actualTo, 65), true,
+        "all allowed exact slots inherit the positive lower-bound proof");
+    }
+  assert.equal(provablyLateWithStandingBounds(from, to, 150, 150, 65), false,
+    "overlapping possible ground slots remain uncertain and require exact routing");
+  assert.equal(provablyLateWithStandingBounds(from, from, 0, 0, 20), false,
+    "a stationary resident cannot be declared late from a nonzero-distance proof");
+  assert.equal(provablyLateWithStandingBounds(from, to, -1, 5, 65), false,
+    "invalid standing-radius bounds cannot authorize an early at-risk classification");
+  assert.equal(provablyLateWithStandingBounds(from, to, Infinity, 0, 65), false,
+    "unbounded displacements never bypass the physical route search");
 });
 
 test("civilian midnight replay is gated: a later impossible deadline skips every costly street search", () => {
