@@ -97,22 +97,27 @@ function mergeGeometry(a: Geometry, b: Geometry): Geometry {
  */
 function buildTerrainOnly(tile: Tile): TileGeometry {
   const terrain = new Builder(), resolution = Math.min(8, tile.size / 2), step = tile.size / resolution,
-    coveragePoints = new Map<string, Point>(), coverageTints = new Map<string, RGB>();
+    // The exact immutable composed surface used for the vertex elevation also
+    // determines its tint. Keep both together so tinting never re-queries it.
+    coveragePoints = new Map<string, { point: Point; surface: ReturnType<typeof finalSurfaceRenderChannelsAt> }>(),
+    coverageTints = new Map<string, RGB>();
   const point = (px: number, pz: number): Point => {
     const key = `${px}/${pz}`;
     let value = coveragePoints.get(key);
     if (!value) {
       const surface = finalSurfaceRenderChannelsAt(px, pz);
-      value = [px, surface.water.kind === "none" ? surface.groundHeight : surface.water.level, pz];
+      value = { point: [px, surface.water.kind === "none" ? surface.groundHeight : surface.water.level, pz], surface };
       coveragePoints.set(key, value);
     }
-    return value;
+    return value.point;
   };
   const tintAt = (value: Point): RGB => {
     const key = `${value[0]}/${value[2]}`;
     let tint = coverageTints.get(key);
     if (!tint) {
-      tint = coreTerrainTint(value[0], value[2], tile.size, value[1], step, false);
+      // Exact same input channels as the old second final-surface lookup.
+      tint = coreTerrainTint(value[0], value[2], tile.size, value[1], step, false,
+        coveragePoints.get(key)!.surface);
       coverageTints.set(key, tint);
     }
     return tint;
