@@ -1343,15 +1343,17 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return stationary;
   }
-  // Exact endpoint legality is required by EVERY street connector, open-ground
-  // detour, bridge and gate leg. Reject impossible routes before materializing
-  // a settlement graph or exploring its costly nearest-node/A* candidates.
-  // An eligible endpoint merely permits the original full path validation.
-  if (!routeEndpointsWalkable(from, to, point => {
+  // Every candidate street connector, exterior detour and gate approach
+  // checks its canonical origin as the exact t=0 one-metre sample. Reject
+  // unwalkable origins before constructing the cold street graph. Do NOT
+  // preflight the destination: t=1 interpolation can differ by one ULP from
+  // its exact coordinate, so a valid route still needs its original checks.
+  const endpointWalkable = (point: Offset) => {
     const position = canonicalOffset(place, point.eastM, point.northM),
       source = lonLatToSource(position.lon, position.lat);
     return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  })) {
+  };
+  if (!endpointWalkable(from)) {
     pathCache.set(key, null);
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return null;
@@ -1441,6 +1443,14 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       }
       }
     }
+  }
+  // Preserve the original post-street-failure destination rejection.
+  // The canonical origin was already checked above; a blocked destination
+  // still cannot be made walkable by the physically validated fallbacks.
+  if (!path && !endpointWalkable(to)) {
+    pathCache.set(key, null);
+    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+    return null;
   }
   // Some outdoor work sites are reached over open walkable ground rather than a
   // settlement street. Allow that physical corridor only after checking EVERY
