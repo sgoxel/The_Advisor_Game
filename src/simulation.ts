@@ -1642,19 +1642,23 @@ export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | nul
     progress = Math.max(0, Math.min(1, remainingSeconds / durationSeconds));
   return progress < 1;
 }
-/** The street route sorts exact endpoint strings before its directed
- * metre-sample check. Only its lower ordered endpoint is guaranteed to be
- * sampled at exact t=0; the higher endpoint's interpolated t=1 may differ
- * by one ULP. A blocked *forward-ordered* leg origin is therefore an
- * impossibility proof; reverse/uncertain routes retain original validation.
- * Field-entry routes also check the same origin connector at exact t=0. */
+/** Street routing normalizes endpoint strings. Its lower endpoint is always
+ * sampled at exact t=0, whereas the higher endpoint's interpolated t=1 can
+ * differ by one ULP. A blocked lower endpoint is therefore impossible for
+ * an ordinary route in either caller direction. A field entry may avoid that
+ * exact endpoint, so only its forward caller origin remains a safe proof. */
 export function routineHasBlockedOrigin<T extends Offset>(
-  legs: readonly { from: T; to: T }[], walkable: (origin: T) => boolean,
+  legs: readonly { from: T; to: T; fromEntry?: Offset; toEntry?: Offset }[],
+  walkable: (point: T) => boolean,
 ): boolean {
   for (const leg of legs) {
     const fromId = `${leg.from.eastM},${leg.from.northM}`,
       toId = `${leg.to.eastM},${leg.to.northM}`;
-    if (compareText(fromId, toId) <= 0 && !walkable(leg.from)) return true;
+    if (compareText(fromId, toId) <= 0) {
+      if (!walkable(leg.from)) return true;
+    } else if (!leg.fromEntry && !leg.toEntry && !walkable(leg.to)) {
+      return true;
+    }
   }
   return false;
 }
@@ -1767,6 +1771,7 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   type DeadlineLeg = {
     fromAnchor: RoutineAnchor; toAnchor: RoutineAnchor;
     from: Offset; to: Offset; remainingSeconds: number;
+    fromEntry?: Offset; toEntry?: Offset;
   };
   const legs: DeadlineLeg[] = [];
   let fromAnchor = plan[0].anchor,
@@ -1784,19 +1789,19 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
         break;
       }
     legs.push({ fromAnchor, toAnchor: next.anchor, from, to,
-      remainingSeconds: nextDeparture - next.start - 1 });
+      remainingSeconds: nextDeparture - next.start - 1,
+      fromEntry: fieldEntry(place, foundation, fromAnchor),
+      toEntry: fieldEntry(place, foundation, next.anchor) });
     from = to;
     fromAnchor = next.anchor;
   }
-  // A later blocked *forward-ordered* exact t=0 origin makes a
-  // mandatory route impossible. Never preflight reverse-ordered legs:
-  // their original t=1 sample may differ from the exact endpoint by one ULP.
+  // Check each street leg's actual normalized t=0 point before any earlier
+  // path search. A reverse field-entry leg remains uncertain and is skipped.
   let risk = routineHasProvablyLateLeg(legs) ||
     routineHasBlockedOrigin(legs, originWalkable);
   if (!risk) for (const leg of legs) {
     const route = routinePath(place, leg.from, leg.to,
-      fieldEntry(place, foundation, leg.fromAnchor),
-      fieldEntry(place, foundation, leg.toAnchor));
+      leg.fromEntry, leg.toEntry);
     if (unfinishedOrBlockedOvernightReturn(route, leg.remainingSeconds)) {
       risk = true;
       break;
