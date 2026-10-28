@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
-import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange } from "../src/simulation.ts";
+import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, continuousWalkableOffsetSegment, residentEndpointWalkable, legalPosition } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
@@ -13,6 +13,26 @@ test("S009 unchanged prior-day anchors cannot require a physical homecoming rout
   assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "work" }, { anchor: "home" }]), true);
   assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "home" }, { anchor: "market" }]), true);
   assert.equal(routineHasAnchorChange([]), false);
+});
+
+test("S009 repeated metre samples retain exact original SEED walkability in either direction", () => {
+  const place = villages[0],
+    samples = [
+      [{ eastM: 0, northM: 0 }, { eastM: 13, northM: -8 }],
+      [{ eastM: -0, northM: 0 }, { eastM: 8, northM: -0 }],
+      [{ eastM: 91.01459183919955, northM: 0 }, { eastM: 91.01459183919954, northM: 7 }],
+      [{ eastM: 18, northM: -12 }, { eastM: 25, northM: -18 }],
+    ] as const;
+  for (const [a, b] of samples) {
+    for (const [from, to] of [[a, b], [b, a]] as const) {
+      const full = continuousWalkableOffsetSegment(from, to,
+        point => legalPosition(place, point.eastM, point.northM).grounded);
+      for (let repeat = 0; repeat < 2; repeat++)
+        assert.equal(continuousWalkableOffsetSegment(from, to,
+          point => residentEndpointWalkable(place, point)), full,
+        "a cached exact metre cannot invent dry ground, bridge access or a successful blocked leg");
+    }
+  }
 });
 
 test("S009 resident cold index builds only the shard while retaining all original SEED candidates and order", () => {
