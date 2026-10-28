@@ -23,6 +23,8 @@ import {
   timedWalkOnPath,
   unfinishedOrBlockedOvernightReturn,
   provablyLateWithoutStreetSearch,
+  routineHasProvablyLateLeg,
+  provablyLateWithStandingBounds,
   walkWindowOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -456,6 +458,67 @@ test("resident street connectors at dense SEED junctions find later legal nodes 
     return false;
   }), -1, "a failed real ground/gate check cannot turn proximity into a lawful path");
   assert.ok(blockedChecks <= 17, "even a fully blocked dense junction cannot trigger an unbounded scan");
+});
+
+test("civilian midnight replay is gated: SEED standing radii conservatively prove late commutes", () => {
+  const from = { eastM: 0, northM: 0 }, to = { eastM: 260, northM: 0 };
+  // Every real standing slot is within four SEED area radii of its anchor.
+  // A positive proof must survive even the closest permitted displacement.
+  assert.equal(provablyLateWithStandingBounds(from, to, 20, 30, 65), true,
+    "even the closest legal slots are farther than the available walk");
+  for (const a of [-20, -10, 0, 10, 20])
+    for (const b of [-30, -15, 0, 15, 30]) {
+      const actualFrom = { eastM: a, northM: 0 },
+        actualTo = { eastM: to.eastM + b, northM: 0 };
+      assert.equal(provablyLateWithoutStreetSearch(actualFrom, actualTo, 65), true,
+        "all allowed exact slots inherit the positive lower-bound proof");
+    }
+  assert.equal(provablyLateWithStandingBounds(from, to, 150, 150, 65), false,
+    "overlapping possible ground slots remain uncertain and require exact routing");
+  assert.equal(provablyLateWithStandingBounds(from, from, 0, 0, 20), false,
+    "a stationary resident cannot be declared late from a nonzero-distance proof");
+  assert.equal(provablyLateWithStandingBounds(from, to, -1, 5, 65), false,
+    "invalid standing-radius bounds cannot authorize an early at-risk classification");
+  assert.equal(provablyLateWithStandingBounds(from, to, Infinity, 0, 65), false,
+    "unbounded displacements never bypass the physical route search");
+});
+
+test("civilian midnight replay is gated: a later impossible deadline skips every costly street search", () => {
+  // The baseline checks each individual route before advancing. The new proof
+  // pass can reorder only *mathematical impossibility*, not authorize a route.
+  const at = (x: number) => ({ eastM: x, northM: 0 });
+  for (const size of [1, 2, 3, 5, 9])
+    for (let late = -1; late < size; late++)
+      for (let blocked = -1; blocked < size; blocked++) {
+        const legs = Array.from({ length: size }, (_, index) => ({
+          from: at(index * 8),
+          to: at(index * 8 + (index === late ? 800 : 4)),
+          remainingSeconds: index === late ? 3 : 3600,
+        }));
+        const oldVerdict = (() => {
+          for (let i = 0; i < legs.length; i++)
+            if (provablyLateWithoutStreetSearch(legs[i].from, legs[i].to, legs[i].remainingSeconds) ||
+                unfinishedOrBlockedOvernightReturn(i === blocked ? null :
+                  [legs[i].from, legs[i].to], legs[i].remainingSeconds))
+              return true;
+          return false;
+        })();
+        let searched = 0;
+        const preflight = routineHasProvablyLateLeg(legs);
+        const newVerdict = preflight || legs.some((leg, i) => {
+          searched++;
+          return unfinishedOrBlockedOvernightReturn(i === blocked ? null :
+            [leg.from, leg.to], leg.remainingSeconds);
+        });
+        assert.equal(newVerdict, oldVerdict,
+          `same lawful overnight-risk verdict with ${size} legs, late=${late}, blocked=${blocked}`);
+        if (late >= 0) {
+          assert.equal(preflight, true, "an impossible later leg is sufficient physical proof");
+          assert.equal(searched, 0, "no street search needed when any leg is provably too late");
+        } else {
+          assert.equal(preflight, false, "uncertain routes must retain their full physical search");
+        }
+      }
 });
 
 test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
