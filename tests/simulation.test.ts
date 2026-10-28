@@ -43,6 +43,7 @@ import {
   residentViewQuery,
   threeNearestOffsets,
   residentBucketBoundsOverlap,
+  streetTopologyComponents,
   orderedResidentIndicesByStandingRank,
 } from "../src/simulation.ts";
 
@@ -458,6 +459,43 @@ test("resident street connectors at dense SEED junctions find later legal nodes 
     return false;
   }), -1, "a failed real ground/gate check cannot turn proximity into a lawful path");
   assert.ok(blockedChecks <= 17, "even a fully blocked dense junction cannot trigger an unbounded scan");
+});
+
+test("resident streets attach: disconnected SEED topology cannot produce a lawful A-star route", () => {
+  // Topology overapproximates physical reachability: removing water, blocked
+  // edges or forbidden enclosures cannot create a new street connection.
+  const edges = [[1], [0, 2], [1], [4], [3], [], [7], [6]] as const;
+  const components = streetTopologyComponents(edges);
+  assert.deepEqual([...components], [0, 0, 0, 3, 3, 5, 6, 6],
+    "every connected street has the stable lowest-index component label");
+  const canReach = (start: number, goal: number, deny: (a: number, b: number) => boolean) => {
+    const visited = new Set([start]), stack = [start];
+    while (stack.length) {
+      const next = stack.pop()!;
+      if (next === goal) return true;
+      for (const neighbor of edges[next])
+        if (!deny(next, neighbor) && !visited.has(neighbor)) {
+          visited.add(neighbor);
+          stack.push(neighbor);
+        }
+    }
+    return false;
+  };
+  for (let from = 0; from < edges.length; from++)
+    for (let to = 0; to < edges.length; to++)
+      for (const denied of [
+        (_a: number, _b: number) => false,
+        (a: number, b: number) => a === 1 && b === 2 || a === 2 && b === 1,
+        (a: number, b: number) => (a + b) % 3 === 0,
+      ]) {
+        if (components[from] !== components[to])
+          assert.equal(canReach(from, to, denied), false,
+            "no subset of the SEED street edges can connect different components");
+      }
+  assert.notEqual(components[2], components[3],
+    "two physically separate neighborhoods do not require an expensive failed A-star search");
+  assert.equal(streetTopologyComponents([]).length, 0,
+    "a streetless settlement retains its original no-street behavior");
 });
 
 test("civilian midnight replay is gated: SEED standing radii conservatively prove late commutes", () => {

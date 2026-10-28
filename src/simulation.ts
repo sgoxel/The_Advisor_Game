@@ -862,7 +862,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[]>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; components: Int32Array; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[]>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -870,6 +870,28 @@ const streetGraphs = new Map<string, StreetGraph>();
  * different streets closer than 9 m are joined (junctions). Built once per
  * focused settlement; bounded cache.
  */
+/** A route cannot connect two components of the original SEED street graph.
+ * Ignore legality here only to form an optimistic supergraph: an edge the
+ * final surface later blocks can split connectivity, never add a crossing.
+ * Deterministic labels are the lowest node index in each component. */
+export function streetTopologyComponents(edges: readonly (readonly number[])[]): Int32Array {
+  const components = new Int32Array(edges.length).fill(-1);
+  for (let first = 0; first < edges.length; first++) {
+    if (components[first] !== -1) continue;
+    const stack = [first];
+    components[first] = first;
+    while (stack.length) {
+      const node = stack.pop()!;
+      for (const next of edges[node])
+        if (components[next] === -1) {
+          components[next] = first;
+          stack.push(next);
+        }
+    }
+  }
+  return components;
+}
+
 function streetGraphFor(place: Place): StreetGraph {
   const cached = streetGraphs.get(place.code);
   if (cached) return cached;
@@ -905,7 +927,8 @@ function streetGraphFor(place: Place): StreetGraph {
     gridBounds.minZ = Math.min(gridBounds.minZ, z);
     gridBounds.maxZ = Math.max(gridBounds.maxZ, z);
   }
-  const graph = { nodes, edges, weights, grid, gridBounds, legalEdges: new Map<string, boolean>(),
+  const graph = { nodes, edges, weights, components: streetTopologyComponents(edges), grid, gridBounds,
+    legalEdges: new Map<string, boolean>(),
     nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[]>(),
     border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
     gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
@@ -1329,7 +1352,10 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
     start = nearest(from),
     goal = nearest(to);
   let path: Offset[] | null = null;
-  if (start >= 0 && goal >= 0) {
+  // A disconnected optimistic SEED graph cannot contain a lawful street
+  // route. Skip its entire A* search; retain the identical open-ground, real
+  // gate and bridge fallbacks below for a physically legal alternative.
+  if (start >= 0 && goal >= 0 && graph.components[start] === graph.components[goal]) {
     if (start === goal) {
       path = [from, graph.nodes[start], to];
     } else {
