@@ -82,6 +82,22 @@ test("resident inspector can resolve facts: S009 blocked endpoints preflight wit
   assert.deepEqual(seen, ["10/20", "250/45"]);
   assert.equal(routeEndpointsWalkable(from, to, () => true), true,
     "both eligible endpoints still require complete metre-sampled legality and can never certify a route");
+
+  // A legitimate metre-sampled t=1 calculation may differ by one ULP from
+  // its separately constructed exact destination. Preflight only the true
+  // t=0 origin before A*: checking exact destination belongs after A* fails.
+  const preciseFrom = { eastM: -564.3661591839741, northM: 0 },
+    preciseTo = { eastM: 91.01459183919955, northM: 0 },
+    interpolatedEnd = preciseFrom.eastM + (preciseTo.eastM - preciseFrom.eastM);
+  assert.notEqual(interpolatedEnd, preciseTo.eastM);
+  const destinationOnlyBlocked = (p: typeof preciseFrom) => p.eastM !== preciseTo.eastM;
+  assert.equal(continuousWalkableOffsetSegment(preciseFrom, preciseTo, destinationOnlyBlocked), true,
+    "do not reject a previously legal route before its original sampled endpoint is checked");
+  assert.equal(routeEndpointsWalkable(preciseFrom, preciseTo, destinationOnlyBlocked), false,
+    "exact destination checks are stricter than original sampled t=1 at some finite offsets");
+  assert.equal(continuousWalkableOffsetSegment(preciseFrom, preciseTo,
+    p => p.eastM !== preciseFrom.eastM), false,
+    "all lawful segments must validate the exact origin at t=0");
 });
 
 test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {
