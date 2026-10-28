@@ -457,11 +457,14 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   if (road) {
     const distance = roadMatch.distance,
       carriagewayRadius = roadWidthM(road) / (2 * CANONICAL_METRES_PER_SOURCE_UNIT),
-      weight = 1 - smooth(clamp01((distance - carriagewayRadius) / (ROAD_SHOULDER_M / CANONICAL_METRES_PER_SOURCE_UNIT))),
+      weight = 1 - smooth(clamp01((distance - carriagewayRadius) / (ROAD_SHOULDER_M / CANONICAL_METRES_PER_SOURCE_UNIT)));
+    // Zero influence contributes no modifier or bridge deck. Do not resolve
+    // a road profile, crossing, or natural support for a discarded candidate.
+    if (weight > 0) {
       // A road profile and crossing use the identical nearest segment/t;
       // resolve that pure SEED tangent once instead of scanning the same
       // canonical polyline twice at every composed surface coordinate.
-      tangent = roadTangentAt(x,z,road),
+      const tangent = roadTangentAt(x,z,road),
       initialRoadHeight = boundedEarthwork(
         roadProfileHeightAt(x, z, road, tangent),
         base.groundHeight,
@@ -487,7 +490,6 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         }
       }
     }
-    if (weight > 0)
       modifiers.push({
         id: road.code,
         priority: WORLD_BUILDING_PRIORITIES.road,
@@ -499,6 +501,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         reservedUse: road.code,
         deckHeight: distance <= carriagewayRadius && deckHeight !== undefined && deckHeight >= base.groundHeight ? deckHeight : undefined,
       });
+    }
   }
   return {
     modifiers,
