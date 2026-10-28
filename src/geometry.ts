@@ -124,13 +124,19 @@ function buildTerrainOnly(tile: Tile): TileGeometry {
   };
   const coverageQuad = (x: number, z: number, size: number, depth = 0): void => {
     const a = point(x, z), b = point(x, z + size), c = point(x + size, z + size), d = point(x + size, z),
-      colours = [tintAt(a), tintAt(b), tintAt(c), tintAt(d)],
-      range = Math.max(...[0, 1, 2].map((channel) => Math.max(...colours.map((value) => value[channel])) - Math.min(...colours.map((value) => value[channel]))));
+      ca = tintAt(a), cb = tintAt(b), cc = tintAt(c), cd = tintAt(d),
+      // The exact four-channel order and threshold from the original
+      // map/spread reduction, without temporary arrays per adaptive cell.
+      range = Math.max(
+        Math.max(ca[0], cb[0], cc[0], cd[0]) - Math.min(ca[0], cb[0], cc[0], cd[0]),
+        Math.max(ca[1], cb[1], cc[1], cd[1]) - Math.min(ca[1], cb[1], cc[1], cd[1]),
+        Math.max(ca[2], cb[2], cc[2], cd[2]) - Math.min(ca[2], cb[2], cc[2], cd[2]),
+      );
     if (depth < 4 && range > 10) {
       const half = size / 2;
       coverageQuad(x, z, half, depth + 1); coverageQuad(x + half, z, half, depth + 1);
       coverageQuad(x, z + half, half, depth + 1); coverageQuad(x + half, z + half, half, depth + 1);
-    } else terrain.quadGradient(a, b, c, d, colours[0], colours[1], colours[2], colours[3]);
+    } else terrain.quadGradient(a, b, c, d, ca, cb, cc, cd);
   };
   for (let z = 0; z < resolution; z++) for (let x = 0; x < resolution; x++)
     coverageQuad(tile.minX + x * step, tile.minZ + z * step, step);
