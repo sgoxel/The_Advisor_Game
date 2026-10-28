@@ -872,12 +872,24 @@ function standTableFor(place: Place): StandTable {
  * Where a resident stands while stationary at an outdoor anchor: a seeded slot inside the shared standing ground
  * (pure function of place, resident and anchor, so walks start and end on the same spot). Indoors and at home: the anchor itself.
  */
+// Standing slots are immutable SEED facts, not Simulation positions. A cold
+// prior-day risk probe and the same resident's schedule often request the
+// identical outdoor stop, even after the settlement's bounded anchor cache
+// has been evicted. Reuse only its exact (identity, anchor, base) result.
+const outdoorStandingSpotCache = new Map<string, Offset>();
 function standingSpot(place: Place, foundation: ResidentFoundation, anchor: RoutineAnchor, base: Offset, outdoors: boolean): Offset {
   if (!outdoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")) return base;
+  const key = `${foundation.code}|${anchor}|${base.eastM},${base.northM}`,
+    cached = outdoorStandingSpotCache.get(key);
+  if (cached) return cached;
   const anchors = settlementAnchors(place), ground = anchors.areas.get(coordKey(base));
   if (!ground) return base;
-  const table = standTableFor(place), n = table.slotOf.get(`${ground.key}|${foundation.index}`) ?? (table.total.get(ground.key) ?? 0) + digest(`${foundation.code}/VISIT/${ground.key}`) % 509;
-  return slotOffset(place, anchors, ground, n);
+  const table = standTableFor(place), n = table.slotOf.get(`${ground.key}|${foundation.index}`) ?? (table.total.get(ground.key) ?? 0) + digest(`${foundation.code}/VISIT/${ground.key}`) % 509,
+    spot = slotOffset(place, anchors, ground, n);
+  outdoorStandingSpotCache.set(key, spot);
+  while (outdoorStandingSpotCache.size > 4096)
+    outdoorStandingSpotCache.delete(outdoorStandingSpotCache.keys().next().value!);
+  return spot;
 }
 // ---------------------------------------------------------------- street paths
 
