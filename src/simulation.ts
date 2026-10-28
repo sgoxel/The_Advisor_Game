@@ -1963,7 +1963,8 @@ function relativeSourceForOffset(
     z: source.z - place.z,
   };
 }
-function residentIndexFor(place: Place, shard?: { index: number; count: number }): ResidentSpatialIndex {
+function residentIndexFor(place: Place, shard?: { index: number; count: number },
+  onCandidate?: (index: number, bounds: ResidentBucketBounds) => boolean): ResidentSpatialIndex {
   const bounds: (ResidentBucketBounds | undefined)[] = [],
     population = populationOf(place),
     anchors = settlementAnchors(place),
@@ -1993,7 +1994,13 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
     sharedMaxX = Math.max(...sharedPoints.map(point => point.x)),
     sharedMinZ = Math.min(...sharedPoints.map(point => point.z)),
     sharedMaxZ = Math.max(...sharedPoints.map(point => point.z));
-  for (let index = 0; index < population; index++) {
+  // Cold first-fact queries visit identities in their final rotated SEED
+  // order. A fully resolved first resident can be reported before unrelated
+  // residents finish indexing, while the final index remains complete.
+  const rotatedStart = onCandidate ? digest(`${place.code}/VISIBLE_START`) % population : 0;
+  let previewResolved = false;
+  for (let order = 0; order < population; order++) {
+    const index = (rotatedStart + order) % population;
     // Shard assignments are exact resident-index congruences. In a cold worker,
     // do not construct thousands of unrelated immutable homes, work sites or
     // canonical projections only to discard them after index construction.
@@ -2021,7 +2028,9 @@ function residentIndexFor(place: Place, shard?: { index: number; count: number }
       bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),
       bz1 = Math.floor(maxZ / RESIDENT_BUCKET_SOURCE);
-    bounds[index] = { bx0, bx1, bz0, bz1 };
+    const bound = bounds[index] = { bx0, bx1, bz0, bz1 };
+    if (onCandidate && !previewResolved)
+      previewResolved = onCandidate(index, bound);
   }
   return { bounds, population };
 }
@@ -2192,12 +2201,13 @@ export class LazySimulation {
     if (button) button.disabled = false;
   }
 
-  private indexFor(place: Place, shard?: { index: number; count: number }) {
+  private indexFor(place: Place, shard?: { index: number; count: number },
+    onCandidate?: (index: number, bounds: ResidentBucketBounds) => boolean) {
     const key = shard ? `${place.code}|SHARD/${shard.index}/${shard.count}` : place.code;
     let index = this.residentIndexes.get(key);
     if (!index) {
       const started = performance.now();
-      index = residentIndexFor(place, shard);
+      index = residentIndexFor(place, shard, onCandidate);
       this.lastResidentIndexBuildMs += performance.now() - started;
       this.residentIndexes.set(key, index);
       // At most eight active shards per device, plus one unsharded inspector.
@@ -2209,15 +2219,18 @@ export class LazySimulation {
     return index;
   }
 
-  private residentCandidates(place: Place, x: number, z: number, radius: number, shard?: { index: number; count: number }) {
-    const index = this.indexFor(place, shard),
-      relativeX = wrapSourceX(x - place.x),
+  private residentCandidates(place: Place, x: number, z: number, radius: number, shard?: { index: number; count: number },
+    onCandidate?: (index: number) => boolean) {
+    const relativeX = wrapSourceX(x - place.x),
       relativeZ = z - place.z,
       bx0 = Math.floor((relativeX - radius) / RESIDENT_BUCKET_SOURCE),
       bx1 = Math.floor((relativeX + radius) / RESIDENT_BUCKET_SOURCE),
       bz0 = Math.floor((relativeZ - radius) / RESIDENT_BUCKET_SOURCE),
       bz1 = Math.floor((relativeZ + radius) / RESIDENT_BUCKET_SOURCE),
       search: ResidentBucketBounds = { bx0, bx1, bz0, bz1 },
+      index = this.indexFor(place, shard, onCandidate
+        ? (resident, bounds) => residentBucketBoundsOverlap(bounds, search) && onCandidate(resident)
+        : undefined),
       found: number[] = [];
     for (let resident = 0; resident < index.bounds.length; resident++) {
       const bounds = index.bounds[resident];
@@ -2344,8 +2357,19 @@ export class LazySimulation {
     // Preserve the exact original place/candidate ordering and legal checks.
     for (const place of settlements) {
       const candidateStarted = phases ? performance.now() : 0;
-      const candidates = this.residentCandidates(place, x, z, radius, shard)
-        .filter(index => !shard || index % shard.count === shard.index);
+      // Cold query: publish the first canonical, fully validated fact in final
+      // rank order before completing unrelated immutable spatial bounds.
+      // Reuse each early evaluation once the normal full batch resumes.
+      const early = new Map<number, Resident>();
+      const candidates = this.residentCandidates(place, x, z, radius, shard,
+        onFirstValidated && !firstValidated ? index => {
+          const resident = residentAt(place, index, this.tick, phases);
+          early.set(index, resident);
+          if (sourceDistance(resident.x, resident.z, x, z) > radius) return false;
+          firstValidated = true;
+          onFirstValidated(resident);
+          return true;
+        } : undefined).filter(index => !shard || index % shard.count === shard.index);
       if (phases) phases.candidateLookupMs += performance.now() - candidateStarted;
       query.candidateResidents += candidates.length;
       for (const index of candidates) {
@@ -2353,7 +2377,7 @@ export class LazySimulation {
           exhausted = true;
           break;
         }
-        const resident = residentAt(place, index, this.tick, phases);
+        const resident = early.get(index) ?? residentAt(place, index, this.tick, phases);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;

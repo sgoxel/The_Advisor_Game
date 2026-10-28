@@ -181,12 +181,19 @@ test("resident inspector can resolve facts with early fully validated SEED resid
   const place = villages[0], simulation = new LazySimulation();
   simulation.setFocus(place);
   simulation.advance(at(9, WORKDAY));
-  const observed: string[] = [];
+  const observed: string[] = [], indexBuildsAtFirst: number[] = [];
   const residents = simulation.focusedResidents(place.x, place.z, 8, 8, undefined, false, undefined,
-    resident => observed.push(resident.code));
+    resident => {
+      observed.push(resident.code);
+      indexBuildsAtFirst.push(simulation.stats.residentIndexBuilds);
+    });
   assert.ok(residents.length > 0, "fixture must produce authoritative residents");
   assert.deepEqual(observed, [residents[0].code],
     "first fact must be fully resolved, once only, and agree with the final ordered resident batch");
+  assert.deepEqual(indexBuildsAtFirst, [0],
+    "the first fully checked resident must reach inspection before a cold index finishes");
+  assert.equal(simulation.stats.residentIndexBuilds, 1,
+    "the early callback cannot abandon the complete canonical spatial index");
 });
 
 test("resident inspector can resolve facts and close-up actors independently of optional scenery", () => {
