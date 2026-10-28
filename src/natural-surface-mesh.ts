@@ -104,7 +104,8 @@ export function rebuildNaturalSurface(
     // At tile.size <= 512 the largest possible settlement reach is
     // 510 + 512 * sqrt(2)/2 < 873 source units. Geography's immutable
     // seam-aware 2048-unit buckets include every possible positive match
-    // in their 3x3 neighbourhood, including after normalizing a shifted\n    // source-seam tile centre. Preserve the exact original predicate
+    // in their 3x3 neighbourhood, including after normalizing a shifted
+    // source-seam tile centre. Preserve the exact original predicate
     // and SEED result, without scanning every settlement in the world for
     // every ordinary detail tile.
     preparedPlace = tile.size <= 512 && nearbyPlaces(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2).some(p =>
