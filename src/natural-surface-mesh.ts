@@ -200,10 +200,16 @@ export function rebuildNaturalSurface(
     }
     indices.push(ia, ib, ic);
   };
+  // Both shoreline and road-cut caches use default-sort lexicographic keys.
+  // Compare the two exact strings without allocating and sorting a pair per cut.
+  const cutEdgeKey = (a: Sample, b: Sample) => {
+    const first = `${a.x}/${a.z}`, second = `${b.x}/${b.z}`;
+    return first <= second ? `${first}|${second}` : `${second}|${first}`;
+  };
   const cuts = new Map<string, { wet: Sample; dry: Sample }>();
   const wet = (p: Sample) => p.wet !== "none";
   const cut = (a: Sample, b: Sample) => {
-    const keys = [`${a.x}/${a.z}`, `${b.x}/${b.z}`].sort(), key = keys.join("|");
+    const key = cutEdgeKey(a, b);
     let result = cuts.get(key);
     if (result) return result;
     if (cuts.size >= 8192) throw new RangeError("Natural shoreline cut cap exceeded");
@@ -222,7 +228,7 @@ export function rebuildNaturalSurface(
   const roadCuts = new Map<string, { road: Sample; ground: Sample }>();
   const onRoad = (p: Sample) => p.wet === "none" && p.material === "Road";
   const roadCut = (a: Sample, b: Sample) => {
-    const key = [`${a.x}/${a.z}`, `${b.x}/${b.z}`].sort().join("|");
+    const key = cutEdgeKey(a, b);
     const cached = roadCuts.get(key);
     if (cached) return cached;
     if (roadCuts.size >= 8192)
@@ -248,9 +254,13 @@ export function rebuildNaturalSurface(
     return result;
   };
   const roadTriangle = (a: Sample, b: Sample, c: Sample) => {
-    const corners = [a, b, c];
-    if (corners.some(wet) || corners.every(p => onRoad(p) === onRoad(a)))
+    // Most triangles have a single material. Avoid three-element scratch arrays
+    // and predicate callbacks until the exact mixed-material split needs them.
+    const firstRoad = onRoad(a);
+    if (wet(a) || wet(b) || wet(c) ||
+        (onRoad(b) === firstRoad && onRoad(c) === firstRoad))
       return emitTriangle(a, b, c);
+    const corners = [a, b, c];
     // Separate road and soil triangles at the same canonical boundary.
     // No triangle may blend road alpha over an unrelated shoulder.
     for (const road of [false, true]) {
