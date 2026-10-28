@@ -568,29 +568,39 @@ if (continuityCorridor.road) roads.push(continuityCorridor.road);
 /** Shortest seam-wrapped source distance to the exact physical road polyline.
  * Matches the S005 transport lookup; never treats a longitude seam as a world-spanning chord.
  */
-type DistanceSegment = { ax: number; az: number; scale: number; dx: number; dz: number; length: number; minZ: number; maxZ: number };
-const distanceSegments = new WeakMap<Road, DistanceSegment[]>();
+type DistanceSegment = { ax: number; az: number; scale: number; dx: number; dz: number; length: number; minZ: number; maxZ: number; minDx: number; maxDx: number };
+// An entire immutable road whose Z extent misses a bounded query cannot
+// contain a qualifying segment. This conservative negative check avoids
+// visiting every cached polyline segment in the terrain mesh's hot loop.
+const distanceSegments = new WeakMap<Road, { segments: DistanceSegment[]; minZ: number; maxZ: number }>();
 /** Immutable SEED roads share prepared metrics across terrain and walking queries.
  * A finite bound may return Infinity outside it; distances inside remain exact. */
 export function roadDistanceAt(x: number, z: number, road: Road, limit = Infinity) {
-  let segments = distanceSegments.get(road);
-  if (!segments) {
+  let prepared = distanceSegments.get(road);
+  if (!prepared) {
     const points = road.centerline && road.centerline.length > 1 ? road.centerline
       : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
-    segments = [];
+    const segments: DistanceSegment[] = [];
+    let minZ = Infinity, maxZ = -Infinity;
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i], scale = Math.cos(sourceToLonLat(a.x, a.z).lat),
-        dx = wrapSourceX(b.x - a.x) * scale, dz = b.z - a.z;
+        dx = wrapSourceX(b.x - a.x) * scale, dz = b.z - a.z,
+        lowZ = Math.min(a.z, b.z), highZ = Math.max(a.z, b.z);
+      minZ = Math.min(minZ, lowZ); maxZ = Math.max(maxZ, highZ);
       segments.push({ ax: a.x, az: a.z, scale, dx, dz, length: dx * dx + dz * dz,
-        minZ: Math.min(a.z, b.z), maxZ: Math.max(a.z, b.z) });
+        minZ: lowZ, maxZ: highZ, minDx: Math.min(0, dx), maxDx: Math.max(0, dx) });
     }
-    distanceSegments.set(road, segments);
+    prepared = { segments, minZ, maxZ };
+    distanceSegments.set(road, prepared);
   }
+  // Same strict per-segment Z rejection as below, applied once to the union
+  // of segment extents. It cannot reject any segment the original loop used.
+  if (z < prepared.minZ - limit || z > prepared.maxZ + limit) return Infinity;
   let distance = limit, found = false;
-  for (const segment of segments) {
+  for (const segment of prepared.segments) {
     if (z < segment.minZ - distance || z > segment.maxZ + distance) continue;
     const qx = wrapSourceX(x - segment.ax) * segment.scale, qz = z - segment.az;
-    if (qx < Math.min(0, segment.dx) - distance || qx > Math.max(0, segment.dx) + distance) continue;
+    if (qx < segment.minDx - distance || qx > segment.maxDx + distance) continue;
     const t = segment.length ? Math.max(0, Math.min(1, (qx * segment.dx + qz * segment.dz) / segment.length)) : 0,
       candidate = Math.hypot(qx - segment.dx * t, qz - segment.dz * t);
     if (candidate <= distance) { distance = candidate; found = true; }
