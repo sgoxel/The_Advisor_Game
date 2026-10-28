@@ -1,0 +1,20 @@
+name: S009 bounded preview focused geometry invariant
+on:
+  push:
+    branches: [agent1/wp-s009-001-focused-coverage-check-20261028]
+    paths: ['.github/workflows/agent1-s009-coverage-focused-check.yml']
+permissions:
+  contents: read
+jobs:
+  preview-invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Verify bounded coverage size and unchanged canonical detail
+        run: timeout --signal=TERM --kill-after=10s 420s node --experimental-strip-types --test --test-name-pattern='cold preview uses bounded material refinement' tests/streaming-coverage-geometry.test.ts
