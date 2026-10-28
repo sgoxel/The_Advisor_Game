@@ -7,7 +7,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import { settlementExteriorFor, settlementHomeAnchorFor } from "./settlement-exterior.ts";
-import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
+import { activityAt, dailyPlan, dailyStandingActivities, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
@@ -865,7 +865,7 @@ function standTableFor(place: Place): StandTable {
     best.clear();
     const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift };
     // Visit the same canonical days (0,0) then (6,6); no per-resident pairs.
-    for (let day = 0; day <= 6; day += 6) for (const entry of dailyPlan(subject, foundation.traits, day, day)) {
+    for (let day = 0; day <= 6; day += 6) for (const entry of dailyStandingActivities(subject, foundation.traits, day, day)) {
       if (entry.indoors || entry.anchor === "home") continue;
       byAnchor.set(entry.anchor, Math.min(byAnchor.get(entry.anchor) ?? 99, KIND_RANK[entry.kind] ?? 9));
     }
