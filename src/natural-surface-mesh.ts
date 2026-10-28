@@ -150,7 +150,9 @@ export function rebuildNaturalSurface(
   const formationMetres = formations.map(f => ({ f, metres: sourceUnitsPerMetreAt(f.z) })),
     segmentVectors = segments.map(s => {
       const dx = wrapSourceX(s.bx - s.ax), dz = s.bz - s.az;
-      return { s, dx, dz, lengthSquared: dx * dx + dz * dz || 1 };
+      return { s, dx, dz, lengthSquared: dx * dx + dz * dz || 1,
+        minDx: Math.min(0, dx), maxDx: Math.max(0, dx),
+        minDz: Math.min(0, dz), maxDz: Math.max(0, dz) };
     });
 
   const originX = tile.minX + tile.size / 2,
@@ -289,20 +291,24 @@ export function rebuildNaturalSurface(
   };
 
   const nearRiver = (x: number, z: number, size: number) =>
-    segmentVectors.some(({ s, dx, dz, lengthSquared }) => {
+    segmentVectors.some(({ s, dx, dz, lengthSquared, minDx, maxDx, minDz, maxDz }) => {
       const reach = (size * Math.SQRT2) / 2 + s.width + RIVER_BANK_HALF_WIDTH_SOURCE,
         qz = z - s.az;
       // A point outside the segment's reach-expanded box cannot pass the
       // original exact closest-point distance test. Reject it before wrap and
       // projection work, retaining exact math for every possible river cell.
-      if (qz < Math.min(0, dz) - reach || qz > Math.max(0, dz) + reach) return false;
+      if (qz < minDz - reach || qz > maxDz + reach) return false;
       const qx = wrapSourceX(x - s.ax);
-      if (qx < Math.min(0, dx) - reach || qx > Math.max(0, dx) + reach) return false;
+      if (qx < minDx - reach || qx > maxDx + reach) return false;
       const t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSquared));
       return Math.hypot(qx - dx * t, qz - dz * t) <= reach;
     });
 
   const majorWet = (s: Sample) => s.wet === "ocean" || s.wet === "lake";
+  // Reuse a single predicate across adaptive cells; do not create an array
+  // and callback closure for every short-circuit coast probe.
+  const nearCoastPoint = (s: Sample, reach: number) =>
+    s.wet === "none" && Math.abs(shoreDistance(s)) <= reach;
   const visit = (x: number, z: number, size: number) => {
     const half = size / 2,
       a = sample(x, z),
@@ -314,11 +320,12 @@ export function rebuildNaturalSurface(
       majorClass = majorWet(a),
       major = majorWet(b) !== majorClass || majorWet(c) !== majorClass ||
         majorWet(d) !== majorClass || majorWet(middle) !== majorClass,
-      nearCoast =
-        majorBoundary &&
-        [a, b, c, d, middle].some(
-          (s) => s.wet === "none" && Math.abs(shoreDistance(s)) <= size * Math.SQRT2 + 8,
-        ),
+      coastReach = size * Math.SQRT2 + 8,
+      nearCoast = majorBoundary && (
+        nearCoastPoint(a, coastReach) || nearCoastPoint(b, coastReach) ||
+        nearCoastPoint(c, coastReach) || nearCoastPoint(d, coastReach) ||
+        nearCoastPoint(middle, coastReach)
+      ),
       // Threshold-limited road distance retains the identical yes/no geometry
       // decision while skipping far immutable polyline segments in every cell.
       roadReach = size * Math.SQRT2 / 2 + 12,
@@ -327,7 +334,8 @@ export function rebuildNaturalSurface(
       // real river crossings. Tighten only road-adjacent mixed wet/dry landing
       // cells, not entire river strips or unrelated tiles.
       bridgeReach = size * Math.SQRT2 / 2 + 2,
-      bridgeBank = river && [a, b, c, d].some(p => wet(p) !== wet(middle)) &&
+      bridgeBank = river && (wet(a) !== wet(middle) || wet(b) !== wet(middle) ||
+        wet(c) !== wet(middle) || wet(d) !== wet(middle)) &&
         preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, bridgeReach) <= bridgeReach),
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
         c.material !== middle.material || d.material !== middle.material,
