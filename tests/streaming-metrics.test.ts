@@ -159,6 +159,11 @@ test("resident transport phases distinguish worker queue and return delivery wit
   metrics.recordTransport({ mainSentEpochMs: 300, workerReceiveEpochMs: 400 }, 500);
   metrics.recordTransport({ mainSentEpochMs: 300, workerReceiveEpochMs: 400, workerSendEpochMs: 450 }, 449);
   report = metrics.summary();
-  assert.equal(report.mainSendToResponseMs.samples, 1, "invalid or partial cross-thread epochs never imply zero latency");
+  assert.equal(report.mainSendToWorkerMs.samples, 1, "cross-clock ordering is required for queue attribution");
+  assert.equal(report.workerSendToMainMs.samples, 1, "cross-clock ordering is required for delivery attribution");
+  assert.equal(report.workerReceiveToSendMs.samples, 3, "valid worker-local elapsed time survives clock skew");
+  assert.equal(report.mainSendToResponseMs.samples, 3, "valid main-local elapsed time survives clock skew");
+  assert.equal(report.invalidCrossClockSamples, 2);
+  assert.deepEqual(report.lastSignedCrossClockMs, { mainToWorker: 100, workerToMain: -1 });
   assert.equal(report.accepted, 0, "observations cannot accept a resident or mutate Simulation");
 });
