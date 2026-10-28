@@ -1312,6 +1312,15 @@ export class StableStreetFrontier {
     return first;
   }
 }
+/** A route is impossible if either exact endpoint is not walkable.
+ * Every legal street, detour, gate, and bridge connector already validates
+ * both endpoints with the same one-metre final-surface predicate. This check
+ * only eliminates futile fallback searches, never authorizes movement. */
+export function routeEndpointsWalkable(
+  from: Offset, to: Offset, walkable: (point: Offset) => boolean,
+): boolean {
+  return walkable(from) && walkable(to);
+}
 /** A missing graph route or illegal connecting segment must never become straight-line travel. */
 function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = true): Offset[] | null {
   // Surface, enclosure and street links are bidirectional. Resolve the same
@@ -1419,6 +1428,19 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       }
       }
     }
+  }
+  // If the original legal street graph cannot connect these endpoints,
+  // do not attempt up to forty costly open-ground/bridge/gate fallbacks when
+  // either exact endpoint itself is already invalid. All such fallback routes
+  // are continuous segments subject to the same endpoint final-surface check.
+  if (!path && !routeEndpointsWalkable(from, to, point => {
+    const position = canonicalOffset(place, point.eastM, point.northM),
+      source = lonLatToSource(position.lon, position.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  })) {
+    pathCache.set(key, null);
+    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+    return null;
   }
   // Some outdoor work sites are reached over open walkable ground rather than a
   // settlement street. Allow that physical corridor only after checking EVERY
