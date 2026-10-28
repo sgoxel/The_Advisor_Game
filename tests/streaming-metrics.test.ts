@@ -167,3 +167,26 @@ test("resident transport phases distinguish worker queue and return delivery wit
   assert.deepEqual(report.lastSignedCrossClockMs, { mainToWorker: 100, workerToMain: -1 });
   assert.equal(report.accepted, 0, "observations cannot accept a resident or mutate Simulation");
 });
+
+test("resident start notices bound queue time on the main clock without changing actor authority", () => {
+  const metrics = new ResidentQueryPhaseSamples();
+  metrics.recordStartNotice(100, 135);
+  metrics.recordStartNotice(100, 99);
+  metrics.recordStartNotice(undefined, 160);
+  assert.equal(metrics.summary().mainSendToStartNoticeMs.samples, 1);
+  assert.equal(metrics.summary().mainSendToStartNoticeMs.latest, 35);
+  // Worker and main clocks have incompatible origins, but durations from
+  // each clock are still valid and the total overhead is provable.
+  metrics.recordTransport({
+    mainSentEpochMs: 100, workerReceiveEpochMs: 1000100,
+    workerSendEpochMs: 1000120,
+  }, 260);
+  const summary = metrics.summary();
+  assert.equal(summary.workerReceiveToSendMs.latest, 20);
+  assert.equal(summary.mainSendToResponseMs.latest, 160);
+  assert.equal(summary.mainTransportOutsideWorkerMs.latest, 140);
+  assert.equal(summary.invalidCrossClockSamples, 1);
+  assert.equal(summary.mainSendToWorkerMs.samples, 0);
+  assert.equal(summary.workerSendToMainMs.samples, 0);
+  assert.equal(summary.accepted, 0);
+});
