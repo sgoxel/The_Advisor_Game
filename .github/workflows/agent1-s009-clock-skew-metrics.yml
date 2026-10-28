@@ -1,0 +1,58 @@
+name: S009 source-matched clock skew truth metrics
+on:
+  push:
+    branches: [agent1/wp-s009-001-clock-skew-metrics-20261028]
+    paths: ['.github/workflows/agent1-s009-clock-skew-metrics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: s009-transport-metrics-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  transport-metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: Capture actual cold and warm resident transport with original screenshot tool
+        shell: bash
+        run: |
+          npm run preview -- --port 4174 >/tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:120000;shot:cold-facts;eval:window.advisorWorld.setHalfHeight(22);wait:15000;shot:warm-facts'
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 960s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s009-clock-skew-metrics --name resident-transport --profile fullhd-landscape --renderer webgl2 --fixed-time-ms 1792874335750 --initial-ready-only --timeout 180 --steps "$STEPS"
+      - name: Print bounded transport and worker samples
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          file=pathlib.Path('test-results/s009-clock-skew-metrics/capture.json')
+          if not file.exists():
+              print('No complete capture; transport metrics PENDING')
+          else:
+              for entry in json.loads(file.read_text()):
+                  perf=entry.get('performance') or {}
+                  print('CAPTURE',entry.get('file'),'backend',entry.get('backend'),'viewport',entry.get('viewport'))
+                  print('TRANSPORT',json.dumps(perf.get('residentQueryPhases'),separators=(',',':'))[:13000])
+                  for key in ('workerMs','workerPhasesMs','uploadMs','firstResidentFactMs','residentFactStatus','maxGenerationReadyObserved','maxUploadsPerFrame'):
+                      print(key, json.dumps(perf.get(key),separators=(',',':'))[:6000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s009-clock-skew-source-metrics
+          path: test-results/s009-clock-skew-metrics/
+          if-no-files-found: warn
