@@ -434,7 +434,7 @@ function addRoadAndBridgeRibbons(
       // A nearby crossing belonging to another road is not this segment's
       // physical bridge. Refined decks and coarse decks use the same owner.
       if (selectedRoadBridgeDeck(middle, road.code)) {
-        const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
+        const start = stationStart, end = stationEnd,
           y0 = (start.deckHeight ?? start.groundHeight) + BRIDGE_EPSILON,
           y1 = (end.deckHeight ?? end.groundHeight) + BRIDGE_EPSILON,
           a: Point = [x0 + bridgeNx, y0, z0 + bridgeNz],
@@ -538,7 +538,7 @@ function addRoadAndBridgeRibbons(
       // centerline as the inspector. Never cover water, extrapolate missing
       // roads or paint an unowned connection as a traversable junction.
       // Terrain shader coverage hides the strip at cartographic/hidden scales.
-      const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
+      const start = stationStart, end = stationEnd,
         valid = [start, middle, end].every(surface =>
           surface.water.kind === "none" &&
           surface.deckHeight === null &&
