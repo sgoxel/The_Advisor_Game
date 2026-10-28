@@ -1,0 +1,58 @@
+name: S009 exact-source post-natural resident and tile metrics
+on:
+  push:
+    branches: [agent1/wp-s009-001-post-natural-metrics-20261028]
+    paths: ['.github/workflows/agent1-s009-post-natural-metrics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: s009-metrics-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  cold-metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: Capture true cold and warm view with original screenshot tool
+        shell: bash
+        run: |
+          npm run preview -- --port 4174 >/tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:120000;shot:cold-facts;eval:window.advisorWorld.setHalfHeight(22);wait:15000;shot:warm-facts'
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 960s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s009-source-metrics --name resident-tile --profile fullhd-landscape --renderer webgl2 --fixed-time-ms 1792874335750 --initial-ready-only --timeout 180 --steps "$STEPS"
+      - name: Print bounded authoritative latency samples
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          d=pathlib.Path('test-results/s009-source-metrics/capture.json')
+          if not d.exists():
+              print('No complete capture; metrics PENDING')
+          else:
+              for r in json.loads(d.read_text()):
+                  print('CAPTURE',r.get('file'),'backend',r.get('backend'),'viewport',r.get('viewport'))
+                  performance=r.get('performance') or {}
+                  print('PERFORMANCE',json.dumps(performance,separators=(',',':'))[:14000])
+                  print('SIMULATION',json.dumps(r.get('simulation'),separators=(',',':'))[:5000])
+                  print('COVERAGE',json.dumps(r.get('coverage'),separators=(',',':'))[:3000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s009-original-source-metrics
+          path: test-results/s009-source-metrics/
+          if-no-files-found: warn
