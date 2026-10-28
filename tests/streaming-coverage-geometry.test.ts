@@ -29,3 +29,14 @@ test('coastal coverage subdivides material boundaries within a fixed mesh bound'
  assert.ok(preview.terrain.indices.length>64*6,'shore must receive more than the uniform grid');
  assert.ok(preview.terrain.indices.length<=64*256*6,'four subdivision levels are a hard bound');
 });
+
+test('cold preview uses bounded material refinement and keeps canonical detail untouched', () => {
+ const home = villages[0], tile = tileForPosition(home.x, home.z, 12);
+ const detailed = buildTile(tile);
+ const preview = buildTile(tile, { terrainOnly: true });
+ // At most four children at the dry-land level and sixteen at water
+ // boundaries: temporary background terrain cannot monopolize generation.
+ assert.ok(preview.terrain.indices.length <= 64 * 16 * 6);
+ assert.ok(preview.terrain.indices.length < detailed.terrain.indices.length);
+ assert.deepEqual(buildTile(tile), detailed);
+});
