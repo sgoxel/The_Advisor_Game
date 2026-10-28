@@ -2,7 +2,7 @@ import {CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX} from "../src/planet.ts";
 import {convertTileGeometryToEnu} from "../src/render-frame.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTile } from "../src/geometry.ts";
+import { buildTile, terrainTint } from "../src/geometry.ts";
 import { roads, roadDistanceAt } from "../src/geography.ts";
 import { siteAccessRoads } from "../src/sites.ts";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../src/surface-refinement.ts";
 import {
   finalSurfaceAt,
+  finalSurfaceRenderChannelsAt,
   finalSurfaceEvidenceAnchors,
   tileAt,
   tileForPosition,
@@ -30,6 +31,25 @@ const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
       return true;
   return false;
 };
+
+test("S009 refined ground tint reuses the identical SEED surface channels", () => {
+  const site = siteAccessRoads[0];
+  assert.ok(site.centerline && site.centerline.length > 1);
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const examples = [
+    site.centerline[0],
+    site.centerline[Math.floor(site.centerline.length / 2)],
+    site.centerline[site.centerline.length - 1],
+    bridge,
+    { x: bridge.x + .25, z: bridge.z + .25 },
+  ];
+  for (const { x, z } of examples) {
+    const reused = terrainTint(x, z, 32, undefined, 0, true,
+      finalSurfaceRenderChannelsAt(x, z));
+    assert.deepEqual(reused, terrainTint(x, z),
+      "fine terrain must retain the exact original material color at every canonical coordinate");
+  }
+});
 
 test("surface refinement remains bounded by tile size", () => {
   assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 0);
