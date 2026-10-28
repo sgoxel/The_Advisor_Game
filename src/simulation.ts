@@ -778,13 +778,20 @@ function slotOffset(place: Place, anchors: SettlementAnchors, area: StandArea, n
   if (!state) anchors.slots.set(area.key, state = { valid: [], next: 0, exhausted: false });
   const rivals = state.rivals ?? (state.rivals = anchors.areaList.filter((other) => other !== area && (other.radiusM < area.radiusM || (other.radiusM === area.radiusM && other.key < area.key))
     && Math.hypot(other.eastM - area.eastM, other.northM - area.northM) < area.radiusM * 2 + other.radiusM + 1)),
-    phase = (digest(`${area.key}/SLOTS`) % 360) * Math.PI / 180;
+    phase = (digest(`${area.key}/SLOTS`) % 360) * Math.PI / 180,
+    // Preserve the exact ordered first-collision check, without allocating a
+    // closure for every attempted spiral position in a crowded standing ground.
+    overlapsRival = (point: Offset) => {
+      for (const other of rivals)
+        if (Math.hypot(point.eastM - other.eastM, point.northM - other.northM) < other.radiusM + SLOT_GAP_M) return true;
+      return false;
+    };
   while (state.valid.length <= n && !state.exhausted) {
     const j = state.next++, radius = SLOT_SPIRAL * Math.sqrt(j + .5);
     if (radius > area.radiusM * 4) { state.exhausted = true; break; }
     const angle = phase + j * 2.399963229728653, point = { eastM: area.eastM + Math.cos(angle) * radius, northM: area.northM + Math.sin(angle) * radius };
     if (radius < area.clearM || onStreetBand(place, anchors, point, area.kerbM)
-      || rivals.some((other) => Math.hypot(point.eastM - other.eastM, point.northM - other.northM) < other.radiusM + SLOT_GAP_M)) continue;
+      || overlapsRival(point)) continue;
     state.valid.push(point);
   }
   return state.valid.length ? state.valid[n % state.valid.length] : area;
