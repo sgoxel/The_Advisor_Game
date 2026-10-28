@@ -60,8 +60,27 @@ import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 import { terrainTint } from "../src/geometry-core.ts";
 
 import { climateSampleAt } from "../src/climate.ts";
-import { landformAt } from "../src/wilderness-terrain.ts";
+import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
+import { naturalSurfaceAt } from "../src/hydrology.ts";
 
+
+test("S009 fast featureless-tile water probe preserves fully composed SEED water", () => {
+  // Composition never changes base water, including a river deck and the
+  // resident settlement. Release tests exercise the exact fast-path premise.
+  const samples = [
+    villages[0],
+    finalSurfaceEvidenceAnchors().bridge,
+    ...[[-1, 0], [0, 0], [1, .5], [-.75, -.5]].map(([x, z]) =>
+      ({ x: x * SOURCE_PRESENTATION_WIDTH / 8,
+        z: z * SOURCE_PRESENTATION_WIDTH / 8 })),
+  ];
+  for (const { x, z } of samples)
+    assert.deepEqual(
+      wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water,
+      finalSurfaceRenderChannelsAt(x, z).water,
+      "fast negative proof must use the exact composed final-surface water channel",
+    );
+});
 
 test("S009 adaptive clipped road fragments reuse canonical metric identity without changing distances", () => {
   const allRoads = [...roads, ...siteAccessRoads],
