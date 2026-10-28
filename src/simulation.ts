@@ -1325,21 +1325,25 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       while (frontier.size) {
         const current = frontier.take();
         if (current === goal) break;
-        graph.edges[current].forEach((next, i) => {
+        // Keep the exact ordered A* relaxations and one-metre legality
+        // checks while avoiding a new .forEach closure for every popped node.
+        const neighbours = graph.edges[current];
+        for (let i = 0; i < neighbours.length; i++) {
+          const next = neighbours[i];
           // A nonimproving edge cannot enter the path, regardless of whether its
           // physical surface is legal. Do not sample every metre needlessly.
           const tentative = cost.get(current)! + graph.weights[current][i];
-          if (!(tentative < (cost.get(next) ?? Infinity))) return;
+          if (!(tentative < (cost.get(next) ?? Infinity))) continue;
           const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
           let legal = graph.legalEdges.get(edgeKey);
           if (legal === undefined) {
             legal = legalStreetSegment(place, graph.nodes[current], graph.nodes[next]);
             graph.legalEdges.set(edgeKey, legal);
           }
-          if (!legal) return;
+          if (!legal) continue;
           cost.set(next, tentative); cameFrom.set(next, current);
           frontier.set(next, tentative + h(next));
-        });
+        }
       }
       if (cost.has(goal)) {
         const route: Offset[] = [];
