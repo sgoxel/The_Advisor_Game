@@ -329,6 +329,22 @@ export function rebuildNaturalSurface(
     return false;
   };
 
+  // Adaptive cells reuse one ordered formation scan rather than allocating
+  // a new .find predicate on every visit; preserve the first matching SEED
+  // formation, the exact wrap conversion and the strict radial boundary.
+  const formationAt = (point: Sample, size: number) => {
+    for (const { f, metres: m } of formationMetres) {
+      const east = wrapSourceX(point.x-f.x)/m.x,
+        north = (point.z-f.z)/m.z,
+        reach = f.radiusM+size/m.z;
+      // A point outside either reach extent cannot pass the original exact
+      // radial threshold. Keep Math.hypot for every possible landform cell.
+      if (east >= -reach && east <= reach && north >= -reach && north <= reach &&
+          Math.hypot(east,north)<reach) return f;
+    }
+    return undefined;
+  };
+
   const majorWet = (s: Sample) => s.wet === "ocean" || s.wet === "lake";
   // Reuse a single predicate across adaptive cells; do not create an array
   // and callback closure for every short-circuit coast probe.
@@ -365,15 +381,7 @@ export function rebuildNaturalSurface(
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
         c.material !== middle.material || d.material !== middle.material,
       prepared = road || (preparedPlace && materialBoundary),
-      formation=formationMetres.find(({ f, metres: m }) => {
-        const east = wrapSourceX(middle.x-f.x)/m.x,
-          north = (middle.z-f.z)/m.z,
-          reach = f.radiusM+size/m.z;
-        // A point outside either reach extent cannot pass the original exact
-        // radial threshold. Keep Math.hypot for every possible landform cell.
-        return east >= -reach && east <= reach && north >= -reach && north <= reach &&
-          Math.hypot(east,north)<reach;
-      })?.f,
+      formation = formationAt(middle, size),
       target = formation ? Math.max(tile.size/128,formation.kind==='waterfall'?.125:formation.kind==='hill'?1:.5) : bridgeBank ? Math.max(0.25, tile.size / 256) : river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
