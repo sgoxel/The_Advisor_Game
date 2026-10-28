@@ -342,8 +342,8 @@ export function roadTangentAt(x:number,z:number,road:Road) {
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
-function roadProfileHeightAt(x: number, z: number, road: Road) {
-  const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
+function roadProfileHeightAt(x: number, z: number, road: Road, nearest = roadTangentAt(x,z,road)) {
+  const path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
     a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
   let profile=roadProfileHeights.get(key);
   if(!profile){
@@ -434,13 +434,16 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
     const distance = roadMatch.distance,
       carriagewayRadius = roadWidthM(road) / (2 * CANONICAL_METRES_PER_SOURCE_UNIT),
       weight = 1 - smooth(clamp01((distance - carriagewayRadius) / (ROAD_SHOULDER_M / CANONICAL_METRES_PER_SOURCE_UNIT))),
+      // A road profile and crossing use the identical nearest segment/t;
+      // resolve that pure SEED tangent once instead of scanning the same
+      // canonical polyline twice at every composed surface coordinate.
+      tangent = roadTangentAt(x,z,road),
       initialRoadHeight = boundedEarthwork(
-        roadProfileHeightAt(x, z, road),
+        roadProfileHeightAt(x, z, road, tangent),
         base.groundHeight,
         4,
         3,
       ),
-      tangent = roadTangentAt(x,z,road),
       // Keep the existing owned crossing available throughout its dry 80 m approach.
       // Without this reach the earthwork transition was disabled past the river bank.
       crossing = freshwaterCrossingAt(tangent.cx,tangent.cz,tangent.x,tangent.z,80),
