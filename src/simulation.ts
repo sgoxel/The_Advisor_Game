@@ -1617,8 +1617,10 @@ export function provablyLateWithStandingBounds(
   from: Offset, to: Offset, fromShiftM: number, toShiftM: number, remainingSeconds: number,
 ): boolean {
   if (fromShiftM < 0 || toShiftM < 0 || !Number.isFinite(fromShiftM) || !Number.isFinite(toShiftM)) return false;
+  // Preserve a one-micrometre guard against floating-point rounding at a
+  // strict deadline. Close calls continue through exact standing-slot routing.
   const minimumMetres = Math.max(0,
-    Math.hypot(to.eastM - from.eastM, to.northM - from.northM) - fromShiftM - toShiftM);
+    Math.hypot(to.eastM - from.eastM, to.northM - from.northM) - fromShiftM - toShiftM - 1e-6);
   return minimumMetres > 1e-6 &&
     (remainingSeconds < 60 || minimumMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
 }
