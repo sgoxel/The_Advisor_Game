@@ -674,6 +674,22 @@ function drySlopeAt(
   return Number.isFinite(slope) ? slope : Math.abs(centre) * 0;
 }
 
+/** The shoreline bisection needs only the original natural-water kind,
+ * not its expensive elevation, terrain slope, vegetation or walkable verdict.
+ * Keep this read-only classification byte-for-byte consistent with the
+ * naturalSurfaceAt wet-domain and nearest-river decision; never use it for
+ * legal ground, bridge decks, wilderness landforms or collision. */
+export function naturalWaterKindAt(x: number, z: number): NaturalSurface["water"]["kind"] {
+  const sx = wrapSourceX(x),
+    macro = macroSampleAt(sourceToLonLat(sx, z));
+  if (macro.domain === "Ocean") return "ocean";
+  if (macro.domain === "Lake") return "lake";
+  const nearest = nearestRiver(sx, z),
+    hit = nearest && nearest.distance > nearest.segment.width && nearest.distance <= 3.7
+      ? nearestRiver(sx, z, true) || nearest : nearest;
+  return hit && hit.distance <= hit.segment.width ? "river" : "none";
+}
+
 export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
   naturalQueries++;
   const sx = wrapSourceX(x),

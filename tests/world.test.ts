@@ -62,7 +62,7 @@ import { terrainTint } from "../src/geometry-core.ts";
 
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
-import { naturalSurfaceAt, naturalElevationAt } from "../src/hydrology.ts";
+import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 
 
 test("S009 terrain coverage reuses exact canonical surface for every vertex tint", () => {
@@ -121,6 +121,29 @@ test("S009 immutable composed point reuse preserves exact slope, bridge and rend
   assert.ok(state.composedCacheSize <= state.composedCacheLimit,
     "composed surface cache must remain memory-bounded");
   assert.equal(state.composedCacheBytesEstimated, state.composedCacheSize * 1024);
+});
+
+test("S009 shoreline cut water-only probe exactly matches the natural surface", () => {
+  const crossing = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    crossing,
+    ...[-12, -6, -3, 0, 3, 6, 12].map(dx => ({ x: crossing.x + dx, z: crossing.z })),
+    ...villages.slice(0, 8).map(({ x, z }) => ({ x, z })),
+    ...[-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dz => ({
+      x: dx * SOURCE_PRESENTATION_WIDTH / 3,
+      z: dz * SOURCE_PRESENTATION_WIDTH / 7,
+    }))),
+  ];
+  let wet = 0, dry = 0;
+  for (const { x, z } of samples) {
+    const original = naturalSurfaceAt(x, z).water.kind,
+      waterOnly = naturalWaterKindAt(x, z);
+    assert.equal(waterOnly, original,
+      `shoreline cut must use original natural-water truth at ${x}/${z}`);
+    if (original === "none") dry++;
+    else wet++;
+  }
+  assert.ok(wet > 0 && dry > 0, "probe must cover both legal dry ground and genuine water");
 });
 
 test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {
