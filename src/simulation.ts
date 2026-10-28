@@ -843,7 +843,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[]>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -887,7 +887,7 @@ function streetGraphFor(place: Place): StreetGraph {
     gridBounds.maxZ = Math.max(gridBounds.maxZ, z);
   }
   const graph = { nodes, edges, weights, grid, gridBounds, legalEdges: new Map<string, boolean>(),
-    nearestLegal: new Map<string, number>(),
+    nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[]>(),
     border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
     gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
   streetGraphs.set(place.code, graph);
@@ -1308,6 +1308,13 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
     if (start === goal) {
       path = [from, graph.nodes[start], to];
     } else {
+      // Different owned doors can join the same legally validated street-node
+      // pair. The immutable SEED graph, fixed goal and stable A* tie rule make
+      // its interior route identical; endpoint connectors remain checked for
+      // each individual resident by nearest().
+      const nodeKey = `${start}/${goal}`, shared = graph.nodePaths.get(nodeKey);
+      if (shared) path = [from, ...shared, to];
+      else {
       const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
         frontier = new StableStreetFrontier(),
         // Heuristic depends only on immutable graph nodes and the fixed goal.
@@ -1325,27 +1332,40 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       while (frontier.size) {
         const current = frontier.take();
         if (current === goal) break;
-        graph.edges[current].forEach((next, i) => {
+        // Keep the exact ordered A* relaxations and one-metre legality
+        // checks while avoiding a new .forEach closure for every popped node.
+        const neighbours = graph.edges[current];
+        for (let i = 0; i < neighbours.length; i++) {
+          const next = neighbours[i];
           // A nonimproving edge cannot enter the path, regardless of whether its
           // physical surface is legal. Do not sample every metre needlessly.
           const tentative = cost.get(current)! + graph.weights[current][i];
-          if (!(tentative < (cost.get(next) ?? Infinity))) return;
+          if (!(tentative < (cost.get(next) ?? Infinity))) continue;
           const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
           let legal = graph.legalEdges.get(edgeKey);
           if (legal === undefined) {
             legal = legalStreetSegment(place, graph.nodes[current], graph.nodes[next]);
             graph.legalEdges.set(edgeKey, legal);
           }
-          if (!legal) return;
+          if (!legal) continue;
           cost.set(next, tentative); cameFrom.set(next, current);
           frontier.set(next, tentative + h(next));
-        });
+        }
       }
       if (cost.has(goal)) {
         const route: Offset[] = [];
         for (let node: number | undefined = goal; node !== undefined; node = cameFrom.get(node))
-          route.unshift(graph.nodes[node]);
+          route.push(graph.nodes[node]);
+        // Backtracking is destination-first. Reverse once instead of shifting
+        // every preceding point on each hop; retain identical canonical nodes.
+        route.reverse();
         path = [from, ...route, to];
+        graph.nodePaths.set(nodeKey, route);
+        // Retain a finite working set. Never cache blocked routes as a legal
+        // shortcut or share endpoint-specific connectors across residents.
+        while (graph.nodePaths.size > 512)
+          graph.nodePaths.delete(graph.nodePaths.keys().next().value!);
+      }
       }
     }
   }
