@@ -1585,15 +1585,27 @@ function fieldEntry(place: Place, foundation: ResidentFoundation, anchor: Routin
   const ground = settlementAnchors(place).areas.get(coordKey(anchorOffset(place, foundation, anchor)));
   return ground?.field ? ground : undefined;
 }
+/** A field approach cannot be used when either original one-metre
+ * connector is illegal. Check those exact directed segments BEFORE the
+ * potentially expensive street search; this is only a negative proof.
+ * Failed approaches still use the original fully validated direct fallback. */
+export function fieldConnectorsAllowCore<T>(
+  from: T, to: T, fromEntry: T | undefined, toEntry: T | undefined,
+  legalSegment: (start: T, end: T) => boolean,
+): boolean {
+  return (!fromEntry || legalSegment(from, fromEntry)) &&
+    (!toEntry || legalSegment(toEntry, to));
+}
 function routinePath(place: Place, from: Offset, to: Offset, fromEntry?: Offset, toEntry?: Offset): Offset[] | null {
   if (!fromEntry && !toEntry) return streetPath(place, from, to);
   const key = residentStreetPathKey(place.code, from, to, true) +
     `|${fromEntry?.eastM},${fromEntry?.northM}|${toEntry?.eastM},${toEntry?.northM}`,
     cached = fieldRouteCache.get(key);
   if (cached !== undefined) return cached;
-  const core = streetPath(place, fromEntry ?? from, toEntry ?? to);
-  const route = core && (!fromEntry || legalStreetSegment(place, from, fromEntry)) &&
-    (!toEntry || legalStreetSegment(place, toEntry, to))
+  const connectorsLegal = fieldConnectorsAllowCore(from, to, fromEntry, toEntry,
+    (start, end) => legalStreetSegment(place, start, end));
+  const core = connectorsLegal ? streetPath(place, fromEntry ?? from, toEntry ?? to) : null;
+  const route = core
     ? [...(fromEntry ? [from] : []), ...core, ...(toEntry ? [to] : [])]
     : streetPath(place, from, to);
   fieldRouteCache.set(key, route);
