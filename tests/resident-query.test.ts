@@ -4,6 +4,7 @@ import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, resi
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
+import { continuousWalkableOffsetSegment, residentEndpointWalkable, legalPosition } from "../src/simulation.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -452,4 +453,24 @@ test("selected real actor stays visible during nearby population handoff, never 
   assert.equal(selectedResidentVisibleInView({ ...actual, x: -131071.98 },
     { x: 131071.98, z: 6, radius: .1 }), true,
     "the real canonical seam is wrapped rather than sending the actual actor to another world");
+});
+
+test("S009 repeated metre samples retain exact original SEED walkability in either direction", () => {
+  const place = villages[0],
+    samples = [
+      [{ eastM: 0, northM: 0 }, { eastM: 13, northM: -8 }],
+      [{ eastM: -0, northM: 0 }, { eastM: 8, northM: -0 }],
+      [{ eastM: 91.01459183919955, northM: 0 }, { eastM: 91.01459183919954, northM: 7 }],
+      [{ eastM: 18, northM: -12 }, { eastM: 25, northM: -18 }],
+    ] as const;
+  for (const [a, b] of samples) {
+    for (const [from, to] of [[a, b], [b, a]] as const) {
+      const full = continuousWalkableOffsetSegment(from, to,
+        point => legalPosition(place, point.eastM, point.northM).grounded);
+      for (let repeat = 0; repeat < 2; repeat++)
+        assert.equal(continuousWalkableOffsetSegment(from, to,
+          point => residentEndpointWalkable(place, point)), full,
+        "a cached exact metre cannot invent dry ground, bridge access or a successful blocked leg");
+    }
+  }
 });

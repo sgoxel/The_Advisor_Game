@@ -1109,13 +1109,27 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
     cached = streetSegmentLegality.get(key);
   if (cached !== undefined) return cached;
+  // This same t=0 metre is mandatory on every legal segment. A blocked
+  // canonical origin disproves the route before building a cold street
+  // graph; interpolate literally as the original validator does (including
+  // -0), never round or substitute the caller's approximate endpoint.
+  const firstMetre = {
+    eastM: from.eastM + (to.eastM - from.eastM) * 0,
+    northM: from.northM + (to.northM - from.northM) * 0,
+  };
+  if (!residentEndpointWalkable(place, firstMetre)) {
+    streetSegmentLegality.set(key, false);
+    while (streetSegmentLegality.size > 16384)
+      streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
+    return false;
+  }
   const { border, gates } = streetGraphFor(place),
     legal = legalEnclosureSegment(from, to, border, gates) &&
-      continuousWalkableOffsetSegment(from, to, point => {
-        const p = canonicalOffset(place, point.eastM, point.northM),
-          source = lonLatToSource(p.lon, p.lat);
-        return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-      });
+      // Every original interpolated one-metre coordinate is still sampled.
+      // Reuse its exact immutable SEED verdict across overlapping street,
+      // gate and overnight legs instead of recomposing the same final surface.
+      // The cache distinguishes signed zero and never rounds bridge-edge ULPs.
+      continuousWalkableOffsetSegment(from, to, point => residentEndpointWalkable(place, point));
   streetSegmentLegality.set(key, legal);
   while (streetSegmentLegality.size > 16384)
     streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
