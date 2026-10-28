@@ -1,5 +1,5 @@
 import type { Geometry } from "./geometry.ts";
-import { nearbyLandforms } from './wilderness-terrain.ts';
+import { nearbyLandforms, wildernessTerrainAt } from './wilderness-terrain.ts';
 import { sourceUnitsPerMetreAt } from './physical-scale.ts';
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
@@ -132,6 +132,32 @@ export function rebuildNaturalSurface(
   // vertices; defer their identical SEED-derived tint until vertex emission.
   const tint = (point: Sample): readonly number[] =>
     point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false,point.surface));
+
+  // Most tiles contain no local roads, settlement or relief and cannot
+  // replace the original mesh unless real SEED water changes across them.
+  // The canonical composer preserves base.water verbatim: use the identical
+  // hydrology+wilderness water channel for this negative-only proof before
+  // doing 81 costly road/site/final-surface compositions. Any actual
+  // coastline or feature still uses the full original composed sampling.
+  if (!formations.length && !segments.length && !preparedRoads.length && !preparedPlace) {
+    let firstMajor: string | undefined, mixedMajor = false;
+    let wet4 = false, dry4 = false;
+    for (let z = 0; z <= 8; z++)
+      for (let x = 0; x <= 8; x++) {
+        const sx = tile.minX + tile.size * x / 8,
+          sz = tile.minZ + tile.size * z / 8,
+          wet = wildernessTerrainAt(sx, sz, naturalSurfaceAt(sx, sz)).water.kind,
+          major = wet === "lake" || wet === "ocean" ? "wet" : "dry";
+        if (firstMajor === undefined) firstMajor = major;
+        else if (major !== firstMajor) mixedMajor = true;
+        if ((x & 1) === 0 && (z & 1) === 0) {
+          if (wet === "none") dry4 = true;
+          else wet4 = true;
+        }
+      }
+    if (!mixedMajor)
+      return { ...unchanged, waterBoundary4: wet4 && dry4 };
+  }
 
   let majorBoundary = false,
     initialWet: string | undefined,
