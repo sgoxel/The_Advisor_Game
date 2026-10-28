@@ -43,12 +43,15 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       waterBoundary4: undefined as boolean | undefined,
     };
     let baseMs: number;
+    let naturalMs: number | undefined, surfaceRefinementMs: number | undefined;
     if (job.kind === 'detail') {
       // Original detail building registered this canonical region before the
       // adaptive pass. Keep that order and retain coarse ground when replacement
       // is unnecessary; plain tiles must never become blank.
       registerContinuityPatch(tile.minX+tile.size/2,tile.minZ+tile.size/2);
+      const naturalStarted = performance.now();
       const proposed = rebuildNaturalSurface(tile, emptyTerrain);
+      naturalMs = performance.now() - naturalStarted;
       natural = proposed;
       const buildStarted = performance.now();
       base = buildTile(tile, {skipBaseTerrain:proposed.replaced});
@@ -59,8 +62,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       base = buildTile(tile, {terrainOnly:true});
       baseMs = performance.now()-buildStarted;
     }
+    const refinementStarted = performance.now();
     const data = job.kind === 'detail'
       ? refineTileSurfacePresentation(tile,base,natural.replaced,natural.waterBoundary4) : base;
+    if (job.kind === 'detail') surfaceRefinementMs = performance.now() - refinementStarted;
     const groundDone = performance.now();
     let vegetation;
     if(job.kind==='detail'){vegetation=buildVegetationGeometry(tile);data.nature=vegetation.geometry;}
@@ -71,7 +76,8 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       if (g.uvs) transfer.push(g.uvs.buffer);
     }
     self.postMessage({tile,data,precision,kind:job.kind,jobKey,vegetation:vegetation?.telemetry,continuity:continuityTelemetry(),
-      timing:{baseMs,groundRefinementMs:groundDone-started-baseMs,decorationMs:performance.now()-groundDone,totalMs:performance.now()-started},
+      timing:{baseMs,groundRefinementMs:groundDone-started-baseMs,naturalMs,surfaceRefinementMs,
+        decorationMs:performance.now()-groundDone,totalMs:performance.now()-started},
       natural:{replaced:natural.replaced,leaves:natural.leaves,samples:natural.samples,cpuScratchBytesEstimated:natural.cpuScratchBytesEstimated}}, {transfer});
   } catch(error){self.postMessage({tile,kind:job.kind,jobKey,error:String(error)});}
 };

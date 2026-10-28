@@ -48,13 +48,16 @@ export class TileWorkerPhaseSamples {
   readonly coverage = {
     baseMs: new BoundedTimingSamples(), groundRefinementMs: new BoundedTimingSamples(),
     decorationMs: new BoundedTimingSamples(), totalMs: new BoundedTimingSamples(),
+    naturalMs: new BoundedTimingSamples(), surfaceRefinementMs: new BoundedTimingSamples(),
   };
   readonly detail = {
     baseMs: new BoundedTimingSamples(), groundRefinementMs: new BoundedTimingSamples(),
     decorationMs: new BoundedTimingSamples(), totalMs: new BoundedTimingSamples(),
+    naturalMs: new BoundedTimingSamples(), surfaceRefinementMs: new BoundedTimingSamples(),
   };
   record(kind: string | undefined, phase?: {
     baseMs?: number; groundRefinementMs?: number; decorationMs?: number; totalMs?: number;
+    naturalMs?: number; surfaceRefinementMs?: number;
   }): void {
     if (!phase || (kind !== "coverage" && kind !== "detail")) return;
     const sample = kind === "detail" ? this.detail : this.coverage;
@@ -62,6 +65,8 @@ export class TileWorkerPhaseSamples {
     sample.groundRefinementMs.record(phase.groundRefinementMs);
     sample.decorationMs.record(phase.decorationMs);
     sample.totalMs.record(phase.totalMs);
+    sample.naturalMs.record(phase.naturalMs);
+    sample.surfaceRefinementMs.record(phase.surfaceRefinementMs);
   }
   summary() {
     const from = (samples: typeof this.coverage) => ({
@@ -69,6 +74,8 @@ export class TileWorkerPhaseSamples {
       groundRefinementMs: samples.groundRefinementMs.summary(),
       decorationMs: samples.decorationMs.summary(),
       totalMs: samples.totalMs.summary(),
+      naturalMs: samples.naturalMs.summary(),
+      surfaceRefinementMs: samples.surfaceRefinementMs.summary(),
     });
     return { coverage: from(this.coverage), detail: from(this.detail) };
   }

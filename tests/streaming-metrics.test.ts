@@ -128,13 +128,17 @@ test("separate bounded coverage/detail worker stages expose honest p95 without c
   phases.record("residents", { totalMs: 9000 });
   phases.record("coverage", { baseMs: 3, groundRefinementMs: 4, decorationMs: 1, totalMs: 8 });
   phases.record("coverage", { baseMs: 4, groundRefinementMs: 5, decorationMs: 2, totalMs: 11 });
-  phases.record("detail", { baseMs: 20, groundRefinementMs: 80, decorationMs: 40, totalMs: 140 });
+  phases.record("detail", { baseMs: 20, groundRefinementMs: 80, naturalMs: 54, surfaceRefinementMs: 26,
+    decorationMs: 40, totalMs: 140 });
   phases.record("detail", { baseMs: NaN, groundRefinementMs: -1, decorationMs: Infinity });
   const summary = phases.summary();
   assert.deepEqual(summary.coverage.totalMs, { samples: 2, latest: 11, p50: 8, p95: 11, p99: 11 });
   assert.equal(summary.coverage.baseMs.p95, 4);
   assert.equal(summary.detail.groundRefinementMs.p95, 80);
   assert.equal(summary.detail.totalMs.p95, 140);
+  assert.equal(summary.detail.naturalMs.p95, 54);
+  assert.equal(summary.detail.surfaceRefinementMs.p95, 26);
+  assert.equal(summary.coverage.naturalMs.samples, 0, "coverage never reports fictional natural rebuild time");
   assert.equal(summary.detail.baseMs.samples, 1, "invalid stage data may not produce a fake zero");
   assert.equal(summary.coverage.totalMs.samples, 2, "unrelated resident jobs never count as tiles");
   for (let i = 0; i < 320; i++) phases.record("detail", { totalMs: i });
