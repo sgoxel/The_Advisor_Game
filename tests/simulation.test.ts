@@ -61,7 +61,7 @@ const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
 
-test("resident inspector S009 blocked endpoints preflight without relaxing legal walking", () => {
+test("resident inspector can resolve facts: S009 blocked endpoints preflight without relaxing legal walking", () => {
   const from = { eastM: 10, northM: 20 }, to = { eastM: 250, northM: 45 };
   const seen: string[] = [];
   const leg = (point: typeof from) => {
