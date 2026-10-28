@@ -729,14 +729,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       catchmentCode: macro.code,
     });
 
-  // The separate elevation call normally recomputes the same expensive
-  // macro geography. Reuse only when a second source normalization is exact,
-  // preserving seam floating-point results when it differs by an ULP.
-  const sameElevationSource = wrapSourceX(sx) === sx,
-    terrain = sameElevationSource
-      ? naturalElevationForMacro(sx, z, macro)
-      : naturalElevationAt(sx, z),
-    nearest = nearestRiver(sx, z),
+  const nearest = nearestRiver(sx, z),
     // Wet footprints form a union; a narrow nearby tributary's dry bank may not
     // erase water belonging to a wider channel.
     hit = nearest && nearest.distance>nearest.segment.width && nearest.distance<=3.7 ? nearestRiver(sx,z,true) || nearest : nearest,
@@ -765,6 +758,14 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
         .split("/TRIBUTARY/")[0],
     });
   }
+  // River water has no need for dry-land elevation: every wet output above
+  // depends only on the unchanged river hit/bed. Defer the exact original
+  // calculation to dry ground and graded banks, including ULP seam fallback.
+  // No surface, permission, bridge or walking decision is approximated.
+  const sameElevationSource = wrapSourceX(sx) === sx,
+    terrain = sameElevationSource
+      ? naturalElevationForMacro(sx, z, macro)
+      : naturalElevationAt(sx, z);
   // Bank influence is a union of wet footprints, not nearest centreline only.
   // A narrow closer reach may end its bank while a wider reach still owns it.
   if (nearest && nearest.distance <= 3.7 + RIVER_BANK_HALF_WIDTH_SOURCE) {
