@@ -129,9 +129,23 @@ test("resident inspector can resolve facts: S009 overnight blocked origins short
     seenReverse: number[] = [];
   assert.equal(routineHasBlockedOrigin([{ from: reverseFrom, to: reverseTo }], point => {
     seenReverse.push(point.eastM);
+    return point === reverseTo;
+  }), false, "reverse original start is uncertain; exact normalized lower end is walkable");
+  assert.deepEqual(seenReverse, [reverseTo.eastM]);
+  seenReverse.length = 0;
+  assert.equal(routineHasBlockedOrigin([{ from: reverseFrom, to: reverseTo }], point => {
+    seenReverse.push(point.eastM);
     return false;
-  }), false, "reverse-ordered origins cannot be rejected from exact-endpoint walkability");
-  assert.deepEqual(seenReverse, [], "an uncertain reverse leg must enter the original full street search");
+  }), true, "blocked exact lower endpoint invalidates a reversed ordinary street leg");
+  assert.deepEqual(seenReverse, [reverseTo.eastM]);
+  seenReverse.length = 0;
+  assert.equal(routineHasBlockedOrigin([{
+    from: reverseFrom, to: reverseTo, fromEntry: { eastM: 5, northM: 1 },
+  }], point => {
+    seenReverse.push(point.eastM);
+    return false;
+  }), false, "reverse field-entry travel remains uncertain and must run full physical checks");
+  assert.deepEqual(seenReverse, [], "do not reject an unproven t=1 field endpoint");
   assert.notEqual(reverseTo.eastM + (reverseFrom.eastM - reverseTo.eastM),
     reverseFrom.eastM, "the original t=1 sample can differ by one ULP");
   assert.equal(continuousWalkableOffsetSegment(reverseTo, reverseFrom,
