@@ -1696,6 +1696,11 @@ async function start() {
         idleWorkers.push(worker);
         return;
       }
+      if (event.data.kind === "resident-started") {
+        residentPhaseTimings.recordStartNotice(event.data.mainSentEpochMs,
+          performance.timeOrigin + performance.now());
+        return; // Does not free a worker, accept an actor or mutate a batch.
+      }
       if (event.data.kind === "resident-first-fact") {
         const batch = residentBatches.get(event.data.id);
         // Preview does not make this worker idle or finish a shard. Final

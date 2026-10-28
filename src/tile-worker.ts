@@ -17,6 +17,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   if (event.data.kind === "residents") {
     const job = event.data, started = performance.now(), workerReceiveEpochMs = performance.timeOrigin + started;
     try {
+      // One observation-only start notice. The main thread can measure its
+      // receipt against its OWN send clock without comparing worker epochs.
+      self.postMessage({ kind:"resident-started", id:job.id, shard:job.shard?.index,
+        mainSentEpochMs:job.mainSentEpochMs });
       residentSimulation ??= import("./simulation.ts").then(({ LazySimulation }) => new LazySimulation());
       const simulation = await residentSimulation, { places } = await import("./geography.ts"),
         place = places.find(place => place.code === job.placeCode);
