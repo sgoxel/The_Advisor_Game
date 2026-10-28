@@ -143,11 +143,15 @@ export function rebuildNaturalSurface(
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
         : [],
-    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(naturalSurfaceRoadCandidates(tile), tile.minX, tile.minZ, tile.size)]
+    // Every intersecting segment of one polyline yields a separate fragment,
+    // but roadDistanceAt measures that same immutable COMPLETE road each time.
+    // Preserve the first canonical occurrence and skip duplicate full-polyline
+    // scans in every adaptive cell. No fragment, route or material is redefined.
+    preparedRoads = tile.size <= 512 ? [...new Set([...roadFragmentsInBounds(naturalSurfaceRoadCandidates(tile), tile.minX, tile.minZ, tile.size)]
       .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
           r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12))
-      .map(r => r.centerline ? canonicalDistanceRoadByLine.get(r.centerline) ?? r : r) : [],
+      .map(r => r.centerline ? canonicalDistanceRoadByLine.get(r.centerline) ?? r : r))] : [],
     // At tile.size <= 512 the largest possible settlement reach is
     // 510 + 512 * sqrt(2)/2 < 873 source units. Geography's immutable
     // seam-aware 2048-unit buckets include every possible positive match
