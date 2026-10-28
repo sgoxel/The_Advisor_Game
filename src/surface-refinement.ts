@@ -76,15 +76,15 @@ function pushTriangle(
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2,
     n = normalFor(a, b, c),
-    base = extra.positions.length / 3,
-    points = [a, b, c] as const,
-    tints = [tintA, tintB, tintC] as const;
+    base = extra.positions.length / 3;
+  // These exact ordered references need no disposable arrays per triangle.
   for (let i = 0; i < 3; i++) {
-    const point = points[i];
+    const point = i === 0 ? a : i === 1 ? b : c,
+      sourceTint = i === 0 ? tintA : i === 1 ? tintB : tintC;
     extra.positions.push(point[0] - originX, extra.uvs ? point[1] : elevationToRenderY(point[1]), point[2] - originZ);
     extra.normals.push(...n);
-    const road=Boolean(extra.uvs)&&tints[i][0]===ROAD_COVERAGE_RGB[0]&&tints[i][1]===ROAD_COVERAGE_RGB[1]&&tints[i][2]===ROAD_COVERAGE_RGB[2],
-      tint=road?terrainTint(point[0],point[2],32,undefined,0,false):tints[i];
+    const road=Boolean(extra.uvs)&&sourceTint[0]===ROAD_COVERAGE_RGB[0]&&sourceTint[1]===ROAD_COVERAGE_RGB[1]&&sourceTint[2]===ROAD_COVERAGE_RGB[2],
+      tint=road?terrainTint(point[0],point[2],32,undefined,0,false):sourceTint;
     extra.colors.push(tint[0],tint[1],tint[2],extra.uvs?(road?255:0):255);
     if (extra.uvs)
       extra.uvs.push(
