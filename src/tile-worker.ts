@@ -38,7 +38,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   }
   const job = event.data, tile = job.tile, jobKey = tileJobKey(job), started = performance.now();
   try {
-    let base: ReturnType<typeof buildTile>, natural = {replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0};
+    let base: ReturnType<typeof buildTile>, natural = {
+      replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0,
+      waterBoundary4: undefined as boolean | undefined,
+    };
     let baseMs: number;
     if (job.kind === 'detail') {
       // Original detail building registered this canonical region before the
@@ -57,7 +60,7 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       baseMs = performance.now()-buildStarted;
     }
     const data = job.kind === 'detail'
-      ? refineTileSurfacePresentation(tile,base,natural.replaced) : base;
+      ? refineTileSurfacePresentation(tile,base,natural.replaced,natural.waterBoundary4) : base;
     const groundDone = performance.now();
     let vegetation;
     if(job.kind==='detail'){vegetation=buildVegetationGeometry(tile);data.nature=vegetation.geometry;}
