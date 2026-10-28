@@ -109,6 +109,8 @@ export class ResidentQueryPhaseSamples {
   readonly workerReceiveToSendMs = new BoundedTimingSamples();
   readonly workerSendToMainMs = new BoundedTimingSamples();
   readonly mainSendToResponseMs = new BoundedTimingSamples();
+  readonly mainSendToStartNoticeMs = new BoundedTimingSamples();
+  readonly mainTransportOutsideWorkerMs = new BoundedTimingSamples();
   // Cross-context epochs may not share a valid order in clock-controlled
   // browser captures. Never discard valid local-clock spans with them.
   private invalidCrossClockSamples = 0;
@@ -126,6 +128,16 @@ export class ResidentQueryPhaseSamples {
   }
 
   clearPending(): void { this.offered = undefined; }
+
+  /** The first worker-start notification is read on the main clock. Its
+   * delivery can delay observation, so this is an UPPER BOUND on queueing,
+   * never a pure measure of worker admission time. */
+  recordStartNotice(mainSentEpochMs?: number, mainNoticeEpochMs?: number) {
+    if (typeof mainSentEpochMs === "number" && typeof mainNoticeEpochMs === "number" &&
+        Number.isFinite(mainSentEpochMs) && Number.isFinite(mainNoticeEpochMs) &&
+        mainSentEpochMs >= 0 && mainNoticeEpochMs >= mainSentEpochMs)
+      this.mainSendToStartNoticeMs.record(mainNoticeEpochMs - mainSentEpochMs);
+  }
 
   /** Shared performance time origins allow cross-thread epochs to be compared.
    * Missing/out-of-order clocks produce no sample, never a synthetic zero.
@@ -145,6 +157,12 @@ export class ResidentQueryPhaseSamples {
     // an external test clock offsets the separate performance origins.
     if (replied >= arrived) this.workerReceiveToSendMs.record(replied - arrived);
     if (mainReceivedEpochMs >= sent) this.mainSendToResponseMs.record(mainReceivedEpochMs - sent);
+    // Same-clock durations cancel any constant cross-context epoch offset.
+    // Total queue+delivery overhead is measurable, but it cannot assign the
+    // two parts individually or infer physical-device performance.
+    if (replied >= arrived && mainReceivedEpochMs >= sent &&
+        mainReceivedEpochMs - sent >= replied - arrived)
+      this.mainTransportOutsideWorkerMs.record((mainReceivedEpochMs - sent) - (replied - arrived));
     this.lastSignedCrossClockMs = { mainToWorker: arrived - sent, workerToMain: mainReceivedEpochMs - replied };
     // A cross-clock interval is a measured latency only if *all* event
     // boundaries are ordered; negative intervals must not turn into zeros.
@@ -222,6 +240,8 @@ export class ResidentQueryPhaseSamples {
       workerReceiveToSendMs: this.workerReceiveToSendMs.summary(),
       workerSendToMainMs: this.workerSendToMainMs.summary(),
       mainSendToResponseMs: this.mainSendToResponseMs.summary(),
+      mainSendToStartNoticeMs: this.mainSendToStartNoticeMs.summary(),
+      mainTransportOutsideWorkerMs: this.mainTransportOutsideWorkerMs.summary(),
       invalidCrossClockSamples: this.invalidCrossClockSamples,
       lastSignedCrossClockMs: this.lastSignedCrossClockMs,
       accepted: this.accepted,
