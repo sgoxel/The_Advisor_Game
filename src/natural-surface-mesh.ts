@@ -1,5 +1,5 @@
 import type { Geometry } from "./geometry.ts";
-import { nearbyLandforms, wildernessTerrainAt } from './wilderness-terrain.ts';
+import { landformAt, nearbyLandforms, wildernessTerrainAt } from './wilderness-terrain.ts';
 import { sourceUnitsPerMetreAt } from './physical-scale.ts';
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
@@ -47,6 +47,19 @@ type Sample = {
   /** Same canonical composed channels already queried to create this sample. */
   surface: ReturnType<typeof finalSurfaceRenderChannelsAt>;
 };
+
+/** Preserve the original wilderness water classification without evaluating
+ * dry elevation/slope for a point that has no local water-changing landform.
+ * Every actual landform still executes the original full canonical path.
+ * This predicate cannot certify legal traversal or supply a mesh vertex. */
+export function sparseNaturalWildernessWaterKindAt(
+  x: number, z: number,
+): ReturnType<typeof naturalWaterKindAt> {
+  const kind = naturalWaterKindAt(x, z);
+  return kind === "none" && landformAt(x, z)
+    ? wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water.kind
+    : kind;
+}
 
 /**
  * One bounded replacement surface. The old coarse ground cannot occlude canonical
@@ -146,7 +159,7 @@ export function rebuildNaturalSurface(
       for (let x = 0; x <= 8; x++) {
         const sx = tile.minX + tile.size * x / 8,
           sz = tile.minZ + tile.size * z / 8,
-          wet = wildernessTerrainAt(sx, sz, naturalSurfaceAt(sx, sz)).water.kind,
+          wet = sparseNaturalWildernessWaterKindAt(sx, sz),
           major = wet === "lake" || wet === "ocean" ? "wet" : "dry";
         if (firstMajor === undefined) firstMajor = major;
         else if (major !== firstMajor) mixedMajor = true;
