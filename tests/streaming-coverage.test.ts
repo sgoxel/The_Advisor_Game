@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {coverageKey,nextStreamingJob,progressiveDetailKeys,visibleCoverageKeys} from '../src/streaming-coverage.ts';
+import {coverageKey,nextStreamingJob,deferOptionalDetailForFirstResident,progressiveDetailKeys,visibleCoverageKeys} from '../src/streaming-coverage.ts';
 import type {Tile} from '../src/world.ts';
 const tile=(key:string)=>({key} as Tile), root=tile('root'), fine=[tile('a'),tile('b')], coarse=[tile('parent')];
 test('root then current-view terrain precede fine decoration work',()=>{
@@ -47,4 +47,17 @@ test('panning drops only old patches outside the new footprint; retained LOD sta
  const hit=(a:string,b:string)=>a===b || (a==='old'&&b==='a');
  assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['b']),['old','outside'],true,hit),['old','b']);
  assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['b']),['old'],true,hit,1),['old']);
+});
+
+test('cold resident CPU reservation defers only optional detail and always expires', () => {
+ const detailed = { tile: fine[0], kind: 'detail' as const },
+   preview = { tile: coarse[0], kind: 'coverage' as const };
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 2, true, 3000), true);
+ assert.equal(deferOptionalDetailForFirstResident(preview, 2, true, 3000), false);
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 0, true, 3000), false);
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 2, false, 3000), false);
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 2, true, 45000), false);
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 2, true, null), false);
+ assert.equal(deferOptionalDetailForFirstResident(detailed, 2, true, NaN), false);
+ assert.equal(deferOptionalDetailForFirstResident(undefined, 2, true, 3000), false);
 });

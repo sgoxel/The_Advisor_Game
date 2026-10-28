@@ -5,7 +5,7 @@ import { nearbyWilderness } from "./wilderness.ts";
 import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
-import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
+import {coverageKey, tileJobKey, nextStreamingJob, deferOptionalDetailForFirstResident, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
@@ -1100,9 +1100,15 @@ function processStreaming(material: pc.StandardMaterial) {
     const cachedOrPending={has:(key:string)=>cachedKeys.has(key)||pending.has(key)};
     while(!captureStreamingQuiesced && idleWorkers.length && generationReadyInUse()<generationLimit()){
       const before=inFlight, job=nextStreamingJob(root,wanted,coverageTiles,cachedOrPending);
+      // Once coherent terrain is ready, the first lawful resident outranks
+      // additional optional fine-detail CPU jobs. Cap the reservation so
+      // broken/slow queries cannot starve the visible world indefinitely.
+      if (deferOptionalDetailForFirstResident(job, residentRunningWorkers(),
+        firstResidentFactMs === null, firstResidentQueryOfferedAt === null
+          ? null : performance.now() - firstResidentQueryOfferedAt)) break;
       if(job)request(job.tile,job.kind);
       // Nothing urgent left: keep warming the cache around the player in the background.
-      else if (ready && !lodTransition && measuredStreamingFps >= 30 &&
+      else if (!residentRunningWorkers() && ready && !lodTransition && measuredStreamingFps >= 30 &&
         canPrefetchStreamingJob(inFlight+residentRunningWorkers(),uploads.length,idleWorkers.length,streamingBudget) &&
         !residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready).inspect) prefetchNext(root);
       if(inFlight===before)break;

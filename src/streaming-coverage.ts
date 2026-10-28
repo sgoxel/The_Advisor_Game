@@ -38,3 +38,19 @@ export function visibleCoverageKeys(keys: string[], cached: Pick<ReadonlySet<str
   // The emergency root also uses one draw slot.
   return keys.filter(key=>cached.has(key)).slice(0,Math.max(0,activeLimit-fineCount-1));
 }
+
+/** Bound the cold-resident CPU reservation without changing the work, its
+ * deterministic order or the authoritative mesh. Coverage/root generation
+ * always proceeds, and background detail resumes by a fixed timeout even
+ * when a resident query never responds. */
+export function deferOptionalDetailForFirstResident(
+  next: TileJob | undefined,
+  activeResidentWorkers: number,
+  firstResidentPending: boolean,
+  elapsedSinceFirstOfferMs: number | null,
+): boolean {
+  return next?.kind === 'detail' && activeResidentWorkers > 0 && firstResidentPending &&
+    elapsedSinceFirstOfferMs !== null &&
+    Number.isFinite(elapsedSinceFirstOfferMs) &&
+    elapsedSinceFirstOfferMs >= 0 && elapsedSinceFirstOfferMs < 45000;
+}
