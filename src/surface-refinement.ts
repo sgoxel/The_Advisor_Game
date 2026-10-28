@@ -52,9 +52,7 @@ function emptyExtra(withUvs = false): ExtraGeometry {
 /** Every overlay triangle used to recompute the same costly world tint for
  * each copy of a shared corner. Identical coordinate + identical SEED query
  * has identical RGB; retain it only while building this one fine tile. */
-function roadBaseTint(extra: ExtraGeometry, x: number, z: number) {
-  const cache = extra.roadTintCache;
-  if (!cache) return terrainTint(x, z, 32, undefined, 0, false);
+export function roadBaseTint(cache: Map<string, ReturnType<typeof terrainTint>>, x: number, z: number) {
   const key = `${x}/${z}`, cached = cache.get(key);
   if (cached) return cached;
   const tint = terrainTint(x, z, 32, undefined, 0, false);
@@ -100,7 +98,7 @@ function pushTriangle(
     extra.positions.push(point[0] - originX, extra.uvs ? point[1] : elevationToRenderY(point[1]), point[2] - originZ);
     extra.normals.push(...n);
     const road=Boolean(extra.uvs)&&sourceTint[0]===ROAD_COVERAGE_RGB[0]&&sourceTint[1]===ROAD_COVERAGE_RGB[1]&&sourceTint[2]===ROAD_COVERAGE_RGB[2],
-      tint=road?roadBaseTint(extra,point[0],point[2]):sourceTint;
+      tint=road?roadBaseTint(extra.roadTintCache!,point[0],point[2]):sourceTint;
     extra.colors.push(tint[0],tint[1],tint[2],extra.uvs?(road?255:0):255);
     if (extra.uvs)
       extra.uvs.push(
