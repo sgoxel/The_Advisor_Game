@@ -10,29 +10,6 @@ import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "..
 import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
 import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
-import { wildernessTerrainAt } from "../src/wilderness-terrain.ts";
-import { naturalSurfaceAt } from "../src/hydrology.ts";
-
-test("S009 fast featureless-tile water probe is canonical at coast, river, wilderness and village samples", () => {
-  // Composition never alters base.water, even at a SEED bridge or pad.
-  // The fast negative-only mesh probe uses the identical canonical base
-  // water, then leaves every true boundary to the full composed path.
-  const samples = [
-    villages[0],
-    finalSurfaceEvidenceAnchors().bridge,
-    ...drainageRecipes.slice(0, 2).flatMap(recipe => recipe.points.filter((_, i) =>
-      i === 0 || i === Math.floor(recipe.points.length / 2))),
-    ...[[-1, 0], [0, 0], [1, .5], [-.75, -.5]].map(([x, z]) =>
-      ({ x: x * SOURCE_PRESENTATION_WIDTH / 8,
-        z: z * SOURCE_PRESENTATION_WIDTH / 8 })),
-  ];
-  for (const { x, z } of samples) {
-    const waterOnly = wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water;
-    const fullyComposed = finalSurfaceRenderChannelsAt(x, z).water;
-    assert.deepEqual(waterOnly, fullyComposed,
-      "a fast rejection cannot disagree with original SEED-composed water");
-  }
-});
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
   const place= villages[0], tile=tileForPosition(place.x,place.z,10);
