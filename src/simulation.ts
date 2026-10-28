@@ -801,6 +801,23 @@ const KIND_RANK: Readonly<Partial<Record<ActivityKind, number>>> = { guard: 0, w
  * Which residents use which standing ground, from their workday and rest-day plans. Each resident gets one slot per
  * ground, numbered by (most frequent use first, resident index), so any two residents at a ground are on different slots.
  */
+/** Rank 0–9 then increasing canonical index, matching the original comparator.
+ * Input indices are already ascending from the complete SEED population scan.
+ * Return the same slot order without comparison sorting large ground rosters. */
+export function orderedResidentIndicesByStandingRank(list: readonly (readonly [number, number])[]): Uint32Array {
+  const next = new Uint32Array(10);
+  for (const [rank] of list) next[rank]++;
+  let start = 0;
+  for (let rank = 0; rank < next.length; rank++) {
+    const count = next[rank];
+    next[rank] = start;
+    start += count;
+  }
+  const ordered = new Uint32Array(list.length);
+  for (const [rank, index] of list) ordered[next[rank]++] = index;
+  return ordered;
+}
+
 function standTableFor(place: Place): StandTable {
   const anchors = settlementAnchors(place);
   if (anchors.stand) return anchors.stand;
@@ -824,8 +841,10 @@ function standTableFor(place: Place): StandTable {
   }
   const slotOf = new Map<string, number>(), total = new Map<string, number>();
   for (const [key, list] of users) {
-    list.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    list.forEach(([, index], slot) => slotOf.set(`${key}|${index}`, slot));
+    // The population loop appended resident indexes in ascending order.
+    // Ten integer activity ranks permit a stable linear pass without sorting.
+    const ordered = orderedResidentIndicesByStandingRank(list);
+    ordered.forEach((index, slot) => slotOf.set(`${key}|${index}`, slot));
     total.set(key, list.length);
   }
   return anchors.stand = { slotOf, total };
