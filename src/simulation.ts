@@ -1343,6 +1343,19 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return stationary;
   }
+  // Exact endpoint legality is required by EVERY street connector, open-ground
+  // detour, bridge and gate leg. Reject impossible routes before materializing
+  // a settlement graph or exploring its costly nearest-node/A* candidates.
+  // An eligible endpoint merely permits the original full path validation.
+  if (!routeEndpointsWalkable(from, to, point => {
+    const position = canonicalOffset(place, point.eastM, point.northM),
+      source = lonLatToSource(position.lon, position.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  })) {
+    pathCache.set(key, null);
+    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+    return null;
+  }
   const graph = streetGraphFor(place),
     legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
     // The settlement graph, source offsets and legal final surface are
@@ -1428,19 +1441,6 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       }
       }
     }
-  }
-  // If the original legal street graph cannot connect these endpoints,
-  // do not attempt up to forty costly open-ground/bridge/gate fallbacks when
-  // either exact endpoint itself is already invalid. All such fallback routes
-  // are continuous segments subject to the same endpoint final-surface check.
-  if (!path && !routeEndpointsWalkable(from, to, point => {
-    const position = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(position.lon, position.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  })) {
-    pathCache.set(key, null);
-    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
-    return null;
   }
   // Some outdoor work sites are reached over open walkable ground rather than a
   // settlement street. Allow that physical corridor only after checking EVERY
