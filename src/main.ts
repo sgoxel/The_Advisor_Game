@@ -118,7 +118,7 @@ import {
   type StreamingBudget,
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
-import { BoundedTimingSamples, ResidentQueryPhaseSamples } from "./streaming-metrics.ts";
+import { BoundedTimingSamples, ResidentQueryPhaseSamples, TileWorkerPhaseSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
@@ -217,6 +217,7 @@ let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<strin
 const frameIntervalSamples = new BoundedTimingSamples();
 const cpuUpdateSamples = new BoundedTimingSamples();
 const workerGenerationSamples = new BoundedTimingSamples();
+const workerPhaseSamples = new TileWorkerPhaseSamples();
 const uploadSamples = new BoundedTimingSamples();
 const residentPhaseTimings = new ResidentQueryPhaseSamples();
 const residentPickSamples = new BoundedTimingSamples();
@@ -1740,6 +1741,7 @@ async function start() {
       idleWorkers.push(worker);
       lastGenerationTiming=event.data.timing||{};
       workerGenerationSamples.record(event.data.timing?.totalMs);
+      workerPhaseSamples.record(event.data.kind, event.data.timing);
       continuityBytesByWorker.set(worker, event.data.continuity?.cpuBytesEstimated || 0);
       continuityWorkerBytes = [...continuityBytesByWorker.values()].reduce((sum, bytes) => sum + bytes, 0);
       continuityWorkerState = event.data.continuity;
@@ -2573,6 +2575,8 @@ async function start() {
             frameIntervalMs: frameIntervalSamples.summary(),
             gpuFrameMs: null,
             workerMs: { ...workerGenerationSamples.summary(), completed: workerGenerationSamples.samples },
+            // Diagnostics only: coverage and detail are different workloads. No samples feed world logic.
+            workerPhasesMs: workerPhaseSamples.summary(),
             uploadMs: { ...uploadSamples.summary(), uploadsThisFrame },
             residentQueryMs: residentPhaseTimings.acceptedResponseMs.summary(),
             residentQueryPhases: residentPhaseTimings.summary(),
