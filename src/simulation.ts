@@ -1049,6 +1049,25 @@ export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" |
 // Cache exact *directed* metre-sampled checks; no coordinate rounding, and no
 // reversal that could change floating-point boundary samples on a wet bridge.
 const streetSegmentLegality = new Map<string, boolean>();
+// The composed final surface is immutable for this SEED. Overnight risk
+// preflight and street route search often check the SAME exact endpoint;
+// reuse only that endpoint's already validated fact, never a whole route.
+// Retain signed-zero distinction and every float digit: rounding can turn a
+// one-metre bridge-edge refusal into an invented legal crossing.
+const residentEndpointVerdicts = new Map<string, boolean>();
+export function residentEndpointWalkable(place: Place, point: Offset): boolean {
+  const coordinate = (value: number) => Object.is(value, -0) ? "-0" : String(value),
+    key = `${place.code}|${coordinate(point.eastM)},${coordinate(point.northM)}`,
+    cached = residentEndpointVerdicts.get(key);
+  if (cached !== undefined) return cached;
+  const position = canonicalOffset(place, point.eastM, point.northM),
+    source = lonLatToSource(position.lon, position.lat),
+    legal = residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  residentEndpointVerdicts.set(key, legal);
+  while (residentEndpointVerdicts.size > 4096)
+    residentEndpointVerdicts.delete(residentEndpointVerdicts.keys().next().value!);
+  return legal;
+}
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
     cached = streetSegmentLegality.get(key);
@@ -1348,12 +1367,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   // unwalkable origins before constructing the cold street graph. Do NOT
   // preflight the destination: t=1 interpolation can differ by one ULP from
   // its exact coordinate, so a valid route still needs its original checks.
-  const endpointWalkable = (point: Offset) => {
-    const position = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(position.lon, position.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  };
-  if (!endpointWalkable(from)) {
+  if (!residentEndpointWalkable(place, from)) {
     pathCache.set(key, null);
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return null;
@@ -1447,7 +1461,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   // Preserve the original post-street-failure destination rejection.
   // The canonical origin was already checked above; a blocked destination
   // still cannot be made walkable by the physically validated fallbacks.
-  if (!path && !endpointWalkable(to)) {
+  if (!path && !residentEndpointWalkable(place, to)) {
     pathCache.set(key, null);
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return null;
@@ -1728,11 +1742,7 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   // deadline, the overnight chain is at risk before any settlement-wide slot
   // roster or metre-sampled street graph is constructed. No uncertain leg
   // is accepted by this inexpensive proof.
-  const originWalkable = (origin: Offset) => {
-    const position = canonicalOffset(place, origin.eastM, origin.northM),
-      source = lonLatToSource(position.lon, position.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  };
+  const originWalkable = (origin: Offset) => residentEndpointWalkable(place, origin);
   const anchors = settlementAnchors(place);
   const shiftBound = (anchor: RoutineAnchor, base: Offset, indoors: boolean) =>
     indoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")
