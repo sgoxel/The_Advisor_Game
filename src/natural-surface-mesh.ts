@@ -65,6 +65,7 @@ export function rebuildNaturalSurface(
   samples: number;
   surfaceVertices: number;
   cpuScratchBytesEstimated: number;
+  waterBoundary4: boolean | undefined;
 } {
   const unchanged = {
     geometry: original,
@@ -73,6 +74,7 @@ export function rebuildNaturalSurface(
     samples: 0,
     surfaceVertices: 0,
     cpuScratchBytesEstimated: 0,
+    waterBoundary4: undefined as boolean | undefined,
   };
   if (tile.size > NATURAL_MESH_LIMITS.maximumTile) return unchanged;
 
@@ -132,7 +134,9 @@ export function rebuildNaturalSurface(
     point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false,point.surface));
 
   let majorBoundary = false,
-    initialWet: string | undefined;
+    initialWet: string | undefined,
+    waterProbeWet = false,
+    waterProbeDry = false;
   for (let z = 0; z <= 8; z++)
     for (let x = 0; x <= 8; x++) {
       const s = sample(
@@ -140,10 +144,18 @@ export function rebuildNaturalSurface(
           tile.minZ + (tile.size * z) / 8,
         ),
         major = s.wet === "lake" || s.wet === "ocean" ? "wet" : "dry";
+      // The 4x4 water-boundary probe used by fine-tile refinement is the
+      // even-coordinate subset of these same 8x8 canonical samples.
+      if ((x & 1) === 0 && (z & 1) === 0) {
+        if (s.wet === "none") waterProbeDry = true;
+        else waterProbeWet = true;
+      }
       if (initialWet === undefined) initialWet = major;
       else if (major !== initialWet) majorBoundary = true;
     }
-  if (!formations.length && !segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace) return unchanged;
+  const waterBoundary4 = waterProbeWet && waterProbeDry;
+  if (!formations.length && !segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace)
+    return { ...unchanged, waterBoundary4 };
   // These canonical feature descriptors are fixed for this tile. Adaptive
   // recursion may visit thousands of cells; avoid repeating unchanged
   // metre-scale conversion and segment vector lengths at every visit.
@@ -464,6 +476,7 @@ export function rebuildNaturalSurface(
     leaves,
     samples: cache.size,
     surfaceVertices,
+    waterBoundary4,
     cpuScratchBytesEstimated:
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
