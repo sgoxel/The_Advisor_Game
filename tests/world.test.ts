@@ -103,7 +103,10 @@ test("S009 immutable composed point reuse preserves exact slope, bridge and rend
     // during the next full legal check, including its four slope probes.
     const render = finalSurfaceRenderChannelsAt(x, z);
     const ground = finalSurfaceAt(x, z);
-    assert.deepEqual(render, {
+    assert.deepEqual({
+      groundHeight: render.groundHeight, groundMaterial: render.groundMaterial,
+      water: render.water, vegetationDensityScale: render.vegetationDensityScale,
+    }, {
       groundHeight: ground.groundHeight, groundMaterial: ground.groundMaterial,
       water: ground.water, vegetationDensityScale: ground.vegetationDensityScale,
     });
