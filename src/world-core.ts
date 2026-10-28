@@ -479,7 +479,15 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   };
 }
 
-function composePointAt(x: number, z: number) {
+// The canonical SEED/geometry composition is immutable for an exact source
+// coordinate. A walking-grade probe, render vertex, and later route sample
+// should not re-run the same road, hydrology, site and modifier composition.
+// Cache the FULL pre-slope composition only; finalSurfaceAt still performs its
+// original independent metre-grade/walkability checks on every uncached point.
+const COMPOSED_POINT_CACHE_LIMIT = 4096;
+const composedPointCache = new Map<string, ReturnType<typeof uncachedComposePointAt>>();
+let composedPointCacheHits = 0;
+function uncachedComposePointAt(x: number, z: number) {
   const base = naturalSurfaceBaseAt(x, z),
     modifierQuery = surfaceModifiersAt(x, z, base);
   return {
@@ -488,6 +496,19 @@ function composePointAt(x: number, z: number) {
     candidateCount: modifierQuery.candidateCount,
     final: composeFinalSurface(base, modifierQuery.modifiers),
   };
+}
+function composePointAt(x: number, z: number) {
+  const key = surfaceCacheKey(x, z),
+    cached = composedPointCache.get(key);
+  if (cached) {
+    composedPointCacheHits++;
+    return cached;
+  }
+  const composed = uncachedComposePointAt(x, z);
+  if (composedPointCache.size >= COMPOSED_POINT_CACHE_LIMIT)
+    composedPointCache.delete(composedPointCache.keys().next().value!);
+  composedPointCache.set(key, composed);
+  return composed;
 }
 
 const FINAL_SURFACE_CACHE_LIMIT = 4096;
@@ -580,6 +601,12 @@ export function finalSurfaceTelemetry() {
     cacheMisses: finalSurfaceCacheMisses,
     cacheSize: finalSurfaceCache.size,
     cacheLimit: FINAL_SURFACE_CACHE_LIMIT,
+    composedCacheSize: composedPointCache.size,
+    composedCacheLimit: COMPOSED_POINT_CACHE_LIMIT,
+    composedCacheHits: composedPointCacheHits,
+    // Full composed points include immutable ground, modifiers and water;
+    // charge them to the shared worker CPU budget, not just the route cache.
+    composedCacheBytesEstimated: composedPointCache.size * 1024,
     roadProfileBytesEstimated: roadProfileHeights.size*1024,
     roadProfileCacheSize: roadProfileHeights.size,
     roadProfileCacheLimit: 2048,
@@ -596,6 +623,7 @@ export function resetFinalSurfaceTelemetry() {
   finalSurfaceQueries = 0;
   finalSurfaceCacheHits = 0;
   finalSurfaceCacheMisses = 0;
+  composedPointCacheHits = 0;
   finalSurfaceModifierCandidates = 0;
   finalSurfaceWorstCandidates = 0;
 }
