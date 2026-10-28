@@ -1343,6 +1343,21 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return stationary;
   }
+  // Every candidate street connector, exterior detour and gate approach
+  // checks its canonical origin as the exact t=0 one-metre sample. Reject
+  // unwalkable origins before constructing the cold street graph. Do NOT
+  // preflight the destination: t=1 interpolation can differ by one ULP from
+  // its exact coordinate, so a valid route still needs its original checks.
+  const endpointWalkable = (point: Offset) => {
+    const position = canonicalOffset(place, point.eastM, point.northM),
+      source = lonLatToSource(position.lon, position.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  };
+  if (!endpointWalkable(from)) {
+    pathCache.set(key, null);
+    while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
+    return null;
+  }
   const graph = streetGraphFor(place),
     legalConnector = (a: Offset, b: Offset) => legalStreetSegment(place, a, b),
     // The settlement graph, source offsets and legal final surface are
@@ -1429,15 +1444,10 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       }
     }
   }
-  // If the original legal street graph cannot connect these endpoints,
-  // do not attempt up to forty costly open-ground/bridge/gate fallbacks when
-  // either exact endpoint itself is already invalid. All such fallback routes
-  // are continuous segments subject to the same endpoint final-surface check.
-  if (!path && !routeEndpointsWalkable(from, to, point => {
-    const position = canonicalOffset(place, point.eastM, point.northM),
-      source = lonLatToSource(position.lon, position.lat);
-    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-  })) {
+  // Preserve the original post-street-failure destination rejection.
+  // The canonical origin was already checked above; a blocked destination
+  // still cannot be made walkable by the physically validated fallbacks.
+  if (!path && !endpointWalkable(to)) {
     pathCache.set(key, null);
     while (pathCache.size > 4000) pathCache.delete(pathCache.keys().next().value!);
     return null;
