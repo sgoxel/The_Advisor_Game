@@ -7,8 +7,8 @@ import {
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
-import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
-import { villages } from "../src/geography.ts";
+import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "../src/planet.ts";
+import { villages, cities, places, nearbyPlaces } from "../src/geography.ts";
 import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
@@ -166,5 +166,23 @@ test("reuses the exact canonical 4x4 water-boundary verdict from the adaptive 8x
     const natural = rebuildNaturalSurface(tile, buildTile(tile).terrain);
     assert.equal(natural.waterBoundary4, wet && dry,
       `tile ${tile.key} must retain the original composed-surface water boundary`);
+  }
+});
+
+test("local settlement buckets retain every strict detail-refinement match across the source seam", () => {
+  // The old world-wide scan is an independent witness. Its boolean must
+  // remain identical even for a centre close to a country/seam boundary.
+  const anchors = [villages[0], cities[0], villages[villages.length - 1]];
+  for (const place of anchors) for (const level of [9, 10, 12, 14]) {
+    const tile = tileForPosition(place.x, place.z, level),
+      x = tile.minX + tile.size / 2,
+      z = tile.minZ + tile.size / 2;
+    for (const shiftedX of [x, x + SOURCE_PRESENTATION_WIDTH, x - SOURCE_PRESENTATION_WIDTH]) {
+      const exact = (p: typeof places[number]) =>
+        Math.hypot(wrapSourceX(p.x - shiftedX), p.z - z) <
+        (p.kind === "city" ? 510 : 170) + tile.size * Math.SQRT2 / 2;
+      assert.equal(nearbyPlaces(shiftedX, z).some(exact), places.some(exact),
+        `lost physical settlement near ${place.code} / level ${level}`);
+    }
   }
 });
