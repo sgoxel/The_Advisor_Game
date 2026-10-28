@@ -1610,6 +1610,19 @@ export function routineHasProvablyLateLeg(legs: readonly {
   return false;
 }
 
+/** Lower-bound distance after all possible legal standing-slot displacement.
+ * A slot never extends beyond 4× its SEED ground radius. Returning false
+ * means UNCERTAIN: the original exact slot and lawful street search must run. */
+export function provablyLateWithStandingBounds(
+  from: Offset, to: Offset, fromShiftM: number, toShiftM: number, remainingSeconds: number,
+): boolean {
+  if (fromShiftM < 0 || toShiftM < 0 || !Number.isFinite(fromShiftM) || !Number.isFinite(toShiftM)) return false;
+  const minimumMetres = Math.max(0,
+    Math.hypot(to.eastM - from.eastM, to.northM - from.northM) - fromShiftM - toShiftM);
+  return minimumMetres > 1e-6 &&
+    (remainingSeconds < 60 || minimumMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
+}
+
 function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
   const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
     key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
@@ -1623,6 +1636,43 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
     while (civilianOvernightRisk.size > 16384)
       civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
     return false;
+  }
+  // A SEED standing slot lies at most four ground radii from its anchor.
+  // If even the *minimum* possible stop-to-stop distance exceeds an actual
+  // deadline, the overnight chain is at risk before any settlement-wide slot
+  // roster or metre-sampled street graph is constructed. No uncertain leg
+  // is accepted by this inexpensive proof.
+  const anchors = settlementAnchors(place);
+  const shiftBound = (anchor: RoutineAnchor, base: Offset, indoors: boolean) =>
+    indoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")
+      ? 0 : (anchors.areas.get(coordKey(base))?.radiusM ?? 0) * 4;
+  let earlier = plan[0], earlierBase = anchorOffset(place, foundation, earlier.anchor),
+    impossibleDeadline = false;
+  for (let i = 1; i < plan.length; i++) {
+    const next = plan[i];
+    if (next.anchor === plan[i - 1].anchor) continue;
+    const nextBase = anchorOffset(place, foundation, next.anchor);
+    let nextDeparture = DAY_SECONDS;
+    for (let j = i + 1; j < plan.length; j++)
+      if (plan[j].anchor !== plan[j - 1].anchor) {
+        nextDeparture = plan[j].start;
+        break;
+      }
+    if (provablyLateWithStandingBounds(earlierBase, nextBase,
+      shiftBound(earlier.anchor, earlierBase, earlier.indoors),
+      shiftBound(next.anchor, nextBase, next.indoors),
+      nextDeparture - next.start - 1)) {
+      impossibleDeadline = true;
+      break;
+    }
+    earlier = next;
+    earlierBase = nextBase;
+  }
+  if (impossibleDeadline) {
+    civilianOvernightRisk.set(key, true);
+    while (civilianOvernightRisk.size > 16384)
+      civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
+    return true;
   }
   // A lawful final homeward route is NOT proof the resident reached its
   // scheduled origin: an earlier failed leg may have left them elsewhere.
