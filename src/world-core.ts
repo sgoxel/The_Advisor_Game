@@ -327,17 +327,41 @@ function settlementTerraceHeight(place: Place) {
   return value;
 }
 
+// Segment latitude and east-vector projections are immutable canonical SEED
+// constants. The surface composer can request the same road tangent thousands
+// of times; never re-run sourceToLonLat + cosine for each segment on each point.
+// Do not cache query coordinates, round results or change nearest-segment ties.
+type RoadTangentSegment = {
+  ax: number; az: number; dx: number; dz: number;
+  latitudeScale: number; east: number; denominator: number;
+};
+const roadTangentSegments = new WeakMap<Road, readonly RoadTangentSegment[]>();
+let roadTangentSegmentBytesEstimated = 0;
+function tangentSegmentsFor(road: Road): readonly RoadTangentSegment[] {
+  const cached = roadTangentSegments.get(road);
+  if (cached) return cached;
+  const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
+    segments: RoadTangentSegment[] = [];
+  for(let i=1;i<path.length;i++) {
+    const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,
+      latitudeScale=Math.cos(sourceToLonLat(a.x,a.z).lat),
+      east=dx*latitudeScale;
+    segments.push({ax:a.x,az:a.z,dx,dz,latitudeScale,east,denominator:east*east+dz*dz||1});
+  }
+  roadTangentSegments.set(road,segments);
+  roadTangentSegmentBytesEstimated += segments.length * 64;
+  return segments;
+}
 /** The final road profile must select the same physical segment as S005 crossing inspection. */
 export function roadTangentAt(x:number,z:number,road:Road) {
-  const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
+  const segments=tangentSegmentsFor(road);
   let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ,cx:x,cz:z,segment:0,t:0};
-  for(let i=1;i<path.length;i++){
-    const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,
-      qx=wrapSourceX(x-a.x),qz=z-a.z,latitudeScale=Math.cos(sourceToLonLat(a.x,a.z).lat),
-      east=dx*latitudeScale,queryEast=qx*latitudeScale,
-      t=Math.max(0,Math.min(1,(queryEast*east+qz*dz)/(east*east+dz*dz||1))),
+  for(let i=0;i<segments.length;i++){
+    const {ax,az,dx,dz,latitudeScale,east,denominator}=segments[i],
+      qx=wrapSourceX(x-ax),qz=z-az,queryEast=qx*latitudeScale,
+      t=Math.max(0,Math.min(1,(queryEast*east+qz*dz)/denominator)),
       distance=Math.hypot(queryEast-east*t,qz-dz*t);
-    if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(a.x+dx*t),cz:a.z+dz*t,segment:i-1,t};}
+    if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(ax+dx*t),cz:az+dz*t,segment:i,t};}
   }
   return result;
 }
@@ -611,6 +635,7 @@ export function finalSurfaceTelemetry() {
     // charge them to the shared worker CPU budget, not just the route cache.
     composedCacheBytesEstimated: composedPointCache.size * 1024,
     roadProfileBytesEstimated: roadProfileHeights.size*1024,
+    roadTangentSegmentBytesEstimated,
     roadProfileCacheSize: roadProfileHeights.size,
     roadProfileCacheLimit: 2048,
     roadIndexBuckets: surfaceRoadBuckets.size,
