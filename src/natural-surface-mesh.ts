@@ -144,6 +144,14 @@ export function rebuildNaturalSurface(
       else if (major !== initialWet) majorBoundary = true;
     }
   if (!formations.length && !segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace) return unchanged;
+  // These canonical feature descriptors are fixed for this tile. Adaptive
+  // recursion may visit thousands of cells; avoid repeating unchanged
+  // metre-scale conversion and segment vector lengths at every visit.
+  const formationMetres = formations.map(f => ({ f, metres: sourceUnitsPerMetreAt(f.z) })),
+    segmentVectors = segments.map(s => {
+      const dx = wrapSourceX(s.bx - s.ax), dz = s.bz - s.az;
+      return { s, dx, dz, lengthSquared: dx * dx + dz * dz || 1 };
+    });
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
@@ -278,14 +286,12 @@ export function rebuildNaturalSurface(
   };
 
   const nearRiver = (x: number, z: number, size: number) =>
-    segments.some((s) => {
-      const dx = wrapSourceX(s.bx - s.ax),
-        dz = s.bz - s.az,
-        qx = wrapSourceX(x - s.ax),
+    segmentVectors.some(({ s, dx, dz, lengthSquared }) => {
+      const qx = wrapSourceX(x - s.ax),
         qz = z - s.az,
         t = Math.max(
           0,
-          Math.min(1, (qx * dx + qz * dz) / (dx * dx + dz * dz || 1)),
+          Math.min(1, (qx * dx + qz * dz) / lengthSquared),
         );
       return (
         Math.hypot(qx - dx * t, qz - dz * t) <=
@@ -318,7 +324,7 @@ export function rebuildNaturalSurface(
         preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) <= size * Math.SQRT2 / 2 + 2),
       materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
       prepared = road || (preparedPlace && materialBoundary),
-      formation=formations.find(f=>{const m=sourceUnitsPerMetreAt(f.z);return Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z;}),
+      formation=formationMetres.find(({ f, metres: m }) => Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z)?.f,
       target = formation ? Math.max(tile.size/128,formation.kind==='waterfall'?.125:formation.kind==='hill'?1:.5) : bridgeBank ? Math.max(0.25, tile.size / 256) : river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
