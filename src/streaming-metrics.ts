@@ -40,6 +40,40 @@ export class BoundedTimingSamples {
   }
 }
 
+
+/** Separate fixed-size worker-stage samples by canonical job kind.
+ * Mixed coverage/detail p95 cannot identify a hot stage or comparable workload.
+ * These timings never affect SEED, Simulation decisions, queues or tile output. */
+export class TileWorkerPhaseSamples {
+  readonly coverage = {
+    baseMs: new BoundedTimingSamples(), groundRefinementMs: new BoundedTimingSamples(),
+    decorationMs: new BoundedTimingSamples(), totalMs: new BoundedTimingSamples(),
+  };
+  readonly detail = {
+    baseMs: new BoundedTimingSamples(), groundRefinementMs: new BoundedTimingSamples(),
+    decorationMs: new BoundedTimingSamples(), totalMs: new BoundedTimingSamples(),
+  };
+  record(kind: string | undefined, phase?: {
+    baseMs?: number; groundRefinementMs?: number; decorationMs?: number; totalMs?: number;
+  }): void {
+    if (!phase || (kind !== "coverage" && kind !== "detail")) return;
+    const sample = kind === "detail" ? this.detail : this.coverage;
+    sample.baseMs.record(phase.baseMs);
+    sample.groundRefinementMs.record(phase.groundRefinementMs);
+    sample.decorationMs.record(phase.decorationMs);
+    sample.totalMs.record(phase.totalMs);
+  }
+  summary() {
+    const from = (samples: typeof this.coverage) => ({
+      baseMs: samples.baseMs.summary(),
+      groundRefinementMs: samples.groundRefinementMs.summary(),
+      decorationMs: samples.decorationMs.summary(),
+      totalMs: samples.totalMs.summary(),
+    });
+    return { coverage: from(this.coverage), detail: from(this.detail) };
+  }
+}
+
 /**
  * Observation-only resident query phases. Keys are canonical requested views;
  * clock and wall-time samples never participate in SEED or Simulation decisions.
