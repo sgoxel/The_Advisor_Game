@@ -1599,6 +1599,17 @@ export function routineHasAnchorChange(plan: readonly { anchor: string }[]): boo
     if (plan[i].anchor !== plan[i - 1].anchor) return true;
   return false;
 }
+/** Exact proof independent of any other scheduled leg: one physically
+ * impossible deadline makes the whole overnight chain uncertain. This may
+ * preempt expensive route searches, never certify a route as traversable. */
+export function routineHasProvablyLateLeg(legs: readonly {
+  from: Offset; to: Offset; remainingSeconds: number;
+}[]): boolean {
+  for (const leg of legs)
+    if (provablyLateWithoutStreetSearch(leg.from, leg.to, leg.remainingSeconds)) return true;
+  return false;
+}
+
 function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
   const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
     key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
@@ -1617,10 +1628,19 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   // scheduled origin: an earlier failed leg may have left them elsewhere.
   // Prove each distinct anchor reached its physical stop before the following
   // departure. Only an uncertain chain needs the expensive prior-day replay.
+  // First gather the exact scheduled physical stops and available time for
+  // every distinct anchor. If ANY leg has a mathematical distance/time proof
+  // of lateness, the prior-day chain is at risk independently of the other
+  // routes; do not spend seconds validating those other SEED street searches.
+  // Otherwise run all original physical route checks in their original order.
+  type DeadlineLeg = {
+    fromAnchor: RoutineAnchor; toAnchor: RoutineAnchor;
+    from: Offset; to: Offset; remainingSeconds: number;
+  };
+  const legs: DeadlineLeg[] = [];
   let fromAnchor = plan[0].anchor,
     from = standingSpot(place, foundation, fromAnchor,
-      anchorOffset(place, foundation, fromAnchor), !plan[0].indoors),
-    risk = false;
+      anchorOffset(place, foundation, fromAnchor), !plan[0].indoors);
   for (let i = 1; i < plan.length; i++) {
     const next = plan[i];
     if (next.anchor === plan[i - 1].anchor) continue;
@@ -1632,20 +1652,20 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
         nextDeparture = plan[j].start;
         break;
       }
-    const remainingSeconds = nextDeparture - next.start - 1;
-    if (provablyLateWithoutStreetSearch(from, to, remainingSeconds)) {
-      risk = true;
-      break;
-    }
-    const route = routinePath(place, from, to,
-      fieldEntry(place, foundation, fromAnchor),
-      fieldEntry(place, foundation, next.anchor));
-    if (unfinishedOrBlockedOvernightReturn(route, remainingSeconds)) {
-      risk = true;
-      break;
-    }
+    legs.push({ fromAnchor, toAnchor: next.anchor, from, to,
+      remainingSeconds: nextDeparture - next.start - 1 });
     from = to;
     fromAnchor = next.anchor;
+  }
+  let risk = routineHasProvablyLateLeg(legs);
+  if (!risk) for (const leg of legs) {
+    const route = routinePath(place, leg.from, leg.to,
+      fieldEntry(place, foundation, leg.fromAnchor),
+      fieldEntry(place, foundation, leg.toAnchor));
+    if (unfinishedOrBlockedOvernightReturn(route, leg.remainingSeconds)) {
+      risk = true;
+      break;
+    }
   }
   civilianOvernightRisk.set(key, risk);
   // Three city rosters and their frequent direct-time queries fit without
