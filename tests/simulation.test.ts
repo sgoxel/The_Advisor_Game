@@ -1361,6 +1361,26 @@ test("late-closing innkeepers retain their actual position through local midnigh
   }
 });
 
+test("civilian midnight replay is gated: SEED outdoor stops survive nonmonotone schedule queries", () => {
+  const place = villages[0], lon = place.canonicalPosition.lon,
+    dawn = tickAtLocalTime(WORKDAY, 7 * HOUR, lon),
+    daytime = tickAtLocalTime(WORKDAY, 15 * HOUR, lon),
+    evening = tickAtLocalTime(WORKDAY, 21 * HOUR, lon);
+  for (const index of [16, 25]) {
+    const first = residentAt(place, index, daytime),
+      earlier = residentAt(place, index, dawn),
+      later = residentAt(place, index, evening);
+    assert.equal(first.code, earlier.code, "schedule sampling cannot replace SEED identity");
+    assert.equal(first.homeEntrance, later.homeEntrance, "slot reuse cannot replace a canonical home door");
+    assert.deepEqual(residentAt(place, index, daytime), first,
+      "revisited outdoor stops and exact route status must match the first schedule query");
+    assert.deepEqual(residentAt(place, index, dawn), earlier,
+      "a reverse Fantasy-Time query cannot inherit a later position");
+    assert.deepEqual(residentAt(place, index, evening), later,
+      "overnight risk and route validity are unchanged after repeated standing-slot reuse");
+  }
+});
+
 test("civilian midnight replay is gated by an actual blocked or overlong return", () => {
   const leg = [{ eastM: 0, northM: 0 }, { eastM: 120, northM: 0 }];
   assert.equal(unfinishedOrBlockedOvernightReturn(null, 86_400), true,
