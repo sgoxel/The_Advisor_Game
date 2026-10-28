@@ -103,6 +103,12 @@ export class ResidentQueryPhaseSamples {
   readonly workerResidentGroundingWallMs = new BoundedTimingSamples();
   readonly coldWorkerQueryWallMs = new BoundedTimingSamples();
   readonly warmWorkerQueryWallMs = new BoundedTimingSamples();
+  // Per-shard transport observations: do not confuse message scheduling or
+  // structured-clone delivery with canonical resident evaluation time.
+  readonly mainSendToWorkerMs = new BoundedTimingSamples();
+  readonly workerReceiveToSendMs = new BoundedTimingSamples();
+  readonly workerSendToMainMs = new BoundedTimingSamples();
+  readonly mainSendToResponseMs = new BoundedTimingSamples();
   private offered?: { key: string; at: number };
   private readonly active = new Map<number, { key: string; at: number; offeredAt?: number }>();
   private accepted = 0;
@@ -116,6 +122,25 @@ export class ResidentQueryPhaseSamples {
   }
 
   clearPending(): void { this.offered = undefined; }
+
+  /** Shared performance time origins allow cross-thread epochs to be compared.
+   * Missing/out-of-order clocks produce no sample, never a synthetic zero.
+   * A shard is observed at its actual send/receive boundaries, not at the
+   * earlier admission/dispatch decision or a later merged-batch acceptance. */
+  recordTransport(
+    timing?: { mainSentEpochMs?: number; workerReceiveEpochMs?: number; workerSendEpochMs?: number },
+    mainReceivedEpochMs?: number,
+  ): void {
+    if (!timing) return;
+    const { mainSentEpochMs: sent, workerReceiveEpochMs: arrived, workerSendEpochMs: replied } = timing;
+    if (sent === undefined || arrived === undefined || replied === undefined || mainReceivedEpochMs === undefined ||
+        ![sent, arrived, replied, mainReceivedEpochMs].every(Number.isFinite) ||
+        sent < 0 || arrived < sent || replied < arrived || mainReceivedEpochMs < replied) return;
+    this.mainSendToWorkerMs.record(arrived - sent);
+    this.workerReceiveToSendMs.record(replied - arrived);
+    this.workerSendToMainMs.record(mainReceivedEpochMs - replied);
+    this.mainSendToResponseMs.record(mainReceivedEpochMs - sent);
+  }
 
   dispatch(id: number, key: string, at: number): void {
     if (!Number.isInteger(id) || !key || !Number.isFinite(at) || at < 0) return;
@@ -181,6 +206,10 @@ export class ResidentQueryPhaseSamples {
       workerResidentGroundingWallMs: this.workerResidentGroundingWallMs.summary(),
       coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
       warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),
+      mainSendToWorkerMs: this.mainSendToWorkerMs.summary(),
+      workerReceiveToSendMs: this.workerReceiveToSendMs.summary(),
+      workerSendToMainMs: this.workerSendToMainMs.summary(),
+      mainSendToResponseMs: this.mainSendToResponseMs.summary(),
       accepted: this.accepted,
       staleViewOrCleared: this.staleViewOrCleared,
       staleTick: this.staleTick,
