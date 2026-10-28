@@ -293,13 +293,24 @@ function settlementAnchors(place: Place): SettlementAnchors {
   const area = (centre: Offset, radiusM: number, kerbM = STREET_CLEAR_M, clearM = 0, key = coordKey(centre)) => standArea(anchors, centre, radiusM, kerbM, clearM, key),
     half = (plot: { widthM?: number; depthM?: number }) => Math.min(plot.widthM ?? 8, plot.depthM ?? 8) / 2;
   area(anchors.plaza, 12, STREET_CLEAR_M, 1.9);
+  // Field patches are already generated in canonical plot/patch order. Group
+  // them once instead of rescanning the entire field roster for every plot
+  // during cold settlement setup; preserve the original IDs and area order.
+  const fieldPatchesByPlot = new Map<string, typeof anchors.fieldsSites>();
+  for (const patch of anchors.fieldsSites) {
+    const plotId = patch.id.slice(0, patch.id.lastIndexOf("/PATCH/")),
+      patches = fieldPatchesByPlot.get(plotId);
+    if (patches) patches.push(patch);
+    else fieldPatchesByPlot.set(plotId, [patch]);
+  }
   for (const plot of plan.plots) {
     if (plot.kind === "service" || plot.kind === "keep") area(at(plot.candidates[0]), Math.max(2.5, Math.min(12, half(plot) - .5)));
     else if (plot.kind === "garden") area(at(plot.candidates[0]), Math.max(1.8, Math.min(3.2, half(plot) + .6)));
     else if (plot.kind === "field") {
       const field = area(at(plot.candidates[0]), Math.max(3, Math.min(12, half(plot) * .85)), STREET_CLEAR_M, 0, plot.id);
       field.field = true;
-      for (const patch of anchors.fieldsSites) if (patch.id.startsWith(`${plot.id}/PATCH/`) && !anchors.areas.has(coordKey(patch))) anchors.areas.set(coordKey(patch), field);
+      for (const patch of fieldPatchesByPlot.get(plot.id) ?? [])
+        if (!anchors.areas.has(coordKey(patch))) anchors.areas.set(coordKey(patch), field);
     }
   }
   for (const post of anchors.posts.flat()) area(post, 2.5);
