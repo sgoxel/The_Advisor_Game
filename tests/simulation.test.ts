@@ -48,6 +48,7 @@ import {
   routeEndpointsWalkable,
   residentEndpointWalkable,
   orderedResidentIndicesByStandingRank,
+  orderedPackedResidentIndicesByStandingRank,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -212,6 +213,11 @@ test("resident inspector can resolve facts: linear standing ranks preserve all c
       const expected = [...list].sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, index]) => index);
       assert.deepEqual([...orderedResidentIndicesByStandingRank(list)], expected,
         `same SEED slots for population ${n} distribution ${mode}`);
+      const packed = list.flatMap(([rank, index]) => [rank, index]);
+      assert.deepEqual([...orderedPackedResidentIndicesByStandingRank(packed)], expected,
+        `packed ranks match canonical sorted slots for population ${n} distribution ${mode}`);
+      assert.deepEqual(packed, list.flatMap(([rank, index]) => [rank, index]),
+        "the packed standing builder does not mutate the input");
       assert.deepEqual(list.map(([, index]) => index), Array.from({ length: n }, (_, i) => i * 3 + 1),
         "never mutate original canonical resident enumeration");
     }
