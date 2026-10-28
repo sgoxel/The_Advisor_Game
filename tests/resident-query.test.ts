@@ -5,6 +5,8 @@ import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSe
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 import { continuousWalkableOffsetSegment, residentEndpointWalkable, legalPosition } from "../src/simulation.ts";
+import { dailyPlan, dailyStandingActivities, personalityFor, traitsFor, type RoutineSubject } from "../src/routines.ts";
+
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
 
@@ -473,4 +475,42 @@ test("S009 repeated metre samples retain exact original SEED walkability in eith
         "a cached exact metre cannot invent dry ground, bridge access or a successful blocked leg");
     }
   }
+});
+
+test("S009 roster-only daily activities preserve every canonical outdoor rank and anchor", () => {
+  // Independent full dailyPlan witness: no authority, seeded minute roll or
+  // character-facing schedule is changed by the reduced standing-slot path.
+  const roles = ["innkeeper", "merchant", "blacksmith", "farmer", "butcher",
+    "guard-officer", "guard", "artisan", "laborer", "trader", "clergy",
+    "noble", "beggar", "elder"] as const;
+  let compared = 0, fullEntries = 0, standingEntries = 0;
+  for (const role of roles)
+    for (const ageGroup of ["adult", "elder"] as const)
+      for (const guardShift of [0, 1] as const)
+        for (const [day, weekday] of [[0, 0], [6, 6], [14, 3], [35, 6]] as const) {
+          const subject: RoutineSubject = {
+            code: `SEED/ROSTER/PARITY/${role}/${ageGroup}/${guardShift}`,
+            role, ageGroup, guardShift,
+          };
+          const traits = traitsFor(subject.code, role, ageGroup),
+            original = dailyPlan(subject, traits, day, weekday),
+            reduced = dailyStandingActivities(subject, traits, day, weekday),
+            normalize = (entries: typeof original) =>
+              entries.filter(entry => !entry.indoors && entry.anchor !== "home")
+                .map(entry => `${entry.kind}/${entry.anchor}`).sort();
+          assert.deepEqual(normalize(reduced), normalize(original),
+            `${role} ${ageGroup} shift ${guardShift} day ${day}/${weekday}`);
+          const personality = personalityFor(subject.code, role);
+          assert.deepEqual(personality, traits.personality,
+            "lean SEED personality must equal the full immutable trait calculation");
+          assert.deepEqual(normalize(dailyStandingActivities(subject, { personality }, day, weekday)),
+            normalize(original), "lean personality must preserve full standing-slot ranks");
+          assert.ok(reduced.every(entry => !entry.indoors && entry.anchor !== "home"));
+          fullEntries += original.length;
+          standingEntries += reduced.length;
+          compared++;
+        }
+  assert.equal(compared, 224);
+  assert.ok(standingEntries < fullEntries / 2,
+    "a cold roster should not materialize the many unrelated indoor/time events");
 });

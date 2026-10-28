@@ -7,7 +7,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import { settlementExteriorFor, settlementHomeAnchorFor } from "./settlement-exterior.ts";
-import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
+import { activityAt, dailyPlan, dailyStandingActivities, moodAt, personalityFor, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
@@ -863,9 +863,21 @@ function standTableFor(place: Place): StandTable {
   for (let index = 0; index < populationOf(place); index++) {
     byAnchor.clear();
     best.clear();
-    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift };
+    // Standing ranks need only immutable spatial anchors and personality.
+    // The old full residentStandSeedFor rolled every ability die and ranked
+    // temperament for thousands of otherwise unseen roster members.
+    const spatial = residentSpatialFactsAt(place, index, exteriorPlan),
+      foundation = {
+        code: spatial.code, role: spatial.role, ageGroup: spatial.character.age,
+        guardShift: spatial.assignment?.shift,
+        homeOffset: spatial.homeOffset, workOffset: spatial.workOffset,
+        traits: residentFoundationCache.get(spatial.code)?.traits ??
+          { personality: personalityFor(spatial.code, spatial.role) },
+      },
+      subject = { code: foundation.code, role: foundation.role,
+        ageGroup: foundation.ageGroup, guardShift: foundation.guardShift };
     // Visit the same canonical days (0,0) then (6,6); no per-resident pairs.
-    for (let day = 0; day <= 6; day += 6) for (const entry of dailyPlan(subject, foundation.traits, day, day)) {
+    for (let day = 0; day <= 6; day += 6) for (const entry of dailyStandingActivities(subject, foundation.traits, day, day)) {
       if (entry.indoors || entry.anchor === "home") continue;
       byAnchor.set(entry.anchor, Math.min(byAnchor.get(entry.anchor) ?? 99, KIND_RANK[entry.kind] ?? 9));
     }

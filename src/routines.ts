@@ -47,6 +47,20 @@ const AGE_BONUS: Readonly<Record<CharacterAge, Partial<Abilities>>> = {
 };
 
 /** Ability scores (3d6 by seed, then trade and age adjustments) and a seeded personality. */
+/** Standing-slot ranking uses personality but not abilities or temperament.
+ * Share the exact original seeded personality computation with full traitsFor
+ * instead of rolling dozens of unused ability dice for each cold resident. */
+export function personalityFor(code: string, role: ResidentRole): Personality {
+  const p = (name: string) => Math.round(unit(`${code}/PERSONALITY/${name}`) * 100) / 100;
+  return {
+    diligence: p("DILIGENCE"),
+    sociability: p("SOCIABILITY"),
+    piety: clamp(p("PIETY") + (role === "clergy" ? .45 : 0), 0, 1),
+    temper: p("TEMPER"),
+    curiosity: p("CURIOSITY"),
+  };
+}
+
 export function traitsFor(code: string, role: ResidentRole, age: CharacterAge): ResidentTraits {
   const abilities = {} as Abilities;
   for (const key of ABILITY_KEYS) {
@@ -54,14 +68,7 @@ export function traitsFor(code: string, role: ResidentRole, age: CharacterAge): 
     for (let die = 0; die < 3; die++) roll += 1 + (digest(`${code}/ABILITY/${key}/${die}`) % 6);
     abilities[key] = clamp(roll + (ROLE_BONUS[role]?.[key] ?? 0) + (AGE_BONUS[age][key] ?? 0), 3, 18);
   }
-  const p = (name: string) => Math.round(unit(`${code}/PERSONALITY/${name}`) * 100) / 100,
-    personality: Personality = {
-      diligence: p("DILIGENCE"),
-      sociability: p("SOCIABILITY"),
-      piety: clamp(p("PIETY") + (role === "clergy" ? .45 : 0), 0, 1),
-      temper: p("TEMPER"),
-      curiosity: p("CURIOSITY"),
-    };
+  const personality = personalityFor(code, role);
   const ranked = (Object.entries(personality) as [keyof Personality, number][]).sort((a, b) => b[1] - a[1]),
     temperament = ({ diligence: "industrious", sociability: "gregarious", piety: "devout", temper: "hot-headed", curiosity: "inquisitive" } as const)[ranked[0][0]];
   return { abilities, personality, temperament };
@@ -74,7 +81,7 @@ export type Mood = { value: number; label: string };
  * Mood for a fantasy day and hour: a seeded daily swing on top of personality,
  * lower on a long workday and late in the evening, higher on the rest day.
  */
-export function moodAt(code: string, traits: ResidentTraits, day: number, weekday: number, secondOfDay: number): Mood {
+export function moodAt(code: string, traits: Pick<ResidentTraits, "personality">, day: number, weekday: number, secondOfDay: number): Mood {
   const { sociability, temper, diligence } = traits.personality,
     daily = (unit(`${code}/MOOD/${day}`) - .5) * .9,
     base = (sociability - .5) * .3 - (temper - .5) * .4,
@@ -111,14 +118,21 @@ const minutes = (code: string, salt: string, span: number) => Math.floor(unit(`$
  * consecutive days join without jumps. Variation comes from role, age, weekday,
  * personality and the day's mood; the same inputs always give the same plan.
  */
-export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: number, weekday: number): Activity[] {
+export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, "personality">, day: number, weekday: number, standingOnly = false): Activity[] {
   const { code, role, ageGroup } = subject, p = traits.personality,
-    d = (salt: string, span: number) => minutes(code, `${salt}/${day}`, span),
+    // Standing-slot ranks depend only on kind, anchor and indoor status.
+    // Do not compute the many seeded *clock minute* rolls for a roster query.
+    // Those rolls do not select an anchor or activity kind.
+    d = (salt: string, span: number) => standingOnly ? 0 : minutes(code, `${salt}/${day}`, span),
     morningMood = moodAt(code, traits, day, weekday, 8 * HOUR).value,
     eveningMood = moodAt(code, traits, day, weekday, 19 * HOUR).value,
     restDay = weekday === 6,
     plan: Activity[] = [],
-    add = (kind: ActivityKind, anchor: RoutineAnchor, start: number, task: string, indoors: boolean) => plan.push({ kind, anchor, start: clamp(Math.round(start), 0, 24 * HOUR - MINUTE), task, indoors });
+    add = (kind: ActivityKind, anchor: RoutineAnchor, start: number, task: string, indoors: boolean) => {
+      if (standingOnly) {
+        if (!indoors && anchor !== "home") plan.push({ kind, anchor, start: 0, task: "", indoors: false });
+      } else plan.push({ kind, anchor, start: clamp(Math.round(start), 0, 24 * HOUR - MINUTE), task, indoors });
+    };
 
   if (role === "guard") {
     // Twelve-hour watches: day shift 06-18, night shift 18-06, sleep in the other half.
@@ -143,7 +157,7 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
       add("commute", "home", 20.5 * HOUR + d("HOMEWARD", 40), "Walking home", false);
       add("sleep", "home", 21.5 * HOUR + d("SLEEP", 50), "Sleeping", true);
     }
-    return plan.sort((a, b) => a.start - b.start);
+    return standingOnly ? plan : plan.sort((a, b) => a.start - b.start);
   }
 
   // Waking: farmers at first light, the diligent earlier, elders later; rest day lie-in.
@@ -200,7 +214,16 @@ export function dailyPlan(subject: RoutineSubject, traits: ResidentTraits, day: 
   }
   const bedtime = ageGroup === "elder" ? 21 : role === "innkeeper" ? 23.2 : 21.8 + p.sociability * 1.1 - p.diligence * .4;
   add("sleep", "home", Math.max(bedtime * HOUR + d("SLEEP", 30), (plan[plan.length - 1]?.start ?? 0) + 25 * MINUTE), "Sleeping", true);
-  return plan.sort((a, b) => a.start - b.start);
+  return standingOnly ? plan : plan.sort((a, b) => a.start - b.start);
+}
+
+/** Deterministic roster-only view of the SAME day planner. Outdoor ranks do
+ * not depend on event times or indoor activities, so omit their expensive
+ * minute hashes, materialization and sort while preserving every actual
+ * outdoor (kind, anchor) occurrence in planner insertion order. Never use
+ * these partial entries to schedule or move an actor. */
+export function dailyStandingActivities(subject: RoutineSubject, traits: Pick<ResidentTraits, "personality">, day: number, weekday: number): Activity[] {
+  return dailyPlan(subject, traits, day, weekday, true);
 }
 
 /** The plan entry active at a second of the day (plans always start at 00:00). */
