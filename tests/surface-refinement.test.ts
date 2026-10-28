@@ -11,6 +11,7 @@ import {
   REFINED_ROAD_HALF_WIDTH_SOURCE,
   refineTileSurfacePresentation,
   refinementResolutionForTile,
+  stripLegacyBridgeDeck,
 } from "../src/surface-refinement.ts";
 import {
   finalSurfaceAt,
@@ -246,4 +247,29 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
   for(const check of physicalDeckChecks) {
     assert.ok(Math.abs(refined.structures.positions[check.vertex*3+1]*CANONICAL_METRES_PER_SOURCE_UNIT-check.metres)<.015,"rendered deck must agree with canonical metre height");
   }
+});
+
+
+test("bridge stripping avoids ordinary-tile copying and retains exact legacy removal", () => {
+  const positions = new Float32Array([
+    0, 0, 0, 1, 0, 0, 0, 0, 1,
+    10, 0, 0, 11, 0, 0, 10, 0, 1,
+  ]);
+  const normals = new Float32Array(18).fill(1);
+  const mixedColors = new Uint8Array([
+    115, 88, 56, 255, 115, 88, 56, 255, 115, 88, 57, 255,
+    108, 79, 45, 255, 108, 79, 45, 255, 108, 79, 45, 255,
+  ]);
+  const base = { positions, normals, colors: mixedColors, indices: new Uint32Array([0, 1, 2, 3, 4, 5]) };
+  assert.strictEqual(stripLegacyBridgeDeck(base), base,
+    "partially matching colors must not allocate, rewrite or remove ordinary geometry");
+  const legacyColors = new Uint8Array(mixedColors);
+  legacyColors[10] = 56;
+  const legacy = { ...base, colors: legacyColors };
+  const result = stripLegacyBridgeDeck(legacy);
+  assert.notStrictEqual(result, legacy);
+  assert.deepEqual([...result.positions], [...positions.slice(9)]);
+  assert.deepEqual([...result.normals], [...normals.slice(9)]);
+  assert.deepEqual([...result.colors], [...legacyColors.slice(12)]);
+  assert.deepEqual([...result.indices], [0, 1, 2]);
 });
