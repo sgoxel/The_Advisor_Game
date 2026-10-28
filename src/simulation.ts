@@ -1549,7 +1549,15 @@ const civilianOvernightRisk = new Map<string, boolean>();
 /** The final homecoming needs history if its real route is absent or cannot finish
  * by midnight; never infer arrival from the scheduled destination alone. */
 export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | null, remainingSeconds: number): boolean {
-  return !path || timedWalkOnPath(path, remainingSeconds).progress < 1;
+  if (!path) return true;
+  // This only tests the arrival deadline after the route has passed its
+  // original legal street/surface checks. Do not compute/discard an interpolated
+  // walking position on every prior-day risk query.
+  const lengthM = pathLength(path);
+  if (lengthM <= 1e-6) return false;
+  const durationSeconds = Math.max(60, lengthM / GOOD_ROAD_WALK_SPEED_MPS),
+    progress = Math.max(0, Math.min(1, remainingSeconds / durationSeconds));
+  return progress < 1;
 }
 /** An optimistic straight line is a strict lower bound on every legal street
  * route. If even that line cannot finish in time, do not run a costly street
