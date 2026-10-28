@@ -287,18 +287,19 @@ export function rebuildNaturalSurface(
 
   const nearRiver = (x: number, z: number, size: number) =>
     segmentVectors.some(({ s, dx, dz, lengthSquared }) => {
-      const qx = wrapSourceX(x - s.ax),
-        qz = z - s.az,
-        t = Math.max(
-          0,
-          Math.min(1, (qx * dx + qz * dz) / lengthSquared),
-        );
-      return (
-        Math.hypot(qx - dx * t, qz - dz * t) <=
-        (size * Math.SQRT2) / 2 + s.width + RIVER_BANK_HALF_WIDTH_SOURCE
-      );
+      const reach = (size * Math.SQRT2) / 2 + s.width + RIVER_BANK_HALF_WIDTH_SOURCE,
+        qz = z - s.az;
+      // A point outside the segment's reach-expanded box cannot pass the
+      // original exact closest-point distance test. Reject it before wrap and
+      // projection work, retaining exact math for every possible river cell.
+      if (qz < Math.min(0, dz) - reach || qz > Math.max(0, dz) + reach) return false;
+      const qx = wrapSourceX(x - s.ax);
+      if (qx < Math.min(0, dx) - reach || qx > Math.max(0, dx) + reach) return false;
+      const t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSquared));
+      return Math.hypot(qx - dx * t, qz - dz * t) <= reach;
     });
 
+  const majorWet = (s: Sample) => s.wet === "ocean" || s.wet === "lake";
   const visit = (x: number, z: number, size: number) => {
     const half = size / 2,
       a = sample(x, z),
@@ -307,10 +308,9 @@ export function rebuildNaturalSurface(
       d = sample(x + size, z),
       middle = sample(x + half, z + half),
       river = nearRiver(middle.x, middle.z, size),
-      wetClasses = [a, b, c, d, middle].map((s) =>
-        s.wet === "ocean" || s.wet === "lake" ? "wet" : "dry",
-      ),
-      major = wetClasses.some((value) => value !== wetClasses[0]),
+      majorClass = majorWet(a),
+      major = majorWet(b) !== majorClass || majorWet(c) !== majorClass ||
+        majorWet(d) !== majorClass || majorWet(middle) !== majorClass,
       nearCoast =
         majorBoundary &&
         [a, b, c, d, middle].some(
@@ -326,7 +326,8 @@ export function rebuildNaturalSurface(
       bridgeReach = size * Math.SQRT2 / 2 + 2,
       bridgeBank = river && [a, b, c, d].some(p => wet(p) !== wet(middle)) &&
         preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, bridgeReach) <= bridgeReach),
-      materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
+      materialBoundary = a.material !== middle.material || b.material !== middle.material ||
+        c.material !== middle.material || d.material !== middle.material,
       prepared = road || (preparedPlace && materialBoundary),
       formation=formationMetres.find(({ f, metres: m }) => Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z)?.f,
       target = formation ? Math.max(tile.size/128,formation.kind==='waterfall'?.125:formation.kind==='hill'?1:.5) : bridgeBank ? Math.max(0.25, tile.size / 256) : river
