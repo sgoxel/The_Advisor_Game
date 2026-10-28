@@ -1655,7 +1655,13 @@ export function routineHasBlockedOrigin<T extends Offset>(
     const fromId = `${leg.from.eastM},${leg.from.northM}`,
       toId = `${leg.to.eastM},${leg.to.northM}`;
     if (compareText(fromId, toId) <= 0) {
-      if (!walkable(leg.from)) return true;
+      // A destination-only field connector may reverse the *core* street
+      // route even when its fallback is forward. Its caller origin is then
+      // sampled at t=1, not necessarily at the exact original coordinate.
+      // A source field connector instead samples the exact origin at t=0.
+      const coreChecksOrigin = !!leg.fromEntry || !leg.toEntry ||
+        compareText(fromId, `${leg.toEntry.eastM},${leg.toEntry.northM}`) <= 0;
+      if (coreChecksOrigin && !walkable(leg.from)) return true;
     } else if (!leg.fromEntry && !leg.toEntry && !walkable(leg.to)) {
       return true;
     }

@@ -121,8 +121,22 @@ test("resident inspector can resolve facts: S009 overnight blocked origins short
   assert.deepEqual(visited, [a.eastM, b.eastM, c.eastM]);
   assert.equal(routineHasBlockedOrigin([], () => false), false,
     "an empty chain cannot manufacture a travel failure");
-  assert.equal(continuousWalkableOffsetSegment(a, b, p => p !== a), false,
+  assert.equal(continuousWalkableOffsetSegment(a, b,
+    p => p.eastM !== a.eastM || p.northM !== a.northM), false,
     "an exact t=0 origin is mandatory for forward-ordered street segments");
+
+  const fieldFrom = { eastM: 20, northM: 0 },
+    fieldTo = { eastM: 90, northM: 0 },
+    reverseCoreEntry = { eastM: -10, northM: 0 },
+    forwardCoreEntry = { eastM: 30, northM: 0 };
+  assert.equal(routineHasBlockedOrigin([{
+    from: fieldFrom, to: fieldTo, toEntry: reverseCoreEntry,
+  }], () => false), false,
+  "destination-only field entry reverses the core: exact caller origin is not proven sampled");
+  assert.equal(routineHasBlockedOrigin([{
+    from: fieldFrom, to: fieldTo, toEntry: forwardCoreEntry,
+  }], () => false), true,
+  "forward core and ordinary fallback both sample the exact caller origin");
 
   const reverseFrom = { eastM: 91.01459183919955, northM: 0 },
     reverseTo = { eastM: -564.3661591839741, northM: 0 },
