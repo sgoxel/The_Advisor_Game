@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
-import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange } from "../src/simulation.ts";
+import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
@@ -13,6 +13,30 @@ test("S009 unchanged prior-day anchors cannot require a physical homecoming rout
   assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "work" }, { anchor: "home" }]), true);
   assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "home" }, { anchor: "market" }]), true);
   assert.equal(routineHasAnchorChange([]), false);
+});
+
+test("S009 field route preflight skips only an actually illegal directed field connector", () => {
+  const from = { eastM: -0, northM: 17 }, to = { eastM: 93, northM: 0 },
+    fromEntry = { eastM: 18, northM: 17 }, toEntry = { eastM: 81, northM: -0 };
+  for (const useFrom of [false, true]) for (const useTo of [false, true])
+    for (const fromLegal of [false, true]) for (const toLegal of [false, true]) {
+      const seen: string[] = [],
+        validate = (a: typeof from, b: typeof from) => {
+          const directed = a === from && b === fromEntry ? "out" :
+            a === toEntry && b === to ? "in" : "unexpected";
+          seen.push(directed);
+          assert.notEqual(directed, "unexpected", "only original directed metre-sampled connectors may be tested");
+          return directed === "out" ? fromLegal : toLegal;
+        },
+        actual = fieldConnectorsAllowCore(from, to,
+          useFrom ? fromEntry : undefined, useTo ? toEntry : undefined, validate),
+        originalWhenCoreExists = (!useFrom || fromLegal) && (!useTo || toLegal);
+      assert.equal(actual, originalWhenCoreExists, "reordering cannot authorize a previously illegal approach");
+      assert.deepEqual(seen, [
+        ...(useFrom ? ["out"] : []),
+        ...(useTo && (!useFrom || fromLegal) ? ["in"] : []),
+      ], "a failed first connector prevents unnecessary second validation");
+    }
 });
 
 test("S009 resident cold index builds only the shard while retaining all original SEED candidates and order", () => {
