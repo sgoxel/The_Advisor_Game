@@ -188,7 +188,10 @@ export function rebuildNaturalSurface(
       area = Math.hypot(nx,ny,nz);
     if(area<1e-14)return;
     const ia = vertex(a, group), ib = vertex(b, group), ic = vertex(c, group);
-    for (const index of [ia, ib, ic]) {
+    // Preserve ordered indexed-normal sums without allocating a fresh
+    // three-element array for every emitted adaptive triangle.
+    for (let vertex = 0; vertex < 3; vertex++) {
+      const index = vertex === 0 ? ia : vertex === 1 ? ib : ic;
       normals[index * 3] += nx;
       normals[index * 3 + 1] += ny;
       normals[index * 3 + 2] += nz;
@@ -329,7 +332,15 @@ export function rebuildNaturalSurface(
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
         c.material !== middle.material || d.material !== middle.material,
       prepared = road || (preparedPlace && materialBoundary),
-      formation=formationMetres.find(({ f, metres: m }) => Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z)?.f,
+      formation=formationMetres.find(({ f, metres: m }) => {
+        const east = wrapSourceX(middle.x-f.x)/m.x,
+          north = (middle.z-f.z)/m.z,
+          reach = f.radiusM+size/m.z;
+        // A point outside either reach extent cannot pass the original exact
+        // radial threshold. Keep Math.hypot for every possible landform cell.
+        return east >= -reach && east <= reach && north >= -reach && north <= reach &&
+          Math.hypot(east,north)<reach;
+      })?.f,
       target = formation ? Math.max(tile.size/128,formation.kind==='waterfall'?.125:formation.kind==='hill'?1:.5) : bridgeBank ? Math.max(0.25, tile.size / 256) : river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
