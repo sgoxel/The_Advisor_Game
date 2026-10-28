@@ -4,15 +4,17 @@ import {
   rebuildNaturalSurface,
   NATURAL_MESH_LIMITS,
   naturalSurfaceRoadCandidates,
+  sparseNaturalWildernessWaterKindAt,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
-import { drainageRecipes } from "../src/hydrology.ts";
+import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "../src/planet.ts";
 import { villages, cities, places, nearbyPlaces, roads } from "../src/geography.ts";
 import { siteAccessRoads } from "../src/sites.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
+import { landformAt, nearbyLandforms } from "../src/wilderness-terrain.ts";
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
   const place= villages[0], tile=tileForPosition(place.x,place.z,10);
@@ -212,4 +214,38 @@ test("indexed detail-road candidates reproduce every exhaustive SEED fragment ac
         `road fragment missing or reordered at ${canonical.key} / shift ${shift}`);
     }
   }
+});
+
+test("feature-free detail tile 8x8 water probe skips only absent wilderness formations", () => {
+  // The original landform search is the independent SEED witness. No
+  // nonempty landform may be missed by the tile-centre conservative envelope,
+  // including source-seam aliases and 512/128/32-unit detail scales.
+  const anchors = [
+    villages[0], villages[Math.floor(villages.length / 2)], cities[0],
+    drainageRecipes[0].points[5], finalSurfaceEvidenceAnchors().bridge,
+    { x: 0, z: 0 }, { x: 40000, z: 18000 },
+  ];
+  let negativeTiles = 0, checked = 0;
+  for (const anchor of anchors) for (const level of [9, 11, 13]) {
+    const canonical = tileForPosition(anchor.x, anchor.z, level);
+    for (const shift of [0, SOURCE_PRESENTATION_WIDTH]) {
+      const tile = shift ? { ...canonical, minX: canonical.minX + shift } : canonical,
+        centerX = tile.minX + tile.size / 2,
+        centerZ = tile.minZ + tile.size / 2,
+        formations = nearbyLandforms(centerX, centerZ, tile.size);
+      if (formations.length) continue;
+      negativeTiles++;
+      for (let z = 0; z <= 8; z++) for (let x = 0; x <= 8; x++) {
+        const sx = tile.minX + tile.size * x / 8,
+          sz = tile.minZ + tile.size * z / 8;
+        assert.equal(landformAt(sx, sz), undefined,
+          `empty conservative formation scan missed a local feature at ${sx}/${sz}`);
+        assert.equal(naturalWaterKindAt(sx, sz), sparseNaturalWildernessWaterKindAt(sx, sz),
+          `negative-only water classification diverged at ${sx}/${sz}`);
+        checked++;
+      }
+    }
+  }
+  assert.ok(negativeTiles >= 4, "must exercise real formation-free tiles");
+  assert.ok(checked >= 324, "must compare at least four full canonical probe grids");
 });

@@ -213,6 +213,11 @@ export function rebuildNaturalSurface(
   const tint = (point: Sample): readonly number[] =>
     point.tint ?? (point.tint = terrainTint(point.x, point.z,32,undefined,0,false,point.surface));
 
+  // For <=512-unit detail tiles, nearbyLandforms uses the original
+  // conservative tile-radius + 80 reach. An empty set proves no local
+  // wilderness feature can alter any 8x8 sample's water. Larger tiles
+  // deliberately skip that formation scan, so they keep the full probe.
+  const noLocalLandforms = tile.size <= 512 && formations.length === 0;
   // Most tiles contain no local roads, settlement or relief and cannot
   // replace the original mesh unless real SEED water changes across them.
   // The canonical composer preserves base.water verbatim: use the identical
@@ -226,7 +231,7 @@ export function rebuildNaturalSurface(
       for (let x = 0; x <= 8; x++) {
         const sx = tile.minX + tile.size * x / 8,
           sz = tile.minZ + tile.size * z / 8,
-          wet = sparseNaturalWildernessWaterKindAt(sx, sz),
+          wet = noLocalLandforms ? naturalWaterKindAt(sx, sz) : sparseNaturalWildernessWaterKindAt(sx, sz),
           major = wet === "lake" || wet === "ocean" ? "wet" : "dry";
         if (firstMajor === undefined) firstMajor = major;
         else if (major !== firstMajor) mixedMajor = true;
