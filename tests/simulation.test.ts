@@ -46,6 +46,7 @@ import {
   residentBucketBoundsOverlap,
   streetTopologyComponents,
   routeEndpointsWalkable,
+  residentEndpointWalkable,
   orderedResidentIndicesByStandingRank,
 } from "../src/simulation.ts";
 
@@ -54,6 +55,36 @@ import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
 import { sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
 import { transportBridgeByCode } from "../src/transport-network.ts";
+
+test("resident inspector can resolve facts: S009 cached exact route endpoints preserve composed walkability", () => {
+  const place = villages[0], evidence = finalSurfaceEvidenceAnchors(),
+    targets = [evidence.bridge, { x: -26817.80086086045, z: 27316.75066655874 }],
+    offsets = [
+      { eastM: 0, northM: 0 }, { eastM: 18, northM: -12 },
+      { eastM: -0, northM: 0 }, { eastM: 0, northM: -0 },
+      { eastM: 91.01459183919955, northM: 0 },
+      { eastM: 91.01459183919954, northM: 0 },
+      ...targets.map(point => {
+        const ll = sourceToLonLat(point.x, point.z);
+        return {
+          eastM: normalizeLongitude(ll.lon - place.canonicalPosition.lon) *
+            CANONICAL_PLANET_RADIUS * Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat))),
+          northM: (ll.lat - place.canonicalPosition.lat) * CANONICAL_PLANET_RADIUS,
+        };
+      }),
+    ];
+  for (const offset of offsets) {
+    const original = legalPosition(place, offset.eastM, offset.northM).grounded;
+    assert.equal(residentEndpointWalkable(place, offset), original,
+      "first exact dry/wet/bridge/ULP preflight must match original Simulation grounding");
+    assert.equal(residentEndpointWalkable(place, { ...offset }), original,
+      "memoized exact value must never certify a blocked original endpoint");
+  }
+  assert.equal(routeEndpointsWalkable(offsets[0], offsets[1],
+    point => residentEndpointWalkable(place, point)),
+    offsets.slice(0, 2).every(point => legalPosition(place, point.eastM, point.northM).grounded),
+    "negative preflight still requires both independently grounded endpoints");
+});
 
 const HOUR = 3600;
 /** Tick at which villages[0]'s local clock shows this time on calendar day `day` (routines follow local time). */
