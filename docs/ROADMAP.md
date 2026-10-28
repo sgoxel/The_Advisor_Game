@@ -50,17 +50,17 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability & Product Conformance
 
 - WP-S009-001-001 — First validated resident without cold-index stall: bounded shared queues & worker/upload p95
-- WP-S009-002-001 — Fast, readable mobile atlas: zero idle reflow & SEED-true picking
-- WP-S009-003-001 — Mobile renderer resilience: 256MB cache trim, 1GB CPU+GPU cap & WebGL2 recovery
-- WP-S009-004-001 — Deployed-SHA README truth audit: Advisor, save/time, 2D actors & zoom
-- WP-S009-005-001 — Truthful Hero/Close loading & pure zoom: no false ready, tilt or blank handoff
+- WP-S009-002-001 — Responsive atlas without idle layout churn: fast, SEED-true touch/keyboard picking
+- WP-S009-003-001 — WebGPU/WebGL2 mobile resilience: adaptive DPR, 256MB trim & shared 1GB cap
+- WP-S009-004-001 — Exact-deployed README capability audit: Advisor, campaign, 2D actors & zoom truth
+- WP-S009-005-001 — Honest Hero/Close readiness & focus-locked pure zoom across LOD/backends
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Decisions, Same-World Interiors & Campaign Persistence
 
 - WP-S010-001-001 — Research first-play UX: inhabited SEED village, 2D hero & lawful advice loop
 - WP-S010-002-001 — Budgeted toon/GLB Hero/Close kit: SEED-true 3D doors, instancing & WebGPU/WebGL2 parity
-- WP-S010-003-001 — SEED-anchored 2D residents in 3D: roof occlusion, depth & picking
-- WP-S010-003-002 — Accessible camera tilt/inspect/follow without zoom-driven motion
+- WP-S010-003-001 — 2D residents in 3D: grounded feet, roof occlusion & identity-safe picking
+- WP-S010-003-002 — Explicit accessible tilt/inspect/follow controls without zoom-driven camera motion
 - WP-S010-004-001 — Actual resident work: legal arrival, workstation occupancy & truthful 2D work poses
 - WP-S010-004-002 — Grounded owned 3D homes: open door apertures, legal final-surface access & walkable streets
 - WP-S010-004-003 — Canonical inventory UX: lawful SEED item transfers, ownership & campaign persistence
@@ -69,13 +69,13 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-003 — Same-resident door traversal: Simulation occupancy & 2D roof/depth parity
 - WP-S010-005-004 — Persistent interior changes: SEED rooms/items/occupants, validated replay & lawful exit
 - WP-S010-005-005 — Occupancy-true 22:00–05:00 lighting: dark empty buildings & no fabricated residents
-- WP-S010-006-001 — Real-device 30 FPS baseline: A55, input latency, memory & renderer recovery
+- WP-S010-006-001 — Physical Galaxy A55 30 FPS proof: input/worker/upload latency & renderer fallback
 
 - WP-S010-007-001 — Research local-first Advisor authority: versioned Sentence Library, character choice and safe LLM proposals
-- WP-S010-007-002 — Accessible local-first Advisor chat: intent routing, LLM fallback & honest decisions
+- WP-S010-007-002 — Accessible offline-first Advisor chat: deterministic intent & honest decision status
 - WP-S010-007-003 — Autonomous Advisor consequence: character accepts/refuses, Simulation validates & world persists
 - WP-S010-008-001 — Research campaign SEED/time authority: creation-derived calendar, 24× clock & offline replay
-- WP-S010-008-002 — New/resume campaign UX: accepted SEED/date & same persistent village hero
+- WP-S010-008-002 — Accessible campaign new/resume: accepted SEED/date, stable hero & save-state truth
 - WP-S010-008-003 — Crash-safe campaign journal: Simulation-validated events, original IDs & deterministic replay
 - WP-S010-009-001 — Research SEED-faithful 3D fauna: habitats, movement, LOD & mobile budgets
 - WP-S010-009-002 — SEED-owned living 3D fauna: lawful habitats, real movement & bounded Hero/Close draw cost
