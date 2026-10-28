@@ -502,7 +502,10 @@ export function rebuildNaturalSurface(
       // real river crossings. Tighten only road-adjacent mixed wet/dry landing
       // cells, not entire river strips or unrelated tiles.
       bridgeReach = size * Math.SQRT2 / 2 + 2,
-      bridgeBank = river && (wet(a) !== wet(middle) || wet(b) !== wet(middle) ||
+      // A road within the smaller inclusive bridge reach must also be inside
+      // the wider strict road reach (12 > 2). A failed wide probe already
+      // proves this expensive second canonical road-distance search is false.
+      bridgeBank = river && road && (wet(a) !== wet(middle) || wet(b) !== wet(middle) ||
         wet(c) !== wet(middle) || wet(d) !== wet(middle)) &&
         nearRoad(middle.x, middle.z, bridgeReach, true),
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
