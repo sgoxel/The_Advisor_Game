@@ -4,7 +4,7 @@ import { sourceUnitsPerMetreAt } from './physical-scale.ts';
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
 import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
-import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
+import { drainageSegmentsInBounds, naturalSurfaceAt, naturalWaterKindAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { places, roads, roadDistanceAt } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
@@ -254,7 +254,7 @@ export function rebuildNaturalSurface(
     let lo = 0, hi = 1;
     for (let i = 0; i < 10; i++) {
       const t = (lo + hi) / 2;
-      const inside = naturalSurfaceAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t).water.kind !== "none";
+      const inside = naturalWaterKindAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t) !== "none";
       if (inside === wet(a)) lo = t; else hi = t;
     }
     const before = sample(a.x + (b.x - a.x) * lo, a.z + (b.z - a.z) * lo);
