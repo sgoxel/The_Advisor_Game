@@ -6,7 +6,7 @@ import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world
 import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, naturalWaterKindAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { nearbyPlaces, roads, roadDistanceAt } from "./geography.ts";
+import { nearbyPlaces, roads, roadDistanceAt, type Road } from "./geography.ts";
 import { siteAccessRoads } from "./sites.ts";
 import { roadFragmentsInBounds } from "./continuity-corridor.ts";
 import {
@@ -108,6 +108,22 @@ export function sparseNaturalWildernessWaterKindAt(
   return kind === "none" && landformAt(x, z)
     ? wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water.kind
     : kind;
+}
+
+/** Return the first immutable road meeting the original exact threshold.
+ * The first wide witness also proves every preceding road cannot meet a
+ * strictly narrower inclusive bridge-bank threshold (12 > 2).
+ * Keep original order, SEED roads, seam wrapping and roadDistanceAt semantics.
+ */
+export function firstRoadWithinReach(
+  x: number, z: number, candidates: readonly Road[], reach: number,
+  inclusive = false, startIndex = 0,
+): number {
+  for (let index = startIndex; index < candidates.length; index++) {
+    const distance = roadDistanceAt(x, z, candidates[index], reach);
+    if (inclusive ? distance <= reach : distance < reach) return index;
+  }
+  return -1;
 }
 
 /**
@@ -445,17 +461,6 @@ export function rebuildNaturalSurface(
     return false;
   };
 
-  // Reuse one ordered scan for each adaptive road/bridge-cell probe instead
-  // of allocating a new .some callback per visited cell. Preserve the
-  // ordinary road's strict bound and bridge-bank's inclusive bound.
-  const nearRoad = (x: number, z: number, reach: number, includeEdge: boolean) => {
-    for (const r of preparedRoads) {
-      const distance = roadDistanceAt(x, z, r, reach);
-      if (includeEdge ? distance <= reach : distance < reach) return true;
-    }
-    return false;
-  };
-
   // Adaptive cells reuse one ordered formation scan rather than allocating
   // a new .find predicate on every visit; preserve the first matching SEED
   // formation, the exact wrap conversion and the strict radial boundary.
@@ -497,7 +502,10 @@ export function rebuildNaturalSurface(
       // Threshold-limited road distance retains the identical yes/no geometry
       // decision while skipping far immutable polyline segments in every cell.
       roadReach = size * Math.SQRT2 / 2 + 12,
-      road = nearRoad(middle.x, middle.z, roadReach, false),
+      // Save the first strictly-near road witness; all earlier canonical roads
+      // were outside the wider reach and cannot satisfy the narrower bank test.
+      roadWitness = firstRoadWithinReach(middle.x, middle.z, preparedRoads, roadReach),
+      road = roadWitness >= 0,
       // The worker uses this mesh instead of the coarse ground refinement at
       // real river crossings. Tighten only road-adjacent mixed wet/dry landing
       // cells, not entire river strips or unrelated tiles.
@@ -507,7 +515,7 @@ export function rebuildNaturalSurface(
       // proves this expensive second canonical road-distance search is false.
       bridgeBank = river && road && (wet(a) !== wet(middle) || wet(b) !== wet(middle) ||
         wet(c) !== wet(middle) || wet(d) !== wet(middle)) &&
-        nearRoad(middle.x, middle.z, bridgeReach, true),
+        firstRoadWithinReach(middle.x, middle.z, preparedRoads, bridgeReach, true, roadWitness) >= 0,
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
         c.material !== middle.material || d.material !== middle.material,
       prepared = road || (preparedPlace && materialBoundary),
