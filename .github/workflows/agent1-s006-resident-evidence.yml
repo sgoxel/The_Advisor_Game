@@ -12,6 +12,15 @@ on:
       - 'src/npc-popup.ts'
       - 'src/simulation.ts'
       - 'src/world.ts'
+      # WP-S009-001-001: changes to real worker/terrain hot paths also need
+      # exact-main cold resident/worker/upload measurements. Prior changes to
+      # geography.ts and natural-surface-mesh.ts silently skipped this evidence.
+      - 'src/geography.ts'
+      - 'src/natural-surface-mesh.ts'
+      - 'src/surface-refinement.ts'
+      - 'src/vegetation-render.ts'
+      - 'src/tile-worker.ts'
+      - 'src/hydrology.ts'
       - 'src/resident-inspector.css'
       - 'src/default-character.ts'
       - 'src/resident-query.ts'
