@@ -1642,16 +1642,20 @@ export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | nul
     progress = Math.max(0, Math.min(1, remainingSeconds / durationSeconds));
   return progress < 1;
 }
-/** Every legal route (ordinary street, field-entry connector, gate, detour
- * and owned bridge) checks its exact origin at t=0. If ANY mandatory
- * prior-day leg starts on unwalkable canonical ground, the overnight chain
- * cannot have finished as scheduled. Check all such negative proofs before
- * expensive street searches; uncertain/positive origins change nothing. */
+/** The street route sorts exact endpoint strings before its directed
+ * metre-sample check. Only its lower ordered endpoint is guaranteed to be
+ * sampled at exact t=0; the higher endpoint's interpolated t=1 may differ
+ * by one ULP. A blocked *forward-ordered* leg origin is therefore an
+ * impossibility proof; reverse/uncertain routes retain original validation.
+ * Field-entry routes also check the same origin connector at exact t=0. */
 export function routineHasBlockedOrigin<T extends Offset>(
-  legs: readonly { from: T }[], walkable: (origin: T) => boolean,
+  legs: readonly { from: T; to: T }[], walkable: (origin: T) => boolean,
 ): boolean {
-  for (const leg of legs)
-    if (!walkable(leg.from)) return true;
+  for (const leg of legs) {
+    const fromId = `${leg.from.eastM},${leg.from.northM}`,
+      toId = `${leg.to.eastM},${leg.to.northM}`;
+    if (compareText(fromId, toId) <= 0 && !walkable(leg.from)) return true;
+  }
   return false;
 }
 /** An optimistic straight line is a strict lower bound on every legal street
@@ -1719,16 +1723,6 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
       source = lonLatToSource(position.lon, position.lat);
     return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
   };
-  // Every non-guard routine starts at its exact home offset. The very first
-  // changed-anchor journey must validate that origin; if the home is already
-  // unwalkable, the whole prior-day chain is at risk without constructing any
-  // settlement-wide standing-slot table or road graph.
-  if (plan[0].anchor === "home" && !originWalkable(foundation.homeOffset)) {
-    civilianOvernightRisk.set(key, true);
-    while (civilianOvernightRisk.size > 16384)
-      civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
-    return true;
-  }
   const anchors = settlementAnchors(place);
   const shiftBound = (anchor: RoutineAnchor, base: Offset, indoors: boolean) =>
     indoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")
@@ -1794,9 +1788,9 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
     from = to;
     fromAnchor = next.anchor;
   }
-  // A later blocked origin makes every possible final route chain late.
-  // Find the necessary negative once before validating any earlier leg.
-  // This proof does not replace a single positive route/surface check.
+  // A later blocked *forward-ordered* exact t=0 origin makes a
+  // mandatory route impossible. Never preflight reverse-ordered legs:
+  // their original t=1 sample may differ from the exact endpoint by one ULP.
   let risk = routineHasProvablyLateLeg(legs) ||
     routineHasBlockedOrigin(legs, originWalkable);
   if (!risk) for (const leg of legs) {
