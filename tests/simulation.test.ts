@@ -104,7 +104,9 @@ test("resident inspector can resolve facts: S009 blocked endpoints preflight wit
 test("resident inspector can resolve facts: S009 overnight blocked origins short-circuit only impossible chains", () => {
   const a = { eastM: 2.5, northM: -3 }, b = { eastM: 18, northM: 9 },
     c = { eastM: -28.5, northM: 71 };
-  const legs = [{ from: a }, { from: b }, { from: c }], visited: number[] = [];
+  const goal = { eastM: 90, northM: 100 };
+  const legs = [{ from: a, to: goal }, { from: b, to: goal },
+    { from: c, to: goal }], visited: number[] = [];
   assert.equal(routineHasBlockedOrigin(legs, p => {
     visited.push(p.eastM);
     return p !== b;
@@ -120,7 +122,21 @@ test("resident inspector can resolve facts: S009 overnight blocked origins short
   assert.equal(routineHasBlockedOrigin([], () => false), false,
     "an empty chain cannot manufacture a travel failure");
   assert.equal(continuousWalkableOffsetSegment(a, b, p => p !== a), false,
-    "the exact t=0 origin of every physically validated leg is mandatory");
+    "an exact t=0 origin is mandatory for forward-ordered street segments");
+
+  const reverseFrom = { eastM: 91.01459183919955, northM: 0 },
+    reverseTo = { eastM: -564.3661591839741, northM: 0 },
+    seenReverse: number[] = [];
+  assert.equal(routineHasBlockedOrigin([{ from: reverseFrom, to: reverseTo }], point => {
+    seenReverse.push(point.eastM);
+    return false;
+  }), false, "reverse-ordered origins cannot be rejected from exact-endpoint walkability");
+  assert.deepEqual(seenReverse, [], "an uncertain reverse leg must enter the original full street search");
+  assert.notEqual(reverseTo.eastM + (reverseFrom.eastM - reverseTo.eastM),
+    reverseFrom.eastM, "the original t=1 sample can differ by one ULP");
+  assert.equal(continuousWalkableOffsetSegment(reverseTo, reverseFrom,
+    p => p.eastM !== reverseFrom.eastM), true,
+    "the original reversed path can remain physically sampled-legal");
 });
 
 test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {
