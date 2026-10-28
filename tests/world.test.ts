@@ -64,6 +64,31 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt } from "../src/hydrology.ts";
 
 
+test("S009 terrain coverage reuses exact canonical surface for every vertex tint", () => {
+  // The noncached API remains an independent reference. These same values
+  // determine the actual coverage quad elevation and palette before/after reuse.
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    ...villages.slice(0, 4).map(({ x, z }) => ({ x, z })),
+    bridge,
+    { x: 0, z: 0 },
+    { x: SOURCE_PRESENTATION_WIDTH / 4, z: -SOURCE_PRESENTATION_WIDTH / 6 },
+    { x: -SOURCE_PRESENTATION_WIDTH / 4, z: SOURCE_PRESENTATION_WIDTH / 8 },
+  ];
+  for (const { x, z } of samples) {
+    const surface = finalSurfaceRenderChannelsAt(x, z);
+    for (const scale of [8, 64, 512]) {
+      const height = surface.water.kind === "none" ? surface.groundHeight : surface.water.level;
+      const step = scale / 8;
+      assert.deepEqual(
+        terrainTint(x, z, scale, height, step, false, surface),
+        terrainTint(x, z, scale, height, step, false),
+        `same opaque colour for exactly sampled coverage surface ${x}/${z} at ${scale}`,
+      );
+    }
+  }
+});
+
 test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {
   // Independent elevation API stays the reference after per-query macro
   // reuse. River-bank grading is intentionally excluded from this fixture.
