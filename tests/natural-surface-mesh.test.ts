@@ -3,12 +3,15 @@ import test from "node:test";
 import {
   rebuildNaturalSurface,
   NATURAL_MESH_LIMITS,
+  naturalSurfaceRoadCandidates,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "../src/planet.ts";
-import { villages, cities, places, nearbyPlaces } from "../src/geography.ts";
+import { villages, cities, places, nearbyPlaces, roads } from "../src/geography.ts";
+import { siteAccessRoads } from "../src/sites.ts";
+import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
 
 test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
@@ -183,6 +186,30 @@ test("local settlement buckets retain every strict detail-refinement match acros
         (p.kind === "city" ? 510 : 170) + tile.size * Math.SQRT2 / 2;
       assert.equal(nearbyPlaces(shiftedX, z).some(exact), places.some(exact),
         `lost physical settlement near ${place.code} / level ${level}`);
+    }
+  }
+});
+
+
+test("indexed detail-road candidates reproduce every exhaustive SEED fragment across scales and seams", () => {
+  const allRoads = [...roads, ...siteAccessRoads];
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const anchors = [villages[0], cities[0], bridge, drainageRecipes[0].points[5]];
+  for (const anchor of anchors) for (const level of [9, 12, 14]) {
+    const canonical = tileForPosition(anchor.x, anchor.z, level);
+    for (const shift of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+      const tile = { ...canonical, minX: canonical.minX + shift };
+      const fragments = (candidates: typeof allRoads) =>
+        [...roadFragmentsInBounds(candidates, tile.minX, tile.minZ, tile.size)]
+          .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
+            [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH].some(alias =>
+              r.maxX + alias >= tile.minX - 12 &&
+              r.minX + alias <= tile.minX + tile.size + 12))
+          .map(r => [r.code, r.fromX, r.fromZ, r.toX, r.toZ, r.minX, r.maxX, r.minZ, r.maxZ]);
+      const subset = naturalSurfaceRoadCandidates(tile);
+      assert.ok(subset.length <= allRoads.length, "candidate list cannot grow beyond canonical roads");
+      assert.deepEqual(fragments([...subset]), fragments(allRoads),
+        `road fragment missing or reordered at ${canonical.key} / shift ${shift}`);
     }
   }
 });

@@ -26,6 +26,53 @@ const canonicalDistanceRoadByLine = new Map(canonicalSurfaceRoads
   .filter(road => road.centerline && road.centerline.length > 1)
   .map(road => [road.centerline!, road] as const));
 
+// All canonical roads are immutable. A small detail tile needs only roads
+// whose actual short SEED polyline fragments can enter its footprint. The
+// old per-tile full-world scan is exact but repeats all road segments for
+// every tile. Index segment bounds once, then retain the original fragment
+// clipping and roadDistanceAt tests unchanged.
+const NATURAL_ROAD_BUCKET_SIZE = 2048;
+const NATURAL_ROAD_BUCKET_REACH = 512 / 2 + 12;
+let naturalRoadBuckets: Map<string, typeof canonicalSurfaceRoads> | undefined;
+export function naturalSurfaceRoadCandidates(tile: Tile): readonly (typeof canonicalSurfaceRoads)[number][] {
+  if (tile.size > 512) return canonicalSurfaceRoads;
+  if (!naturalRoadBuckets) {
+    const buckets = new Map<string, typeof canonicalSurfaceRoads>();
+    for (const road of canonicalSurfaceRoads) {
+      const points = road.centerline && road.centerline.length > 1
+        ? road.centerline
+        : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
+      for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1], b = points[i],
+          deltaX = b.x - a.x,
+          toX = Math.abs(deltaX) < SOURCE_PRESENTATION_WIDTH / 2
+            ? b.x : a.x + wrapSourceX(deltaX),
+          lowX = Math.min(a.x, toX), highX = Math.max(a.x, toX),
+          lowZ = Math.floor((Math.min(a.z, b.z) - NATURAL_ROAD_BUCKET_REACH) / NATURAL_ROAD_BUCKET_SIZE),
+          highZ = Math.floor((Math.max(a.z, b.z) + NATURAL_ROAD_BUCKET_REACH) / NATURAL_ROAD_BUCKET_SIZE);
+        for (const shift of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+          const lowBucketX = Math.floor((lowX + shift - NATURAL_ROAD_BUCKET_REACH) / NATURAL_ROAD_BUCKET_SIZE),
+            highBucketX = Math.floor((highX + shift + NATURAL_ROAD_BUCKET_REACH) / NATURAL_ROAD_BUCKET_SIZE);
+          for (let bz = lowZ; bz <= highZ; bz++)
+            for (let bx = lowBucketX; bx <= highBucketX; bx++) {
+              const key = `${bx}/${bz}`,
+                list = buckets.get(key) ?? [];
+              // A road's fragments are consecutive, so its first insertion
+              // per bucket preserves exact global road iteration order.
+              if (list[list.length - 1] !== road) list.push(road);
+              buckets.set(key, list);
+            }
+        }
+      }
+    }
+    naturalRoadBuckets = buckets;
+  }
+  const bx = Math.floor((tile.minX + tile.size / 2) / NATURAL_ROAD_BUCKET_SIZE),
+    bz = Math.floor((tile.minZ + tile.size / 2) / NATURAL_ROAD_BUCKET_SIZE);
+  return naturalRoadBuckets.get(`${bx}/${bz}`) ?? [];
+}
+
+
 export const NATURAL_MESH_LIMITS = Object.freeze({
   maximumTile: 2048,
   leaves: 16384,
@@ -96,7 +143,7 @@ export function rebuildNaturalSurface(
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
         : [],
-    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(canonicalSurfaceRoads, tile.minX, tile.minZ, tile.size)]
+    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(naturalSurfaceRoadCandidates(tile), tile.minX, tile.minZ, tile.size)]
       .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
           r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12))
