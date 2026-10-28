@@ -279,7 +279,9 @@ function addGroundRefinement(
   const tintAt = (x: number, z: number) => {
     const key = keyFor(x, z), cached = tintCache.get(key);
     if (cached) return cached;
-    const tint = terrainTint(x, z);
+    // The four ground corners already contain the exact composed surface.
+    // Reuse it rather than repeating the costly canonical query per tinted vertex.
+    const tint = terrainTint(x, z, 32, undefined, 0, true, renderAt(x, z));
     tintCache.set(key, tint);
     return tint;
   };
