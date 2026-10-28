@@ -5,12 +5,13 @@ import {
   NATURAL_MESH_LIMITS,
   naturalSurfaceRoadCandidates,
   sparseNaturalWildernessWaterKindAt,
+  firstRoadWithinReach,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "../src/planet.ts";
-import { villages, cities, places, nearbyPlaces, roads } from "../src/geography.ts";
+import { villages, cities, places, nearbyPlaces, roads, roadDistanceAt } from "../src/geography.ts";
 import { siteAccessRoads } from "../src/sites.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
@@ -248,4 +249,33 @@ test("feature-free detail tile 8x8 water probe skips only absent wilderness form
   }
   assert.ok(negativeTiles >= 4, "must exercise real formation-free tiles");
   assert.ok(checked >= 324, "must compare at least four full canonical probe grids");
+});
+
+test("bridge-bank second road scan skips only exact wider-search negatives", () => {
+  // Independent original full-array .some loops preserve the strict wide and
+  // inclusive narrow thresholds, road order and wrap-alias behavior.
+  const candidates = [...roads.slice(0, 5), ...siteAccessRoads.slice(0, 2)],
+    bridge = finalSurfaceEvidenceAnchors().bridge,
+    probes = [
+      bridge, villages[0], cities[0],
+      { x: candidates[0].fromX, z: candidates[0].fromZ },
+      { x: candidates[0].toX, z: candidates[0].toZ },
+      { x: 200000, z: 80000 },
+    ];
+  let checked = 0;
+  for (const p of probes) for (const shift of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH])
+    for (const size of [0.25, 2, 32, 128]) {
+      const x = p.x + shift, z = p.z,
+        wide = size * Math.SQRT2 / 2 + 12,
+        narrow = size * Math.SQRT2 / 2 + 2,
+        referenceWide = candidates.some(r => roadDistanceAt(x, z, r, wide) < wide),
+        referenceNarrow = candidates.some(r => roadDistanceAt(x, z, r, narrow) <= narrow),
+        first = firstRoadWithinReach(x, z, candidates, wide),
+        narrowed = first >= 0 &&
+          firstRoadWithinReach(x, z, candidates, narrow, true, first) >= 0;
+      assert.equal(first >= 0, referenceWide, `wide road verdict at ${x}/${z} size ${size}`);
+      assert.equal(narrowed, referenceNarrow, `narrow road verdict at ${x}/${z} size ${size}`);
+      checked++;
+    }
+  assert.equal(checked, 72);
 });
