@@ -318,6 +318,17 @@ export function rebuildNaturalSurface(
     return false;
   };
 
+  // Reuse one ordered scan for each adaptive road/bridge-cell probe instead
+  // of allocating a new .some callback per visited cell. Preserve the
+  // ordinary road's strict bound and bridge-bank's inclusive bound.
+  const nearRoad = (x: number, z: number, reach: number, includeEdge: boolean) => {
+    for (const r of preparedRoads) {
+      const distance = roadDistanceAt(x, z, r, reach);
+      if (includeEdge ? distance <= reach : distance < reach) return true;
+    }
+    return false;
+  };
+
   const majorWet = (s: Sample) => s.wet === "ocean" || s.wet === "lake";
   // Reuse a single predicate across adaptive cells; do not create an array
   // and callback closure for every short-circuit coast probe.
@@ -343,14 +354,14 @@ export function rebuildNaturalSurface(
       // Threshold-limited road distance retains the identical yes/no geometry
       // decision while skipping far immutable polyline segments in every cell.
       roadReach = size * Math.SQRT2 / 2 + 12,
-      road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, roadReach) < roadReach),
+      road = nearRoad(middle.x, middle.z, roadReach, false),
       // The worker uses this mesh instead of the coarse ground refinement at
       // real river crossings. Tighten only road-adjacent mixed wet/dry landing
       // cells, not entire river strips or unrelated tiles.
       bridgeReach = size * Math.SQRT2 / 2 + 2,
       bridgeBank = river && (wet(a) !== wet(middle) || wet(b) !== wet(middle) ||
         wet(c) !== wet(middle) || wet(d) !== wet(middle)) &&
-        preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, bridgeReach) <= bridgeReach),
+        nearRoad(middle.x, middle.z, bridgeReach, true),
       materialBoundary = a.material !== middle.material || b.material !== middle.material ||
         c.material !== middle.material || d.material !== middle.material,
       prepared = road || (preparedPlace && materialBoundary),
