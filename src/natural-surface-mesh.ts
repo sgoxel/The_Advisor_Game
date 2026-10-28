@@ -87,6 +87,8 @@ type Sample = {
   y: number;
   /** Computed only when a sampled point becomes a rendered vertex. */
   tint?: readonly number[];
+  /** One canonical sample is one top-surface vertex; skirts use separate keys. */
+  surfaceVertexIndex?: number;
   wet: string;
   /** Only read on tiles with a real major wet/dry boundary. */
   shoreDistance?: number;
@@ -168,7 +170,10 @@ export function rebuildNaturalSurface(
     colors: number[] = [],
     indices: number[] = [],
     uvs: number[] = [],
-    vertexIndices = new Map<string, number>();
+    // Copied skirt-bottom samples must still share coordinate-keyed vertices.
+    // Surface samples are already interned by x/z in cache, so avoid hashing
+    // a string for every top-surface triangle corner.
+    skirtVertexIndices = new Map<string, number>();
   let leaves = 0;
 
   const sample = (x: number, z: number) => {
@@ -267,11 +272,12 @@ export function rebuildNaturalSurface(
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
   const vertex = (p: Sample, group: "surface" | "skirt") => {
-    const key = `${group}/${p.x}/${p.z}/${p.y}`,
-      cached = vertexIndices.get(key);
+    const skirtKey = group === "skirt" ? `${p.x}/${p.z}/${p.y}` : "",
+      cached = group === "surface" ? p.surfaceVertexIndex : skirtVertexIndices.get(skirtKey);
     if (cached !== undefined) return cached;
     const index = positions.length / 3;
-    vertexIndices.set(key, index);
+    if (group === "surface") p.surfaceVertexIndex = index;
+    else skirtVertexIndices.set(skirtKey, index);
     positions.push(p.x - originX, p.y, p.z - originZ);
     normals.push(0, 0, 0);
     colors.push(...tint(p), p.material === "Road" && p.wet === "none" ? 255 : 0);
@@ -580,7 +586,7 @@ export function rebuildNaturalSurface(
     cpuScratchBytesEstimated:
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
-      cache.size * 192 +
-      vertexIndices.size * 96 + (cuts.size + roadCuts.size) * 256,
+      cache.size * 200 +
+      skirtVertexIndices.size * 96 + (cuts.size + roadCuts.size) * 256,
   };
 }
