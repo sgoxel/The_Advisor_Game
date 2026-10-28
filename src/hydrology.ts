@@ -115,10 +115,11 @@ function lerp(a: number, b: number, t: number) {
 function phase(layer: number) {
   return addressed(`NATURAL-SURFACE/PHASE/${layer}`) * TAU;
 }
-function sphericalDetail(x: number, z: number, layer: number) {
-  const p = sourceToLonLat(wrapSourceX(x), z),
-    q = phase(layer),
-    a = Math.sin(p.lon * (13 + layer * 2) + p.lat * (17 + layer * 3) + q),
+// These three deterministic phase addresses never depend on query order, time,
+// device or camera. Avoid hashing the same Campaign-SEED strings for each vertex.
+const PHASE_0 = phase(0), PHASE_2 = phase(2), PHASE_4 = phase(4);
+function sphericalDetail(p: LonLat, layer: number, q: number) {
+  const a = Math.sin(p.lon * (13 + layer * 2) + p.lat * (17 + layer * 3) + q),
     b = Math.cos(
       p.lon * (23 + layer * 3) - p.lat * (11 + layer * 2) - q * 0.67,
     ),
@@ -140,9 +141,12 @@ function naturalElevationForMacro(
   if (macro.domain === "Ocean") return -2.8;
   if (macro.domain === "Lake") return -1.8;
 
-  const broad = sphericalDetail(sx, z, 0),
-    detail = sphericalDetail(sx, z, 2),
-    shoulder = sphericalDetail(sx, z, 4),
+  // Original three detail calls each normalized/converted this same source
+  // coordinate; sharing the exact converted point preserves every phase/sample.
+  const point = sourceToLonLat(wrapSourceX(sx), z),
+    broad = sphericalDetail(point, 0, PHASE_0),
+    detail = sphericalDetail(point, 2, PHASE_2),
+    shoulder = sphericalDetail(point, 4, PHASE_4),
     mountainWeight = smooth01(macro.mountainIntensity / 0.58),
     base =
       macro.domain === "Island"
