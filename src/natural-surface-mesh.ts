@@ -38,6 +38,9 @@ type Sample = {
   x: number;
   z: number;
   y: number;
+  /** Immutable canonical sample; its first surface vertex is shared by every
+   * indexed triangle in this tile. Never used for independent skirt vertices. */
+  surfaceVertexIndex?: number;
   /** Computed only when a sampled point becomes a rendered vertex. */
   tint?: readonly number[];
   wet: string;
@@ -110,8 +113,10 @@ export function rebuildNaturalSurface(
     colors: number[] = [],
     indices: number[] = [],
     uvs: number[] = [],
+    // Only skirts require a coordinate key: top triangles always reuse the
+    // original tile-local Sample object at that exact canonical x/z.
     vertexIndices = new Map<string, number>();
-  let leaves = 0;
+  let leaves = 0, surfaceVertexIndexCount = 0;
 
   const sample = (x: number, z: number) => {
     const key = `${x}/${z}`,
@@ -209,11 +214,16 @@ export function rebuildNaturalSurface(
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
   const vertex = (p: Sample, group: "surface" | "skirt") => {
-    const key = `${group}/${p.x}/${p.z}/${p.y}`,
-      cached = vertexIndices.get(key);
+    // Surface vertices refer to one canonical Sample object (sample() caches
+    // x/z exactly). Avoid formatting and hashing a string for every triangle
+    // corner. Skirts still have separate keyed indices, including lowered
+    // border samples, to preserve the original normal seams and vertex order.
+    const key = group === "skirt" ? `${p.x}/${p.z}/${p.y}` : undefined,
+      cached = key === undefined ? p.surfaceVertexIndex : vertexIndices.get(key);
     if (cached !== undefined) return cached;
     const index = positions.length / 3;
-    vertexIndices.set(key, index);
+    if (key === undefined) { p.surfaceVertexIndex = index; surfaceVertexIndexCount++; }
+    else vertexIndices.set(key, index);
     positions.push(p.x - originX, p.y, p.z - originZ);
     normals.push(0, 0, 0);
     colors.push(...tint(p), p.material === "Road" && p.wet === "none" ? 255 : 0);
@@ -523,6 +533,6 @@ export function rebuildNaturalSurface(
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
       cache.size * 192 +
-      vertexIndices.size * 96 + (cuts.size + roadCuts.size) * 256,
+      (surfaceVertexIndexCount + vertexIndices.size) * 96 + (cuts.size + roadCuts.size) * 256,
   };
 }
