@@ -402,6 +402,11 @@ function addRoadAndBridgeRibbons(
       normal = roadNormalSource(vx, vz, (road.fromZ + road.toZ) / 2, roadWidthM(road) / 2),
       bridgeNx = normal.x, bridgeNz = normal.z;
     const [first, last] = clippedStationRange(road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ, tile.minX, tile.minZ, tile.size, segmentCount);
+    // Adjacent station endpoints are the same exact source coordinates:
+    // t1 for index i equals t0 for i+1. Reuse only within this road and
+    // only when the prior station actually passed the tile clip.
+    let previousEnd: ReturnType<typeof finalSurfaceAt> | undefined;
+    let previousIndex = -2;
     for (let index = first; index < last; index++) {
       const t0 = index / segmentCount,
         t1 = (index + 1) / segmentCount,
@@ -424,8 +429,11 @@ function addRoadAndBridgeRibbons(
       // corner, leaving an abrupt pale wedge next to an otherwise legal deck.
       // Its bank apron uses the same physical road width and shares
       // final-surface ownership; no underwater or unowned connecting surface.
-      const stationStart = finalSurfaceAt(x0, z0),
+      const stationStart = previousEnd && previousIndex === index - 1
+          ? previousEnd : finalSurfaceAt(x0, z0),
         stationEnd = finalSurfaceAt(x1, z1);
+      previousEnd = stationEnd;
+      previousIndex = index;
       if ([stationStart, middle, stationEnd].some(s =>
         s.water.kind === "river" || selectedRoadBridgeDeck(s, road.code))) {
         addOwnedDryBridgeLanding(tile, ground, road.code, x0, z0, x1, z1,
