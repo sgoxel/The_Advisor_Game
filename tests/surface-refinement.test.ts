@@ -9,6 +9,7 @@ import {
   REFINED_BRIDGE_HALF_WIDTH_SOURCE,
   REFINED_BRIDGE_RGB,
   REFINED_ROAD_HALF_WIDTH_SOURCE,
+  roadBaseTint,
   refineTileSurfacePresentation,
   refinementResolutionForTile,
   stripLegacyBridgeDeck,
@@ -49,6 +50,34 @@ test("S009 refined ground tint reuses the identical SEED surface channels", () =
     assert.deepEqual(reused, terrainTint(x, z),
       "fine terrain must retain the exact original material color at every canonical coordinate");
   }
+});
+
+test("S009 per-tile road base tints are byte-identical to uncached SEED queries", () => {
+  // Ground overlay quads repeat source coordinates across two triangles and
+  // adjacent cells. Compare the same original road-albedo expression while
+  // requiring a single cached result for every repeated exact coordinate.
+  const road = siteAccessRoads[0];
+  assert.ok(road.centerline && road.centerline.length > 1);
+  const crossing = finalSurfaceEvidenceAnchors().bridge;
+  const points = [
+    road.centerline[0],
+    road.centerline[Math.floor(road.centerline.length / 2)],
+    road.centerline[road.centerline.length - 1],
+    crossing,
+    { x: crossing.x + 0.25, z: crossing.z - 0.25 },
+  ];
+  const cache = new Map<string, ReturnType<typeof terrainTint>>();
+  const expectedUnique = new Set(points.map(p => `${p.x}/${p.z}`)).size;
+  for (let pass = 0; pass < 3; pass++)
+    for (const { x, z } of points) {
+      const result = roadBaseTint(cache, x, z);
+      assert.deepEqual(result, terrainTint(x, z, 32, undefined, 0, false),
+        "cached overlay RGB must equal the original exact canonical color");
+      assert.strictEqual(roadBaseTint(cache, x, z), result,
+        "repeated triangle corners must reuse one immutable tint array");
+    }
+  assert.equal(cache.size, expectedUnique,
+    "a fine tile retains no more ground tints than unique exact road vertices");
 });
 
 test("surface refinement remains bounded by tile size", () => {
