@@ -130,6 +130,13 @@ function sphericalDetail(x: number, z: number, layer: number) {
 export function naturalElevationAt(x: number, z: number) {
   const sx = wrapSourceX(x),
     macro = macroSampleAt(sourceToLonLat(sx, z));
+  return naturalElevationForMacro(sx, z, macro);
+}
+/** Reuse the identical sampled macro input within one natural-surface query.
+ * No new elevation authority or approximate source coordinates. */
+function naturalElevationForMacro(
+  sx: number, z: number, macro: ReturnType<typeof macroSampleAt>,
+) {
   if (macro.domain === "Ocean") return -2.8;
   if (macro.domain === "Lake") return -1.8;
 
@@ -650,8 +657,10 @@ export function freshwaterHabitatCandidate(
   );
 }
 
-function drySlopeAt(x: number, z: number, centre: number) {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
+function drySlopeAt(
+  x: number, z: number, centre: number,
+  macro = macroSampleAt(sourceToLonLat(x, z)),
+) {
   if (macro.mountainIntensity < 0.34) return 0;
   const step = SAMPLE_STEP_SOURCE,
     hx = naturalElevationAt(x + step, z) - naturalElevationAt(x - step, z),
@@ -700,7 +709,13 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       catchmentCode: macro.code,
     });
 
-  const terrain = naturalElevationAt(sx, z),
+  // The separate elevation call normally recomputes the same expensive
+  // macro geography. Reuse only when a second source normalization is exact,
+  // preserving seam floating-point results when it differs by an ULP.
+  const sameElevationSource = wrapSourceX(sx) === sx,
+    terrain = sameElevationSource
+      ? naturalElevationForMacro(sx, z, macro)
+      : naturalElevationAt(sx, z),
     nearest = nearestRiver(sx, z),
     // Wet footprints form a union; a narrow nearby tributary's dry bank may not
     // erase water belonging to a wider channel.
@@ -765,7 +780,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     }
   }
 
-  const slope = drySlopeAt(sx, z, terrain),
+  const slope = drySlopeAt(sx, z, terrain, macro),
     cliff = slope > 0.68,
     highland = macro.mountainIntensity > 0.15 || terrain > 105;
   let material: SurfaceMaterial = highland
