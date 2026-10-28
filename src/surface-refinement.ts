@@ -156,6 +156,18 @@ function isLegacyBridgeTriangle(geometry: Geometry, triangleOffset: number) {
 
 /** Remove the old 10-source-unit-wide deck before adding the authority-shaped deck. */
 export function stripLegacyBridgeDeck(geometry: Geometry): Geometry {
+  // Most fine tiles have no legacy bridge slabs. Avoid allocating and copying
+  // every triangle into temporary JS arrays just to return the original mesh.
+  // Inspect the exact same indexed RGB triplets as the removal pass: a partial
+  // color match cannot trigger this path and no SEED/surface fact changes.
+  let hasLegacyDeck = false;
+  for (let i = 0; i < geometry.indices.length; i += 3)
+    if (isLegacyBridgeTriangle(geometry, i)) {
+      hasLegacyDeck = true;
+      break;
+    }
+  if (!hasLegacyDeck) return geometry;
+
   let removed = false;
   const positions: number[] = [],
     normals: number[] = [],
