@@ -300,19 +300,23 @@ export function rebuildNaturalSurface(
     triangle(a, c, d, group);
   };
 
-  const nearRiver = (x: number, z: number, size: number) =>
-    segmentVectors.some(({ s, dx, dz, lengthSquared, minDx, maxDx, minDz, maxDz }) => {
+  const nearRiver = (x: number, z: number, size: number) => {
+    // Visit the identical segment order and keep the exact closest-point
+    // predicate; avoid allocating a fresh .some callback for every adaptive cell.
+    for (const { s, dx, dz, lengthSquared, minDx, maxDx, minDz, maxDz } of segmentVectors) {
       const reach = (size * Math.SQRT2) / 2 + s.width + RIVER_BANK_HALF_WIDTH_SOURCE,
         qz = z - s.az;
       // A point outside the segment's reach-expanded box cannot pass the
       // original exact closest-point distance test. Reject it before wrap and
       // projection work, retaining exact math for every possible river cell.
-      if (qz < minDz - reach || qz > maxDz + reach) return false;
+      if (qz < minDz - reach || qz > maxDz + reach) continue;
       const qx = wrapSourceX(x - s.ax);
-      if (qx < minDx - reach || qx > maxDx + reach) return false;
+      if (qx < minDx - reach || qx > maxDx + reach) continue;
       const t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSquared));
-      return Math.hypot(qx - dx * t, qz - dz * t) <= reach;
-    });
+      if (Math.hypot(qx - dx * t, qz - dz * t) <= reach) return true;
+    }
+    return false;
+  };
 
   const majorWet = (s: Sample) => s.wet === "ocean" || s.wet === "lake";
   // Reuse a single predicate across adaptive cells; do not create an array
