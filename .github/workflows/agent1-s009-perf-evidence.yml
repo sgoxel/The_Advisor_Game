@@ -1,0 +1,72 @@
+name: S009 exact-source resident and tile performance evidence
+on:
+  push:
+    branches: [agent1/s009-source-matched-perf-evidence-20261028]
+    paths: [.github/workflows/agent1-s009-perf-evidence.yml]
+permissions:
+  contents: read
+jobs:
+  source-matched-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The workflow is branch-only; run the exact game source on deployed main.
+          ref: 77ff1d213bf19b83fdcc570942457aebe2f1157f
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0 mss==10.1.0 pillow==11.3.0
+      - name: One bounded true-game cold and warm telemetry capture
+        run: |
+          set -uo pipefail
+          echo "S009_GAME_SOURCE_SHA=77ff1d213bf19b83fdcc570942457aebe2f1157f"
+          npm run preview -- --port 4174 > /tmp/s009-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null || exit 1
+          STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(18);wait:150000;shot:cold;eval:window.advisorWorld.setHalfHeight(60);wait:10000;eval:window.advisorWorld.setHalfHeight(18);wait:30000;shot:warm'
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 9m \
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ \
+              --headed --out test-results/s009-source-matched \
+              --name s009-perf --steps "$STEPS" --profile fullhd-landscape \
+              --renderer webgl2 --fixed-time-ms 1792874335750 \
+              --initial-ready-only --timeout 180
+          RESULT=$?
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('test-results/s009-source-matched/capture.json')
+          records=json.loads(path.read_text()) if path.exists() else []
+          for r in records:
+              p=r.get('performance') or {}
+              keys=('workerMs','uploadMs','residentQueryMs','residentQueryPhases',
+                    'residentStartupMilestonesMs','residentFactStatus','firstResidentFactMs',
+                    'generationReady','maxGenerationReadyObserved','maxUploadsPerFrame',
+                    'cpuUpdateMs','frameIntervalMs','residentPickMs')
+              print('S009_PERFORMANCE='+json.dumps({
+                  'source_sha':'77ff1d213bf19b83fdcc570942457aebe2f1157f', 'shot':r.get('file'), 'backend':r.get('backend'),
+                  'ready':r.get('ready'),'settled':r.get('settled'),
+                  'consoleErrors':r.get('consoleErrors'),'pageErrors':r.get('pageErrors'),
+                  **{k:p.get(k) for k in keys}
+              },separators=(',',':')),flush=True)
+          if not records:
+              for failure in Path('test-results/s009-source-matched').glob('*failure.json'):
+                  print('S009_CAPTURE_FAILURE='+failure.read_text()[:7000],flush=True)
+          PY
+          exit "$RESULT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s009-source-matched-timing-and-real-png
+          path: test-results/s009-source-matched/
+          if-no-files-found: warn
