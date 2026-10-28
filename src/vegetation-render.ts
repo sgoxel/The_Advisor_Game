@@ -43,22 +43,26 @@ class Builder {
   private indices: number[] = [];
 
   private triangle(a: Point, b: Point, c: Point, tint: RGB) {
-    const o = this.origin, transform = (p: Point): Point => [o.x+p[0]*o.sx,o.y+p[1]*o.sy,o.z+p[2]*o.sz];
-    [a,b,c] = [transform(a),transform(b),transform(c)];
-    const u = b.map((value, index) => value - a[index]),
-      v = c.map((value, index) => value - a[index]),
-      normal = [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-      ],
-      length = Math.hypot(...normal) || 1,
+    // Dense Hero/Close forests emit thousands of triangles. Retain the exact
+    // transform, cross-product and float conversion order without allocating
+    // three transformed points, vector maps and normal arrays per triangle.
+    const o = this.origin,
+      ax = o.x + a[0] * o.sx, ay = o.y + a[1] * o.sy, az = o.z + a[2] * o.sz,
+      bx = o.x + b[0] * o.sx, by = o.y + b[1] * o.sy, bz = o.z + b[2] * o.sz,
+      cx = o.x + c[0] * o.sx, cy = o.y + c[1] * o.sy, cz = o.z + c[2] * o.sz,
+      ux = bx - ax, uy = by - ay, uz = bz - az,
+      vx = cx - ax, vy = cy - ay, vz = cz - az,
+      nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx,
+      length = Math.hypot(nx, ny, nz) || 1,
+      normalX = nx / length, normalY = ny / length, normalZ = nz / length,
       start = this.positions.length / 3;
-    for (const point of [a, b, c]) {
-      this.positions.push(...point);
-      this.normals.push(...normal.map((value) => value / length));
-      this.colors.push(...tint, 255);
-    }
+    this.positions.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+    this.normals.push(normalX, normalY, normalZ,
+      normalX, normalY, normalZ, normalX, normalY, normalZ);
+    this.colors.push(tint[0], tint[1], tint[2], 255,
+      tint[0], tint[1], tint[2], 255, tint[0], tint[1], tint[2], 255);
     this.indices.push(start, start + 1, start + 2);
   }
 
