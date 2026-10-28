@@ -44,6 +44,7 @@ import {
   threeNearestOffsets,
   residentBucketBoundsOverlap,
   streetTopologyComponents,
+  routeEndpointsWalkable,
   orderedResidentIndicesByStandingRank,
 } from "../src/simulation.ts";
 
@@ -59,6 +60,29 @@ const LON = villages[0].canonicalPosition.lon;
 const at = (hour: number, day = 1) => tickAtLocalTime(day, hour * HOUR, LON);
 /** First calendar day after the origin that is a local workday (weekday 0-5). */
 const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => localWeekday(tickAtLocalTime(day, 12 * HOUR, LON), LON) !== 6)!;
+
+test("S009 blocked route endpoints reject costly detours without relaxing legal walking", () => {
+  const from = { eastM: 10, northM: 20 }, to = { eastM: 250, northM: 45 };
+  const seen: string[] = [];
+  const leg = (point: typeof from) => {
+    const key = `${point.eastM}/${point.northM}`;
+    seen.push(key);
+    return key !== "10/20";
+  };
+  assert.equal(routeEndpointsWalkable(from, to, leg), false,
+    "one unwalkable initial point makes every continuously validated route impossible");
+  assert.deepEqual(seen, ["10/20"],
+    "never spend a second final-surface query once the first endpoint is blocked");
+  seen.length = 0;
+  const lastBlocked = (point: typeof from) => {
+    seen.push(`${point.eastM}/${point.northM}`);
+    return point !== to;
+  };
+  assert.equal(routeEndpointsWalkable(from, to, lastBlocked), false);
+  assert.deepEqual(seen, ["10/20", "250/45"]);
+  assert.equal(routeEndpointsWalkable(from, to, () => true), true,
+    "both eligible endpoints still require complete metre-sampled legality and can never certify a route");
+});
 
 test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {
   // The population scan appends canonical indexes in ascending order. Its
