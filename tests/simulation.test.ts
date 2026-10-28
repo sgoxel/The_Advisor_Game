@@ -24,6 +24,7 @@ import {
   unfinishedOrBlockedOvernightReturn,
   provablyLateWithoutStreetSearch,
   routineHasProvablyLateLeg,
+  routineHasBlockedOrigin,
   provablyLateWithStandingBounds,
   walkWindowOnPath,
   lastReachableRoutineStop,
@@ -98,6 +99,28 @@ test("resident inspector can resolve facts: S009 blocked endpoints preflight wit
   assert.equal(continuousWalkableOffsetSegment(preciseFrom, preciseTo,
     p => p.eastM !== preciseFrom.eastM), false,
     "all lawful segments must validate the exact origin at t=0");
+});
+
+test("resident inspector can resolve facts: S009 overnight blocked origins short-circuit only impossible chains", () => {
+  const a = { eastM: 2.5, northM: -3 }, b = { eastM: 18, northM: 9 },
+    c = { eastM: -28.5, northM: 71 };
+  const legs = [{ from: a }, { from: b }, { from: c }], visited: number[] = [];
+  assert.equal(routineHasBlockedOrigin(legs, p => {
+    visited.push(p.eastM);
+    return p !== b;
+  }), true, "a later blocked origin invalidates the chain without validating earlier routes");
+  assert.deepEqual(visited, [a.eastM, b.eastM],
+    "stop after the first definitive failure; unrelated later legs need no surface checks");
+  visited.length = 0;
+  assert.equal(routineHasBlockedOrigin(legs, p => {
+    visited.push(p.eastM);
+    return true;
+  }), false, "all walkable origins remain uncertain and need original street validation");
+  assert.deepEqual(visited, [a.eastM, b.eastM, c.eastM]);
+  assert.equal(routineHasBlockedOrigin([], () => false), false,
+    "an empty chain cannot manufacture a travel failure");
+  assert.equal(continuousWalkableOffsetSegment(a, b, p => p !== a), false,
+    "the exact t=0 origin of every physically validated leg is mandatory");
 });
 
 test("resident inspector can resolve facts: linear standing ranks preserve all canonical sorted slots", () => {
