@@ -63,6 +63,7 @@ import { terrainTint } from "../src/geometry-core.ts";
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
+import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
 
 test("S009 terrain coverage reuses exact canonical surface for every vertex tint", () => {
@@ -165,6 +166,32 @@ test("S009 dry natural-surface elevation preserves independent canonical elevati
     checked++;
   }
   assert.ok(checked > 0, "fixture must exercise at least one dry-land station");
+});
+
+test("S009 early empty-tile water-only probe retains exact natural and local-lake classification", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    bridge,
+    ...[-6, -2, 0, 2, 6].map(dx => ({ x: bridge.x + dx, z: bridge.z })),
+    ...villages.slice(0, 8).map(({ x, z }) => ({ x, z })),
+    ...[-1, 0, 1].map(v => ({
+      x: v * SOURCE_PRESENTATION_WIDTH / 4,
+      z: v * SOURCE_PRESENTATION_WIDTH / 11,
+    })),
+  ];
+  for (const { x, z } of samples)
+    assert.equal(
+      sparseNaturalWildernessWaterKindAt(x, z),
+      wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water.kind,
+      `8x8 early-exit probe must retain identical wilderness water at ${x}/${z}`,
+    );
+  const seam = samples.at(-1)!;
+  assert.equal(
+    sparseNaturalWildernessWaterKindAt(seam.x + SOURCE_PRESENTATION_WIDTH, seam.z),
+    wildernessTerrainAt(seam.x + SOURCE_PRESENTATION_WIDTH, seam.z,
+      naturalSurfaceAt(seam.x + SOURCE_PRESENTATION_WIDTH, seam.z)).water.kind,
+    "source-wrap water membership must remain unchanged",
+  );
 });
 
 test("S009 fast featureless-tile water probe preserves fully composed SEED water", () => {
