@@ -843,14 +843,18 @@ function standTableFor(place: Place): StandTable {
   if (anchors.stand) return anchors.stand;
   const exteriorPlan = settlementExteriorFor(place);
   // Flat rank/index pairs avoid thousands of short-lived arrays on a cold city roster.
-  const users = new Map<string, number[]>();
+  const users = new Map<string, number[]>(),
+    // The complete SEED roster can contain tens of thousands of residents.
+    // Reuse these disposable per-resident maps instead of allocating both
+    // maps and two day-pair arrays for every identity. clear() preserves
+    // the original insertion order for each resident's ranked anchors.
+    byAnchor = new Map<RoutineAnchor, number>(), best = new Map<string, number>();
   for (let index = 0; index < populationOf(place); index++) {
-    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
-      // Every occurrence of the same routine anchor has one immutable SEED
-      // ground. Merge its lowest original kind rank before the expensive
-      // site/coordinate lookup; duplicate day entries add no new ground.
-      byAnchor = new Map<RoutineAnchor, number>(), best = new Map<string, number>();
-    for (const [day, weekday] of [[0, 0], [6, 6]]) for (const entry of dailyPlan(subject, foundation.traits, day, weekday)) {
+    byAnchor.clear();
+    best.clear();
+    const foundation = residentStandSeedFor(place, index, exteriorPlan), subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift };
+    // Visit the same canonical days (0,0) then (6,6); no per-resident pairs.
+    for (let day = 0; day <= 6; day += 6) for (const entry of dailyPlan(subject, foundation.traits, day, day)) {
       if (entry.indoors || entry.anchor === "home") continue;
       byAnchor.set(entry.anchor, Math.min(byAnchor.get(entry.anchor) ?? 99, KIND_RANK[entry.kind] ?? 9));
     }
