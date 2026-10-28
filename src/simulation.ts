@@ -1111,11 +1111,11 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   if (cached !== undefined) return cached;
   const { border, gates } = streetGraphFor(place),
     legal = legalEnclosureSegment(from, to, border, gates) &&
-      continuousWalkableOffsetSegment(from, to, point => {
-        const p = canonicalOffset(place, point.eastM, point.northM),
-          source = lonLatToSource(p.lon, p.lat);
-        return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
-      });
+      // Every original interpolated one-metre coordinate is still sampled.
+      // Reuse its exact immutable SEED verdict across overlapping street,
+      // gate and overnight legs instead of recomposing the same final surface.
+      // The cache distinguishes signed zero and never rounds bridge-edge ULPs.
+      continuousWalkableOffsetSegment(from, to, point => residentEndpointWalkable(place, point));
   streetSegmentLegality.set(key, legal);
   while (streetSegmentLegality.size > 16384)
     streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
