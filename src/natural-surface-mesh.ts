@@ -316,12 +316,16 @@ export function rebuildNaturalSurface(
         [a, b, c, d, middle].some(
           (s) => s.wet === "none" && Math.abs(shoreDistance(s)) <= size * Math.SQRT2 + 8,
         ),
-      road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) < size * Math.SQRT2 / 2 + 12),
+      // Threshold-limited road distance retains the identical yes/no geometry
+      // decision while skipping far immutable polyline segments in every cell.
+      roadReach = size * Math.SQRT2 / 2 + 12,
+      road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, roadReach) < roadReach),
       // The worker uses this mesh instead of the coarse ground refinement at
       // real river crossings. Tighten only road-adjacent mixed wet/dry landing
       // cells, not entire river strips or unrelated tiles.
+      bridgeReach = size * Math.SQRT2 / 2 + 2,
       bridgeBank = river && [a, b, c, d].some(p => wet(p) !== wet(middle)) &&
-        preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) <= size * Math.SQRT2 / 2 + 2),
+        preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r, bridgeReach) <= bridgeReach),
       materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
       prepared = road || (preparedPlace && materialBoundary),
       formation=formationMetres.find(({ f, metres: m }) => Math.hypot(wrapSourceX(middle.x-f.x)/m.x,(middle.z-f.z)/m.z)<f.radiusM+size/m.z)?.f,
