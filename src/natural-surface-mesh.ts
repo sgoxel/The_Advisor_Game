@@ -164,7 +164,9 @@ export function rebuildNaturalSurface(
     preparedPlace = tile.size <= 512 && nearbyPlaces(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2).some(p =>
       Math.hypot(wrapSourceX(p.x - tile.minX - tile.size / 2), p.z - tile.minZ - tile.size / 2) <
         (p.kind === 'city' ? 510 : 170) + tile.size * Math.SQRT2 / 2),
-    cache = new Map<string, Sample>(),
+    // x/z are exact canonical numeric coordinates. Two numeric maps avoid
+    // repeatedly stringifying the same grid and cut points in adaptive cells.
+    sampleRows = new Map<number, Map<number, Sample>>(),
     positions: number[] = [],
     normals: number[] = [],
     colors: number[] = [],
@@ -174,13 +176,13 @@ export function rebuildNaturalSurface(
     // Surface samples are already interned by x/z in cache, so avoid hashing
     // a string for every top-surface triangle corner.
     skirtVertexIndices = new Map<string, number>();
-  let leaves = 0;
+  let leaves = 0, sampleCount = 0;
 
   const sample = (x: number, z: number) => {
-    const key = `${x}/${z}`,
-      cached = cache.get(key);
+    let row = sampleRows.get(x);
+    const cached = row?.get(z);
     if (cached) return cached;
-    if (cache.size >= NATURAL_MESH_LIMITS.samples)
+    if (sampleCount >= NATURAL_MESH_LIMITS.samples)
       throw new RangeError("Natural mesh sample cap exceeded");
     const surface = finalSurfaceRenderChannelsAt(x, z),
       wet = surface.water.kind,
@@ -192,7 +194,9 @@ export function rebuildNaturalSurface(
         wet,
         surface,
       };
-    cache.set(key, value);
+    if (!row) { row = new Map<number, Sample>(); sampleRows.set(x, row); }
+    row.set(z, value);
+    sampleCount++;
     return value;
   };
 
@@ -580,13 +584,13 @@ export function rebuildNaturalSurface(
     geometry,
     replaced: true,
     leaves,
-    samples: cache.size,
+    samples: sampleCount,
     surfaceVertices,
     waterBoundary4,
     cpuScratchBytesEstimated:
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
-      cache.size * 200 +
+      sampleCount * 200 + sampleRows.size * 128 +
       skirtVertexIndices.size * 96 + (cuts.size + roadCuts.size) * 256,
   };
 }
