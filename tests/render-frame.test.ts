@@ -39,6 +39,47 @@ test("local render axes agree with globe east/up/south orientation", () => {
   }
 });
 
+test("ENU conversion smooths shared terrain slopes without shifting canonical heights", () => {
+  const tile = tileAt(12, 2048, 2048);
+  // Two noncoplanar terrain triangles share vertices 0 and 2. Independent
+  // skirt/structure corners do not share indices and must keep sharp edges.
+  const geometry = {
+    positions: new Float32Array([
+      -1, 0, -1,
+      -1, 0, 1,
+      1, 30, 1,
+      1, 0, -1,
+    ]),
+    normals: new Float32Array(12),
+    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    colors: new Uint8Array(16),
+  };
+  const data = { terrain: geometry } as ReturnType<typeof buildTile>;
+  convertTileGeometryToEnu(tile, data);
+  const p = geometry.positions;
+  const face = (a: number, b: number, c: number) => {
+    const i = a * 3, j = b * 3, k = c * 3;
+    const ux = p[j] - p[i], uy = p[j + 1] - p[i + 1], uz = p[j + 2] - p[i + 2];
+    const vx = p[k] - p[i], vy = p[k + 1] - p[i + 1], vz = p[k + 2] - p[i + 2];
+    return [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+  };
+  const normalize = (n: number[]) => {
+    const length = Math.hypot(...n);
+    return n.map(v => v / length);
+  };
+  const a = face(0, 1, 2), b = face(0, 2, 3);
+  assert.ok(Math.hypot(...a.map((v, i) => v - b[i])) > 0.1,
+    "regression fixture needs distinct terrain face slopes");
+  const average = normalize(a.map((v, i) => v + b[i]));
+  for (const [index, expected] of [[0, average], [1, normalize(a)], [2, average], [3, normalize(b)]] as const) {
+    for (let axis = 0; axis < 3; axis++)
+      close(geometry.normals[index * 3 + axis], expected[axis], 1e-5,
+        `vertex ${index} ENU normal axis ${axis} must use all adjacent terrain faces`);
+  }
+  close(p[7] * CANONICAL_METRES_PER_SOURCE_UNIT, 30, 1e-3,
+    "normal reconstruction must never modify canonical terrain height");
+});
+
 test("worker mesh winding and rebased patch placement use the same south axis", () => {
   const tile = tileAt(12, 2047, 2300),
     x = tile.minX + tile.size / 2,
