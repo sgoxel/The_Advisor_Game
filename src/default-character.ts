@@ -1,5 +1,9 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
+import {
+  characterModelManifest, characterModelFile, characterVisualFormat,
+  type CharacterVisualFormat, type CharacterModelManifest,
+} from "./character-model-policy.ts";
 
 /** Camera-facing authored cutouts in the real 3D world, not DOM proxy actors.
  * SEED/Simulation still own every identity, position, height and walking leg. */
@@ -53,19 +57,52 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
     images.set(name, loading);
     return loading;
   }
-  // Keep real geometry available immediately. A missing specialist image
-  // retains the real authored default, never invents another resident.
+  // The owner may deploy GLBs later by uploading characters/models/*.glb
+  // and adding matching illustration-type filenames to models.json. An empty,
+  // absent or invalid manifest never starts a 3D request or delays 2D actors.
+  const manifest: Promise<CharacterModelManifest> = fetch(
+    new URL("characters/models.json", document.baseURI).href,
+  ).then(response => response.ok ? response.json() : {})
+    .then(characterModelManifest)
+    .catch(() => characterModelManifest({}));
+  const resources = new Map<string, Promise<pc.ContainerResource | null>>();
+  function ownerModel(file: string): Promise<pc.ContainerResource | null> {
+    const prior = resources.get(file);
+    if (prior) return prior;
+    const url = new URL(`characters/models/${file}`, document.baseURI).href;
+    const loaded = new Promise<pc.ContainerResource | null>((resolve) => {
+      app.assets.loadFromUrl(url, "container", (error, asset) => {
+        if (error || !asset?.resource) {
+          console.warn("Optional character model unavailable; keeping illustration", file, error);
+          resolve(null);
+          return;
+        }
+        resolve(asset.resource);
+      });
+    });
+    resources.set(file, loaded);
+    return loaded;
+  }
+  // Keep real 2D geometry available immediately in every shipped version.
+  // Missing specialist images retain the existing authored default.
   const fallback = await artwork("default");
   const requested = new WeakMap<pc.Entity, string>();
   const assigned = new WeakMap<pc.Entity, string>();
+  const revisions = new WeakMap<pc.Entity, number>();
   const renders = new WeakMap<pc.Entity, pc.RenderComponent>();
   const shapes = new WeakMap<pc.Entity, pc.Entity>();
+  const activeModels = new WeakMap<pc.Entity, pc.Entity>();
+  const headings = new WeakMap<pc.Entity, number>();
   return {
     url: DEFAULT_CHARACTER_URL,
     clips: [] as string[],
+    /** Truthful actor presentation, including mixtures of optional 3D and 2D. */
+    format(actor: pc.Entity): CharacterVisualFormat {
+      return characterVisualFormat(activeModels.has(actor));
+    },
     create() {
-      const actor = new pc.Entity("SEED resident illustrated cutout");
-      const cutout = new pc.Entity("Authored illustration");
+      const actor = new pc.Entity("SEED resident visual");
+      const cutout = new pc.Entity("Authored 2D illustration");
       cutout.addComponent("render", {
         meshInstances: [new pc.MeshInstance(mesh, fallback)],
         castShadows: false, receiveShadows: false,
@@ -79,28 +116,84 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       const name = Object.hasOwn(CHARACTER_TYPES, key) ? key : "default";
       requested.set(actor, name);
       if (assigned.get(actor) === name) return;
-      try {
-        const material = await artwork(name);
-        if (requested.get(actor) !== name) return;
+      assigned.set(actor, name);
+      const revision = (revisions.get(actor) ?? 0) + 1;
+      revisions.set(actor, revision);
+      const current = () => requested.get(actor) === name && revisions.get(actor) === revision;
+      // Recycled pooled residents immediately keep the original picture while
+      // art/model assets change asynchronously. Old model roots are removed.
+      activeModels.get(actor)?.destroy();
+      activeModels.delete(actor);
+      const cutout = shapes.get(actor)!;
+      cutout.enabled = true;
+      for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = fallback;
+      cutout.setLocalScale(1, 1, 1);
+      void artwork(name).then(material => {
+        if (!current()) return;
         for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = material;
-        // Shape and colours always agree with the existing SEED popup image.
-        const aspect = CHARACTER_TYPES[name].aspect;
-        shapes.get(actor)?.setLocalScale(aspect / .4453, 1, 1);
-        assigned.set(actor, name);
+        cutout.setLocalScale(CHARACTER_TYPES[name].aspect / .4453, 1, 1);
+      }).catch(error => {
+        if (current()) console.warn("Resident illustration unavailable", name, error);
+      });
+      const models = await manifest;
+      if (!current()) return;
+      const file = characterModelFile(name, models);
+      if (!file) return;
+      const resource = await ownerModel(file);
+      if (!current() || !resource) return;
+      let model: pc.Entity | undefined;
+      try {
+        model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+        const pieces = (model.findComponents("render") as pc.RenderComponent[])
+          .flatMap(component => component.meshInstances);
+        if (!pieces.length) throw new Error("no renderable mesh");
+        // Align the owner's model's actual feet and height to the same 1.782 m
+        // nominal body used by the 2D quad; the actor parent still owns the
+        // exact Simulation-derived physical scale and absolute world position.
+        let minX = Infinity, minY = Infinity, minZ = Infinity,
+          maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (const part of pieces) {
+          const box = part.aabb, c = box.center, h = box.halfExtents;
+          minX = Math.min(minX, c.x - h.x); maxX = Math.max(maxX, c.x + h.x);
+          minY = Math.min(minY, c.y - h.y); maxY = Math.max(maxY, c.y + h.y);
+          minZ = Math.min(minZ, c.z - h.z); maxZ = Math.max(maxZ, c.z + h.z);
+        }
+        const height = maxY - minY;
+        if (!Number.isFinite(height) || height <= 0 ||
+            ![minX, minY, minZ, maxX, maxZ].every(Number.isFinite))
+          throw new Error("invalid model bounds");
+        const factor = DEFAULT_CHARACTER_HEIGHT_M / height;
+        model.setLocalScale(factor, factor, factor);
+        model.setLocalPosition(-(minX + maxX) * factor / 2, -minY * factor,
+          -(minZ + maxZ) * factor / 2);
+        if (!current()) { model.destroy(); return; }
+        actor.addChild(model);
+        activeModels.set(actor, model);
+        // Never turn off the 2D fallback until the 3D entity exists and has
+        // real renderable geometry. Model failure only removes the optional art.
+        cutout.enabled = false;
       } catch (error) {
-        console.warn("Resident illustration unavailable", name, error);
+        model?.destroy();
+        if (current()) console.warn("Invalid owner character model; keeping illustration", file, error);
       }
     },
     palette(_actor: pc.Entity, _variant: number) {
       // The authored illustrations already express the SEED-picked character.
     },
-    move(_actor: pc.Entity, _speedMps: number, _dx: number, _dz: number) {
-      // main's interpolation remains the only physical movement authority.
+    move(actor: pc.Entity, speedMps: number, dx: number, dz: number) {
+      // Motion direction rotates only the visual model; Simulation moves feet.
+      if (speedMps > 0 && Number.isFinite(dx) && Number.isFinite(dz) && Math.hypot(dx, dz) > 0)
+        headings.set(actor, Math.atan2(dx, dz) * 180 / Math.PI);
     },
     face(actor: pc.Entity, camera: pc.Entity) {
-      // Upright (Y-axis only), camera-facing in the genuine 3D scene.
-      const p = actor.getPosition(), c = camera.getPosition();
-      actor.setEulerAngles(0, Math.atan2(c.x - p.x, c.z - p.z) * 180 / Math.PI, 0);
+      // 2D sprites face the camera. Optional 3D models retain their movement
+      // heading rather than changing NPC decisions with camera motion.
+      if (activeModels.has(actor)) {
+        actor.setEulerAngles(0, headings.get(actor) ?? 0, 0);
+      } else {
+        const p = actor.getPosition(), c = camera.getPosition();
+        actor.setEulerAngles(0, Math.atan2(c.x - p.x, c.z - p.z) * 180 / Math.PI, 0);
+      }
     },
     setLighting(_direction: pc.Vec3, _tint: readonly number[]) {
       // Unlit authored ink matches the inspector at day and night.
