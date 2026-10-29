@@ -1102,6 +1102,7 @@ export function continuousWalkableOffsetSegmentCoordinates(
   const length = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
   const steps = Math.max(1, Math.ceil(length));
   const check = (i: number) => {
+    if (activeResidentRouteProbes) activeResidentRouteProbes.metreProbes++;
     const t = i / steps;
     return walkableAt(from.eastM + (to.eastM - from.eastM) * t,
       from.northM + (to.northM - from.northM) * t);
@@ -1201,6 +1202,27 @@ export function residentWalkableSurface(surface: Pick<FinalSurface, "walkable" |
 // SEED-owned final surface and enclosure never change during resident queries.
 // Cache exact *directed* metre-sampled checks; no coordinate rounding, and no
 // reversal that could change floating-point boundary samples on a wet bridge.
+/** On-demand-only route work counters, used by a worker query and never by SEED,
+ * Simulation routing, AI decisions, cache policy, or any latency branch. */
+export type ResidentRouteProbeCounts = {
+  streetPathSearches: number;
+  segmentRequests: number;
+  segmentScans: number;
+  metreProbes: number;
+  endpointSurfaceMisses: number;
+  graphSearches: number;
+  detourSearches: number;
+};
+let activeResidentRouteProbes: ResidentRouteProbeCounts | undefined;
+export function beginResidentRouteProbes(): ResidentRouteProbeCounts {
+  const counts: ResidentRouteProbeCounts = {
+    streetPathSearches: 0, segmentRequests: 0, segmentScans: 0,
+    metreProbes: 0, endpointSurfaceMisses: 0, graphSearches: 0, detourSearches: 0,
+  };
+  activeResidentRouteProbes = counts;
+  return counts;
+}
+export function endResidentRouteProbes(): void { activeResidentRouteProbes = undefined; }
 const streetSegmentLegality = new Map<string, boolean>();
 // The composed final surface is immutable for this SEED. Overnight risk
 // preflight and street route search often check the SAME exact endpoint;
@@ -1213,6 +1235,7 @@ function residentEndpointWalkableAt(place: Place, eastM: number, northM: number)
     key = `${place.code}|${coordinate(eastM)},${coordinate(northM)}`,
     cached = residentEndpointVerdicts.get(key);
   if (cached !== undefined) return cached;
+  if (activeResidentRouteProbes) activeResidentRouteProbes.endpointSurfaceMisses++;
   const position = canonicalOffset(place, eastM, northM),
     source = lonLatToSource(position.lon, position.lat),
     legal = residentWalkableSurface(finalSurfaceAt(source.x, source.z));
@@ -1231,9 +1254,11 @@ export function residentEndpointWalkable(place: Place, point: Offset): boolean {
   return residentEndpointWalkableAt(place, point.eastM, point.northM);
 }
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
+  if (activeResidentRouteProbes) activeResidentRouteProbes.segmentRequests++;
   const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
     cached = streetSegmentLegality.get(key);
   if (cached !== undefined) return cached;
+  if (activeResidentRouteProbes) activeResidentRouteProbes.segmentScans++;
   // A crossing through a solid SEED wall is already illegal regardless
   // of ground. Test the same authoritative enclosure first, before doing an
   // expensive final-surface sample for a route that cannot be accepted.
@@ -1315,6 +1340,7 @@ export function nearestLegalStreetNode(
 export function legalOpenGroundDetour(
   from: Offset, to: Offset, legal: (a: Offset, b: Offset) => boolean,
 ): Offset[] | null {
+  if (activeResidentRouteProbes) activeResidentRouteProbes.detourSearches++;
   const dx = to.eastM - from.eastM, dz = to.northM - from.northM,
     length = Math.hypot(dx, dz);
   if (length < 12 || length > 4000) return null;
@@ -1537,6 +1563,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
   const key = residentStreetPathKey(place.code, from, to, allowGateDetour),
     cached = pathCache.get(key);
   if (cached !== undefined) return cached;
+  if (activeResidentRouteProbes) activeResidentRouteProbes.streetPathSearches++;
   // A home-work pair at the same lawful doorway is already at its destination.
   // Do not invent a trip out to a street vertex and back before allowing work.
   if (Math.hypot(to.eastM - from.eastM, to.northM - from.northM) <= 1e-6) {
@@ -1591,6 +1618,7 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       if (shared !== undefined) {
         if (shared) path = [from, ...shared, to];
       } else {
+      if (activeResidentRouteProbes) activeResidentRouteProbes.graphSearches++;
       const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
         frontier = new StableStreetFrontier(),
         // Heuristic depends only on immutable graph nodes and the fixed goal.

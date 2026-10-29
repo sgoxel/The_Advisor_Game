@@ -87,6 +87,11 @@ export class TileWorkerPhaseSamples {
  * Up to two queries may overlap; request IDs prevent stale completions stealing a newer sample.
  */
 export class ResidentQueryPhaseSamples {
+  // Exact count-based diagnosis of one cold resident batch, not an extra
+  // timer and not a world/gameplay input. The latest per-query count is
+  // kept separately from the first cold query for reproduction.
+  private firstColdRouteProbes: import("./simulation.ts").ResidentRouteProbeCounts | null = null;
+  private lastRouteProbes: import("./simulation.ts").ResidentRouteProbeCounts | null = null;
   readonly offerToDispatchMs = new BoundedTimingSamples();
   readonly dispatchToResponseMs = new BoundedTimingSamples();
   readonly acceptedResponseMs = new BoundedTimingSamples();
@@ -184,7 +189,8 @@ export class ResidentQueryPhaseSamples {
   complete(
     id: number, accepted: boolean, at: number,
     workerPhases?: { preparationMs?: number; queryMs?: number; indexBuildMs?: number;
-      candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; overnightRiskMs?: number; overnightStopsMs?: number; overnightRoutesMs?: number; groundingMs?: number },
+      candidateLookupMs?: number; foundationMs?: number; doorMs?: number; scheduleMs?: number; overnightRiskMs?: number; overnightStopsMs?: number; overnightRoutesMs?: number; groundingMs?: number;
+      routeProbes?: import("./simulation.ts").ResidentRouteProbeCounts },
     wasWarm = false,
   ): void {
     const active = this.active.get(id);
@@ -205,6 +211,11 @@ export class ResidentQueryPhaseSamples {
     this.workerResidentOvernightStopsWallMs.record(workerPhases?.overnightStopsMs);
     this.workerResidentOvernightRoutesWallMs.record(workerPhases?.overnightRoutesMs);
     this.workerResidentGroundingWallMs.record(workerPhases?.groundingMs);
+    if (workerPhases?.routeProbes) {
+      this.lastRouteProbes = { ...workerPhases.routeProbes };
+      if (!wasWarm && !this.firstColdRouteProbes)
+        this.firstColdRouteProbes = { ...workerPhases.routeProbes };
+    }
     // Includes canonical resident evaluation and any non-index query work.
     if (workerPhases?.queryMs !== undefined && workerPhases.indexBuildMs !== undefined)
       this.workerNonIndexQueryWallMs.record(Math.max(0, workerPhases.queryMs - workerPhases.indexBuildMs));
@@ -240,6 +251,8 @@ export class ResidentQueryPhaseSamples {
       workerResidentOvernightStopsWallMs: this.workerResidentOvernightStopsWallMs.summary(),
       workerResidentOvernightRoutesWallMs: this.workerResidentOvernightRoutesWallMs.summary(),
       workerResidentGroundingWallMs: this.workerResidentGroundingWallMs.summary(),
+      firstColdRouteProbes: this.firstColdRouteProbes,
+      lastRouteProbes: this.lastRouteProbes,
       coldWorkerQueryWallMs: this.coldWorkerQueryWallMs.summary(),
       warmWorkerQueryWallMs: this.warmWorkerQueryWallMs.summary(),
       mainSendToWorkerMs: this.mainSendToWorkerMs.summary(),

@@ -14,7 +14,7 @@ export function residentMotionFraction(
 }
 
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number; actors?: boolean };
-export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number }; mainSentEpochMs?: number };
+export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number }; mainSentEpochMs?: number; routeProbes?: boolean };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
 /** The initially coherent world may supply resident facts during later zoom
  * refinement; optional current-view detail must not indefinitely starve a

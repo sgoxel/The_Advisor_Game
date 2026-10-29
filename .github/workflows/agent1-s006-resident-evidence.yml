@@ -100,9 +100,9 @@ jobs:
           if [ "${{ runner.os }}" = "macOS" ]; then
             # Native Apple Silicon Chrome uses the real Metal WebGPU device.
             # Keep all renderer/SEED/canvas-click/fresh-POST PNG checks active.
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --browser-channel chrome --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
+            python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --browser-channel chrome --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
           else
-            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
+            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
           fi
       - uses: actions/upload-artifact@v4
         if: always()
