@@ -1862,13 +1862,6 @@ type ScheduledResidentState = {
   activityStart: number; activityEnd: number; activityProgress: number;
   travelProgress?: number; travelDistanceM?: number; walkAhead?: Offset[];
 };
-// Carry yesterday's actual position for guards, the fixed service roster, and
-// civilians with a physically blocked or overlong final return. Do not replay
-// the entire civilian population on every query; cache only SEED/time facts.
-const overnightPositions = new Map<string, ScheduledResidentState>();
-// Only uncertain civilian homecomings need yesterday's expensive physical replay.
-// Ordinary residents with a proven timely final return keep the cheap analytic path.
-const civilianOvernightRisk = new Map<string, boolean>();
 /** The final homecoming needs history if its real route is absent or cannot finish
  * by midnight; never infer arrival from the scheduled destination alone. */
 export function unfinishedOrBlockedOvernightReturn(path: readonly Offset[] | null, remainingSeconds: number): boolean {
@@ -1949,128 +1942,7 @@ export function provablyLateWithStandingBounds(
     (remainingSeconds < 60 || minimumMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
 }
 
-function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number, phases?: ResidentEvaluationPhases): boolean {
-  const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
-    key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
-    cached = civilianOvernightRisk.get(key);
-  if (cached !== undefined) return cached;
-  const plan = dailyPlan({ code: foundation.code, role: foundation.role,
-    ageGroup: foundation.ageGroup, guardShift: foundation.guardShift }, foundation.traits,
-    priorDay, localWeekday(priorTick, lon));
-  if (!routineHasAnchorChange(plan)) {
-    civilianOvernightRisk.set(key, false);
-    while (civilianOvernightRisk.size > 16384)
-      civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
-    return false;
-  }
-  // A SEED standing slot lies at most four ground radii from its anchor.
-  // If even the *minimum* possible stop-to-stop distance exceeds an actual
-  // deadline, the overnight chain is at risk before any settlement-wide slot
-  // roster or metre-sampled street graph is constructed. No uncertain leg
-  // is accepted by this inexpensive proof.
-  const originWalkable = (origin: Offset) => residentEndpointWalkable(place, origin);
-  const anchors = settlementAnchors(place);
-  const shiftBound = (anchor: RoutineAnchor, base: Offset, indoors: boolean) =>
-    indoors || anchor === "home" || (foundation.role === "guard" && anchor === "work")
-      ? 0 : (anchors.areas.get(coordKey(base))?.radiusM ?? 0) * 4;
-  let earlier = plan[0], earlierBase = anchorOffset(place, foundation, earlier.anchor),
-    impossibleDeadline = false;
-  for (let i = 1; i < plan.length; i++) {
-    const next = plan[i];
-    if (next.anchor === plan[i - 1].anchor) continue;
-    const nextBase = anchorOffset(place, foundation, next.anchor);
-    let nextDeparture = DAY_SECONDS;
-    for (let j = i + 1; j < plan.length; j++)
-      if (plan[j].anchor !== plan[j - 1].anchor) {
-        nextDeparture = plan[j].start;
-        break;
-      }
-    if (provablyLateWithStandingBounds(earlierBase, nextBase,
-      shiftBound(earlier.anchor, earlierBase, earlier.indoors),
-      shiftBound(next.anchor, nextBase, next.indoors),
-      nextDeparture - next.start - 1)) {
-      impossibleDeadline = true;
-      break;
-    }
-    earlier = next;
-    earlierBase = nextBase;
-  }
-  if (impossibleDeadline) {
-    civilianOvernightRisk.set(key, true);
-    while (civilianOvernightRisk.size > 16384)
-      civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
-    return true;
-  }
-  // A lawful final homeward route is NOT proof the resident reached its
-  // scheduled origin: an earlier failed leg may have left them elsewhere.
-  // Prove each distinct anchor reached its physical stop before the following
-  // departure. Only an uncertain chain needs the expensive prior-day replay.
-  // First gather the exact scheduled physical stops and available time for
-  // every distinct anchor. If ANY leg has a mathematical distance/time proof
-  // of lateness, the prior-day chain is at risk independently of the other
-  // routes; do not spend seconds validating those other SEED street searches.
-  // Otherwise run all original physical route checks in their original order.
-  type DeadlineLeg = {
-    fromAnchor: RoutineAnchor; toAnchor: RoutineAnchor;
-    from: Offset; to: Offset; remainingSeconds: number;
-    fromEntry?: Offset; toEntry?: Offset;
-  };
-  // Diagnostics only: isolate exact standing-slot construction from the
-  // subsequently validated street/gate/bridge paths. Never use wall time
-  // to choose a route or a resident outcome.
-  const stopsStarted = phases ? performance.now() : 0;
-  const legs: DeadlineLeg[] = [];
-  let fromAnchor = plan[0].anchor,
-    from = standingSpot(place, foundation, fromAnchor,
-      anchorOffset(place, foundation, fromAnchor), !plan[0].indoors);
-  for (let i = 1; i < plan.length; i++) {
-    const next = plan[i];
-    if (next.anchor === plan[i - 1].anchor) continue;
-    const to = standingSpot(place, foundation, next.anchor,
-      anchorOffset(place, foundation, next.anchor), !next.indoors);
-    let nextDeparture = DAY_SECONDS;
-    for (let j = i + 1; j < plan.length; j++)
-      if (plan[j].anchor !== plan[j - 1].anchor) {
-        nextDeparture = plan[j].start;
-        break;
-      }
-    legs.push({ fromAnchor, toAnchor: next.anchor, from, to,
-      remainingSeconds: nextDeparture - next.start - 1,
-      fromEntry: fieldEntry(place, foundation, fromAnchor),
-      toEntry: fieldEntry(place, foundation, next.anchor) });
-    from = to;
-    fromAnchor = next.anchor;
-  }
-  // Check each street leg's actual normalized t=0 point before any earlier
-  // path search. A reverse field-entry leg remains uncertain and is skipped.
-  if (phases) phases.overnightStopsMs = (phases.overnightStopsMs ?? 0) + performance.now() - stopsStarted;
-  const pathsStarted = phases ? performance.now() : 0;
-  let risk = routineHasProvablyLateLeg(legs) ||
-    routineHasBlockedOrigin(legs, originWalkable);
-  // A single failed required leg proves overnight uncertainty, regardless
-  // of which earlier stops were reached. The final return is most relevant to
-  // midnight continuity: test it first so a blocked homecoming does not pay
-  // for unrelated earlier street/bridge searches. If it succeeds, still prove
-  // EVERY preceding leg with the original metre-sampled Simulation validator.
-  // All checks are immutable SEED facts; reversing this conjunction cannot
-  // certify an untraversed segment or change character decisions.
-  if (!risk) for (let i = legs.length - 1; i >= 0; i--) {
-    const leg = legs[i], route = routinePath(place, leg.from, leg.to,
-      leg.fromEntry, leg.toEntry);
-    if (unfinishedOrBlockedOvernightReturn(route, leg.remainingSeconds)) {
-      risk = true;
-      break;
-    }
-  }
-  if (phases) phases.overnightRoutesMs = (phases.overnightRoutesMs ?? 0) + performance.now() - pathsStarted;
-  civilianOvernightRisk.set(key, risk);
-  // Three city rosters and their frequent direct-time queries fit without
-  // evicting and recomputing every unique door route during bounded queries.
-  while (civilianOvernightRisk.size > 16384)
-    civilianOvernightRisk.delete(civilianOvernightRisk.keys().next().value!);
-  return risk;
-}
-function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, replayOvernight = true, phases?: ResidentEvaluationPhases): ScheduledResidentState {
+function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, phases?: ResidentEvaluationPhases): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
     plan = dailyPlan(subject, foundation.traits, day, weekday),
@@ -2079,47 +1951,19 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),
     mood = moodAt(foundation.code, foundation.traits, day, weekday, second),
     timing = { activityStart: activity.start, activityEnd: end, activityProgress };
-  // Seed the bounded history replay at an owned home, never at a scheduled
-  // post/worksite. Both guard shifts must carry their actual prior-day end
-  // position through midnight, including blocked returns.
-  const initialAnchor: RoutineAnchor = !replayOvernight ? "home" : plan[0].anchor,
-    morning = standingSpot(place, foundation, initialAnchor, anchorOffset(place, foundation, initialAnchor),
-      !replayOvernight ? false : !plan[0].indoors),
-    previousKey = `${foundation.code}|${day}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`;
-  let previousDay: ScheduledResidentState | undefined;
-  const fixedRoster = foundation.role === "guard" || foundation.index < SERVICE_ROLES.length;
-  let needsHistory = replayOvernight && fixedRoster;
-  if (replayOvernight && !fixedRoster) {
-    const riskStarted = phases ? performance.now() : 0;
-    needsHistory = civilianReturnAtRisk(place, foundation, tick - second - 1, phases);
-    if (phases) phases.overnightRiskMs += performance.now() - riskStarted;
-  }
-  if (needsHistory) {
-    previousDay = overnightPositions.get(previousKey);
-    if (!previousDay) {
-      previousDay = scheduleAt(place, foundation, tick - second - 1, false);
-      overnightPositions.set(previousKey, previousDay);
-      while (overnightPositions.size > 1024) overnightPositions.delete(overnightPositions.keys().next().value!);
-    }
-  }
-  const atMorning = !!previousDay &&
-    Math.hypot(previousDay.offset.eastM - morning.eastM, previousDay.offset.northM - morning.northM) <= 2 &&
-    (initialAnchor !== "work" || previousDay.activity === "guard");
-  // Replay only changed anchors from absolute Fantasy Time. A failed return
-  // cannot reset an unarrived day watchman to home at midnight.
-  let offset = previousDay?.offset ?? morning,
-    actualAnchor: RoutineAnchor | "en route" = previousDay ? (atMorning ? initialAnchor : "en route") : initialAnchor,
-    actuallyIndoors = previousDay ? (atMorning && previousDay.indoors) : !replayOvernight || plan[0].indoors;
+  // Each focused resident starts from today's deterministic first scheduled
+  // anchor. Do not query, replay or validate yesterday's routes on camera
+  // focus/inspection. Route legality is resolved for today's actual walk
+  // requests and reused through the canonical resident path cache.
+  const initialAnchor: RoutineAnchor = plan[0].anchor,
+    morning = standingSpot(place, foundation, initialAnchor,
+      anchorOffset(place, foundation, initialAnchor), !plan[0].indoors);
+  let offset = morning,
+    actualAnchor: RoutineAnchor | "en route" = initialAnchor,
+    actuallyIndoors = plan[0].indoors;
   type Leg = { path: Offset[]; start: number; origin: RoutineAnchor | "en route"; destination: RoutineAnchor };
   let leg: Leg | undefined;
   let blocked: { origin: RoutineAnchor | "en route"; destination: RoutineAnchor } | undefined;
-  if (previousDay && !atMorning) {
-    // Complete a real unfinished journey, or remain blocked at the previous
-    // position. Never adopt a schedule's new-day origin as an executed move.
-    const continuation = streetPath(place, offset, morning);
-    if (continuation) leg = { path: continuation, start: 0, origin: "en route", destination: initialAnchor };
-    else blocked = { origin: "en route", destination: initialAnchor };
-  }
   const advance = (atSecond: number) => {
     if (!leg) return;
     const moved = timedWalkOnPath(leg.path, atSecond - leg.start);
@@ -2326,7 +2170,7 @@ export function residentAt(place: Place, index: number, tick: number, phases?: R
     homeOffset = door ? offsetForSource(place, door.x, door.z) : seeded.homeOffset,
     foundation = door ? { ...seeded, homeOffset,
       workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
-    schedule = scheduleAt(place, foundation, tick, true, phases),
+    schedule = scheduleAt(place, foundation, tick, phases),
     scheduleDone = phases ? performance.now() : 0,
     location = legalPosition(place, schedule.offset.eastM, schedule.offset.northM),
     groundingDone = phases ? performance.now() : 0,
