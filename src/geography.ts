@@ -572,7 +572,11 @@ type DistanceSegment = { ax: number; az: number; scale: number; dx: number; dz: 
 // An entire immutable road whose Z extent misses a bounded query cannot
 // contain a qualifying segment. This conservative negative check avoids
 // visiting every cached polyline segment in the terrain mesh's hot loop.
-const distanceSegments = new WeakMap<Road, { segments: DistanceSegment[]; minZ: number; maxZ: number }>();
+type PreparedDistanceSegments = {
+  segments: DistanceSegment[]; minZ: number; maxZ: number;
+  zBucketSize: number; zBuckets?: Map<number, number[]>;
+};
+const distanceSegments = new WeakMap<Road, PreparedDistanceSegments>();
 /** Immutable SEED roads share prepared metrics across terrain and walking queries.
  * A finite bound may return Infinity outside it; distances inside remain exact. */
 export function roadDistanceAt(x: number, z: number, road: Road, limit = Infinity) {
@@ -590,14 +594,60 @@ export function roadDistanceAt(x: number, z: number, road: Road, limit = Infinit
       segments.push({ ax: a.x, az: a.z, scale, dx, dz, length: dx * dx + dz * dz,
         minZ: lowZ, maxZ: highZ, minDx: Math.min(0, dx), maxDx: Math.max(0, dx) });
     }
-    prepared = { segments, minZ, maxZ };
+    // The SEED road is immutable. A coarse Z-window index avoids walking
+    // hundreds of physically distant polyline segments for each 1 m route
+    // probe or terrain vertex. Every intersecting segment remains eligible,
+    // in its original order; long/high-overlap roads use the original scan.
+    let zBuckets: Map<number, number[]> | undefined;
+    const zBucketSize = Math.max(16, (maxZ - minZ) / 96 || 16);
+    if (segments.length > 16 && Number.isFinite(zBucketSize)) {
+      const index = new Map<number, number[]>();
+      let references = 0, bounded = true;
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i],
+          first = Math.floor(segment.minZ / zBucketSize),
+          last = Math.floor(segment.maxZ / zBucketSize);
+        references += last - first + 1;
+        if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) ||
+            last - first > 96 || references > segments.length * 8 + 128) {
+          bounded = false;
+          break;
+        }
+        for (let bin = first; bin <= last; bin++) {
+          const values = index.get(bin) ?? [];
+          values.push(i);
+          index.set(bin, values);
+        }
+      }
+      if (bounded) zBuckets = index;
+    }
+    prepared = { segments, minZ, maxZ, zBucketSize, zBuckets };
     distanceSegments.set(road, prepared);
   }
   // Same strict per-segment Z rejection as below, applied once to the union
   // of segment extents. It cannot reject any segment the original loop used.
   if (z < prepared.minZ - limit || z > prepared.maxZ + limit) return Infinity;
+  // The candidate window is based on the INITIAL bound. Distance can only
+  // decrease below that bound, so it cannot introduce a qualifying segment
+  // outside this conservative set. Keep original index order and exact maths.
+  let candidateIndices: readonly number[] | undefined;
+  if (prepared.zBuckets && Number.isFinite(limit) && limit >= 0) {
+    const first = Math.floor((z - limit) / prepared.zBucketSize),
+      last = Math.floor((z + limit) / prepared.zBucketSize);
+    if (Number.isSafeInteger(first) && Number.isSafeInteger(last) &&
+        last >= first && last - first <= 8) {
+      if (first === last) candidateIndices = prepared.zBuckets.get(first) ?? [];
+      else {
+        const indices = new Set<number>();
+        for (let bin = first; bin <= last; bin++)
+          for (const index of prepared.zBuckets.get(bin) ?? []) indices.add(index);
+        candidateIndices = [...indices].sort((a, b) => a - b);
+      }
+    }
+  }
   let distance = limit, found = false;
-  for (const segment of prepared.segments) {
+  for (let i = 0; i < (candidateIndices?.length ?? prepared.segments.length); i++) {
+    const segment = prepared.segments[candidateIndices ? candidateIndices[i] : i];
     if (z < segment.minZ - distance || z > segment.maxZ + distance) continue;
     const qx = wrapSourceX(x - segment.ax) * segment.scale, qz = z - segment.az;
     if (qx < segment.minDx - distance || qx > segment.maxDx + distance) continue;
