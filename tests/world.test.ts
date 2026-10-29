@@ -33,7 +33,7 @@ import {
   roadNetworkTelemetry,
   roadDistanceAt,
 } from "../src/geography.ts";
-import { nearbyCriticalSites, siteAccessRoads } from "../src/sites.ts";
+import { criticalSites, nearestCriticalSiteAt, nearbyCriticalSites, siteAccessRoads } from "../src/sites.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
@@ -175,6 +175,26 @@ test("S009 wet route probes discard only site pads, never water or bridge author
       assert.equal(surface.traversal, "bridge", "a genuine deck remains the only wet passage");
   }
   assert.ok(wet > 0, "fixture must exercise real natural water");
+});
+
+test("S009 exact nearest-site hot path retains sorted winner at banks and wrap", () => {
+  let checked = 0;
+  for (const site of criticalSites.slice(0, 16)) {
+    for (const offset of [0, 4, -6, 15.875, 16.125]) {
+      for (const wrap of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+        const x = site.x + offset + wrap, z = site.z - offset / 5;
+        assert.equal(nearestCriticalSiteAt(x, z, 16)?.code,
+          nearbyCriticalSites(x, z, 16, 1)[0]?.code,
+          `fast nearest-site winner must equal canonical sorted query at ${x}/${z}`);
+        checked++;
+      }
+    }
+  }
+  for (const x of [0, SOURCE_PRESENTATION_WIDTH / 3, -SOURCE_PRESENTATION_WIDTH / 3])
+    assert.equal(nearestCriticalSiteAt(x, SOURCE_PRESENTATION_WIDTH / 6, 16)?.code,
+      nearbyCriticalSites(x, SOURCE_PRESENTATION_WIDTH / 6, 16, 1)[0]?.code,
+      "empty or remote index lookup cannot invent a site");
+  assert.ok(checked > 0, "test must include actual SEED-owned critical sites");
 });
 
 test("S009 metre-grade neighbour height-only path equals four complete canonical surfaces", () => {
