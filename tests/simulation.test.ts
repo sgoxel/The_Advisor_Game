@@ -18,6 +18,7 @@ import {
   residentGuardPresence,
   legalPosition,
   continuousWalkableOffsetSegment,
+  continuousWalkableOffsetSegmentCoordinates,
   residentWalkableSurface,
   legalEnclosureSegment,
   timedWalkOnPath,
@@ -733,6 +734,32 @@ test("civilian midnight replay is gated: a later impossible deadline skips every
           assert.equal(preflight, false, "uncertain routes must retain their full physical search");
         }
       }
+});
+
+test("continuous walking segments preserve exact signed-zero, ULP and blocking sample order with numeric metres", () => {
+  const cases = [
+    [{ eastM: -0, northM: -0 }, { eastM: 0, northM: 0 }],
+    [{ eastM: -0, northM: 0 }, { eastM: 1.0000000000000002, northM: -0 }],
+    [{ eastM: 31.25, northM: -12.75 }, { eastM: -7.5, northM: 4.125 }],
+    ...[8, 9, 31, 32, 33, 96, 3200].map(length =>
+      [{ eastM: 0, northM: 0 }, { eastM: length, northM: 0 }]),
+  ];
+  for (const [from, to] of cases) {
+    for (const blockedAt of [-1, 0, 1, 3, 17]) {
+      const original: { eastM: number; northM: number }[] = [];
+      const numeric: { eastM: number; northM: number }[] = [];
+      const oldResult = continuousWalkableOffsetSegment(from, to, point => {
+        original.push(point);
+        return original.length - 1 !== blockedAt;
+      });
+      const newResult = continuousWalkableOffsetSegmentCoordinates(from, to, (eastM, northM) => {
+        numeric.push({ eastM, northM });
+        return numeric.length - 1 !== blockedAt;
+      });
+      assert.equal(newResult, oldResult, "a blocked canonical metre must produce the identical verdict");
+      assert.deepEqual(numeric, original, "same directed positions, including exact -0 and one-ULP boundaries");
+    }
+  }
 });
 
 test("continuous walking segments reject interior water or blocked cuts without endpoint-only approval", () => {
