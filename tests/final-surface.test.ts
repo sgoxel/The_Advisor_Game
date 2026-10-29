@@ -20,6 +20,26 @@ test("priority map is exact 0-9 owner order", () => {
   assert.deepEqual(Object.values(WORLD_BUILDING_PRIORITIES), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
 
+test("zero/single modifier surface fast path remains byte-identical to the canonical multi-record composer", () => {
+  const road: SurfaceModifier = {
+    id: "road/singleton", priority: WORLD_BUILDING_PRIORITIES.road,
+    weight: 0.75, targetGroundHeight: 3,
+    material: "Road", walkable: true, reservedUse: "road/singleton",
+  };
+  for (const base of [
+    dry,
+    { ...dry, water: { kind: "river" as const, level: 0, flowX: 0, flowZ: 1 } },
+  ]) {
+    const empty = composeFinalSurface(base, []),
+      skipped = composeFinalSurface(base, [{ id: "zero", priority: 1, weight: 0 }]);
+    assert.deepEqual(empty, skipped, "empty path cannot alter water, walking or ownership");
+    const single = composeFinalSurface(base, [road]),
+      canonicalDuplicate = composeFinalSurface(base, [road, { ...road }]);
+    assert.deepEqual(single, canonicalDuplicate,
+      "single modifier must match the fully deduplicated canonical path");
+  }
+});
+
 test("same-priority modifiers reduce by stable canonical id, not insertion order", () => {
   const a: SurfaceModifier = {
     id: "A",

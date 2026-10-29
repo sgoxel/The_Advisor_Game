@@ -116,6 +116,11 @@ function surfaceModifierSignature(modifier: SurfaceModifier) {
 }
 
 function canonicalSurfaceModifiers(modifiers: readonly SurfaceModifier[]) {
+  // With zero or one owner there is no duplicate identity to reconcile and
+  // no priority/tie order to determine. The original JSON signatures,
+  // Map and sort change no output in these frequent first-use metre probes.
+  // Keep the full canonical-conflict check for every multi-owner point.
+  if (modifiers.length <= 1) return modifiers;
   const unique = new Map<string, { modifier: SurfaceModifier; signature: string }>();
   for (const modifier of modifiers) {
     const signature = surfaceModifierSignature(modifier),
