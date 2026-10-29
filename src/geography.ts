@@ -4,6 +4,7 @@ import { climateSampleAt } from "./climate.ts";
 import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
@@ -703,6 +704,18 @@ export function nearbyPlaces(x: number, z: number): readonly Place[] {
     neighbourhoods.set(key, result);
   }
   return result;
+}
+
+// Pads cannot affect a dry surface beyond their 1,400 m city radius plus
+// 180 m falloff. The seeded keep is 28 source units south with a 16-unit
+// support radius. Latitude changes east-west distance, never north-south.
+// Preserve the exact original nearestPlace tie/order whenever either owner
+// could contribute; skip its full distance scan only for provably empty Z bands.
+const SURFACE_PLACE_Z_SUPPORT = Math.max((1400 + 180) / CANONICAL_METRES_PER_SOURCE_UNIT, 28 + 16);
+export function nearestSurfacePlace(x: number, z: number): Place | undefined {
+  if (!nearbyPlaces(x, z).some(place => Math.abs(z - place.z) <= SURFACE_PLACE_Z_SUPPORT))
+    return undefined;
+  return nearestPlace(x, z);
 }
 
 /** Transitional source/render lookup used by local terrain generation. */
