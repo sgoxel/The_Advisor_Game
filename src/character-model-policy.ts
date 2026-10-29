@@ -36,10 +36,12 @@ export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: 
 }
 
 /** Only genuinely renderable, visible owner meshes may replace an actor's 2D art.
- * A valid GLB can contain disabled nodes, render components or mesh instances.
- * Nothing here may decide character identity or Simulation positions. */
+ * A valid GLB can contain disabled nodes, render components, mesh instances
+ * or authored materials with no visible opacity. Never hide the 2D resident
+ * for an entirely transparent model. Rendering is presentation-only. */
 export function characterDrawableMeshes<T extends {
   visible?: boolean;
+  material?: unknown;
   mesh?: { primitive?: readonly { count: number }[] } | null;
 }>(components: readonly {
   enabled: boolean;
@@ -50,6 +52,13 @@ export function characterDrawableMeshes<T extends {
   for (const component of components) {
     if (!component.enabled || !component.entity.enabled) continue;
     for (const part of component.meshInstances) {
+      // Imported glTF standard materials express full transparency with
+      // opacity=0. A hidden mesh still has primitives and positive bounds,
+      // but must never displace the original illustrated resident.
+      const material = part.material;
+      const opacity = material && typeof material === "object" && "opacity" in material
+        ? material.opacity : undefined;
+      if (typeof opacity === "number" && (!Number.isFinite(opacity) || opacity <= 0)) continue;
       if (part.visible !== false && characterMeshHasGeometry([part]))
         drawable.push(part);
     }
