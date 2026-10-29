@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -60,4 +60,24 @@ test("WP #693 render components with zero drawable primitives must keep 2D fallb
     { mesh: { primitive: [{ count: 0 }] } },
     { mesh: { primitive: [{ count: 6 }] } },
   ]), true, "valid drawable meshes remain eligible for optional 3D");
+});
+
+test("WP #693 hidden GLB nodes/components/meshes cannot suppress 2D residents", () => {
+  const drawable = { visible: true, mesh: { primitive: [{ count: 6 }] } };
+  const hidden = { visible: false, mesh: { primitive: [{ count: 6 }] } };
+  const empty = { visible: true, mesh: { primitive: [{ count: 0 }] } };
+  const component = (enabled: boolean, entityEnabled: boolean, meshInstances: typeof drawable[]) =>
+    ({ enabled, entity: { enabled: entityEnabled }, meshInstances });
+
+  assert.deepEqual(characterDrawableMeshes([
+    component(false, true, [drawable]),
+    component(true, false, [drawable]),
+    component(true, true, [hidden]),
+    component(true, true, [empty]),
+  ]), [], "a loaded but fully hidden or empty owner GLB must leave 2D visible");
+
+  assert.deepEqual(characterDrawableMeshes([
+    component(false, true, [drawable]),
+    component(true, true, [hidden, drawable, empty]),
+  ]), [drawable], "only a genuinely visible mesh can activate a supplied 3D model");
 });
