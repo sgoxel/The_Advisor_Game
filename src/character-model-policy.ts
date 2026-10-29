@@ -35,6 +35,28 @@ export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: 
     Number.isFinite(primitive.count) && primitive.count > 0));
 }
 
+/** Only genuinely renderable, visible owner meshes may replace an actor's 2D art.
+ * A valid GLB can contain disabled nodes, render components or mesh instances.
+ * Nothing here may decide character identity or Simulation positions. */
+export function characterDrawableMeshes<T extends {
+  visible?: boolean;
+  mesh?: { primitive?: readonly { count: number }[] } | null;
+}>(components: readonly {
+  enabled: boolean;
+  entity: { enabled: boolean };
+  meshInstances: readonly T[];
+}[]): T[] {
+  const drawable: T[] = [];
+  for (const component of components) {
+    if (!component.enabled || !component.entity.enabled) continue;
+    for (const part of component.meshInstances) {
+      if (part.visible !== false && characterMeshHasGeometry([part]))
+        drawable.push(part);
+    }
+  }
+  return drawable;
+}
+
 /** An optional model load is never allowed to fail resident presentation. */
 export async function usableOwnerModel<T>(
   file: string | null,
