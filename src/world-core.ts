@@ -1,7 +1,7 @@
 import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { wildernessTerrainAt, wildernessTerrainCacheState } from './wilderness-terrain.ts';
-import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
+import { nearestCriticalSiteAt, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
@@ -448,7 +448,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   // and pad sample even though the original modifier is always discarded.
   // Bridge decks remain owned and checked by their original road modifier.
   if (base.water.kind === "none") {
-    const site = nearbyCriticalSites(x, z, 16, 1)[0],
+    const site = nearestCriticalSiteAt(x, z, 16),
       siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
     siteCandidateCount = site ? 1 : 0;
     if (site && siteSample && siteSample.influence > 0)
