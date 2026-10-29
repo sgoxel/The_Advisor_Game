@@ -939,7 +939,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; components: Int32Array; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[] | null>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; components: Int32Array; grid: Map<string, number[]>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[] | null>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -1025,7 +1025,6 @@ function streetGraphFor(place: Place): StreetGraph {
   }
   const { border, gates } = enclosureFor(place);
   const graph = { nodes, edges, weights, components: streetTopologyComponents(edges), grid, gridBounds,
-    legalEdges: new Map<string, boolean>(),
     nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[] | null>(),
     border, gates, cell };
   streetGraphs.set(place.code, graph);
@@ -1399,15 +1398,15 @@ const pathCache = new Map<string, Offset[] | null>();
 export function residentStreetPathKey(placeCode: string, from: Offset, to: Offset, allowGateDetour: boolean) {
   return `${placeCode}|${from.eastM},${from.northM}|${to.eastM},${to.northM}|${allowGateDetour ? "g" : "d"}`;
 }
-/**
- * Follow a real SEED road polyline only when its two physical connectors and
- * every intermediate metre are legal. Pure, finite adapter: it proposes neither
- * a new bridge nor a new workplace, and never supplies authoritative walkability.
- */
+/** Follow an actual road with physically validated endpoint connectors.
+ * The general-purpose adapter checks all edges by default; when the caller
+ * supplies a definitive SEED-accepted road, trust its interior centerline.
+ * This never invents a bridge, off-road connector or world-state change. */
 export function validatedResidentRoadPolyline(
   from: Offset, to: Offset, road: readonly Offset[],
   legal: (a: Offset, b: Offset) => boolean,
   maxConnectorM = 450, maxPathM = 6500,
+  trustAcceptedRoadCore = false,
 ): Offset[] | null {
   if (road.length < 2 || road.length > 32 || ![from.eastM, from.northM, to.eastM, to.northM].every(Number.isFinite) ||
       road.some(point => !Number.isFinite(point.eastM) || !Number.isFinite(point.northM))) return null;
@@ -1435,15 +1434,19 @@ export function validatedResidentRoadPolyline(
     distance = path.reduce((sum, p, i) =>
       i ? sum + Math.hypot(p.eastM - path[i - 1].eastM, p.northM - path[i - 1].northM) : 0, 0);
   if (distance > maxPathM) return null;
+  // The two approaches are NOT roads: still validate their exact physical
+  // connection to/from the canonical road. Once on a SEED-accepted road,
+  // NPCs reuse its definitive connected centreline, without any runtime
+  // disabled/blocked check of the interior road edges.
   for (let i = 1; i < path.length; i++)
-    if (!legal(path[i - 1], path[i])) return null;
+    if ((!trustAcceptedRoadCore || i === 1 || i === path.length - 1) &&
+        !legal(path[i - 1], path[i])) return null;
   return path;
 }
 
-/** Demand-driven real transport bridge route between a SEED gate and an
- * exterior livelihood. Called only after local street/dry-detour failure.
- * No source road or water span gets a free pass: every segment uses the
- * same final-surface and enclosure validator as ordinary resident walking. */
+/** Demand-driven SEED road/bridge route between a gate and an exterior
+ * livelihood. Accepted road interior links are already world-authoritative;
+ * resident-specific off-road approaches still obey gates and final surface. */
 // Bridge discoveries and evictions invalidate transportNetwork.bridges' array
 // identity. Reuse road membership only for that exact immutable snapshot;
 // a global unversioned Set would miss newly discovered SEED bridge roads.
@@ -1467,7 +1470,7 @@ function residentTransportBridgePath(place: Place, from: Offset, to: Offset): Of
     if (!residentBridgeRoadCodes.has(road.code) || road.centerline.length > 32) continue;
     const points = road.centerline.map(point => offsetForSource(place, point.x, point.z)),
       candidate = validatedResidentRoadPolyline(from, to, points,
-        (a, b) => legalStreetSegment(place, a, b));
+        (a, b) => legalStreetSegment(place, a, b), 450, 6500, true);
     if (!candidate) continue;
     const length = pathLength(candidate);
     if (length < bestDistance) { best = candidate; bestDistance = length; }
@@ -1636,22 +1639,16 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       while (frontier.size) {
         const current = frontier.take();
         if (current === goal) break;
-        // Keep the exact ordered A* relaxations and one-metre legality
-        // checks while avoiding a new .forEach closure for every popped node.
+        // Preserve exact ordered A* relaxations and stable SEED graph tie
+        // rules; road edges are already authorized by world construction.
         const neighbours = graph.edges[current];
         for (let i = 0; i < neighbours.length; i++) {
           const next = neighbours[i];
-          // A nonimproving edge cannot enter the path, regardless of whether its
-          // physical surface is legal. Do not sample every metre needlessly.
+          // Accepted SEED streets already own legal connectivity and grades.
+          // Search the fixed graph without rechecking whether each road is
+          // blocked/disabled; character-specific access remains validated.
           const tentative = cost.get(current)! + graph.weights[current][i];
           if (!(tentative < (cost.get(next) ?? Infinity))) continue;
-          const edgeKey = `${Math.min(current,next)}/${Math.max(current,next)}`;
-          let legal = graph.legalEdges.get(edgeKey);
-          if (legal === undefined) {
-            legal = legalStreetSegment(place, graph.nodes[current], graph.nodes[next]);
-            graph.legalEdges.set(edgeKey, legal);
-          }
-          if (!legal) continue;
           cost.set(next, tentative); cameFrom.set(next, current);
           frontier.set(next, tentative + h(next));
         }
