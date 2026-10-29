@@ -85,16 +85,19 @@ test("WP #693 hidden GLB nodes/components/meshes cannot suppress 2D residents", 
 
 test("WP #693 fully transparent owner GLB geometry cannot hide its 2D resident", () => {
   const geometry = { primitive: [{ count: 6 }] };
-  const invisible = { visible: true, mesh: geometry, material: { opacity: 0 } };
-  const nonfinite = { visible: true, mesh: geometry, material: { opacity: NaN } };
-  const drawable = { visible: true, mesh: geometry, material: { opacity: 1 } };
-  const translucent = { visible: true, mesh: geometry, material: { opacity: 0.5 } };
-  const component = (meshInstances: (typeof invisible)[]) =>
+  const invisible = { visible: true, mesh: geometry, material: { opacity: 0, transparent: true } };
+  const nonfinite = { visible: true, mesh: geometry, material: { opacity: NaN, transparent: true } };
+  const drawable = { visible: true, mesh: geometry, material: { opacity: 1, transparent: false } };
+  const translucent = { visible: true, mesh: geometry, material: { opacity: 0.5, transparent: true } };
+  const masked = { visible: true, mesh: geometry, material: { opacity: 0, transparent: false, alphaTest: 0.5 } };
+  const opaqueAlpha = { visible: true, mesh: geometry, material: { opacity: 0, transparent: false } };
+  const component = (meshInstances: Array<typeof invisible | typeof masked>) =>
     ({ enabled: true, entity: { enabled: true }, meshInstances });
-  assert.deepEqual(characterDrawableMeshes([component([invisible, nonfinite])]), [],
-    "mesh primitives with entirely invisible authored opacity leave original WebP visible");
-  assert.deepEqual(characterDrawableMeshes([component([invisible, drawable, translucent])]),
-    [drawable, translucent], "a genuinely visible owner GLB can still replace 2D, even with transparent accessories");
+  assert.deepEqual(characterDrawableMeshes([component([invisible, nonfinite, masked])]), [],
+    "zero-opacity blended/masked mesh primitives leave original WebP visible");
+  assert.deepEqual(characterDrawableMeshes([component([invisible, drawable, translucent, opaqueAlpha])]),
+    [drawable, translucent, opaqueAlpha],
+    "valid opaque, visible and semi-transparent GLB parts remain eligible without replacing 2D with invisible art");
 });
 
 test("WP #693 missing specialist art shares default material and its correct sprite aspect", async () => {
