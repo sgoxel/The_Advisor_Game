@@ -49,7 +49,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming
+- WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED at 2026-10-29
 - WP-S009-002-001 — Stop idle atlas reflow: cache labels/panels, retain stable-ID accessible picking & input p95
 - WP-S009-003-001 — Enforce combined 1GB runtime cache/resource accounting & recover WebGPU→WebGL2 without world reset
 - WP-S009-004-001 — Audit exact-SHA README promises: PASS / FOUNDATION / ABSENT / UNVERIFIED for UX, performance & browsers
