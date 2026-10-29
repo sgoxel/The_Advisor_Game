@@ -213,23 +213,35 @@ test("S005 owned-door marker cannot cover returning original 2D resident", () =>
     "invalid projection must not create a floating doorway label");
 });
 
-test("S009 cold resident precomputation reserves one real terrain worker and admission slot", () => {
+test("S009 initial resident overlap preserves a live terrain worker and the shared queue", () => {
   const allowed = residentColdQueryCanStart;
-  assert.equal(allowed(false, 12, 2, 0, 4), true,
-    "a close scene with two spare workers may overlap canonical resident facts and terrain");
-  assert.equal(allowed(false, 12, 3, 3, 6), true,
-    "bounded existing workers may prepare a resident while mandatory tiles keep capacity");
-  assert.equal(allowed(false, 12, 1, 0, 4), false,
+  assert.equal(allowed(false, 12, 2, 0, 4, 0), true,
+    "when no terrain tile is running, one worker and one slot remain reserved");
+  assert.equal(allowed(false, 12, 3, 3, 6, 0), true,
+    "the existing two-spare-capacity rule still admits an early actor query");
+  assert.equal(allowed(false, 12, 1, 0, 4, 0), false,
     "one-worker hardware cannot lose the only worker to resident replay");
-  assert.equal(allowed(false, 12, 2, 3, 4), false,
-    "one remaining shared admission slot belongs to required terrain");
-  assert.equal(allowed(true, 12, 2, 0, 4), false,
+  assert.equal(allowed(false, 12, 2, 3, 4, 0), false,
+    "one remaining admission slot without terrain in flight belongs to required ground");
+  assert.equal(allowed(false, 12, 1, 1, 2, 1), true,
+    "a second worker can prepare a resident while the first actually generates terrain");
+  assert.equal(allowed(false, 12, 1, 7, 8, 2), true,
+    "a busy eight-slot queue may use its one free slot when real terrain is running");
+  assert.equal(allowed(false, 12, 0, 1, 2, 1), false,
+    "one-worker hardware with an in-flight terrain job has no spare resident worker");
+  assert.equal(allowed(false, 12, 1, 2, 2, 1), false,
+    "full shared admission never allows an extra resident even with free hardware");
+  assert.equal(allowed(false, 12, 1, 1, 1, 1), false,
+    "single-slot devices do not overcommit a mandatory terrain worker");
+  assert.equal(allowed(false, 12, 1, 0, 4, 0), false,
+    "idle workers without active terrain still reserve one for mandatory coverage");
+  assert.equal(allowed(true, 12, 2, 1, 4, 1), false,
     "a pending camera change must not start an obsolete actor query");
   for (const halfHeight of [20, 48, 100, Infinity, NaN])
-    assert.equal(allowed(false, halfHeight, 4, 0, 8), false,
-      "remote and invalid camera scales must not precompute unrelated actors");
-  assert.equal(allowed(false, 12, 2, 6, 6), false,
-    "a fully occupied admission cannot overcommit workers");
+    assert.equal(allowed(false, halfHeight, 4, 0, 8, 1), false,
+      "remote or invalid camera scales never precompute unrelated actors");
+  assert.equal(allowed(false, 12, 2, 6, 6, 2), false,
+    "a fully occupied eight-or-smaller admission cannot overcommit workers");
 });
 
 test("S009 early canonical actor snapshots remain eligible for the first coherent frame", () => {

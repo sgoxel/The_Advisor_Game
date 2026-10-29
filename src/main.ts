@@ -298,14 +298,16 @@ const residentBatches = new Map<number, ResidentBatch>();
 const residentRunningWorkers = () => activeResidentWorkers(residentBatches.values());
 const generationReadyInUse = () => inFlight + uploads.length + residentRunningWorkers();
 function dispatchResidentQuery() {
-  // Before first coherent terrain, precompute a close-view actor query only
-  // when spare workers/admission leave one worker and slot for mandatory tiles.
-  // Actors remain invisible until terrain readiness; no Simulation fact changes.
-  const early = !ready && residentColdQueryCanStart(selectionDirty, view.halfHeight,
-    idleWorkers.length, generationReadyInUse(), generationLimit());
+  // One resident worker may overlap an already-running mandatory terrain job.
+  // Without an active terrain worker, preserve the original spare-worker/slot
+  // reservation. Only one pre-ready resident batch can run at a time; actor
+  // facts are never shown before coherent terrain or used as world authority.
+  const early = !ready && residentBatches.size === 0 && residentColdQueryCanStart(
+    selectionDirty, view.halfHeight, idleWorkers.length,
+    generationReadyInUse(), generationLimit(), inFlight);
   if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, residentBatches.size > 0) && !early) return;
   if (!selectionDirty && (ready || early)) {
-    const available = generationLimit() - generationReadyInUse() - (early ? 1 : 0);
+    const available = early ? 1 : generationLimit() - generationReadyInUse();
     if (available > 0) {
       const job = residentQueries.take(true);
       if (job) {
