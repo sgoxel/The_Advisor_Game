@@ -922,7 +922,7 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; components: Int32Array; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[]>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; components: Int32Array; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; nearestLegal: Map<string, number>; nodePaths: Map<string, readonly Offset[] | null>; border: Offset[]; gates: Offset[]; cell: number; gridBounds: { minX: number; maxX: number; minZ: number; maxZ: number } };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -1494,9 +1494,13 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
       // pair. The immutable SEED graph, fixed goal and stable A* tie rule make
       // its interior route identical; endpoint connectors remain checked for
       // each individual resident by nearest().
+      // A failed inner graph search is also a stable SEED fact. Its
+      // exact node pair can recur for other residents or the next day;
+      // remember rejection without caching an endpoint-specific connector.
       const nodeKey = `${start}/${goal}`, shared = graph.nodePaths.get(nodeKey);
-      if (shared) path = [from, ...shared, to];
-      else {
+      if (shared !== undefined) {
+        if (shared) path = [from, ...shared, to];
+      } else {
       const cost = new Map<number, number>([[start, 0]]), cameFrom = new Map<number, number>(),
         frontier = new StableStreetFrontier(),
         // Heuristic depends only on immutable graph nodes and the fixed goal.
@@ -1543,11 +1547,13 @@ function streetPath(place: Place, from: Offset, to: Offset, allowGateDetour = tr
         route.reverse();
         path = [from, ...route, to];
         graph.nodePaths.set(nodeKey, route);
-        // Retain a finite working set. Never cache blocked routes as a legal
-        // shortcut or share endpoint-specific connectors across residents.
-        while (graph.nodePaths.size > 512)
-          graph.nodePaths.delete(graph.nodePaths.keys().next().value!);
+      } else {
+        // Only the exhaustive A* failure is reused. Physical fallback paths,
+        // gate legality and this resident's exact connectors still run below.
+        graph.nodePaths.set(nodeKey, null);
       }
+      while (graph.nodePaths.size > 512)
+        graph.nodePaths.delete(graph.nodePaths.keys().next().value!);
       }
     }
   }
