@@ -147,6 +147,34 @@ test("S009 shoreline cut water-only probe exactly matches the natural surface", 
   assert.ok(wet > 0 && dry > 0, "probe must cover both legal dry ground and genuine water");
 });
 
+test("S009 wet route probes discard only site pads, never water or bridge authority", () => {
+  const crossing = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    crossing,
+    ...[-12, -6, -3, 0, 3, 6, 12].map(dx => ({ x: crossing.x + dx, z: crossing.z })),
+    ...[-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dz => ({
+      x: dx * SOURCE_PRESENTATION_WIDTH / 3,
+      z: dz * SOURCE_PRESENTATION_WIDTH / 7,
+    }))),
+  ];
+  let wet = 0;
+  for (const { x, z } of samples) {
+    const water = naturalSurfaceAt(x, z).water;
+    if (water.kind === "none") continue;
+    wet++;
+    const surface = finalSurfaceAt(x, z);
+    assert.deepEqual(surface.water, water, "priority-9 site exclusion cannot rewrite natural water");
+    for (const site of nearbyCriticalSites(x, z, 16, 1))
+      assert.equal(surface.contributingModifierIds.includes(`${site.code}/PAD`), false,
+        "a discarded wet site pad cannot become a canonical contributor");
+    if (surface.deckHeight === null)
+      assert.equal(surface.walkable, false, "unbridged wet ground remains blocked");
+    else
+      assert.equal(surface.traversal, "bridge", "a genuine deck remains the only wet passage");
+  }
+  assert.ok(wet > 0, "fixture must exercise real natural water");
+});
+
 test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {
   // Independent elevation API stays the reference after per-query macro
   // reuse. River-bank grading is intentionally excluded from this fixture.
