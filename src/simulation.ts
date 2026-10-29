@@ -1047,6 +1047,34 @@ export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
   const firstRing = bounds ? Math.max(0,
     bounds.minX - cx, cx - bounds.maxX, bounds.minZ - cz, cz - bounds.maxZ) : 0;
   if (firstRing >= 40) return -1;
+  // A distant habitat can sit dozens of empty grid rings away from a
+  // small village. For a sparse graph, inspect only actual occupied cells.
+  // Equal distances retain the original ring -> dx -> dz -> insertion
+  // order, including the first-ring termination tie: no SEED road, endpoint
+  // or legal surface predicate changes.
+  if (firstRing >= 4 && graph.grid.size <= 96) {
+    let bestRing = Infinity, bestDx = Infinity, bestDz = Infinity, bestSlot = Infinity;
+    for (const [key, ids] of graph.grid) {
+      const slash = key.indexOf("/");
+      const dx = Number(key.slice(0, slash)) - cx,
+        dz = Number(key.slice(slash + 1)) - cz,
+        ring = Math.max(Math.abs(dx), Math.abs(dz));
+      if (ring >= 40) continue;
+      for (let slot = 0; slot < ids.length; slot++) {
+        const id = ids[slot],
+          d = Math.hypot(graph.nodes[id].eastM - offset.eastM,
+            graph.nodes[id].northM - offset.northM);
+        if (d < bestDistance || (d === bestDistance &&
+          (ring < bestRing || (ring === bestRing &&
+            (dx < bestDx || (dx === bestDx &&
+              (dz < bestDz || (dz === bestDz && slot < bestSlot)))))))) {
+          best = id; bestDistance = d;
+          bestRing = ring; bestDx = dx; bestDz = dz; bestSlot = slot;
+        }
+      }
+    }
+    return best;
+  }
   for (let ring = firstRing; ring < 40; ring++) {
     // Visit exactly the same perimeter buckets, in the same dx/dz order,
     // without scanning (and rejecting) the growing square's interior.
