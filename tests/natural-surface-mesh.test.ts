@@ -6,6 +6,7 @@ import {
   naturalSurfaceRoadCandidates,
   sparseNaturalWildernessWaterKindAt,
   firstRoadWithinReach,
+  dryReliefMidpointNeeded,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
@@ -278,4 +279,18 @@ test("bridge-bank second road scan skips only exact wider-search negatives", () 
       checked++;
     }
   assert.equal(checked, 72);
+});
+
+// A terrain midpoint must not be thrown away just because all its corners
+// share the same material and are dry. This catches a genuine height ridge or
+// bowl without introducing any presentation-only vertical exaggeration.
+test("dry landform midpoint retains nonplanar canonical heights", () => {
+  assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 24), true,
+    "a SEED-owned hill peak must survive an otherwise flat dry quad");
+  assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, -3), true,
+    "a canonical valley floor must survive the same material quad");
+  assert.equal(dryReliefMidpointNeeded(10, 14, 18, 14, 14), false,
+    "a truly planar slope must not need extra triangles");
+  assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 10.02), false,
+    "sub-centimetre numerical noise is not a meaningful new contour");
 });
