@@ -245,6 +245,30 @@ test("S005 dry-bank road approach keeps its existing river owner beyond the wet-
     "unbounded approach reach fails closed");
 });
 
+test("S005 real SEED bridge deck and graded roadbed meet on both dry banks", () => {
+  const witness = finalSurfaceEvidenceAnchors(),
+    crossing = freshwaterCrossingAt(witness.bridge.x, witness.bridge.z,
+      witness.bridgeTangent.x, witness.bridgeTangent.z);
+  assert.ok(crossing, "existing SEED bridge must resolve its actual wet span");
+  const pierM = Math.min(5, (120 - crossing!.spanM) / 2);
+  assert.ok(pierM > 0, "selected bridge must have legal length available for its bank landing");
+  for (const side of [-1, 1]) {
+    const t = (side < 0 ? crossing!.lo : crossing!.hi) +
+      side * pierM / (2 * crossing!.metresPerUnit),
+      x = wrapSourceX(witness.bridge.x + crossing!.ux * t),
+      z = witness.bridge.z + crossing!.uz * t,
+      surface = finalSurfaceAt(x, z);
+    assert.equal(surface.water.kind, "none", "deck overlap must reach physically dry land");
+    assert.ok(surface.deckHeight !== null, "dry-bank bridge overlap cannot disappear at the shoreline");
+    assert.equal(surface.groundHeight, surface.deckHeight,
+      "canonical roadbed and exposed bridge walking deck must share one physical elevation");
+    assert.equal(surface.surfaceHeight, surface.deckHeight,
+      "rendered top and collision elevation must use that same deck");
+    assert.ok(surface.contributingModifierIds.includes(witness.roadCode) && surface.walkable,
+      "the original SEED road must own the walkable landing");
+  }
+});
+
 test("S005 bank approach measures true geodesic grade on the traversed bridge-deck surface", () => {
   const bank = (heights: readonly number[], groundAtNearBank: number) =>
     heights.map((surfaceHeight, index) => ({
