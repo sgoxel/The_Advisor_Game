@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Hero/Close 3D surface truth: visible relief, resident feet, doors, roads and collision
+- WP-S003-004-001 — Hero/Close final-surface parity: grounded residents, physical doors/roads & collision
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
@@ -34,7 +34,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S005 — Transport & Traversal Network
 
 - WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview — COMPLETED and REVIEWED at 2026-10-27
-- WP-S005-002-001 — Make bridge landfalls physical: dry-bank deck→graded road→legal two-way crossing
+- WP-S005-002-001 — Physical bridge landfalls: continuous dry-bank deck→graded road & legal two-way travel
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -50,35 +50,35 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability, UI/UX & README Conformance
 
 - WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED and REVIEWED at 2026-10-29
-- WP-S009-002-001 — Eliminate idle map-label reflow while preserving readable mobile panels, picking and focus
-- WP-S009-003-001 — Account for combined 1 GB CPU/GPU resources and recover renderer in-session
-- WP-S009-004-001 — Audit deployed README conformance: 3D world truth, pure zoom, Advisor UX and mobile performance
-- WP-S009-005-001 — Make wheel/pinch pure zoom; distinguish terrain, resident and interaction readiness
-- WP-S009-006-001 — Persist versioned SEED foundation cache for fast reopen and exact world regeneration
+- WP-S009-002-001 — Remove idle map-label measurements; preserve responsive readability, picking & focus
+- WP-S009-003-001 — Account for combined 1 GB CPU/GPU resources & restore the renderer in-session
+- WP-S009-004-001 — Trace deployed README clauses to code, real-world visuals and device evidence
+- WP-S009-005-001 — Keep wheel/pinch/buttons pure zoom; report terrain, resident & interaction readiness honestly
+- WP-S009-006-001 — Cache versioned SEED foundations across restarts without changing canonical truth
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 
-- WP-S010-001-001 — Research first-play hero→inspect→advise→decision UX and authoritative state
-- WP-S010-002-001 — Deliver grounded shared GLB buildings/doors/roofs/props with mobile-safe 3D performance
-- WP-S010-003-001 — Prove 2D residents' feet, occlusion and picking; correct billboard telemetry
-- WP-S010-003-002 — Provide accessible inspect, tilt, follow and reset independent of pure zoom
-- WP-S010-003-003 — Adopt owner-supplied 3D NPC meshes with permanent per-character 2D fallback
-- WP-S010-004-001 — Prove legal resident work shifts, real station arrival and visible resident activity
-- WP-S010-004-002 — Make SEED-owned 3D homes grounded and reachable: real doorways, roads & legal slopes
-- WP-S010-004-003 — Ship canonical inventory UX: Simulation-owned items, legal transfers & replayable history
-- WP-S010-004-004 — Detour NPCs around new road obstacles legally, rejoin the route & recover without teleport
-- WP-S010-005-001 — Enter and leave one SEED home through its real door in the same 3D world
-- WP-S010-005-002 — Make 3D service interiors enterable: lawful street→door→workstation with real resident occupancy
-- WP-S010-005-003 — Keep the same resident through doors: Simulation occupancy, grounded feet & roof/depth parity
-- WP-S010-005-004 — Persist validated interior changes: canonical rooms, items, occupants & lawful exit/replay
-- WP-S010-005-005 — Base occupied-home lighting on fantasy 22:00–05:00; keep earlier twilight cosmetic
-- WP-S010-006-001 — Certify real Galaxy A55 Chrome FPS, input latency, memory, thermals and recovery
+- WP-S010-001-001 — Research first-play hero→inspect→advise→decision UX and Simulation-owned outcomes
+- WP-S010-002-001 — Reuse grounded GLB buildings/doors/roofs/props with measured mobile 3D costs
+- WP-S010-003-001 — Verify 2D resident feet, depth/roof occlusion, accessible picking & truthful telemetry
+- WP-S010-003-002 — Expose accessible inspect/tilt/follow/reset controls independently of pure zoom
+- WP-S010-003-003 — Validate optional owner GLBs; permanently fall back to each NPC's original 2D art
+- WP-S010-004-001 — Prove lawful SEED work shifts: real station arrival and visible resident activity
+- WP-S010-004-002 — Ground SEED-owned homes: connected paths, real door thresholds and legal slopes
+- WP-S010-004-003 — Make inventory actionable: Simulation-owned items, legal transfer UX & replay
+- WP-S010-004-004 — Detour NPCs around new road obstacles legally, rejoin or stop without teleport
+- WP-S010-005-001 — Enter/exit one SEED home continuously via its real street→door→room path
+- WP-S010-005-002 — Enter 3D service interiors lawfully; reach workstations with real resident occupancy
+- WP-S010-005-003 — Preserve resident identity, occupancy, feet and roof/depth parity through doors
+- WP-S010-005-004 — Persist Simulation-approved room/item/occupant changes and replay lawful exits
+- WP-S010-005-005 — Use fantasy 22:00–05:00 for occupied-home light; earlier twilight remains cosmetic
+- WP-S010-006-001 — Measure real Galaxy A55 Chrome FPS, input, combined memory, thermals & recovery
 
-- WP-S010-007-001 — Research local-first Advisor dialogue: versioned Sentence Library, autonomous choice & bounded LLM
-- WP-S010-007-002 — Ship accessible offline Advisor chat with versioned Sentence Library and bounded LLM
-- WP-S010-007-003 — Show advice→autonomous decision→Simulation-validated action or refusal
-- WP-S010-008-001 — Research campaign SEED/time authority: creation-derived fantasy clock, offline continuity & replay
-- WP-S010-008-002 — Offer accessible campaign create/resume with creation-time fantasy clock and stable hero
-- WP-S010-008-003 — Persist and replay Simulation-approved campaign events exactly once through restart/offline time
-- WP-S010-009-001 — Research SEED-faithful living fauna: habitats, lawful movement, real 3D art & mobile LOD
-- WP-S010-009-002 — Render 13 SEED-owned living 3D fauna species with lawful habitats, actions & mobile LOD
+- WP-S010-007-001 — Research deterministic Sentence Library, bounded LLM command set & autonomy
+- WP-S010-007-002 — Ship accessible offline Advisor chat: local-first routing, bounded optional LLM
+- WP-S010-007-003 — Show advice→autonomous choice→Simulation-approved action/refusal in the world
+- WP-S010-008-001 — Research creation-time campaign clock, stable SEED, offline continuity & replay
+- WP-S010-008-002 — Create/resume accessible campaigns with accepted creation time, SEED & stable hero
+- WP-S010-008-003 — Journal and replay Simulation-approved campaign changes exactly once offline
+- WP-S010-009-001 — Research SEED-faithful fauna identity, habitats, legal behavior & 3D mobile LOD
+- WP-S010-009-002 — Render 13 SEED-owned living 3D fauna species with lawful habitat/actions & mobile LOD
