@@ -19,7 +19,26 @@ export function alderwickTests(backend) {
       window.advisorWorld.navigation.setFocus(v.canonicalPosition.lon,v.canonicalPosition.lat);
       window.advisorWorld.setHalfHeight(97);
     });
-    const settled=()=>page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:180000});
+    const settled=async()=>{
+      try {
+        await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:180000});
+      } catch (error) {
+        // Preserve the actual failing runtime state without weakening the wait.
+        const diagnostic=await page.evaluate(()=>{
+          const s=window.advisorWorld?.state;
+          return s?{
+            ready:s.ready,settled:s.settled,error:s.error,view:s.view,
+            streaming:s.streaming,simulation:s.simulation,
+            performance:s.performance,visibleMeshes:s.visibleMeshes,
+            visibleGeometryTriangles:s.visibleGeometryTriangles
+          }:{stateUnavailable:true};
+        }).catch(e=>({evaluationError:String(e)}));
+        const directory=`test-results/alderwick-${backend}`;
+        fs.mkdirSync(directory,{recursive:true});
+        fs.writeFileSync(`${directory}/settle-timeout.json`,JSON.stringify(diagnostic,null,2));
+        throw error;
+      }
+    };
     await settled();
     const out=`test-results/alderwick-${backend}`;
     fs.mkdirSync(out,{recursive:true});
