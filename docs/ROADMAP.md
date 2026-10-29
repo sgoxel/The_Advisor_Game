@@ -62,13 +62,14 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-002-001 — Deliver grounded shared GLB buildings/doors/roofs/props with mobile-safe 3D performance
 - WP-S010-003-001 — Prove 2D residents' feet, occlusion and picking; correct billboard telemetry
 - WP-S010-003-002 — Provide accessible inspect, tilt, follow and reset independent of pure zoom
-- WP-S010-004-001 — Prove legal resident work shifts, real station arrival and visible 2D activity
+- WP-S010-003-003 — Adopt owner-supplied 3D NPC meshes with permanent per-character 2D fallback
+- WP-S010-004-001 — Prove legal resident work shifts, real station arrival and visible resident activity
 - WP-S010-004-002 — Make SEED-owned 3D homes grounded and reachable: real doorways, roads & legal slopes
 - WP-S010-004-003 — Ship canonical inventory UX: Simulation-owned items, legal transfers & replayable history
 - WP-S010-004-004 — Detour NPCs around new road obstacles legally, rejoin the route & recover without teleport
 - WP-S010-005-001 — Enter and leave one SEED home through its real door in the same 3D world
 - WP-S010-005-002 — Make 3D service interiors enterable: lawful street→door→workstation with real resident occupancy
-- WP-S010-005-003 — Keep the same 2D resident through doors: Simulation occupancy, grounded feet & roof/depth parity
+- WP-S010-005-003 — Keep the same resident through doors: Simulation occupancy, grounded feet & roof/depth parity
 - WP-S010-005-004 — Persist validated interior changes: canonical rooms, items, occupants & lawful exit/replay
 - WP-S010-005-005 — Base occupied-home lighting on fantasy 22:00–05:00; keep earlier twilight cosmetic
 - WP-S010-006-001 — Certify real Galaxy A55 Chrome FPS, input latency, memory, thermals and recovery
