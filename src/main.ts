@@ -2735,7 +2735,12 @@ async function start() {
             logicalResidents: simulation.stats.logicalResidents,
             pooledActors: actors.length,
             visibleActors: actors.filter(actor => actor.enabled).length,
-            format: "skinned-3d", generatedActors: actors.filter(actor => actor.enabled && actor.tags.has("generated-npc")).length, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
+            format: actors.some(actor => actor.enabled && characterVisuals.format(actor) === "3d-model")
+              ? (actors.some(actor => actor.enabled && characterVisuals.format(actor) === "2d-cutout")
+                ? "mixed-3d-model-and-2d-cutout" : "3d-model") : "2d-cutout",
+            modelActors: actors.filter(actor => actor.enabled && characterVisuals.format(actor) === "3d-model").length,
+            illustratedActors: actors.filter(actor => actor.enabled && characterVisuals.format(actor) === "2d-cutout").length,
+            generatedActors: actors.filter(actor => actor.enabled && actor.tags.has("generated-npc")).length, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
             physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * CANONICAL_METRES_PER_SOURCE_UNIT),
             worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M, 0)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
