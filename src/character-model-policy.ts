@@ -26,3 +26,16 @@ export type CharacterVisualFormat = "2d-cutout" | "3d-model";
 export function characterVisualFormat(usableModel: boolean): CharacterVisualFormat {
   return usableModel ? "3d-model" : "2d-cutout";
 }
+
+/** An optional model load is never allowed to fail resident presentation. */
+export async function usableOwnerModel<T>(
+  file: string | null,
+  load: (filename: string) => Promise<T | null>,
+): Promise<T | null> {
+  if (!file) return null;
+  try {
+    return await load(file);
+  } catch {
+    return null;
+  }
+}
