@@ -243,6 +243,52 @@ test("S005 dry-bank road approach keeps its existing river owner beyond the wet-
     "at least one real bank must retain the same owned crossing when beyond the old water-only reach");
   assert.equal(freshwaterCrossingAt(bridge.x, bridge.z, bridgeTangent.x, bridgeTangent.z, Infinity), null,
     "unbounded approach reach fails closed");
+  // The screenshot-tool's selected MAIN-19 bridge is also the real
+  // Simulation-backed resident's outbound and reverse crossing. Certify its
+  // two dry landings, not just the first unrelated evidence bridge.
+  const bridgeCode = "ADVISOR-0126-ALDERWICK/macro-roads-v2/ROAD/J/0/11/1/1~J/0/11/1/3/BRIDGE/ADVISOR-0126-ALDERWICK-v5-DRAINAGE-0-69-MAIN-19",
+    selected = transportBridgeByCode(bridgeCode),
+    selectedRoad = siteTransportNetwork.roadEdges.find(edge => edge.code === selected?.roadCode);
+  assert.ok(selected && selectedRoad, "original rendered/visited SEED bridge and owned road remain registered");
+  const stations = selectedRoad!.centerline;
+  let nearest = Infinity, direction: { x: number; z: number } | null = null;
+  const latScale = Math.cos(sourceToLonLat(selected!.x, selected!.z).lat);
+  for (let i = 1; i < stations.length; i++) {
+    const a = stations[i - 1], b = stations[i],
+      dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+      east = dx * latScale, north = dz,
+      queryEast = wrapSourceX(selected!.x - a.x) * latScale, queryNorth = selected!.z - a.z,
+      lengthSquared = east * east + north * north;
+    if (lengthSquared < 1e-12) continue;
+    const fraction = Math.max(0, Math.min(1, (queryEast * east + queryNorth * north) / lengthSquared)),
+      distance = CANONICAL_METRES_PER_SOURCE_UNIT *
+        Math.hypot(queryEast - east * fraction, queryNorth - north * fraction);
+    if (distance < nearest) { nearest = distance; direction = { x: dx, z: dz }; }
+  }
+  assert.ok(direction && nearest <= 2, "fixed bridge must sit on its actual finite SEED road centreline");
+  const actual = freshwaterCrossingAt(selected!.x, selected!.z, direction!.x, direction!.z);
+  assert.ok(actual && actual.code === selected!.drainageCode &&
+    Math.abs(actual.spanM - selected!.spanM) <= Math.max(1, selected!.spanM * .01),
+    "the dry landing must belong to this original river crossing");
+  const overlapM = Math.min(5, (120 - actual!.spanM) / 2);
+  assert.ok(overlapM > 0, "original bridge has physical landfall under the 120m bridge limit");
+  for (const side of [-1, 1]) {
+    const t = (side < 0 ? actual!.lo : actual!.hi) + side * overlapM / (2 * actual!.metresPerUnit),
+      x = wrapSourceX(selected!.x + actual!.ux * t),
+      z = selected!.z + actual!.uz * t,
+      surface = finalSurfaceAt(x, z);
+    assert.equal(surface.water.kind, "none", "selected deck must overlap a dry bank on both sides");
+    assert.ok(surface.deckHeight !== null, "selected dry-bank deck must not end before land");
+    assert.equal(surface.groundHeight, surface.deckHeight, "selected landing roadbed must meet its physical deck");
+    assert.equal(surface.surfaceHeight, surface.deckHeight, "the crossing's rendered and collision top must agree");
+    assert.ok(surface.walkable && surface.contributingModifierIds.includes(selectedRoad!.code),
+      "the same original road must own each legal bank landing");
+  }
+  const span = transportBridgeSpanAt(selected!, selectedRoad!);
+  assert.ok(span.matchingCrossing && span.deckStationsWalkable &&
+    span.bankStationsWalkable && span.approachStationsWalkable &&
+    span.routeStationsWalkable && span.routeStationsTopLegal,
+    "the exact screenshot/resident bridge must have one legal wet deck, two dry banks and full road stations");
 });
 
 test("S005 real SEED bridge deck and graded roadbed meet on both dry banks", () => {
