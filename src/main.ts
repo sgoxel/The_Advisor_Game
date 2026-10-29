@@ -216,6 +216,19 @@ let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<strin
 // Fixed-size performance samples; percentile sorting occurs only in the on-demand state getter.
 const frameIntervalSamples = new BoundedTimingSamples();
 const cpuUpdateSamples = new BoundedTimingSamples();
+// Observable CPU frame work and input callbacks, never inputs to SEED/Simulation.
+const cpuFrameSamples = new BoundedTimingSamples();
+const engineCpuUpdateSamples = new BoundedTimingSamples();
+const cpuRenderSamples = new BoundedTimingSamples();
+const inputHandlerSamples = new BoundedTimingSamples();
+const drawCallSamples = new BoundedTimingSamples();
+const gpuFrameSamples = new BoundedTimingSamples();
+let rendererLossCount = 0;
+const measureInput = <T extends Event>(handler: (event: T) => void) => (event: T) => {
+  const started = performance.now();
+  try { handler(event); }
+  finally { inputHandlerSamples.record(performance.now() - started); }
+};
 const workerGenerationSamples = new BoundedTimingSamples();
 const workerPhaseSamples = new TileWorkerPhaseSamples();
 const uploadSamples = new BoundedTimingSamples();
@@ -1333,7 +1346,7 @@ function setupControls() {
     startY = 0,
     moved = false,
     lastPinch = 0;
-  canvas.addEventListener("pointerdown", (event) => {
+  canvas.addEventListener("pointerdown", measureInput<PointerEvent>((event) => {
     try {
       canvas.setPointerCapture(event.pointerId);
     } catch {
@@ -1349,8 +1362,8 @@ function setupControls() {
       lastPinch = Math.hypot(a.x - b.x, a.y - b.y);
       moved = true;
     }
-  });
-  canvas.addEventListener("pointermove", (event) => {
+  }));
+  canvas.addEventListener("pointermove", measureInput<PointerEvent>((event) => {
     const previous = pointers.get(event.pointerId);
     if (!previous) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -1369,8 +1382,8 @@ function setupControls() {
       moved = true;
       panScreen(startX, startY, event.clientX, event.clientY);
     } else panScreen(previous.x, previous.y, event.clientX, event.clientY);
-  });
-  canvas.addEventListener("pointerup", (event) => {
+  }));
+  canvas.addEventListener("pointerup", measureInput<PointerEvent>((event) => {
     if (!moved && pointers.size === 1 && projectionTransition <= 0.001) {
       // A click on a villager opens its character popup; anywhere else inspects the ground.
       const resident = pickResidentAt?.(event.clientX, event.clientY);
@@ -1381,21 +1394,21 @@ function setupControls() {
     }
     pointers.delete(event.pointerId);
     lastPinch = 0;
-  });
-  canvas.addEventListener("pointercancel", (event) => {
+  }));
+  canvas.addEventListener("pointercancel", measureInput<PointerEvent>((event) => {
     pointers.delete(event.pointerId);
     lastPinch = 0;
-  });
+  }));
   canvas.addEventListener(
     "wheel",
-    (event) => {
+    measureInput<WheelEvent>((event) => {
       event.preventDefault();
       navigate(
         view.x,
         view.z,
         view.halfHeight * Math.exp(event.deltaY * 0.0015),
       );
-    },
+    }),
     { passive: false },
   );
   // Place rows in the settlement card (notable places, nearby sites, neighbours) centre the camera on
@@ -1444,7 +1457,7 @@ function setupControls() {
       layers[key] = (event.target as HTMLInputElement).checked;
       setLayers();
     };
-  window.addEventListener("keydown", (event) => {
+  window.addEventListener("keydown", measureInput<KeyboardEvent>((event) => {
     if (document.activeElement !== canvas) return;
     if (
       [
@@ -1463,8 +1476,8 @@ function setupControls() {
       pressed.add(event.key);
       event.preventDefault();
     }
-  });
-  window.addEventListener("keyup", (event) => pressed.delete(event.key));
+  }));
+  window.addEventListener("keyup", measureInput<KeyboardEvent>((event) => pressed.delete(event.key)));
   window.addEventListener("blur", () => pressed.clear());
   window.addEventListener("resize", () => {
     app.resizeCanvas();
@@ -1560,6 +1573,7 @@ async function start() {
   const device = await createRenderer(canvas);
   canvas = device.canvas as HTMLCanvasElement;
   device.on("devicelost", () => {
+    rendererLossCount++;
     rendererState.phase = "lost";
     rendererState.error =
       "The GPU connection was lost. Reload the page to restore rendering.";
@@ -1576,6 +1590,9 @@ async function start() {
   });
   // Full native resolution; the update loop steps it down only if the frame rate cannot keep up.
   device.maxPixelRatio = devicePixelRatio || 1;
+  // GPU profiling is opt-in for real measurement only; it may add GPU overhead.
+  const profileGpu = new URLSearchParams(window.location.search).has("profile-gpu");
+  if (profileGpu && device.gpuProfiler) device.gpuProfiler.enabled = true;
   const options = new pc.AppOptions();
   options.graphicsDevice = device;
   options.componentSystems = [
@@ -1860,9 +1877,11 @@ async function start() {
     frames = 0,
     fps = 0;
   let resolutionFrames = 0, resolutionSeconds = 0;
+  let cpuFrameStartedAt = 0;
   app.on("update", (dt: number) => {
     if (rendererState.phase === "lost") return;
     const cpuUpdateStarted = performance.now();
+    cpuFrameStartedAt = cpuUpdateStarted;
     // Adaptive resolution: average the frame time, decide every couple of seconds.
     resolutionFrames++; resolutionSeconds += dt;
     if (resolutionSeconds >= RESOLUTION_DECISION_SECONDS) {
@@ -2361,6 +2380,16 @@ async function start() {
     frameIntervalSamples.record(dt * 1000);
     cpuUpdateSamples.record(performance.now() - cpuUpdateStarted);
   });
+  app.on("frameend", () => {
+    // Read engine counters after rendering. Draw calls refer to the previous
+    // completed frame; CPU frame excludes GPU execution/browser compositing.
+    const stats = app.stats;
+    engineCpuUpdateSamples.record(stats.cpuUpdateTime);
+    cpuRenderSamples.record(stats.cpuRenderTime);
+    drawCallSamples.record(stats.drawCallCount);
+    if (cpuFrameStartedAt > 0) cpuFrameSamples.record(performance.now() - cpuFrameStartedAt);
+    if (profileGpu) gpuFrameSamples.record(stats.gpuFrameTime);
+  });
   // Only the genuine screenshot-tool session can briefly quiesce geometry
   // uploads and worker prefetch while continuing normal GPU frames, actor
   // animation, clock advancement, resident queries and Simulation validation.
@@ -2595,7 +2624,28 @@ async function start() {
             // CPU update excludes GPU/browser paint; frame interval is scheduling cadence.
             cpuUpdateMs: cpuUpdateSamples.summary(),
             frameIntervalMs: frameIntervalSamples.summary(),
-            gpuFrameMs: null,
+            cpuFrameMs: cpuFrameSamples.summary(),
+            cpuEngineUpdateMs: engineCpuUpdateSamples.summary(),
+            cpuRenderMs: cpuRenderSamples.summary(),
+            inputHandlerMs: inputHandlerSamples.summary(),
+            gpuFrameMs: gpuFrameSamples.samples ? gpuFrameSamples.summary() : null,
+            drawCalls: app.stats.drawCallCount,
+            drawCallSamples: drawCallSamples.summary(),
+            // PlayCanvas release builds cannot count submitted triangles:
+            // primitiveCount is unavailable, and terrain mesh totals are not
+            // submitted/drawn geometry. Never invent a triangle count.
+            triangles: null,
+            primitivesSubmitted: app.stats.primitiveCount ?? null,
+            entities: app.root.find(() => true).length + 1,
+            engineVramBytesEstimated: app.stats.vramTotalBytes,
+            longFrameCount: slowFrameCount,
+            rendererLossCount,
+            presentation: projectionTransition <= 0.001 ? "flat" : projectionTransition >= 0.999 ? "globe" : "transition",
+            scaleLabel: scaleLabelForHalfHeight(view.halfHeight),
+            continuousFootprintM: canonicalFootprintForHalfHeight(view.halfHeight),
+            projectionTransition,
+            renderScale: app.graphicsDevice.maxPixelRatio / (devicePixelRatio || 1),
+            devicePixelRatio: app.graphicsDevice.maxPixelRatio,
             workerMs: { ...workerGenerationSamples.summary(), completed: workerGenerationSamples.samples },
             // Diagnostics only: coverage and detail are different workloads. No samples feed world logic.
             workerPhasesMs: workerPhaseSamples.summary(),
