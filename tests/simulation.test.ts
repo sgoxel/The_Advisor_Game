@@ -810,7 +810,7 @@ test("continuous walking segments preflight exact short-edge center without skip
 test("continuous walking segments reject blocked short terminals at the exact last metre", () => {
   for (const length of [9, 12, 16, 31, 32]) {
     const from = { eastM: -0, northM: 0.125 },
-      to = { eastM: length + 0.03125, northM: 0.125 },
+      to = { eastM: length - 0.03125, northM: 0.125 },
       steps = Math.ceil(Math.hypot(to.eastM - from.eastM, to.northM - from.northM)),
       terminal = from.eastM + (to.eastM - from.eastM) * (steps / steps);
     let checks = 0;
