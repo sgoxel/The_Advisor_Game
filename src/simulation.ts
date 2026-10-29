@@ -1077,14 +1077,16 @@ export function continuousWalkableOffsetSegment(
     return true;
   }
   if (stride > 1) {
-    // An interior cut is common on rejected overnight doglegs. Probe a
-    // central original stride position first; the full validator still visits
-    // each exact metre once on every accepted path, without coarser samples.
+    // An interior cut is common on rejected overnight doglegs. Preserve
+    // the original centre-first one-probe refusal for a blocked middle.
     const middle = Math.floor(Math.floor(steps / stride) / 2) * stride;
     if (!check(middle)) return false;
+    // A blocked terminal can also reject a long approach before the
+    // remaining stride samples. Probe the ORIGINAL t=steps/steps coordinate;
+    // a successful path must still visit every other original metre once.
+    if (!check(steps)) return false;
     for (let i = 0; i <= steps; i += stride)
-      if (i !== middle && !check(i)) return false;
-    if (steps % stride && !check(steps)) return false;
+      if (i !== middle && i !== steps && !check(i)) return false;
   }
   for (let i = 0; i <= steps; i++) {
     if (stride > 1 && (i % stride === 0 || i === steps)) continue;
