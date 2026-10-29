@@ -1,7 +1,7 @@
 import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { wildernessTerrainAt, wildernessTerrainCacheState } from './wilderness-terrain.ts';
-import { nearestCriticalSiteAt, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
+import { nearestCriticalSiteAt, nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
