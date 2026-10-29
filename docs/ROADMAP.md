@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Restore canonical Hero/Close 3D relief and ground resident feet, buildings, roads and collision
+- WP-S003-004-001 — Fix Hero/Close 3D terrain relief, feet/door/road grounding and final-surface collision
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
@@ -34,7 +34,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S005 — Transport & Traversal Network
 
 - WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview — COMPLETED and REVIEWED at 2026-10-27
-- WP-S005-002-001 — Join both bridge banks, road stations, collision and deck into one lawful continuous crossing
+- WP-S005-002-001 — Repair lawful bridge continuity: dry/wet bank approaches, deck height, road stations and collision
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -50,18 +50,18 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability, UI/UX & README Conformance
 
 - WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED and REVIEWED at 2026-10-29
-- WP-S009-002-001 — Measure and remove unchanged-frame DOM layout work without breaking responsive labels, picking or focus
-- WP-S009-003-001 — Account for combined 1GB CPU+GPU working set and recover lost renderer without changing world identity
-- WP-S009-004-001 — Audit deployed-SHA README conformance with traceable UI/UX, performance and Simulation evidence
-- WP-S009-005-001 — Preserve pure-zoom camera angle/focus and report terrain versus interaction readiness truthfully
-- WP-S009-006-001 — Persist versioned SEED world foundations for faster browser reopen with identical Simulation truth
+- WP-S009-002-001 — Remove measured idle-frame DOM reflow while preserving readable labels, picking and focus
+- WP-S009-003-001 — Complete 1GB combined CPU/GPU accounting and in-session WebGPU/WebGL2 recovery
+- WP-S009-004-001 — Audit exact deployed SHA against README: 3D truth, pure zoom, Advisor UX, performance and accessibility
+- WP-S009-005-001 — Make wheel/pinch pure zoom and distinguish terrain-visible from authoritative interaction-ready
+- WP-S009-006-001 — Reopen faster using versioned SEED foundation cache with identical Simulation and graceful regeneration
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 
 - WP-S010-001-001 — Research first playable Advisor journey: persistent hero, seeded home, inspect→advise→observable decision UX
 - WP-S010-002-001 — Reuse cohesive mobile-safe 3D GLB buildings, doors, roofs and props with grounded dual-backend rendering
-- WP-S010-003-001 — Correct 2D resident telemetry and prove feet, occlusion and selection across zoom and renderers
-- WP-S010-003-002 — Separate accessible inspect, tilt and camera follow from pure zoom and autonomous NPC action
+- WP-S010-003-001 — Correct 2D-billboard telemetry and prove grounded feet, roof occlusion and picking
+- WP-S010-003-002 — Deliver separate accessible inspect, tilt, follow and reset controls without altering pure zoom
 - WP-S010-004-001 — Prove real resident work shifts: lawful home→station arrival, capacity & visible 2D activity
 - WP-S010-004-002 — Make SEED-owned 3D homes grounded and reachable: real doorways, roads & legal slopes
 - WP-S010-004-003 — Ship canonical inventory UX: Simulation-owned items, legal transfers & replayable history
@@ -70,12 +70,12 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-002 — Make 3D service interiors enterable: lawful street→door→workstation with real resident occupancy
 - WP-S010-005-003 — Keep the same 2D resident through doors: Simulation occupancy, grounded feet & roof/depth parity
 - WP-S010-005-004 — Persist validated interior changes: canonical rooms, items, occupants & lawful exit/replay
-- WP-S010-005-005 — Bind occupied-home lighting to 22:00–05:00 fantasy night; keep dusk cosmetic and empty homes dark
-- WP-S010-006-001 — Verify Galaxy A55 Chrome sustained 30/60 FPS, input latency, combined memory and renderer recovery
+- WP-S010-005-005 — Base occupied-home lighting on fantasy 22:00–05:00; keep earlier twilight cosmetic
+- WP-S010-006-001 — Certify Galaxy A55 Chrome sustained FPS, input latency, memory, thermals and renderer recovery
 
 - WP-S010-007-001 — Research local-first Advisor dialogue: versioned Sentence Library, autonomous choice & bounded LLM
-- WP-S010-007-002 — Deliver accessible offline-first Advisor dialogue with local intent routing and Simulation-bounded LLM proposals
-- WP-S010-007-003 — Prove one Advisor suggestion causes autonomous validated action or observable refusal
+- WP-S010-007-002 — Ship accessible offline-first Advisor chat, Sentence Library and Simulation-bounded LLM proposals
+- WP-S010-007-003 — Prove advice → autonomous choice → validated action or observable refusal
 - WP-S010-008-001 — Research campaign SEED/time authority: creation-derived fantasy clock, offline continuity & replay
 - WP-S010-008-002 — Offer truthful accessible campaign create/resume with stable SEED, fantasy clock and hero identity
 - WP-S010-008-003 — Persist and replay Simulation-approved campaign events exactly once through restart/offline time
