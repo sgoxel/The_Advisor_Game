@@ -50,15 +50,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability, UI/UX & README Conformance
 
 - WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED and REVIEWED at 2026-10-29
-- WP-S009-002-001 — Remove idle label/panel reflow, improve critical text readability & preserve accessible SEED picking
-- WP-S009-003-001 — Account for all CPU+GPU runtime resources within 1GB & recover lost WebGPU as WebGL2 in place
-- WP-S009-004-001 — Audit deployed-SHA README promises: gameplay gaps, UI/UX, performance & browser proof
-- WP-S009-005-001 — Fix false full-ready loading & automatic zoom tilt; preserve screen/world focus across scales
-- WP-S009-006-001 — Persist versioned SEED world foundations across browser restarts for faster repeat openings
+- WP-S009-002-001 — Eliminate idle label/panel reflow; preserve readable, accessible mobile picking and focus
+- WP-S009-003-001 — Bound total CPU+GPU memory and recover lost WebGPU in place without losing world or selection
+- WP-S009-004-001 — Audit deployed-SHA README gameplay, performance, UI/UX and renderer conformance with reproducible evidence
+- WP-S009-005-001 — Fix premature 100% loading and zoom-driven tilt; preserve focus, projection and honest first interaction
+- WP-S009-006-001 — Cache versioned SEED-derived world foundations across restarts without changing canonical truth
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 
-- WP-S010-001-001 — Research first-play Advisor UX: low-rank SEED hero, inhabited 3D village & accessible onboarding
+- WP-S010-001-001 — Research playable first-session Advisor UX: persistent low-rank hero, inhabited village and accessible first advice
 - WP-S010-002-001 — Ship reusable mobile-safe Hero/Close 3D GLB kit: true doors, roofs, props & renderer parity
 - WP-S010-003-001 — Ground 2D resident art on SEED feet with real roof occlusion, stable picking & truthful metadata
 - WP-S010-003-002 — Add accessible inspect/tilt/follow controls without implicit zoom tilt or direct NPC control
@@ -74,10 +74,10 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-006-001 — Verify real Galaxy A55 default Chrome: sustained 30 FPS, input & WebGPU/WebGL2 recovery
 
 - WP-S010-007-001 — Research local-first Advisor dialogue: versioned Sentence Library, autonomous choice & bounded LLM
-- WP-S010-007-002 — Ship accessible offline-first Advisor chat: deterministic intent library, proposal-only LLM & choice states
-- WP-S010-007-003 — Prove advice→autonomous decision→lawful Simulation action→visible replayable consequence
+- WP-S010-007-002 — Build offline-first accessible Advisor chat with deterministic intents and truthful autonomous decision states
+- WP-S010-007-003 — Demonstrate advice→independent character decision→legal Simulation travel and visible consequence
 - WP-S010-008-001 — Research campaign SEED/time authority: creation-derived fantasy clock, offline continuity & replay
-- WP-S010-008-002 — Ship campaign creation/resume UX: accepted SEED, real start time, same hero & honest save state
-- WP-S010-008-003 — Save only Simulation-validated campaign events: atomic checkpoints, stable IDs & exact offline replay
+- WP-S010-008-002 — Ship honest campaign create/resume UX with accepted SEED, creation clock, same hero and save-state feedback
+- WP-S010-008-003 — Persist only Simulation-approved campaign events with atomic checkpoints and deterministic restart replay
 - WP-S010-009-001 — Research SEED-faithful living fauna: habitats, lawful movement, real 3D art & mobile LOD
 - WP-S010-009-002 — Render 13 SEED-owned living 3D fauna species with lawful habitats, actions & mobile LOD
