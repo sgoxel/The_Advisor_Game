@@ -19,6 +19,8 @@ import {
   legalPosition,
   continuousWalkableOffsetSegment,
   continuousWalkableOffsetSegmentCoordinates,
+  beginResidentRouteProbes,
+  endResidentRouteProbes,
   residentWalkableSurface,
   legalEnclosureSegment,
   timedWalkOnPath,
@@ -779,6 +781,30 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unbridged one-metre obstacle cannot be skipped by coarse sampling");
   assert.equal(continuousWalkableOffsetSegment(goal, start, narrowCut), false,
     "reverse travel cannot bypass the same narrow physical crossing");
+});
+
+test("S009 route-probe counters observe exact metres without affecting the lawful result", () => {
+  const from = { eastM: -0, northM: 0 }, to = { eastM: 12, northM: 0 };
+  const first = beginResidentRouteProbes();
+  try {
+    assert.equal(continuousWalkableOffsetSegmentCoordinates(from, to, () => true), true);
+    assert.equal(first.metreProbes, 13,
+      "a legal twelve-metre route still evaluates every original exact metre");
+    assert.equal(first.segmentScans, 0, "a pure segment sample has no street graph authority");
+    assert.equal(first.graphSearches, 0, "observing walkable metres does not start A-star");
+  } finally { endResidentRouteProbes(); }
+  const second = beginResidentRouteProbes();
+  try {
+    assert.equal(continuousWalkableOffsetSegmentCoordinates(from, to,
+      eastM => eastM !== 6), false);
+    assert.equal(second.metreProbes, 1,
+      "an illegal midpoint retains its existing single-probe refusal");
+    assert.equal(second.endpointSurfaceMisses, 0,
+      "this pure callback test never calls the authoritative final surface");
+    assert.equal(first.metreProbes, 13, "a fresh observation leaves the earlier snapshot intact");
+  } finally { endResidentRouteProbes(); }
+  assert.equal(continuousWalkableOffsetSegmentCoordinates(from, to, () => true), true,
+    "the detached observer never changes ordinary Simulation walkability");
 });
 
 test("continuous walking segments preflight exact short-edge center without skipping legal metres", () => {
