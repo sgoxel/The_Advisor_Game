@@ -1064,6 +1064,18 @@ export function continuousWalkableOffsetSegment(
   // one-metre positions first, not a coarser substitute for validation.
   // Successful routes still check every original metre exactly once.
   const stride = steps > 32 ? Math.max(2, Math.ceil(steps / 16)) : 1;
+  // Most street edges are shorter than the long-detour stride range. When a
+  // short edge crosses a central cut, reject at its original exact metre
+  // before sampling the remaining positions. This never changes the set of
+  // required samples or licenses a route without full validation.
+  if (stride === 1 && steps > 8) {
+    const middle = Math.floor(steps / 2);
+    if (!check(middle)) return false;
+    for (let i = 0; i <= steps; i++) {
+      if (i !== middle && !check(i)) return false;
+    }
+    return true;
+  }
   if (stride > 1) {
     // An interior cut is common on rejected overnight doglegs. Probe a
     // central original stride position first; the full validator still visits
