@@ -42,6 +42,13 @@ export function residentColdQueryCanStart(
     idleWorkerCount >= 2 && admissionLimit - inUse >= 2;
 }
 
+/** A precomputed actor result remains unconsumed for presentation until
+ * coherent terrain allows actual sprites. Inspector-only results still mark
+ * their usual snapshot revision immediately. */
+export function residentActorSnapshotMayMarkPresented(actorsVisible: boolean, queryActors: boolean): boolean {
+  return actorsVisible || !queryActors;
+}
+
 /** Split ordinary cold resident facts across at most two existing idle
  * workers; each owns exactly its own SEED index and legal route checks.
  * Actor queries retain a single worker: their early-stop rule prioritizes
