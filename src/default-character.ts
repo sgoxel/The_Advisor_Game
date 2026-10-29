@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat,
+  characterModelManifest, characterModelFile, characterVisualFormat, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -139,7 +139,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       if (!current()) return;
       const file = characterModelFile(name, models);
       if (!file) return;
-      const resource = await ownerModel(file);
+      const resource = await usableOwnerModel(file, ownerModel);
       if (!current() || !resource) return;
       let model: pc.Entity | undefined;
       try {
