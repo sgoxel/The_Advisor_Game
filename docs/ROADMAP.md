@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Diagnose Hero/Close flatness: SEED-consistent relief, legal grades & seam-free LOD
+- WP-S003-004-001 — Restore Hero/Close relief: reconcile SEED height, 3D mesh, walkability and seam-free LOD
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
@@ -34,7 +34,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S005 — Transport & Traversal Network
 
 - WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview — COMPLETED and REVIEWED at 2026-10-27
-- WP-S005-002-001 — Verify bridge landings: dry-bank continuity, graded decks & legal two-way travel
+- WP-S005-002-001 — Repair bridge-to-bank gaps: continuous dry landings, legal grades and two-way resident traversal
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -49,19 +49,19 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Reduce cold first-resident delay: lawful routing hot paths & worker/upload p95
-- WP-S009-002-001 — Stop idle atlas reflow: cached label/panel bounds, accessible touch UI & stable-ID picking
-- WP-S009-003-001 — Bound memory & recover renderer: 256MB unused-cache trim, ≤1GB CPU+GPU, WebGL2 fallback
-- WP-S009-004-001 — Audit deployed README promises: clause-level evidence, honest statuses & issue ownership
-- WP-S009-005-001 — Correct false-ready UI & pure-zoom drift: first resident facts, fixed focus/angle
+- WP-S009-001-001 — Cut cold first-resident latency: legal routing hot paths, worker p95 ≤50/35/25ms and ≤1 upload/frame
+- WP-S009-002-001 — Eliminate idle atlas reflow: cached labels/panels, stable-ID picking and input p95 budgets
+- WP-S009-003-001 — Enforce 256MB cache trim and ≤1GB combined CPU+GPU; recover WebGPU loss via WebGL2
+- WP-S009-004-001 — Audit deployed README claims with exact-SHA evidence: PASS / FOUNDATION / ABSENT / UNVERIFIED
+- WP-S009-005-001 — Fix false 100% readiness and pure-zoom camera drift: first resident truth, fixed focus/angle
 
 ## STAGE S010 — Hero-Zoom Gameplay, Advisor Decisions, Same-World Interiors & Campaign Persistence
 
-- WP-S010-001-001 — Research first-play village UX: low-rank 2D hero, accessible advice & lawful outcome
-- WP-S010-002-001 — Build mobile-safe 3D world kit: shared toon GLBs, real portals & backend parity
-- WP-S010-003-001 — Ground 2D residents in the 3D world: legal footpoints, roof occlusion & stable picking
+- WP-S010-001-001 — Research first-play village journey: 2D hero, accessible advice and autonomous outcome
+- WP-S010-002-001 — Deliver mobile-safe Hero/Close GLB world kit: real door apertures, reusable 3D and renderer parity
+- WP-S010-003-001 — Ground 2D residents in real 3D: legal footpoints, roof occlusion and stable-ID picking
 - WP-S010-003-002 — Make tilt/inspect/follow explicit camera-only UX, separate from pure zoom and actor choice
-- WP-S010-004-001 — Legal resident work shifts: physical workstation, real occupancy & visible 2D activity
+- WP-S010-004-001 — Prove legal resident work shifts: physical workstation, capacity and visible 2D activity
 - WP-S010-004-002 — Grounded owned 3D homes: open door apertures, legal final-surface access & walkable streets
 - WP-S010-004-003 — Canonical inventory UX: lawful SEED item transfers, ownership & campaign persistence
 - WP-S010-005-001 — Same-world owned-home UX: legal door→room→exit, honest readiness & roof cutaway
@@ -69,13 +69,13 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-003 — Same-resident door traversal: Simulation occupancy & 2D roof/depth parity
 - WP-S010-005-004 — Persistent interior changes: SEED rooms/items/occupants, validated replay & lawful exit
 - WP-S010-005-005 — Light only occupied homes at Fantasy Night 22:00–05:00; empty rooms stay dark
-- WP-S010-006-001 — Validate Galaxy A55 Chrome on device: p95 ≤33.3ms, input latency & renderer fallback
+- WP-S010-006-001 — Verify Galaxy A55 Chrome on physical device: ≤33.3ms frame p95, input and renderer recovery
 
 - WP-S010-007-001 — Research local-first Advisor authority: versioned Sentence Library, character choice and safe LLM proposals
-- WP-S010-007-002 — Make Advisor chat accessible and offline-first: deterministic intents & safe LLM proposals
-- WP-S010-007-003 — Make advice observable: character choice→Simulation validation→replayable world outcome
+- WP-S010-007-002 — Ship accessible offline-first Advisor chat: deterministic Sentence Library and bounded LLM proposals
+- WP-S010-007-003 — Prove advice→character choice→Simulation action→visible, replayable world consequence
 - WP-S010-008-001 — Research campaign SEED/time authority: creation-derived calendar, 24× clock & offline replay
-- WP-S010-008-002 — Create/resume campaigns: chosen SEED, creation-derived calendar & trustworthy save UX
-- WP-S010-008-003 — Persist validated Simulation events: atomic saves, stable IDs & deterministic replay
+- WP-S010-008-002 — Create/resume real campaigns: accepted SEED, creation-derived fantasy clock and honest save UX
+- WP-S010-008-003 — Persist validated Simulation events only: atomic campaign saves, stable IDs and exact replay
 - WP-S010-009-001 — Research SEED-faithful 3D fauna: habitats, movement, LOD & mobile budgets
-- WP-S010-009-002 — Bring 13 SEED-native animals into 3D: legal habitats/actions & mobile LOD
+- WP-S010-009-002 — Render 13 SEED-owned 3D fauna species: legal habitats, observable actions and mobile LOD
