@@ -32,7 +32,7 @@ import {
   roadNetworkTelemetry,
   roadDistanceAt,
 } from "../src/geography.ts";
-import { siteAccessRoads } from "../src/sites.ts";
+import { nearbyCriticalSites, siteAccessRoads } from "../src/sites.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
