@@ -34,10 +34,12 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
     } catch (error) { self.postMessage({ kind: "residents", id: job.id, error: String(error) }); }
     return;
   }
-  const job = event.data;
+  const job = event.data, started = performance.now();
   try {
     tileRendererReady ??= import("./tile-render-worker.ts");
-    await (await tileRendererReady).renderTileJob(job);
+    // Include first-use module initialization in the original end-to-end
+    // worker tile duration; do not manufacture an apparent p95 speedup.
+    await (await tileRendererReady).renderTileJob(job, started);
   } catch (error) {
     // Include the same stable key even if the renderer module itself fails.
     // No failed tile is allowed to silently occupy an admission slot.
