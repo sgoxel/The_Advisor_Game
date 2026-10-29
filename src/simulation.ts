@@ -1984,7 +1984,9 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
       actuallyIndoors = plan[step - 1].indoors;
     const next = plan[step],
       destination = standingSpot(place, foundation, next.anchor, anchorOffset(place, foundation, next.anchor), !next.indoors),
-      origin = actualAnchor,
+      // advance() mutates actualAnchor in its closure. TypeScript cannot see
+      // that assignment here, but the runtime value can be "en route".
+      origin = actualAnchor as RoutineAnchor | "en route",
       path = routinePath(place, offset, destination,
         origin === "en route" ? undefined : fieldEntry(place, foundation, origin),
         fieldEntry(place, foundation, next.anchor));
