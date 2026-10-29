@@ -62,6 +62,7 @@ import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
 import { terrainTint } from "../src/geometry-core.ts";
 
+import { composeFinalSurface, type SurfaceBase, type SurfaceModifier } from "../src/final-surface.ts";
 import { climateSampleAt } from "../src/climate.ts";
 import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
@@ -195,6 +196,31 @@ test("S009 exact nearest-site hot path retains sorted winner at banks and wrap",
       nearbyCriticalSites(x, SOURCE_PRESENTATION_WIDTH / 6, 16, 1)[0]?.code,
       "empty or remote index lookup cannot invent a site");
   assert.ok(checked > 0, "test must include actual SEED-owned critical sites");
+});
+
+test("S009 wet neighbour ground never receives road or site earthwork", () => {
+  // Independent composer contract behind the neighbour fast negative proof:
+  // dry bank grading and optional wet bridge decks may change, but river,
+  // ocean and lake beds retain the exact original SEED ground height.
+  const modifiers: SurfaceModifier[] = [
+    { id: "SEED/ROAD", priority: 8, weight: 1, targetGroundHeight:50,
+      material:"Road", walkable:true, deckHeight:8 },
+    { id: "SEED/SITE", priority: 9, weight: 1, targetGroundHeight:90,
+      material:"Settlement", walkable:true },
+  ];
+  for (const kind of ["river", "lake", "ocean"] as const) {
+    const base: SurfaceBase = {
+      groundHeight:-2.25, material:kind==="river"?"River":kind==="lake"?"Lake":"Ocean",
+      water:{kind,level:0,flowX:0,flowZ:0}, walkable:false,
+      vegetationDensityScale:0,reservedUse:null,
+    };
+    for (const owners of [[], modifiers.slice(0,1), modifiers])
+      assert.equal(composeFinalSurface(base, owners).groundHeight,base.groundHeight,
+        `wet ${kind} natural bed may not be graded by road or site owners`);
+    const crossing = composeFinalSurface(base,modifiers);
+    assert.equal(crossing.surfaceHeight,8,"bridge top stays separate from wet bed");
+    assert.equal(crossing.traversal,"bridge","original deck remains legal");
+  }
 });
 
 test("S009 metre-grade neighbour height-only path equals four complete canonical surfaces", () => {
