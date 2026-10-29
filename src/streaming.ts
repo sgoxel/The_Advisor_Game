@@ -12,14 +12,16 @@ export type StreamingBudget = {
   gpuBytes: number;
 };
 
-/** Owner policy, 2026-10-23: decimal MB/GB, combined CPU+GPU estimates.
- * A55/Chrome reference; these are application policies, not browser RAM quotas. */
+/** Owner policy, 2026-10-29: keep reusable app-owned CPU+GPU terrain until
+ * the combined 1 GB ceiling, evicting unused data only to make room for work.
+ * This is RAM/GPU retention, separate from future persistent browser storage. */
 export const STREAMING_MEMORY_POLICY=Object.freeze({cacheTrimStartBytes:1_000_000_000,combinedBytes:1_000_000_000});
 
 /**
  * Queue and active-render bounds vary with viewport; cache retention is byte-based.
  * Old and incoming coverage stay protected while unused cache entries are trimmed
- * only at the device-sized ceiling (streamingMemoryBytesForDevice, never below 1 GB), or when required work needs room. SEED/content never depends on this policy.
+ * only when needed to stay within the one combined 1 GB ceiling.
+ * SEED/content never depends on this policy.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -144,26 +146,19 @@ export function generationWorkerCount(hardwareConcurrency?: number, deviceMemory
 /** Main-thread milliseconds per frame that may go to moving finished tiles to the GPU. */
 export const UPLOAD_FRAME_BUDGET_MS = 6;
 
-/**
- * Tile cache memory sized to the device instead of one fixed figure: half of RAM on desktops and
- * laptops, 35% on phones and tablets (whose browsers kill tabs sooner), never below the old
- * 1 GB floor and never above 4 GB (about what one browser tab can hold).
- * `deviceMemoryGB` is navigator.deviceMemory (Chromium reports up to 8; others omit it → 4).
- */
-export function streamingMemoryBytesForDevice(deviceClass: StreamingDeviceClass, deviceMemoryGB?: number) {
-  const memory = (deviceMemoryGB && deviceMemoryGB > 0 ? deviceMemoryGB : 4) * 1e9,
-    share = deviceClass === "desktop" ? .5 : .35;
-  return Math.round(Math.max(STREAMING_MEMORY_POLICY.combinedBytes, Math.min(4e9, memory * share)));
+/** Fixed owner ceiling, independent of hardware-reported RAM or viewport class.
+ * The arguments remain for callers; they must not silently raise the 1 GB cap. */
+export function streamingMemoryBytesForDevice(_deviceClass: StreamingDeviceClass, _deviceMemoryGB?: number) {
+  return STREAMING_MEMORY_POLICY.combinedBytes;
 }
 
 /**
  * Device-class admission is a single bound for generating + ready-to-upload jobs.
  * A high-core worker pool may idle; it must never enlarge the 4/6/8 shared cap.
- * The memory policy is independent (owned by WP-S009-003-001).
+ * The owner-prescribed memory ceiling is invariant across device classes.
  */
-export function streamingBudgetForPool(width: number, height: number, _workers: number, deviceMemoryGB?: number): StreamingBudget {
-  const budget = streamingBudgetForViewport(width, height), bytes = streamingMemoryBytesForDevice(budget.deviceClass, deviceMemoryGB);
-  return { ...budget, cacheTrimStartBytes: bytes, combinedBytes: bytes, cpuBytes: bytes, gpuBytes: bytes };
+export function streamingBudgetForPool(width: number, height: number, _workers: number, _deviceMemoryGB?: number): StreamingBudget {
+  return streamingBudgetForViewport(width, height);
 }
 
 /** Optional prefetch must leave one budget slot AND one idle worker for newly

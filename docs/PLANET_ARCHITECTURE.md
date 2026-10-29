@@ -348,11 +348,11 @@ Quality may step down only after sustained frame pressure; it must use hysteresi
 
 ### 11.2 Owner working-set policy and rendering budgets
 
-Owner clarification, 2026-10-15: Samsung Galaxy A55 running Chrome is the reference phone, using the 8 GB variant for planning. The memory figures below were agent-authored initial working-set assumptions, not owner requirements, Chrome limits or measured A55 capacity. They have been superseded by the owner's explicit policy: retain reusable terrain data until combined app-owned estimates exceed **256 MB (256,000,000 bytes)**; then trim unused entries, with one combined CPU+GPU ceiling of **1 GB (1,000,000,000 bytes)**. There is no independent 1 GB allowance for each pool, and no patch-count cache eviction below the soft threshold. Queue/active-render bounds remain finite. This is an application accounting/admission policy, not a browser/OS allocation guarantee; it must not constrain canonical settlement counts, geography or road quality. Actual A55 measurements must decide tuning; viewport emulation cannot validate its RAM, GPU speed or thermal behaviour.
+Owner clarification, 2026-10-29 (supersedes the historical 2026-10-15 256 MB trim point): Samsung Galaxy A55 running Chrome remains the reference phone. Reuse unchanged generated terrain, geography, settlements and road foundations as long as possible, retaining app-owned CPU+GPU cache up to **1 GB combined (1,000,000,000 bytes)**; trim unused entries only to make room before exceeding this ceiling. There is no independent 1 GB allowance per resource pool or automatic patch-count eviction. The previous 256 MB cache-trim assumption and 1–4 GB hardware-scaled runtime allowances are obsolete. Queue/active-render bounds remain finite. This is an application accounting/admission policy, not a browser/OS allocation guarantee; it must not constrain canonical settlement counts, geography or road quality. Actual A55 measurements must decide tuning; viewport emulation cannot validate its RAM, GPU speed or thermal behaviour.
 
 Samsung specifies 8/12 GB variants and a 1080 × 2340 panel: https://www.samsung.com/in/smartphones/galaxy-a/galaxy-a55-5g-awesome-iceblue-256gb-sm-a556elbgins/ . Google states that no fixed memory number fits every device and recommends testing the target device: https://developer.chrome.com/docs/devtools/memory-problems#memory_bloat_how_much_is_too_much . Heap-only readings do not cover total page resources: https://web.dev/articles/monitor-total-page-memory-usage .
 
-Software-rendered CI verifies counters/invariants; physical-device FPS and total-memory claims require actual hardware evidence. The table reflects the owner's current memory policy. The earlier 96/160/256 MiB per-pool assumptions are historical agent decisions, not device limits.
+Software-rendered CI verifies counters/invariants; physical-device FPS and total-memory claims require actual hardware evidence. The table reflects the owner's latest memory policy. The earlier 96/160/256 MiB per-pool and 256 MB trim assumptions were superseded by the owner's 1 GB reuse allowance.
 
 | Metric | Phone baseline | Tablet baseline | Desktop baseline |
 | --- | ---: | ---: | ---: |
@@ -361,15 +361,34 @@ Software-rendered CI verifies counters/invariants; physical-device FPS and total
 | Frame-time p95 minimum budget | ≤33.3 ms | ≤33.3 ms | ≤33.3 ms |
 | 60 FPS target p95 | ≤16.7 ms | ≤16.7 ms | ≤16.7 ms |
 | Navigation/input handler p95 | ≤4 ms | ≤3 ms | ≤2 ms |
-| Main-thread upload p95 | ≤4 ms | ≤3 ms | ≤2 ms |
-| Worker generation task p95 | ≤50 ms | ≤35 ms | ≤25 ms |
+| Main-thread upload p95 | Measured CI scenario baseline +25%; see below | Measured CI scenario baseline +25%; see below | Measured CI scenario baseline +25%; see below |
+| Worker generation task p95 | Measured CI scenario baseline +25%; see below | Measured CI scenario baseline +25%; see below | Measured CI scenario baseline +25%; see below |
 | Uploads per rendered frame | ≤1 | ≤1 | ≤1 |
 | Generation+ready queue | ≤4 | ≤6 | ≤8 |
 | Active render patches | ≤160 | ≤220 | ≤260 |
 | Cached prepared patches | Byte-based retention | Byte-based retention | Byte-based retention |
-| Cache eviction begins, combined CPU+GPU estimate | >256 MB | >256 MB | >256 MB |
+| Cache eviction begins, combined CPU+GPU estimate | Only as needed at 1 GB | Only as needed at 1 GB | Only as needed at 1 GB |
 | Combined app-owned CPU+GPU estimate ceiling | ≤1 GB | ≤1 GB | ≤1 GB |
 | Final globe surface texture | ≤1024×512 | ≤2048×1024 | ≤2048×1024 |
+
+### 11.3 Owner-approved measured baselines and load/cache expectations (2026-10-29)
+
+**Cold first opening:** up to **120 seconds** is acceptable for initial world preparation. Measure page start, first coherent current-view terrain, first authoritative inspectable world/resident fact, and settled required detail separately; this allowance is not permission to block input, show a false ready state, or weaken SEED/Simulation correctness.
+
+**Second and subsequent openings:** must be substantially faster by loading unchanged persisted canonical-derived geography, city/road/terrain foundations and useful previously generated regional detail instead of recomputing them. Benchmark a cold installation separately from warm reloads, report cache hits/misses and actual timings, and never treat an in-memory cache as proof that browser restarts reuse data. This is a required future implementation/evidence outcome, **not a claim that IndexedDB persistence already exists**.
+
+**Persistent world cache:** target up to **1,000,000,000 bytes** of reusable IndexedDB or equivalent browser storage, separate from the **1 GB combined app-owned CPU+GPU runtime ceiling**. Browser quota and user eviction may provide less than 1 GB; storage failure must degrade gracefully to canonical regeneration. Cache keys must include SEED and generator version and any relevant authoritative change/version; restore persisted Simulation events separately. Do not regenerate unchanged saved foundations just because a browser session restarted, but do not allocate detailed geometry for unseen parts of the entire planet.
+
+**Terrain worker/upload p95 regression policy:** prior fixed 50/35/25 ms worker limits and 4/3/2 ms upload limits were agent-selected without device-specific justification. Replace them as WP acceptance gates with a **fixed ceiling at 125% of observed p95** for each **comparable scenario/test-runner** below. Round up to integer ms. These are reference CI regression ceilings, not universal Galaxy A55/tablet/desktop hardware SLAs. New hardware requires its own measured baseline; missing performance samples remain UNVERIFIED, not PASS. Do not automatically raise ceilings in later runs or change them to excuse regressions.
+
+| Original exact-main S005 screenshot-tool scenario (2026-10-29, SHA `a7df9724`) | Observed terrain worker p95 | Fixed regression ceiling (+25%) | Observed upload p95 | Fixed regression ceiling (+25%) |
+| --- | ---: | ---: | ---: | ---: |
+| WebGPU 1920×1080 | 507.5 ms | **635 ms** | 1 ms | **2 ms** |
+| WebGPU 1080×1920 | 650.1 ms | **813 ms** | 3 ms | **4 ms** |
+| WebGL2 1920×1080 | 361.7 ms | **453 ms** | 3 ms | **4 ms** |
+| WebGL2 1080×1920 | 235.9 ms | **295 ms** | 2 ms | **3 ms** |
+
+Source: [original S005 screenshots and capture.json run #40866855966](https://github.com/sgoxel/The_Advisor_Game/actions/runs/40866855966), using the maximum reported p95 from each profile within the run and genuine desktop CI runners, **not** physical phone measurements. Task timing covers first-use imports/assets when present and is measured separately from end-to-end terrain readiness. Individual worker p95 PASS does not prove fast startup or sustained FPS. A failed browser/screenshot/SEED correctness test is still a failure; relaxing the p95 gate must not silently label unrelated tests PASS. Retain the 30 FPS minimum/60 FPS target, one-upload-per-frame rule, memory ceiling and bounded queue protections.
 
 Additional rules:
 - no navigation frame should contain an avoidable synchronous generation burst;

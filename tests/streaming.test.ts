@@ -160,17 +160,19 @@ test("urgent work owns the shared generating+ready cap while optional prefetch l
   }
 });
 
-test("the tile cache grows with device memory and uploads use a per-frame budget", async () => {
+test("owner 1 GB runtime cache limit is invariant across reported RAM, with one upload per frame", async () => {
   const { streamingMemoryBytesForDevice, streamingBudgetForPool, STREAMING_BUDGETS, UPLOAD_FRAME_BUDGET_MS } = await import("../src/streaming.ts");
-  assert.equal(streamingMemoryBytesForDevice("desktop", 8), 4e9, "a desktop reporting 8 GB (the browser maximum) gets 4 GB");
-  assert.equal(streamingMemoryBytesForDevice("desktop", 4), 2e9);
-  assert.equal(streamingMemoryBytesForDevice("phone", 8), 2.8e9, "phones keep 35% of RAM");
-  assert.equal(streamingMemoryBytesForDevice("phone", 4), 1.4e9);
-  assert.equal(streamingMemoryBytesForDevice("phone", 2), 1e9, "never below the old 1 GB floor");
-  assert.equal(streamingMemoryBytesForDevice("tablet", undefined), 1.4e9, "unknown memory is treated as 4 GB");
+  for (const device of ["desktop", "phone", "tablet"] as const)
+    for (const memory of [undefined, 2, 4, 8, 32])
+      assert.equal(streamingMemoryBytesForDevice(device, memory), 1e9, "hardware RAM cannot enlarge owner's combined limit");
   const desktop = streamingBudgetForPool(1440, 900, 11, 8);
-  assert.equal(desktop.cacheTrimStartBytes, 4e9);
-  assert.equal(desktop.combinedBytes, 4e9);
+  assert.equal(desktop.cacheTrimStartBytes, 1e9);
+  assert.equal(desktop.combinedBytes, 1e9);
+  for (const [w, h] of [[390, 844], [768, 1024], [1440, 900]]) {
+    const pool = streamingBudgetForPool(w, h, 11, 32);
+    assert.equal(pool.cacheTrimStartBytes, 1e9);
+    assert.equal(pool.combinedBytes, 1e9);
+  }
   assert.equal(desktop.maxUploadsPerFrame, 1, "each rendered frame admits at most one real GPU mesh group");
   assert.ok(Object.values(STREAMING_BUDGETS).every(budget => budget.maxUploadsPerFrame === 1), "no device class can burst multiple mesh-group uploads into one frame");
   assert.ok(UPLOAD_FRAME_BUDGET_MS > 0 && UPLOAD_FRAME_BUDGET_MS < 16, "uploads leave most of a 60 fps frame to drawing");
