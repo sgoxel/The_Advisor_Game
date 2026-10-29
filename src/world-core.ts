@@ -570,15 +570,19 @@ function surfaceCacheKey(x: number, z: number) {
 function slopeNeighbourGroundHeightAt(x: number, z: number) {
   const full = composedPointCache.get(surfaceCacheKey(x, z));
   if (full) return full.final.groundHeight;
-  const base = naturalSurfaceBaseAt(x, z, true),
-    modifiers = surfaceModifiersAt(x, z, base).modifiers;
+  const base = naturalSurfaceBaseAt(x, z, true);
+  // Natural water owns groundHeight even when an adjacent road has a deck.
+  // A metre-grade neighbour cannot use a bridge's independent deck channel;
+  // skip the road/site modifier query entirely for that immutable wet ground.
+  if (base.water.kind !== "none") return base.groundHeight;
+  const modifiers = surfaceModifiersAt(x, z, base).modifiers;
   // The gradient reads only ground height. With zero or one modifier, the
   // canonical composer has no sorting, duplicate check or cross-owner order:
   // reproduce its exact one-owner lerp without allocating a full FinalSurface.
   // Multi-owner surfaces retain the original full composer and conflict checks.
   if (modifiers.length > 1) return composeFinalSurface(base, modifiers).groundHeight;
   const modifier = modifiers[0];
-  if (!modifier || modifier.targetGroundHeight === undefined || base.water.kind !== "none")
+  if (!modifier || modifier.targetGroundHeight === undefined)
     return base.groundHeight;
   const weight = clamp01(modifier.weight ?? 1);
   return weight <= 0 ? base.groundHeight
