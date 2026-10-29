@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -46,4 +46,18 @@ test("WP #693 missing model, failed loader and invalid resource never remove 2D 
   assert.equal(characterVisualFormat(false), "2d-cutout");
   assert.deepEqual(await usableOwnerModel("guard_male.glb", load), { file: "guard_male.glb" });
   assert.equal(characterVisualFormat(true), "3d-model");
+});
+
+test("WP #693 render components with zero drawable primitives must keep 2D fallback", () => {
+  assert.equal(characterMeshHasGeometry([]), false);
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [] } }]), false);
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 0 }] } }]), false);
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: NaN }] } }]), false);
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: Infinity }] } }]), false);
+  assert.equal(characterMeshHasGeometry([{}, { mesh: null }]), false);
+  assert.equal(characterVisualFormat(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 0 }] } }])), "2d-cutout");
+  assert.equal(characterMeshHasGeometry([
+    { mesh: { primitive: [{ count: 0 }] } },
+    { mesh: { primitive: [{ count: 6 }] } },
+  ]), true, "valid drawable meshes remain eligible for optional 3D");
 });
