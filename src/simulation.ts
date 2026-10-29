@@ -1066,15 +1066,17 @@ export function nearestNode(graph: Pick<StreetGraph, "nodes" | "grid" | "cell">,
 /** Sample the authoritative final surface at most one physical metre apart, including endpoints.
  * A sub-2 m stream/cut between formerly legal samples cannot authorize an invented shortcut.
  * Presentation streets alone are not walking authority. */
-export function continuousWalkableOffsetSegment(
-  from: Offset, to: Offset, walkable: (point: Offset) => boolean,
+/** Same exact ordered metre samples as the public object callback, without
+ * allocating a temporary Offset for each hot-path resident surface query. */
+export function continuousWalkableOffsetSegmentCoordinates(
+  from: Offset, to: Offset, walkableAt: (eastM: number, northM: number) => boolean,
 ): boolean {
   const length = Math.hypot(to.eastM - from.eastM, to.northM - from.northM);
   const steps = Math.max(1, Math.ceil(length));
   const check = (i: number) => {
     const t = i / steps;
-    return walkable({ eastM: from.eastM + (to.eastM - from.eastM) * t,
-      northM: from.northM + (to.northM - from.northM) * t });
+    return walkableAt(from.eastM + (to.eastM - from.eastM) * t,
+      from.northM + (to.northM - from.northM) * t);
   };
   // Rejected off-street doglegs also recur at 40–128 m during cold
   // civilian overnight replay. Probe at most ~16 of the *same exact*
@@ -1110,6 +1112,13 @@ export function continuousWalkableOffsetSegment(
     if (!check(i)) return false;
   }
   return true;
+}
+/** Keep the original public callback and every direction/sample in its exact order. */
+export function continuousWalkableOffsetSegment(
+  from: Offset, to: Offset, walkable: (point: Offset) => boolean,
+): boolean {
+  return continuousWalkableOffsetSegmentCoordinates(from, to,
+    (eastM, northM) => walkable({ eastM, northM }));
 }
 /** A resident may cross the visible settlement enclosure only through a
  * SEED-authored gate aperture. Final-surface walkability alone has no knowledge
@@ -1165,12 +1174,12 @@ const streetSegmentLegality = new Map<string, boolean>();
 // Retain signed-zero distinction and every float digit: rounding can turn a
 // one-metre bridge-edge refusal into an invented legal crossing.
 const residentEndpointVerdicts = new Map<string, boolean>();
-export function residentEndpointWalkable(place: Place, point: Offset): boolean {
+function residentEndpointWalkableAt(place: Place, eastM: number, northM: number): boolean {
   const coordinate = (value: number) => Object.is(value, -0) ? "-0" : String(value),
-    key = `${place.code}|${coordinate(point.eastM)},${coordinate(point.northM)}`,
+    key = `${place.code}|${coordinate(eastM)},${coordinate(northM)}`,
     cached = residentEndpointVerdicts.get(key);
   if (cached !== undefined) return cached;
-  const position = canonicalOffset(place, point.eastM, point.northM),
+  const position = canonicalOffset(place, eastM, northM),
     source = lonLatToSource(position.lon, position.lat),
     legal = residentWalkableSurface(finalSurfaceAt(source.x, source.z));
   residentEndpointVerdicts.set(key, legal);
@@ -1183,6 +1192,10 @@ export function residentEndpointWalkable(place: Place, point: Offset): boolean {
     residentEndpointVerdicts.delete(residentEndpointVerdicts.keys().next().value!);
   return legal;
 }
+/** Object-form API for callers that already own an Offset. */
+export function residentEndpointWalkable(place: Place, point: Offset): boolean {
+  return residentEndpointWalkableAt(place, point.eastM, point.northM);
+}
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
     cached = streetSegmentLegality.get(key);
@@ -1191,11 +1204,9 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   // canonical origin disproves the route before building a cold street
   // graph; interpolate literally as the original validator does (including
   // -0), never round or substitute the caller's approximate endpoint.
-  const firstMetre = {
-    eastM: from.eastM + (to.eastM - from.eastM) * 0,
-    northM: from.northM + (to.northM - from.northM) * 0,
-  };
-  if (!residentEndpointWalkable(place, firstMetre)) {
+  if (!residentEndpointWalkableAt(place,
+    from.eastM + (to.eastM - from.eastM) * 0,
+    from.northM + (to.northM - from.northM) * 0)) {
     streetSegmentLegality.set(key, false);
     while (streetSegmentLegality.size > 16384)
       streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
@@ -1207,7 +1218,8 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
       // Reuse its exact immutable SEED verdict across overlapping street,
       // gate and overnight legs instead of recomposing the same final surface.
       // The cache distinguishes signed zero and never rounds bridge-edge ULPs.
-      continuousWalkableOffsetSegment(from, to, point => residentEndpointWalkable(place, point));
+      continuousWalkableOffsetSegmentCoordinates(from, to,
+        (eastM, northM) => residentEndpointWalkableAt(place, eastM, northM));
   streetSegmentLegality.set(key, legal);
   while (streetSegmentLegality.size > 16384)
     streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
