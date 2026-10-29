@@ -722,6 +722,32 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "reverse travel cannot bypass the same narrow physical crossing");
 });
 
+test("continuous walking segments preflight exact short-edge center without skipping legal metres", () => {
+  const start = { eastM: 0, northM: 0 };
+  for (const length of [9, 12, 16, 31, 32]) {
+    const destination = { eastM: length, northM: 0 };
+    const middle = Math.floor(length / 2);
+    let checks = 0;
+    assert.equal(continuousWalkableOffsetSegment(start, destination, point => {
+      checks++;
+      return point.eastM !== middle;
+    }), false, "a blocked original central metre must reject the route");
+    assert.equal(checks, 1, "an exact blocked center must need only one final-surface probe");
+    const visited: number[] = [];
+    assert.equal(continuousWalkableOffsetSegment(start, destination, point => {
+      visited.push(point.eastM);
+      return true;
+    }), true);
+    assert.deepEqual(visited.sort((a, b) => a - b),
+      Array.from({ length: length + 1 }, (_, i) => i),
+      "every legal short edge must still validate all original one-metre samples exactly once");
+    for (let blocked = 0; blocked <= length; blocked++)
+      assert.equal(continuousWalkableOffsetSegment(start, destination,
+        point => point.eastM !== blocked), false,
+        "no off-center one-metre water/cut can be bypassed");
+  }
+});
+
 test("continuous walking segments reject long routes early without skipping any one-metre crossing", () => {
   const origin = { eastM: 0, northM: 0 }, destination = { eastM: 3200, northM: 0 };
   let calls = 0;
