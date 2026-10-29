@@ -690,7 +690,11 @@ export function naturalWaterKindAt(x: number, z: number): NaturalSurface["water"
   return hit && hit.distance <= hit.segment.width ? "river" : "none";
 }
 
-export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
+/** The height-only flag is reserved for final-surface neighbour gradient probes.
+ * It bypasses only the expensive dry *natural-cliff* slope calculation; water,
+ * ground height and bank shaping remain exact. The caller may read groundHeight
+ * ONLY: cliff, walkability and vegetation are not authoritative in this mode. */
+export function naturalSurfaceAt(x: number, z: number, heightOnly = false): NaturalSurface {
   naturalQueries++;
   const sx = wrapSourceX(x),
     macro = macroSampleAt(sourceToLonLat(sx, z));
@@ -801,7 +805,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     }
   }
 
-  const slope = drySlopeAt(sx, z, terrain, macro),
+  const slope = heightOnly ? 0 : drySlopeAt(sx, z, terrain, macro),
     cliff = slope > 0.68,
     highland = macro.mountainIntensity > 0.15 || terrain > 105;
   let material: SurfaceMaterial = highland

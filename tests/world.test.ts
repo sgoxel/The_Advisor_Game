@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   cellAt,
   finalSurfaceAt,
+  finalSurfaceLocalSlopeAt,
   finalSurfaceRenderChannelsAt,
   finalSurfaceTelemetry,
   cellSeed,
@@ -32,13 +33,14 @@ import {
   roadNetworkTelemetry,
   roadDistanceAt,
 } from "../src/geography.ts";
-import { nearbyCriticalSites, siteAccessRoads } from "../src/sites.ts";
+import { criticalSites, nearestCriticalSiteAt, nearbyCriticalSites, siteAccessRoads } from "../src/sites.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_RADIUS,
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
@@ -173,6 +175,60 @@ test("S009 wet route probes discard only site pads, never water or bridge author
       assert.equal(surface.traversal, "bridge", "a genuine deck remains the only wet passage");
   }
   assert.ok(wet > 0, "fixture must exercise real natural water");
+});
+
+test("S009 exact nearest-site hot path retains sorted winner at banks and wrap", () => {
+  let checked = 0;
+  for (const site of criticalSites.slice(0, 16)) {
+    for (const offset of [0, 4, -6, 15.875, 16.125]) {
+      for (const wrap of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+        const x = site.x + offset + wrap, z = site.z - offset / 5;
+        assert.equal(nearestCriticalSiteAt(x, z, 16)?.code,
+          nearbyCriticalSites(x, z, 16, 1)[0]?.code,
+          `fast nearest-site winner must equal canonical sorted query at ${x}/${z}`);
+        checked++;
+      }
+    }
+  }
+  for (const x of [0, SOURCE_PRESENTATION_WIDTH / 3, -SOURCE_PRESENTATION_WIDTH / 3])
+    assert.equal(nearestCriticalSiteAt(x, SOURCE_PRESENTATION_WIDTH / 6, 16)?.code,
+      nearbyCriticalSites(x, SOURCE_PRESENTATION_WIDTH / 6, 16, 1)[0]?.code,
+      "empty or remote index lookup cannot invent a site");
+  assert.ok(checked > 0, "test must include actual SEED-owned critical sites");
+});
+
+test("S009 metre-grade neighbour height-only path equals four complete canonical surfaces", () => {
+  const crossing = finalSurfaceEvidenceAnchors().bridge;
+  const samples = [
+    { x: crossing.x + 0.03125, z: crossing.z + 0.0625 },
+    ...[0.125, 1.375, -4.125, 12.375].map(offset => ({
+      x: crossing.x + offset, z: crossing.z - offset / 3,
+    })),
+    ...villages.slice(0, 4).map(({ x, z }) => ({
+      x: x + 0.21875, z: z - 0.34375,
+    })),
+    { x: SOURCE_PRESENTATION_WIDTH / 3 + 0.125, z: -SOURCE_PRESENTATION_WIDTH / 8 },
+    { x: -SOURCE_PRESENTATION_WIDTH / 3 - 0.125, z: SOURCE_PRESENTATION_WIDTH / 8 },
+  ];
+  for (const { x, z } of samples) {
+    // Exercise the optimized first-use neighbour path before filling the full
+    // composed-point cache via the independent original full-surface reference.
+    const actual = finalSurfaceLocalSlopeAt(x, z),
+      latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(x, z).lat))),
+      dx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale),
+      dz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
+      fullHeight = (sx: number, sz: number) =>
+        finalSurfaceRenderChannelsAt(sx, sz).groundHeight,
+      expected = Math.hypot(
+        fullHeight(x + dx, z) - fullHeight(x - dx, z),
+        fullHeight(x, z + dz) - fullHeight(x, z - dz),
+      ) / 2;
+    assert.equal(actual, expected,
+      `ground-only neighbours must preserve exact full-surface metre grade at ${x}/${z}`);
+    const full = finalSurfaceAt(x, z);
+    assert.deepEqual(finalSurfaceAt(x, z), full,
+      "partial neighbour probes must not corrupt full legal surface caching");
+  }
 });
 
 test("S009 dry natural-surface elevation preserves independent canonical elevation", () => {

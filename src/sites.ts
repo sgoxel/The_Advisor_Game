@@ -437,6 +437,29 @@ export function nearbyCriticalSites(
     .slice(0, limit);
 }
 
+/** Allocation-free nearest-only variant for canonical final-surface composition.
+ * The general nearbyCriticalSites result remains the independent sorted
+ * reference. Aliased wrap buckets repeat the same SEED site identity; neither
+ * duplicates nor source-bucket traversal order can break distance/code ties. */
+export function nearestCriticalSiteAt(x: number, z: number, radiusSourceUnits: number): CriticalSite | undefined {
+  const minX = Math.floor((x - radiusSourceUnits) / SITE_BUCKET_SOURCE_UNITS),
+    maxX = Math.floor((x + radiusSourceUnits) / SITE_BUCKET_SOURCE_UNITS),
+    minZ = Math.floor((z - radiusSourceUnits) / SITE_BUCKET_SOURCE_UNITS),
+    maxZ = Math.floor((z + radiusSourceUnits) / SITE_BUCKET_SOURCE_UNITS);
+  let nearest: CriticalSite | undefined, distance = Infinity;
+  for (let bz = minZ; bz <= maxZ; bz++)
+    for (let bx = minX; bx <= maxX; bx++)
+      for (const site of buckets.get(`${canonicalRoadBucketX(bx, SITE_BUCKET_SOURCE_UNITS, SOURCE_PRESENTATION_WIDTH)}/${bz}`) ?? []) {
+        const candidate = Math.hypot(wrapSourceX(site.x - x), site.z - z);
+        if (candidate <= radiusSourceUnits &&
+          (candidate < distance || (candidate === distance && (!nearest || site.code < nearest.code)))) {
+          nearest = site;
+          distance = candidate;
+        }
+      }
+  return nearest;
+}
+
 export type SiteSurfaceSample = {
   height: number;
   cleared: boolean;

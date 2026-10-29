@@ -1,7 +1,7 @@
 import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { wildernessTerrainAt, wildernessTerrainCacheState } from './wilderness-terrain.ts';
-import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
+import { nearestCriticalSiteAt, nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
@@ -251,8 +251,8 @@ export function finalSurfaceEvidenceAnchors() {
   }
   throw new Error('No legal existing natural river crossing available for evidence');
 }
-function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
-  const natural=wildernessTerrainAt(x,z,naturalSurfaceAt(x,z));
+function naturalSurfaceBaseAt(x:number,z:number,heightOnly=false):SurfaceBase {
+  const natural=wildernessTerrainAt(x,z,naturalSurfaceAt(x,z,heightOnly));
   return {groundHeight:natural.groundHeight,material:natural.material,water:natural.water,walkable:natural.walkable,vegetationDensityScale:natural.vegetationDensityScale,reservedUse:null};
 }
 
@@ -448,7 +448,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   // and pad sample even though the original modifier is always discarded.
   // Bridge decks remain owned and checked by their original road modifier.
   if (base.water.kind === "none") {
-    const site = nearbyCriticalSites(x, z, 16, 1)[0],
+    const site = nearestCriticalSiteAt(x, z, 16),
       siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
     siteCandidateCount = site ? 1 : 0;
     if (site && siteSample && siteSample.influence > 0)
@@ -564,13 +564,23 @@ function surfaceCacheKey(x: number, z: number) {
   return `${GENERATOR_VERSION}/${x}/${z}`;
 }
 
+/** A gradient reads only composed heights, not the four neighbours' legal
+ * walkability/cliff/material verdicts. The central full finalSurfaceAt remains
+ * authoritative. Never put a partial neighbour into the full-point cache. */
+function slopeNeighbourGroundHeightAt(x: number, z: number) {
+  const full = composedPointCache.get(surfaceCacheKey(x, z));
+  if (full) return full.final.groundHeight;
+  const base = naturalSurfaceBaseAt(x, z, true);
+  return composeFinalSurface(base, surfaceModifiersAt(x, z, base).modifiers).groundHeight;
+}
+
 /** Actual one-metre road-local grade, not a 30-metre hillside stencil. */
 export function finalSurfaceLocalSlopeAt(x: number, z: number) {
   const latitudeScale = Math.max(.1, Math.abs(Math.cos(sourceToLonLat(x, z).lat))),
     dx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * latitudeScale),
     dz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
-    sx = composePointAt(x + dx, z).final.groundHeight - composePointAt(x - dx, z).final.groundHeight,
-    sz = composePointAt(x, z + dz).final.groundHeight - composePointAt(x, z - dz).final.groundHeight;
+    sx = slopeNeighbourGroundHeightAt(x + dx, z) - slopeNeighbourGroundHeightAt(x - dx, z),
+    sz = slopeNeighbourGroundHeightAt(x, z + dz) - slopeNeighbourGroundHeightAt(x, z - dz);
   return Math.hypot(sx, sz) / 2;
 }
 
