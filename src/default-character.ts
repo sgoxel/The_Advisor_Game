@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -145,8 +145,11 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       try {
         model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
         const pieces = (model.findComponents("render") as pc.RenderComponent[])
-          .flatMap(component => component.meshInstances);
-        if (!pieces.length) throw new Error("no renderable mesh");
+          .flatMap(component => component.meshInstances)
+          .filter(part => characterMeshHasGeometry([part]));
+        // A GLB can have a render component and a mesh instance but zero
+        // actual primitives. Do not hide the authoritative resident's artwork.
+        if (!pieces.length) throw new Error("no drawable model geometry");
         // Align the owner's model's actual feet and height to the same 1.782 m
         // nominal body used by the 2D quad; the actor parent still owns the
         // exact Simulation-derived physical scale and absolute world position.
