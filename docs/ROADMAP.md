@@ -34,7 +34,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S005 — Transport & Traversal Network
 
 - WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview — COMPLETED and REVIEWED at 2026-10-27
-- WP-S005-002-001 — Physically join bridge decks to both dry-bank roads with legal collision and resident traversal
+- WP-S005-002-001 — Join both bridge banks, road stations, collision and deck into one lawful continuous crossing
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -50,17 +50,17 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability, UI/UX & README Conformance
 
 - WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED and REVIEWED at 2026-10-29
-- WP-S009-002-001 — Eliminate unchanged-frame DOM reflow; preserve responsive label placement, canonical picking and keyboard/touch focus
-- WP-S009-003-001 — Enforce combined 1GB CPU+GPU resource admission, adaptive quality and identity-safe renderer recovery
-- WP-S009-004-001 — Audit exact deployed-SHA README compatibility: Advisor autonomy, pure zoom, UX, world truth and renderer proof
-- WP-S009-005-001 — Make loading readiness truthful and zoom strictly angle/focus preserving across Hero/Close
-- WP-S009-006-001 — Reuse versioned SEED geography/roads/terrain across browser restarts without corrupting world truth
+- WP-S009-002-001 — Measure and remove unchanged-frame DOM layout work without breaking responsive labels, picking or focus
+- WP-S009-003-001 — Account for combined 1GB CPU+GPU working set and recover lost renderer without changing world identity
+- WP-S009-004-001 — Audit deployed-SHA README conformance with traceable UI/UX, performance and Simulation evidence
+- WP-S009-005-001 — Preserve pure-zoom camera angle/focus and report terrain versus interaction readiness truthfully
+- WP-S009-006-001 — Persist versioned SEED world foundations for faster browser reopen with identical Simulation truth
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 
 - WP-S010-001-001 — Research first playable Advisor journey: persistent hero, seeded home, inspect→advise→observable decision UX
 - WP-S010-002-001 — Reuse cohesive mobile-safe 3D GLB buildings, doors, roofs and props with grounded dual-backend rendering
-- WP-S010-003-001 — Keep existing 2D WebP residents foot-grounded, occluded and canonically selectable
+- WP-S010-003-001 — Correct 2D resident telemetry and prove feet, occlusion and selection across zoom and renderers
 - WP-S010-003-002 — Separate accessible inspect, tilt and camera follow from pure zoom and autonomous NPC action
 - WP-S010-004-001 — Prove real resident work shifts: lawful home→station arrival, capacity & visible 2D activity
 - WP-S010-004-002 — Make SEED-owned 3D homes grounded and reachable: real doorways, roads & legal slopes
