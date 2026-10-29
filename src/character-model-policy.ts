@@ -57,6 +57,30 @@ export function characterDrawableMeshes<T extends {
   return drawable;
 }
 
+/** Reuse one texture/material promise per authored NPC illustration.
+ * Missing specialist art resolves to the original shared default image,
+ * including the default image's own proportions, without retrying every actor.
+ * Only the fatal absence of the default itself remains retryable. */
+export type SharedCharacterArtwork<T> = { name: string; value: T };
+export function loadSharedCharacterArtwork<T>(
+  name: string,
+  cache: Map<string, Promise<SharedCharacterArtwork<T>>>,
+  load: (name: string) => Promise<T>,
+  defaultName = "default",
+): Promise<SharedCharacterArtwork<T>> {
+  const existing = cache.get(name);
+  if (existing) return existing;
+  const pending = load(name).then(value => ({ name, value })).catch(error => {
+    if (name === defaultName) {
+      cache.delete(name);
+      throw error;
+    }
+    return loadSharedCharacterArtwork(defaultName, cache, load, defaultName);
+  });
+  cache.set(name, pending);
+  return pending;
+}
+
 /** An optional model load is never allowed to fail resident presentation. */
 export async function usableOwnerModel<T>(
   file: string | null,

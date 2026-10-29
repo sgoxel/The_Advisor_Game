@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, loadSharedCharacterArtwork, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -80,4 +80,41 @@ test("WP #693 hidden GLB nodes/components/meshes cannot suppress 2D residents", 
     component(false, true, [drawable]),
     component(true, true, [hidden, drawable, empty]),
   ]), [drawable], "only a genuinely visible mesh can activate a supplied 3D model");
+});
+
+test("WP #693 missing specialist art shares default material and its correct sprite aspect", async () => {
+  const cache = new Map<string, Promise<{ name: string; value: string }>>();
+  const calls: Record<string, number> = Object.create(null);
+  const load = async (name: string): Promise<string> => {
+    calls[name] = (calls[name] ?? 0) + 1;
+    if (name === "guard_male") throw Error("missing specialist WebP");
+    return "material:" + name;
+  };
+  const first = loadSharedCharacterArtwork("guard_male", cache, load);
+  assert.strictEqual(first, loadSharedCharacterArtwork("guard_male", cache, load),
+    "simultaneous resident loads share one request");
+  const [illustration, repeated] = await Promise.all([first, loadSharedCharacterArtwork("guard_male", cache, load)]);
+  assert.deepEqual(illustration, { name: "default", value: "material:default" });
+  assert.strictEqual(illustration, repeated);
+  assert.strictEqual(await loadSharedCharacterArtwork("guard_male", cache, load), illustration,
+    "a previously missing specialist keeps shared 2D art instead of retrying every actor");
+  assert.deepEqual({ ...calls }, { guard_male: 1, default: 1 });
+  assert.deepEqual(await loadSharedCharacterArtwork("baker_female", cache, load),
+    { name: "baker_female", value: "material:baker_female" },
+    "existing matching 2D art remains unchanged");
+  assert.equal(calls.baker_female, 1);
+  assert.equal(calls.default, 1);
+});
+
+test("WP #693 unavailable default art fails honestly and may retry after recovery", async () => {
+  const cache = new Map<string, Promise<{ name: string; value: string }>>();
+  let requests = 0;
+  const load = async () => {
+    if (++requests === 1) throw Error("temporary default art failure");
+    return "restored default material";
+  };
+  await assert.rejects(loadSharedCharacterArtwork("default", cache, load), /temporary/);
+  assert.deepEqual(await loadSharedCharacterArtwork("default", cache, load),
+    { name: "default", value: "restored default material" });
+  assert.equal(requests, 2);
 });
