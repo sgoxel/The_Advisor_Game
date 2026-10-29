@@ -29,6 +29,19 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
+/** During an initial close view, overlap the first genuine resident query with
+ * remaining coarse tile preparation only when TWO existing workers and TWO
+ * shared admission slots are free. Preserve one worker/slot for mandatory
+ * terrain; one-worker devices keep the old terrain-first behavior. Renderer
+ * readiness still gates all actor presentation. */
+export function residentColdQueryCanStart(
+  selectionDirty: boolean, halfHeight: number,
+  idleWorkerCount: number, inUse: number, admissionLimit: number,
+): boolean {
+  return !selectionDirty && Number.isFinite(halfHeight) && halfHeight < 20 &&
+    idleWorkerCount >= 2 && admissionLimit - inUse >= 2;
+}
+
 /** Split ordinary cold resident facts across at most two existing idle
  * workers; each owns exactly its own SEED index and legal route checks.
  * Actor queries retain a single worker: their early-stop rule prioritizes
