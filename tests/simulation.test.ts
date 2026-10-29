@@ -49,6 +49,7 @@ import {
   residentEndpointWalkable,
   orderedResidentIndicesByStandingRank,
   orderedPackedResidentIndicesByStandingRank,
+  residentStandingRankSlot,
 } from "../src/simulation.ts";
 
 import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
@@ -221,6 +222,37 @@ test("resident inspector can resolve facts: linear standing ranks preserve all c
       assert.deepEqual(list.map(([, index]) => index), Array.from({ length: n }, (_, i) => i * 3 + 1),
         "never mutate original canonical resident enumeration");
     }
+});
+
+test("S009 cold resident standing slots lazily preserve every original rank and absent fallback", () => {
+  for (const n of [0, 1, 7, 64, 480, 2400]) {
+    const pairs: number[] = [];
+    for (let index = 0; index < n; index++) pairs.push((index * 7 + (index >> 2)) % 10, index * 3 + 1);
+    const expected = [...orderedPackedResidentIndicesByStandingRank(pairs)];
+    const table = { users: new Map([["market", pairs], ["field", [2, 11, 0, 8]]]),
+      slots: new Map<string, Map<number, number>>() };
+    assert.equal(table.slots.size, 0, "no public ground expands before a real standing lookup");
+    for (let slot = 0; slot < expected.length; slot++) {
+      assert.deepEqual(residentStandingRankSlot(table, "market", expected[slot]),
+        { slot, total: n }, "exact rank-first, index-tie standing position remains unchanged");
+    }
+    assert.deepEqual(residentStandingRankSlot(table, "market", n * 3 + 2),
+      { slot: undefined, total: n }, "unassigned resident retains exact total for the original fallback");
+    assert.deepEqual(residentStandingRankSlot(table, "missing", 11),
+      { slot: undefined, total: 0 }, "ground without roster keeps zero-rank fallback");
+    assert.equal(table.slots.has("field"), false,
+      "unvisited grounds do not allocate a sorted roster or lookup map");
+    assert.deepEqual(residentStandingRankSlot(table, "field", 8),
+      { slot: 0, total: 2 }, "a second ground resolves its own stable original ranking");
+    assert.deepEqual(residentStandingRankSlot(table, "field", 11),
+      { slot: 1, total: 2 });
+    assert.deepEqual(residentStandingRankSlot(table, "market", expected[0] ?? 1234567),
+      { slot: expected.length ? 0 : undefined, total: n },
+      "first ground still uses its cached exact rank after another ground is accessed");
+    assert.deepEqual(pairs, Array.from({ length: n }, (_, i) => [
+      (i * 7 + (i >> 2)) % 10, i * 3 + 1,
+    ]).flat(), "the original canonical packed roster never changes");
+  }
 });
 
 test("the roster and seeded population exclude child characters and deleted sprites", () => {

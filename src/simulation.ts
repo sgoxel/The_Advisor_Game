@@ -225,7 +225,11 @@ type ActivitySite = Offset & { id: string; label: string };
 type StandArea = { key: string; eastM: number; northM: number; radiusM: number; kerbM: number; clearM: number; field?: boolean };
 type SlotState = { valid: Offset[]; next: number; exhausted: boolean; rivals?: StandArea[] };
 type StreetSegment = { ax: number; az: number; bx: number; bz: number; halfM: number };
-type StandTable = { slotOf: Map<string, number>; total: Map<string, number> };
+type StandTable = {
+  /** Raw canonical rank/index pairs; order each ground only if someone stands there. */
+  users: Map<string, number[]>;
+  slots: Map<string, Map<number, number>>;
+};
 type SettlementAnchors = {
   markets: ActivitySite[]; gardens: ActivitySite[]; fieldsSites: ActivitySite[]; nature?: { fishing: ActivitySite[]; woodland: ActivitySite[]; maintenance: ActivitySite[] }; inn: Offset; market: Offset; plaza: Offset; keep: Offset; services: Map<string, Offset>; posts: Offset[][];
   /** Standing grounds by anchor coordinates, all of them (each once), the slots generated so far, street segments in metres and the resident-to-slot table. */
@@ -887,15 +891,26 @@ function standTableFor(place: Place): StandTable {
     }
     for (const [key, rank] of best) { const list = users.get(key); if (list) list.push(rank, index); else users.set(key, [rank, index]); }
   }
-  const slotOf = new Map<string, number>(), total = new Map<string, number>();
-  for (const [key, list] of users) {
-    // The population loop appended resident indexes in ascending order.
-    // Ten integer activity ranks permit a stable linear pass without sorting.
-    const ordered = orderedPackedResidentIndicesByStandingRank(list);
-    ordered.forEach((index, slot) => slotOf.set(`${key}|${index}`, slot));
-    total.set(key, ordered.length);
+  // This first cold resident typically visits only a few of the many SEED
+  // public grounds. Retain every original rank/index pair but defer its exact
+  // stable rank ordering and slot map until a resident actually visits it.
+  return anchors.stand = { users, slots: new Map() };
+}
+/** Resolve a canonical ground's rank slot without expanding unrelated public
+ * grounds. The original counting-sort order (rank, then index) is unchanged. */
+export function residentStandingRankSlot(
+  table: StandTable, groundKey: string, residentIndex: number,
+): { slot: number | undefined; total: number } {
+  const pairs = table.users.get(groundKey);
+  if (!pairs) return { slot: undefined, total: 0 };
+  let slots = table.slots.get(groundKey);
+  if (!slots) {
+    slots = new Map();
+    const ordered = orderedPackedResidentIndicesByStandingRank(pairs);
+    for (let i = 0; i < ordered.length; i++) slots.set(ordered[i], i);
+    table.slots.set(groundKey, slots);
   }
-  return anchors.stand = { slotOf, total };
+  return { slot: slots.get(residentIndex), total: pairs.length / 2 };
 }
 /**
  * Where a resident stands while stationary at an outdoor anchor: a seeded slot inside the shared standing ground
@@ -913,7 +928,9 @@ function standingSpot(place: Place, foundation: ResidentFoundation, anchor: Rout
   if (cached) return cached;
   const anchors = settlementAnchors(place), ground = anchors.areas.get(coordKey(base));
   if (!ground) return base;
-  const table = standTableFor(place), n = table.slotOf.get(`${ground.key}|${foundation.index}`) ?? (table.total.get(ground.key) ?? 0) + digest(`${foundation.code}/VISIT/${ground.key}`) % 509,
+  const table = standTableFor(place),
+    { slot, total } = residentStandingRankSlot(table, ground.key, foundation.index),
+    n = slot ?? total + digest(`${foundation.code}/VISIT/${ground.key}`) % 509,
     spot = slotOffset(place, anchors, ground, n);
   outdoorStandingSpotCache.set(key, spot);
   while (outdoorStandingSpotCache.size > 4096)
