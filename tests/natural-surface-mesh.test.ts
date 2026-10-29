@@ -292,5 +292,5 @@ test("dry landform midpoint retains nonplanar canonical heights", () => {
   assert.equal(dryReliefMidpointNeeded(10, 14, 18, 14, 14), false,
     "a truly planar slope must not need extra triangles");
   assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 10.02), false,
-    "sub-centimetre numerical noise is not a meaningful new contour");
+    "two-centimetre numeric difference does not merit extra triangles");
 });
