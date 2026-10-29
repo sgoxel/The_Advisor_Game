@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -230,6 +230,15 @@ test("S009 cold resident precomputation reserves one real terrain worker and adm
       "remote and invalid camera scales must not precompute unrelated actors");
   assert.equal(allowed(false, 12, 2, 6, 6), false,
     "a fully occupied admission cannot overcommit workers");
+});
+
+test("S009 early canonical actor snapshots remain eligible for the first coherent frame", () => {
+  assert.equal(residentActorSnapshotMayMarkPresented(false, true), false,
+    "a cold precomputed actor result must not consume its only first visible update");
+  assert.equal(residentActorSnapshotMayMarkPresented(true, true), true,
+    "the exact early result becomes visible when the real terrain is ready");
+  assert.equal(residentActorSnapshotMayMarkPresented(false, false), true,
+    "ordinary inspector-only snapshots retain their existing presentation behavior");
 });
 
 test("resident facts dispatch after initial ready without waiting for later zoom refinement", () => {
