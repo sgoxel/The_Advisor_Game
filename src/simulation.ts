@@ -1200,10 +1200,19 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
   const key = `${place.code}|${from.eastM},${from.northM}|${to.eastM},${to.northM}`,
     cached = streetSegmentLegality.get(key);
   if (cached !== undefined) return cached;
-  // This same t=0 metre is mandatory on every legal segment. A blocked
-  // canonical origin disproves the route before building a cold street
-  // graph; interpolate literally as the original validator does (including
-  // -0), never round or substitute the caller's approximate endpoint.
+  // A crossing through a solid SEED wall is already illegal regardless
+  // of ground. Test the same authoritative enclosure first, before doing an
+  // expensive final-surface sample for a route that cannot be accepted.
+  // Legal segments still sample the original exact t=0 and every metre.
+  const { border, gates } = enclosureFor(place);
+  if (!legalEnclosureSegment(from, to, border, gates)) {
+    streetSegmentLegality.set(key, false);
+    while (streetSegmentLegality.size > 16384)
+      streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
+    return false;
+  }
+  // This exact t=0 metre remains mandatory. Interpolate literally as
+  // before (including -0); do not round bridge-edge coordinates.
   if (!residentEndpointWalkableAt(place,
     from.eastM + (to.eastM - from.eastM) * 0,
     from.northM + (to.northM - from.northM) * 0)) {
@@ -1212,8 +1221,7 @@ function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
       streetSegmentLegality.delete(streetSegmentLegality.keys().next().value!);
     return false;
   }
-  const { border, gates } = enclosureFor(place),
-    legal = legalEnclosureSegment(from, to, border, gates) &&
+  const legal =
       // Every original interpolated one-metre coordinate is still sampled.
       // Reuse its exact immutable SEED verdict across overlapping street,
       // gate and overnight legs instead of recomposing the same final surface.
