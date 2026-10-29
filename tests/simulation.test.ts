@@ -807,6 +807,34 @@ test("continuous walking segments preflight exact short-edge center without skip
   }
 });
 
+test("continuous walking segments reject blocked short terminals at the exact last metre", () => {
+  for (const length of [9, 12, 16, 31, 32]) {
+    const from = { eastM: -0, northM: 0.125 },
+      to = { eastM: length - 0.03125, northM: 0.125 },
+      steps = Math.ceil(Math.hypot(to.eastM - from.eastM, to.northM - from.northM)),
+      terminal = from.eastM + (to.eastM - from.eastM) * (steps / steps);
+    let checks = 0;
+    assert.equal(continuousWalkableOffsetSegmentCoordinates(from, to, (eastM) => {
+      checks++;
+      return eastM !== terminal;
+    }), false, "a terminal SEED obstacle still blocks the exact direction-specific route");
+    assert.equal(checks, 2, "blocked terminal needs only midpoint and terminal final-surface probes");
+    const visited: string[] = [];
+    assert.equal(continuousWalkableOffsetSegmentCoordinates(from, to, (eastM, northM) => {
+      visited.push(`${Object.is(eastM, -0) ? "-0" : eastM}/${northM}`);
+      return true;
+    }), true);
+    const expected = Array.from({ length: steps + 1 }, (_, i) => {
+      const t = i / steps;
+      const eastM = from.eastM + (to.eastM - from.eastM) * t,
+        northM = from.northM + (to.northM - from.northM) * t;
+      return `${Object.is(eastM, -0) ? "-0" : eastM}/${northM}`;
+    });
+    assert.deepEqual(visited.sort(), expected.sort(),
+      "short allowed routes check every original signed-zero/float metre exactly once");
+  }
+});
+
 test("continuous walking segments reject long routes early without skipping any one-metre crossing", () => {
   const origin = { eastM: 0, northM: 0 }, destination = { eastM: 3200, northM: 0 };
   let calls = 0;

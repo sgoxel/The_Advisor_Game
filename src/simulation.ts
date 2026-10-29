@@ -1118,8 +1118,14 @@ export function continuousWalkableOffsetSegmentCoordinates(
   if (stride === 1 && steps > 8) {
     const middle = Math.floor(steps / 2);
     if (!check(middle)) return false;
+    // Short cold-route connectors can terminate on blocked dry/wet boundaries.
+    // Probe the ORIGINAL t=steps/steps sample before the remaining metres.
+    // Never replace it with the nominal 'to' offset: float/ULP differences
+    // can matter at a bridge edge. All accepted segments still check every
+    // original position exactly once, including this terminal.
+    if (!check(steps)) return false;
     for (let i = 0; i <= steps; i++) {
-      if (i !== middle && !check(i)) return false;
+      if (i !== middle && i !== steps && !check(i)) return false;
     }
     return true;
   }
