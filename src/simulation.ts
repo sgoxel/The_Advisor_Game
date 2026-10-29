@@ -1155,7 +1155,12 @@ export function residentEndpointWalkable(place: Place, point: Offset): boolean {
     source = lonLatToSource(position.lon, position.lat),
     legal = residentWalkableSurface(finalSurfaceAt(source.x, source.z));
   residentEndpointVerdicts.set(key, legal);
-  while (residentEndpointVerdicts.size > 4096)
+  // Cold overnight replay validates thousands of exact one-metre samples across
+  // reused home/work/gate legs. Keep a bounded multi-leg working set instead
+  // of evicting those immutable verdicts during the same resident query.
+  // This stores verdicts only: every distinct metre still receives its original
+  // complete SEED/final-surface legality check on first use.
+  while (residentEndpointVerdicts.size > 16384)
     residentEndpointVerdicts.delete(residentEndpointVerdicts.keys().next().value!);
   return legal;
 }
