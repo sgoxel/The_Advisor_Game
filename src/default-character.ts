@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, loadSharedCharacterArtwork, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -27,35 +27,30 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   mesh.setIndices([0, 1, 2, 1, 3, 2]);
   mesh.update(pc.PRIMITIVE_TRIANGLES);
 
-  const images = new Map<string, Promise<pc.StandardMaterial>>();
-  function artwork(key: string): Promise<pc.StandardMaterial> {
+  const images = new Map<string, Promise<{ name: string; value: pc.StandardMaterial }>>();
+  function artwork(key: string) {
     const name = Object.hasOwn(CHARACTER_TYPES, key) ? key : "default";
-    let loading = images.get(name);
-    if (loading) return loading;
-    const url = new URL(`characters/${name}.webp`, document.baseURI).href;
-    loading = new Promise<pc.StandardMaterial>((resolve, reject) => {
-      app.assets.loadFromUrl(url, "texture", (error, asset) => {
-        if (error || !asset) { reject(new Error(`Resident artwork ${name}: ${error}`)); return; }
-        const texture = asset.resource as pc.Texture;
-        const material = new pc.StandardMaterial();
-        material.name = `SEED character cutout · ${name}`;
-        material.diffuseMap = texture;
-        material.opacityMap = texture;
-        material.opacityMapChannel = "a";
-        material.alphaTest = 0.08;
-        material.useLighting = false;
-        material.useFog = false;
-        material.useSkybox = false;
-        material.cull = pc.CULLFACE_NONE;
-        material.update();
-        resolve(material);
+    return loadSharedCharacterArtwork(name, images, (requested) => {
+      const url = new URL(`characters/${requested}.webp`, document.baseURI).href;
+      return new Promise<pc.StandardMaterial>((resolve, reject) => {
+        app.assets.loadFromUrl(url, "texture", (error, asset) => {
+          if (error || !asset) { reject(new Error(`Resident artwork ${requested}: ${error}`)); return; }
+          const texture = asset.resource as pc.Texture;
+          const material = new pc.StandardMaterial();
+          material.name = `SEED character cutout · ${requested}`;
+          material.diffuseMap = texture;
+          material.opacityMap = texture;
+          material.opacityMapChannel = "a";
+          material.alphaTest = 0.08;
+          material.useLighting = false;
+          material.useFog = false;
+          material.useSkybox = false;
+          material.cull = pc.CULLFACE_NONE;
+          material.update();
+          resolve(material);
+        });
       });
-    }).catch(error => {
-      images.delete(name);
-      throw error;
     });
-    images.set(name, loading);
-    return loading;
   }
   // The owner may deploy GLBs later by uploading characters/models/*.glb
   // and adding matching illustration-type filenames to models.json. An empty,
@@ -85,7 +80,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   }
   // Keep real 2D geometry available immediately in every shipped version.
   // Missing specialist images retain the existing authored default.
-  const fallback = await artwork("default");
+  const fallback = (await artwork("default")).value;
   const requested = new WeakMap<pc.Entity, string>();
   const assigned = new WeakMap<pc.Entity, string>();
   const revisions = new WeakMap<pc.Entity, number>();
@@ -128,10 +123,11 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       cutout.enabled = true;
       for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = fallback;
       cutout.setLocalScale(1, 1, 1);
-      void artwork(name).then(material => {
+      void artwork(name).then(({ name: artworkName, value: material }) => {
         if (!current()) return;
         for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = material;
-        cutout.setLocalScale(CHARACTER_TYPES[name].aspect / .4453, 1, 1);
+        // A missing specialist image uses the shared default proportions too.
+        cutout.setLocalScale(CHARACTER_TYPES[artworkName].aspect / .4453, 1, 1);
       }).catch(error => {
         if (current()) console.warn("Resident illustration unavailable", name, error);
       });
