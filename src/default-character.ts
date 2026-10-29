@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -144,12 +144,14 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       let model: pc.Entity | undefined;
       try {
         model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
-        const pieces = (model.findComponents("render") as pc.RenderComponent[])
-          .flatMap(component => component.meshInstances)
-          .filter(part => characterMeshHasGeometry([part]));
-        // A GLB can have a render component and a mesh instance but zero
-        // actual primitives. Do not hide the authoritative resident's artwork.
-        if (!pieces.length) throw new Error("no drawable model geometry");
+        // A GLB may contain hidden nodes, disabled render components or
+        // invisible mesh instances alongside genuine geometry. Such authored
+        // data must never suppress the visible 2D NPC illustration.
+        if (!model.enabled) throw new Error("disabled model root");
+        const pieces = characterDrawableMeshes(
+          model.findComponents("render") as pc.RenderComponent[],
+        );
+        if (!pieces.length) throw new Error("no visible drawable model geometry");
         // Align the owner's model's actual feet and height to the same 1.782 m
         // nominal body used by the 2D quad; the actor parent still owns the
         // exact Simulation-derived physical scale and absolute world position.
