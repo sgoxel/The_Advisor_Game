@@ -554,6 +554,10 @@ test("S009 resident-only worker stays free of eager geometry/asset imports", asy
     "resident worker bootstrap must have no eager runtime module imports");
   assert.match(bootstrap, /tileRendererReady \?\?= import\("\.\/tile-render-worker\.ts"\)/,
     "rendering modules must load on demand, not during resident initialization");
+  assert.match(bootstrap, /renderTileJob\(job, started\)/,
+    "first-use dynamic module load must remain inside measured tile end-to-end duration");
+  assert.match(renderer, /renderTileJob\(job: TileJob, started: number\)/,
+    "the unchanged tile renderer must receive the original worker start timestamp");
   assert.ok(bootstrap.indexOf('self.postMessage({ready:true})') >
     bootstrap.indexOf("self.onmessage ="),
     "workers must register their handler before advertising readiness");
