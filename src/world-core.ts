@@ -298,7 +298,10 @@ function surfaceRoadAt(x: number, z: number, clearance = ROAD_SUPPORT_RADIUS) {
   let road: Road | undefined,
     distance = clearance;
   for (const candidate of bucket) {
-    const candidateDistance = roadDistanceAt(wrappedX, z, candidate, clearance + 1e-8);
+    // Once a nearer road wins, no more-distant candidate can replace it.
+    // Preserve the original 1e-8 tie window (including endpoint priority),
+    // but let the road-segment Z/X bounds reject irrelevant long polylines.
+    const candidateDistance = roadDistanceAt(wrappedX, z, candidate, distance + 1e-8);
     const endpointAtQuery = (r: Road) => Math.min(
       Math.hypot(wrapSourceX(wrappedX-r.fromX),z-r.fromZ),
       Math.hypot(wrapSourceX(wrappedX-r.toX),z-r.toZ)) < 1e-8,
