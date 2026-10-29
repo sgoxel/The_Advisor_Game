@@ -1926,8 +1926,15 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   // path search. A reverse field-entry leg remains uncertain and is skipped.
   let risk = routineHasProvablyLateLeg(legs) ||
     routineHasBlockedOrigin(legs, originWalkable);
-  if (!risk) for (const leg of legs) {
-    const route = routinePath(place, leg.from, leg.to,
+  // A single failed required leg proves overnight uncertainty, regardless
+  // of which earlier stops were reached. The final return is most relevant to
+  // midnight continuity: test it first so a blocked homecoming does not pay
+  // for unrelated earlier street/bridge searches. If it succeeds, still prove
+  // EVERY preceding leg with the original metre-sampled Simulation validator.
+  // All checks are immutable SEED facts; reversing this conjunction cannot
+  // certify an untraversed segment or change character decisions.
+  if (!risk) for (let i = legs.length - 1; i >= 0; i--) {
+    const leg = legs[i], route = routinePath(place, leg.from, leg.to,
       leg.fromEntry, leg.toEntry);
     if (unfinishedOrBlockedOvernightReturn(route, leg.remainingSeconds)) {
       risk = true;
