@@ -27,6 +27,14 @@ export function characterVisualFormat(usableModel: boolean): CharacterVisualForm
   return usableModel ? "3d-model" : "2d-cutout";
 }
 
+/** A container can have render components but no drawable mesh primitives.
+ * Never hide the resident's 2D illustration for a zero-geometry owner GLB.
+ * This is a presentation-only check; it does not affect Simulation identity. */
+export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: readonly { count: number }[] } | null }[]): boolean {
+  return parts.some(part => part.mesh?.primitive?.some(primitive =>
+    Number.isFinite(primitive.count) && primitive.count > 0));
+}
+
 /** An optional model load is never allowed to fail resident presentation. */
 export async function usableOwnerModel<T>(
   file: string | null,
