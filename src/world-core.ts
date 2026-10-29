@@ -442,19 +442,25 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
       });
   }
 
-  const site = nearbyCriticalSites(x, z, 16, 1)[0],
-    siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
-  if (site && siteSample && siteSample.influence > 0 && base.water.kind === "none")
-    modifiers.push({
-      id: `${site.code}/PAD`,
-      priority: WORLD_BUILDING_PRIORITIES.site,
-      weight: siteSample.influence,
-      targetGroundHeight: siteSample.height,
-      material: "Settlement",
-      walkable: siteSample.walkable,
-      vegetationDensityScale: 0,
-      reservedUse: site.code,
-    });
+  // Priority-9 site pads can never modify wet canonical ground. In the cold
+  // resident metre route, a wet point otherwise pays for a site-index lookup
+  // and pad sample even though the original modifier is always discarded.
+  // Bridge decks remain owned and checked by their original road modifier.
+  if (base.water.kind === "none") {
+    const site = nearbyCriticalSites(x, z, 16, 1)[0],
+      siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
+    if (site && siteSample && siteSample.influence > 0)
+      modifiers.push({
+        id: `${site.code}/PAD`,
+        priority: WORLD_BUILDING_PRIORITIES.site,
+        weight: siteSample.influence,
+        targetGroundHeight: siteSample.height,
+        material: "Settlement",
+        walkable: siteSample.walkable,
+        vegetationDensityScale: 0,
+        reservedUse: site.code,
+      });
+  }
 
   const road = roadMatch.road;
   if (road) {
