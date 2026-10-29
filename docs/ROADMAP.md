@@ -64,6 +64,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-004-001 — Prove legal resident work shifts: physical workstation, capacity and visible 2D activity
 - WP-S010-004-002 — Grounded owned 3D homes: open door apertures, legal final-surface access & walkable streets
 - WP-S010-004-003 — Canonical inventory UX: lawful SEED item transfers, ownership & campaign persistence
+- WP-S010-004-004 — NPC obstacle avoidance: deterministic road detours & stuck recovery
 - WP-S010-005-001 — Make one owned home enterable in the same world: legal door→room→exit, honest load & roof cutaway
 - WP-S010-005-002 — Enterable 3D service interiors: lawful street→door→station & resident occupancy
 - WP-S010-005-003 — Same-resident door traversal: Simulation occupancy & 2D roof/depth parity
