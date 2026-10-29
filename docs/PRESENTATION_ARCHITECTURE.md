@@ -1,8 +1,10 @@
-# Presentation Architecture — toon 3D, 2D residents, semantic zoom
+# Presentation Architecture — toon 3D, 2D-default residents with optional owner meshes, semantic zoom
 
 Status: WP-S007-001-001 reference analysis. **Research only.** Nothing in this document is implemented by that WP; it records the current source, the target, the cited techniques, the semantic-zoom contract and the future implementation slices. No visual PASS is claimed (`VISUAL: N/A`).
 
-Authority: `docs/README.md` (PlayCanvas 3D World Standard, 3D Asset Standard, Character 2D Art in 3D, Performance Rules, Canonical Scale and Navigation Rule) and `docs/SEMANTIC_ZOOM_REQUIREMENTS.md`. Presentation never decides terrain class, walkability, routes, SEED identity, Simulation state or canonical material meaning. The contract test `tests/presentation-architecture.test.ts` keeps the tables below in step with the source constants.
+Authority: `docs/README.md` (PlayCanvas 3D World Standard, 3D Asset Standard, Optional Owner 3D Character Models and Permanent 2D Fallback, Performance Rules, Canonical Scale and Navigation Rule) and `docs/SEMANTIC_ZOOM_REQUIREMENTS.md`. Presentation never decides terrain class, walkability, routes, SEED identity, Simulation state or canonical material meaning. The contract test `tests/presentation-architecture.test.ts` keeps the tables below in step with the source constants.
+
+**Owner character presentation revision, 2026-10-29:** This historical reference analysis preserves the 2D character-atlas target as the **current working fallback**, not an exclusive prohibition against future 3D NPCs. Use current original 2D resident images until the owner supplies actual GLB/glTF character meshes; then use a valid deployed owner model where available, while every unmatched, missing, unsupported or failed model **always uses its corresponding 2D illustration**. Models and sprites share exactly the same Simulation-owned identity, feet, collision, position and interactions. The independent future adoption WP is [WP-S010-003-003](ROADMAP.md); the existing 2D-baseline work and performance rules continue to apply.
 
 ## 1. Source-to-target gap (audited at this commit)
 
