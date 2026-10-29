@@ -58,7 +58,15 @@ export function characterDrawableMeshes<T extends {
       const material = part.material;
       const opacity = material && typeof material === "object" && "opacity" in material
         ? material.opacity : undefined;
-      if (typeof opacity === "number" && (!Number.isFinite(opacity) || opacity <= 0)) continue;
+      // glTF alphaMode=OPAQUE ignores authored alpha even if its base color
+      // contains zero. Only reject fully transparent *blended or masked*
+      // materials; an otherwise opaque GLB must still be allowed.
+      const alphaMat = material && typeof material === "object" ? material as {
+        transparent?: boolean; alphaTest?: number;
+      } : null;
+      const usesAlpha = alphaMat?.transparent === true || (alphaMat?.alphaTest ?? 0) > 0;
+      if (usesAlpha && typeof opacity === "number" &&
+          (!Number.isFinite(opacity) || opacity <= 0)) continue;
       if (part.visible !== false && characterMeshHasGeometry([part]))
         drawable.push(part);
     }
