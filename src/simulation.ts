@@ -1076,6 +1076,11 @@ export function continuousWalkableOffsetSegment(
     }
     return true;
   }
+  // The last canonical metre of a long off-street approach can be wet or
+  // blocked even when the middle is dry. Reject it before scanning the
+  // corridor, using the identical t=steps/steps coordinate as the full pass.
+  // Accepted segments still visit every original metre exactly once.
+  if (stride > 1 && !check(steps)) return false;
   if (stride > 1) {
     // An interior cut is common on rejected overnight doglegs. Probe a
     // central original stride position first; the full validator still visits
@@ -1083,8 +1088,7 @@ export function continuousWalkableOffsetSegment(
     const middle = Math.floor(Math.floor(steps / stride) / 2) * stride;
     if (!check(middle)) return false;
     for (let i = 0; i <= steps; i += stride)
-      if (i !== middle && !check(i)) return false;
-    if (steps % stride && !check(steps)) return false;
+      if (i !== middle && i !== steps && !check(i)) return false;
   }
   for (let i = 0; i <= steps; i++) {
     if (stride > 1 && (i % stride === 0 || i === steps)) continue;
