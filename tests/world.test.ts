@@ -872,9 +872,11 @@ test("S009 bounded road polyline rejects only impossible Z extents, preserving e
     const points = road.centerline && road.centerline.length > 1 ? road.centerline
       : [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
     for (const anchor of [points[0], points[Math.floor(points.length / 2)], points[points.length - 1]]) {
-      for (const dz of [-512, -1, 0, 512])
+      // Exact reference comparison across Z-bucket edges, seam wrapping,
+      // first-use and warmed immutable indices, and finite/whole-road bounds.
+      for (const dz of [-512, -32, -16, -1, 0, 1, 16, 32, 512])
         for (const dx of [0, 11, SOURCE_PRESENTATION_WIDTH])
-          for (const limit of [2, 24, Infinity]) {
+          for (const limit of [0, .001, 2, 24, 128, Infinity]) {
             const x = anchor.x + dx, z = anchor.z + dz;
             assert.equal(roadDistanceAt(x, z, road, limit), reference(x, z, road, limit),
               `SEED road ${road.code} x=${x} z=${z} limit=${limit}`);
