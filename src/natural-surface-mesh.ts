@@ -81,6 +81,15 @@ export const NATURAL_MESH_LIMITS = Object.freeze({
   shoreStep: 16,
 });
 
+/** The centre is already sampled from the composed final surface. Keep that
+ * genuine landform height when its quad corners would interpolate a different
+ * elevation; do not invent a raised visual-only mesh or resample the SEED. */
+export function dryReliefMidpointNeeded(
+  a: number, b: number, c: number, d: number, middle: number,
+): boolean {
+  return Math.abs(middle - (a + b + c + d) / 4) > 0.05;
+}
+
 type Sample = {
   x: number;
   z: number;
@@ -536,7 +545,8 @@ export function rebuildNaturalSurface(
     if (++leaves > NATURAL_MESH_LIMITS.leaves)
       throw new RangeError("Natural mesh leaf cap exceeded");
 
-    const centreNeeded = river || major || materialBoundary || middle.wet !== a.wet;
+    const centreNeeded = river || major || materialBoundary || middle.wet !== a.wet ||
+      (formation !== undefined && dryReliefMidpointNeeded(a.y, b.y, c.y, d.y, middle.y));
     if (centreNeeded) {
       triangle(a, b, middle);
       triangle(b, c, middle);
