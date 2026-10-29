@@ -405,6 +405,44 @@ def parse_point(text: str, viewport: tuple[int, int]) -> tuple[float, float]:
     return x, y
 
 
+# Measure normal, settled gameplay BEFORE any screenshot, freeze or compositor
+# readback. This is diagnostic evidence, never a pass/fail criterion. It avoids
+# confusing PlayCanvas' 300-frame startup rolling window with stable gameplay.
+# Sampling latest counters periodically is light but not an exhaustive frame trace.
+UNINTERRUPTED_RENDER_JS = """async () => {
+  const readings = [], started = performance.now();
+  while (readings.length < 20 && performance.now() - started < 3000) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const s = window.advisorWorld?.state, p = s?.performance;
+    if (!p || p.cpuRenderMs?.latest == null) continue;
+    readings.push({
+      renderMs: p.cpuRenderMs.latest,
+      frameMs: p.cpuFrameMs?.latest ?? null,
+      drawCalls: p.drawCalls ?? null,
+      fps: s.fps ?? null,
+      settled: !!s.settled,
+      pending: s.pending ?? null,
+    });
+  }
+  const pct = (key, fraction) => {
+    const values = readings.map(r => r[key]).filter(v => Number.isFinite(v)).sort((a,b) => a-b);
+    return values.length ? values[Math.ceil(fraction * values.length) - 1] : null;
+  };
+  return {
+    context: "normal gameplay before screenshot/quiescence",
+    approximateIntervalMs: 100,
+    observedWallMs: Math.round(performance.now() - started),
+    samples: readings.length,
+    settledSamples: readings.filter(r => r.settled && r.pending === 0).length,
+    cpuRenderSampledP50Ms: pct("renderMs", 0.5),
+    cpuRenderSampledP95Ms: pct("renderMs", 0.95),
+    cpuFrameSampledP95Ms: pct("frameMs", 0.95),
+    drawCallSampledP95: pct("drawCalls", 0.95),
+    fpsSampledP50: pct("fps", 0.5),
+  };
+}"""
+
+
 def write_records(out: str, records: list[dict[str, Any]]) -> None:
     (Path(out) / "capture.json").write_text(json.dumps(records, indent=2) + "\n")
 
@@ -419,6 +457,7 @@ class Session:
         self.console_errors: list[str] = []
         self.page_errors: list[str] = []
         self.shots = 0
+        self.uninterrupted_render_probe: dict[str, Any] | None = None
         page.on("console", lambda m: self.console_errors.append(m.text) if m.type == "error" else None)
         page.on("pageerror", lambda error: self.page_errors.append(str(error)))
 
@@ -809,6 +848,14 @@ class Session:
                 SETTLED_FRAMES_JS, polling=250,
                 timeout=min(60000, self.args.timeout * 1000),
             )
+            if self.uninterrupted_render_probe is None:
+                # One bounded observation per resident evidence session.
+                # Keep the game running and avoid GPU/scene quiescence here.
+                # A missing probe is UNKNOWN, never a reason to fail a real PNG.
+                try:
+                    self.uninterrupted_render_probe = self.page.evaluate(UNINTERRUPTED_RENDER_JS)
+                except PlaywrightError as error:
+                    self.uninterrupted_render_probe = {"status": "unavailable", "reason": str(error).splitlines()[0]}
         # The renderer can begin optional prefetch between a settled probe
         # and the screenshot. Acquire a genuinely settled frame and block
         # ONLY new streaming work atomically in the real page; neither actor
@@ -837,7 +884,9 @@ class Session:
             # release when optional prefetch could legitimately resume.
             state = self.page.evaluate(STATE_JS)
             tile_status_before = state["tileStatusText"]
+            readback_started = time.monotonic()
             self.capture_viewport(path, require_fresh_paint=resident_proof)
+            readback_wall_ms = round((time.monotonic() - readback_started) * 1000, 2)
             post_capture_state = self.page.evaluate(STATE_JS)
             tile_status_after = post_capture_state["tileStatusText"]
         finally:
@@ -873,6 +922,11 @@ class Session:
                 "consistent": frame_settled_consistent,
             },
             "residentSceneLargestColorBinFraction": scene_flat_fraction,
+            # Distinguish scene/render CPU from the independent screenshot
+            # compositor readback; no new performance pass/fail threshold.
+            "uninterruptedRenderProbe": self.uninterrupted_render_probe if resident_proof else None,
+            "captureReadbackWallMs": readback_wall_ms,
+            "performanceAfterReadback": post_capture_state.get("performance"),
             "browserChannel": self.args.browser_channel,
             "consoleErrors": list(self.console_errors), "pageErrors": list(self.page_errors),
         }
