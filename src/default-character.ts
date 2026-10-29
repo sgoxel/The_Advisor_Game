@@ -144,6 +144,11 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       let model: pc.Entity | undefined;
       try {
         model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
+        // PlayCanvas reports .enabled=false for every detached GraphNode,
+        // even when its authored enabled flag is true. Probe the model under
+        // the live scene root before evaluating its render components.
+        // This synchronous phase never hides the resident's original artwork.
+        app.root.addChild(model);
         // A GLB may contain hidden nodes, disabled render components or
         // invisible mesh instances alongside genuine geometry. Such authored
         // data must never suppress the visible 2D NPC illustration.
@@ -172,7 +177,9 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         model.setLocalPosition(-(minX + maxX) * factor / 2, -minY * factor,
           -(minZ + maxZ) * factor / 2);
         if (!current()) { model.destroy(); return; }
-        actor.addChild(model);
+        // Move the proven visible mesh to the same Simulation-owned actor.
+        // Reparent preserves local GLB scale/foot alignment, not world truth.
+        model.reparent(actor);
         activeModels.set(actor, model);
         // Never turn off the 2D fallback until the 3D entity exists and has
         // real renderable geometry. Model failure only removes the optional art.
