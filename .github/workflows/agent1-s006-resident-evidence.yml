@@ -21,6 +21,7 @@ on:
       - 'src/vegetation-render.ts'
       - 'src/tile-worker.ts'
       - 'src/hydrology.ts'
+      - 'src/world-core.ts'
       - 'src/resident-inspector.css'
       - 'src/default-character.ts'
       - 'src/resident-query.ts'
