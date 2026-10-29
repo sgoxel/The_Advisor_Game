@@ -14,8 +14,8 @@ import { loadAssetMeshes } from "./asset-meshes.ts";
 const emptyTerrain = { positions:new Float32Array(), normals:new Float32Array(),
   colors:new Uint8Array(), indices:new Uint32Array() };
 
-export async function renderTileJob(job: TileJob) {
-  const tile = job.tile, jobKey = tileJobKey(job), started = performance.now();
+export async function renderTileJob(job: TileJob, started: number) {
+  const tile = job.tile, jobKey = tileJobKey(job);
   try {
     let base: ReturnType<typeof buildTile>, natural = {
       replaced:false,leaves:0,samples:0,cpuScratchBytesEstimated:0,
