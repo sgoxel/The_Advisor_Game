@@ -50,6 +50,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
     let baseMs: number;
     let naturalMs: number | undefined, surfaceRefinementMs: number | undefined;
     if (job.kind === 'detail') {
+      // Detail meshes must still use the complete Blender asset registry.
+      // Coverage and resident facts have no model dependency and need not
+      // wait for nine separate optional GLB network requests.
+      await meshAssetsReady;
       // Original detail building registered this canonical region before the
       // adaptive pass. Keep that order and retain coarse ground when replacement
       // is unnecessary; plain tiles must never become blank.
@@ -86,7 +90,9 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       natural:{replaced:natural.replaced,leaves:natural.leaves,samples:natural.samples,cpuScratchBytesEstimated:natural.cpuScratchBytesEstimated}}, {transfer});
   } catch(error){self.postMessage({tile,kind:job.kind,jobKey,error:String(error)});}
 };
-// Blender-made assets (src/models) are loaded once before the worker accepts jobs; a failure only
-// logs a warning and leaves the procedural kits in place.
-// (A promise chain, not top-level await: the worker bundle is iife.)
-void loadAssetMeshes().catch(() => undefined).then(() => self.postMessage({ready:true}));
+// Initial coverage and resident facts need no Blender meshes. Advertise
+// readiness before starting optional model fetches; each detail job above
+// awaits this exact settled registry, so mesh choice and SEED output remain
+// byte-identical to the previous asset-first startup sequence.
+self.postMessage({ready:true});
+const meshAssetsReady = loadAssetMeshes().catch(() => undefined);

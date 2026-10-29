@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -211,6 +211,34 @@ test("S005 owned-door marker cannot cover returning original 2D resident", () =>
     "a separately located genuine door keeps its independent marker");
   assert.equal(ownedDoorLabelClearOfResident({ x: Number.NaN, y: 458 }, feet, head), false,
     "invalid projection must not create a floating doorway label");
+});
+
+test("S009 cold resident precomputation reserves one real terrain worker and admission slot", () => {
+  const allowed = residentColdQueryCanStart;
+  assert.equal(allowed(false, 12, 2, 0, 4), true,
+    "a close scene with two spare workers may overlap canonical resident facts and terrain");
+  assert.equal(allowed(false, 12, 3, 3, 6), true,
+    "bounded existing workers may prepare a resident while mandatory tiles keep capacity");
+  assert.equal(allowed(false, 12, 1, 0, 4), false,
+    "one-worker hardware cannot lose the only worker to resident replay");
+  assert.equal(allowed(false, 12, 2, 3, 4), false,
+    "one remaining shared admission slot belongs to required terrain");
+  assert.equal(allowed(true, 12, 2, 0, 4), false,
+    "a pending camera change must not start an obsolete actor query");
+  for (const halfHeight of [20, 48, 100, Infinity, NaN])
+    assert.equal(allowed(false, halfHeight, 4, 0, 8), false,
+      "remote and invalid camera scales must not precompute unrelated actors");
+  assert.equal(allowed(false, 12, 2, 6, 6), false,
+    "a fully occupied admission cannot overcommit workers");
+});
+
+test("S009 early canonical actor snapshots remain eligible for the first coherent frame", () => {
+  assert.equal(residentActorSnapshotMayMarkPresented(false, true), false,
+    "a cold precomputed actor result must not consume its only first visible update");
+  assert.equal(residentActorSnapshotMayMarkPresented(true, true), true,
+    "the exact early result becomes visible when the real terrain is ready");
+  assert.equal(residentActorSnapshotMayMarkPresented(false, false), true,
+    "ordinary inspector-only snapshots retain their existing presentation behavior");
 });
 
 test("resident facts dispatch after initial ready without waiting for later zoom refinement", () => {
