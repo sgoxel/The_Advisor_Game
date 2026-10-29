@@ -335,7 +335,10 @@ function dispatchResidentQuery() {
     if (!batch) continue;
     batch.unsent.delete(workerId);
     idleWorkers.splice(index, 1);
-    worker.postMessage({ ...batch.job, mainSentEpochMs: performance.timeOrigin + performance.now(), shard: {
+    // Explicit capture URL only; ordinary play never runs route-probe counters.
+    worker.postMessage({ ...batch.job,
+      routeProbes: new URLSearchParams(window.location.search).has("resident-route-probes"),
+      mainSentEpochMs: performance.timeOrigin + performance.now(), shard: {
       index: batch.assignments.get(workerId)!, count: batch.count,
     } });
   }
