@@ -1009,7 +1009,7 @@ function streetGraphFor(place: Place): StreetGraph {
   const { border, gates } = enclosureFor(place);
   const graph = { nodes, edges, weights, components: streetTopologyComponents(edges), grid, gridBounds,
     legalEdges: new Map<string, boolean>(),
-    nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[]>(),
+    nearestLegal: new Map<string, number>(), nodePaths: new Map<string, readonly Offset[] | null>(),
     border, gates, cell };
   streetGraphs.set(place.code, graph);
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
