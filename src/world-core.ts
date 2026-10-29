@@ -570,8 +570,19 @@ function surfaceCacheKey(x: number, z: number) {
 function slopeNeighbourGroundHeightAt(x: number, z: number) {
   const full = composedPointCache.get(surfaceCacheKey(x, z));
   if (full) return full.final.groundHeight;
-  const base = naturalSurfaceBaseAt(x, z, true);
-  return composeFinalSurface(base, surfaceModifiersAt(x, z, base).modifiers).groundHeight;
+  const base = naturalSurfaceBaseAt(x, z, true),
+    modifiers = surfaceModifiersAt(x, z, base).modifiers;
+  // The gradient reads only ground height. With zero or one modifier, the
+  // canonical composer has no sorting, duplicate check or cross-owner order:
+  // reproduce its exact one-owner lerp without allocating a full FinalSurface.
+  // Multi-owner surfaces retain the original full composer and conflict checks.
+  if (modifiers.length > 1) return composeFinalSurface(base, modifiers).groundHeight;
+  const modifier = modifiers[0];
+  if (!modifier || modifier.targetGroundHeight === undefined || base.water.kind !== "none")
+    return base.groundHeight;
+  const weight = clamp01(modifier.weight ?? 1);
+  return weight <= 0 ? base.groundHeight
+    : base.groundHeight + (modifier.targetGroundHeight - base.groundHeight) * weight;
 }
 
 /** Actual one-metre road-local grade, not a 30-metre hillside stencil. */
