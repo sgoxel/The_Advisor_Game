@@ -506,7 +506,7 @@ The PlayCanvas scene is presentation only. Renderer state, mesh transforms, dept
 
 ## PlayCanvas 3D World Standard
 
-Everything in the world is rendered as 3D presentation **except character artwork**.
+Everything in the world uses real 3D spatial presentation. Until owner-created 3D character meshes are supplied and integrated, characters use the existing 2D artwork inside that 3D world. Character presentation may later use an approved 3D model where one is available; the 2D illustration remains a permanent per-character fallback.
 
 3D presentation includes:
 
@@ -518,7 +518,7 @@ Everything in the world is rendered as 3D presentation **except character artwor
 - settlement structures, landmarks and world objects;
 - shadows, lighting and other spatial presentation.
 
-Characters remain **2D drawn images rendered inside the 3D world as camera-facing sprites/billboards**. The sprite feet are anchored to the character's authoritative world coordinate. Character presentation may animate through atlas/frame changes, but the image never becomes world authority.
+Until the owner provides matching 3D meshes, characters remain **2D drawn images rendered inside the 3D world as camera-facing sprites/billboards**. The sprite feet are anchored to the character's authoritative world coordinate. After a suitable owner-supplied 3D model is deployed and ready for a particular character, that character may use the 3D mesh. **Whenever a matching usable 3D model is not present in the deployed version, cannot load, or cannot be rendered, that character must use the existing 2D image instead.** Mixed 2D/3D character presentation is valid. Neither sprite frames nor 3D mesh/animation transforms become world or Simulation authority.
 
 The default gameplay camera is **orthographic top-down / 3/4 view**. Perspective distortion is not required for normal play. Real 3D depth handles building height, roofs, object overlap, terrain elevation where used, and natural occlusion instead of manually faking depth through a 2D layer stack.
 
@@ -575,18 +575,20 @@ The renderer should prefer:
 
 Draft SVG artwork may still be useful as a design/source reference, but terrain/buildings/props are no longer defined as flattened 2D world tiles. Final world presentation is 3D geometry with material textures.
 
-## Character 2D Art in 3D
+## Optional Owner 3D Character Models and Permanent 2D Fallback
 
-Character art remains 2D by design.
+The current playable default is **2D illustrated NPCs and protagonist art in the real PlayCanvas 3D world**. Keep using those images until the owner supplies actual 3D character meshes. A missing model must never make the character disappear or prevent gameplay. Later, a valid deployed owner-supplied 3D model may be used for the corresponding character, while any unmatched or unavailable character continues using the original 2D artwork.
 
-Each visible character uses a PlayCanvas Sprite/billboard presentation that:
+The 2D fallback uses a PlayCanvas Sprite/billboard presentation that:
 
 - faces the gameplay camera according to the selected billboard rule;
 - anchors at the feet to authoritative X/Y position and appropriate visual elevation;
 - participates correctly in the 3D depth/occlusion system;
 - supports transparent character artwork and animation frames;
 - can be hidden/cut away correctly by buildings and roofs;
-- does not require a skeletal 3D character model.
+- does not require any 3D character model, even when model assets are missing, fail to load or are not included in a deployed release.
+
+When real owner-created 3D character meshes become available, use the standard PlayCanvas-compatible GLB/glTF asset pipeline where practical. Pick an available matching model through a stable presentation mapping, retain the same Simulation-owned character identity, foot contact, scale, routes, legal collision, roof/depth occlusion and interaction, and reuse shared model resources. Mesh animation or root motion is visual only. If the chosen model is missing, fails, is unsupported, or is not deployed, use the same character's 2D image without substituting an invented person. A 3D model is never required for a playable release.
 
 Off-screen Simulation characters do not require active render entities.
 
@@ -618,7 +620,7 @@ Performance work should prioritize:
 
 The design target is **60 FPS on capable hardware** with **30 FPS as the minimum supported gameplay fallback**, without changing Simulation correctness. Software-rendered CI validates functional counters and bounded behavior; it is not evidence of physical-device FPS.
 
-The visual direction remains a readable, grounded **seinen medieval-fantasy / old-school RPG** style. Real 3D is used to improve spatial depth, buildings, settlements and terrain while 2D character artwork preserves the intended illustrated character identity.
+The visual direction remains a readable, grounded **seinen medieval-fantasy / old-school RPG** style. Real 3D improves spatial depth, buildings, settlements and terrain; future owner-provided 3D character meshes may enrich residents while the original 2D character artwork remains the permanent fallback.
 
 ---
 
