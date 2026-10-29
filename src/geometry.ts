@@ -11,7 +11,7 @@ import { featuresFor, type Tile } from "./world.ts";
 import { elevationToRenderY } from "./render-frame.ts";
 import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
 import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
-import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { assetFor, type AssetMesh } from "./asset-meshes.ts";
 
@@ -141,7 +141,15 @@ function buildTerrainOnly(tile: Tile): TileGeometry {
       waterBoundary = coveragePoints.get(`${b[0]}/${b[2]}`)!.surface.water.kind !== waterKind ||
         coveragePoints.get(`${c[0]}/${c[2]}`)!.surface.water.kind !== waterKind ||
         coveragePoints.get(`${d[0]}/${d[2]}`)!.surface.water.kind !== waterKind;
-    if (depth < (waterBoundary ? 2 : 1) && range > 10) {
+    // Colour can remain uniform across a steep ridge or canyon. Refine such
+    // cells from the SAME composed surface, otherwise the coverage mesh can
+    // bridge over real relief until a detailed tile happens to arrive.
+    const middle = point(x + size / 2, z + size / 2),
+      cornerMean = (a[1] + b[1] + c[1] + d[1]) / 4,
+      cornerRelief = Math.max(a[1], b[1], c[1], d[1]) - Math.min(a[1], b[1], c[1], d[1]),
+      terrainRelief = Math.abs(middle[1] - cornerMean) > 0.5 ||
+        cornerRelief > size * CANONICAL_METRES_PER_SOURCE_UNIT * 0.2;
+    if (depth < (waterBoundary ? 2 : 1) && (range > 10 || terrainRelief)) {
       const half = size / 2;
       coverageQuad(x, z, half, depth + 1); coverageQuad(x + half, z, half, depth + 1);
       coverageQuad(x, z + half, half, depth + 1); coverageQuad(x + half, z + half, half, depth + 1);
