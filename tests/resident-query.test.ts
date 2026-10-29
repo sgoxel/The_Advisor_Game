@@ -571,3 +571,40 @@ test("S009 resident-only worker stays free of eager geometry/asset imports", asy
     assert.ok(renderer.includes(requirement), `the exact terrain renderer still performs ${requirement}`);
   }
 });
+
+test("S009 long blocked-route terminal preflight retains exact every-metre legality", () => {
+  // Independent original metre enumeration: the optimization may change only
+  // rejection order, never the physical sample set or route truth.
+  for (const steps of [33, 64, 127, 256]) {
+    const from = { eastM: 0.125, northM: -3.5 },
+      to = { eastM: steps + 0.125, northM: -3.5 },
+      key = (point: { eastM: number; northM: number }) =>
+        `${Object.is(point.eastM, -0) ? "-0" : point.eastM}|${Object.is(point.northM, -0) ? "-0" : point.northM}`,
+      original = Array.from({ length: steps + 1 }, (_, i) => {
+        const t = i / steps;
+        return key({ eastM: from.eastM + (to.eastM - from.eastM) * t,
+          northM: from.northM + (to.northM - from.northM) * t });
+      }),
+      visited: string[] = [];
+    assert.equal(continuousWalkableOffsetSegment(from, to, point => {
+      visited.push(key(point));
+      return true;
+    }), true);
+    assert.equal(visited.length, original.length, "each accepted original metre sampled once");
+    assert.deepEqual([...visited].sort(), [...original].sort(),
+      "accepted path uses the exact original floating-point positions");
+    for (let blocked = 0; blocked <= steps; blocked++) {
+      const blockedKey = original[blocked];
+      assert.equal(continuousWalkableOffsetSegment(from, to,
+        point => key(point) !== blockedKey), false,
+      "a blocked original metre must still reject the complete route");
+    }
+    let terminalChecks = 0;
+    assert.equal(continuousWalkableOffsetSegment(from, to, point => {
+      terminalChecks++;
+      return key(point) !== original[steps];
+    }), false);
+    assert.equal(terminalChecks, 1,
+      "blocked destination rejects a long illegal dogleg before any other metre work");
+  }
+});
