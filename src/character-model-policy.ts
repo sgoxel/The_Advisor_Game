@@ -75,7 +75,12 @@ export function loadSharedCharacterArtwork<T>(
       cache.delete(name);
       throw error;
     }
-    return loadSharedCharacterArtwork(defaultName, cache, load, defaultName);
+    // A temporary failure of the shared default must not permanently poison
+    // a specialist's cached promise. A future character request can recover.
+    return loadSharedCharacterArtwork(defaultName, cache, load, defaultName).catch(fallbackError => {
+      cache.delete(name);
+      throw fallbackError;
+    });
   });
   cache.set(name, pending);
   return pending;

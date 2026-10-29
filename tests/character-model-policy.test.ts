@@ -118,3 +118,26 @@ test("WP #693 unavailable default art fails honestly and may retry after recover
     { name: "default", value: "restored default material" });
   assert.equal(requests, 2);
 });
+
+test("WP #693 transient default outage does not poison a specialist's fallback after recovery", async () => {
+  const cache = new Map<string, Promise<{ name: string; value: string }>>();
+  let defaultOnline = false;
+  const calls: Record<string, number> = Object.create(null);
+  const load = async (name: string): Promise<string> => {
+    calls[name] = (calls[name] ?? 0) + 1;
+    if (name !== "default") throw Error("specialist not deployed");
+    if (!defaultOnline) throw Error("default temporarily unavailable");
+    return "recovered default illustration";
+  };
+  const first = loadSharedCharacterArtwork("guard_male", cache, load);
+  await assert.rejects(first, /temporarily unavailable/);
+  assert.equal(cache.has("guard_male"), false, "rejected specialist fallback must be retryable");
+  assert.equal(cache.has("default"), false, "rejected default must be retryable");
+  defaultOnline = true;
+  assert.deepEqual(await loadSharedCharacterArtwork("guard_male", cache, load),
+    { name: "default", value: "recovered default illustration" });
+  assert.deepEqual({ ...calls }, { guard_male: 2, default: 2 });
+  assert.strictEqual(await loadSharedCharacterArtwork("guard_male", cache, load),
+    await loadSharedCharacterArtwork("default", cache, load),
+    "recovery uses the shared original 2D material without new downloads");
+});
