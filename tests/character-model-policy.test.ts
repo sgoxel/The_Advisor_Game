@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
 import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, loadSharedCharacterArtwork, usableOwnerModel } from "../src/character-model-policy.ts";
 
@@ -140,4 +141,60 @@ test("WP #693 transient default outage does not poison a specialist's fallback a
   assert.strictEqual(await loadSharedCharacterArtwork("guard_male", cache, load),
     await loadSharedCharacterArtwork("default", cache, load),
     "recovery uses the shared original 2D material without new downloads");
+});
+
+test("WP #693 popup keeps a real 2D portrait after specialist image failure", () => {
+  type ImageStub = {
+    src: string;
+    alt: string;
+    dataset: Record<string, string>;
+    className: string;
+    width: number;
+    height: number;
+    decoding: string;
+    loading: string;
+    onerror: (() => void) | null;
+  };
+  const images: ImageStub[] = [];
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      baseURI: "https://example.test/The_Advisor_Game/",
+      createElement(tag: string) {
+        assert.equal(tag, "img");
+        const picture: ImageStub = {
+          src: "", alt: "", dataset: {}, className: "",
+          width: 0, height: 0, decoding: "", loading: "", onerror: null,
+        };
+        images.push(picture);
+        return picture;
+      },
+    },
+  });
+  try {
+    let mounted: unknown;
+    const slot = { replaceChildren(image: unknown) { mounted = image; } } as HTMLElement;
+    const root = "https://example.test/The_Advisor_Game/characters/";
+    mountNpcPortrait(slot, "guard_male", "Marek", "wp693-missing-portrait");
+    const picture = images[0]!;
+    assert.strictEqual(mounted, picture);
+    assert.equal(picture.src, root + "guard_male.webp");
+    picture.onerror?.();
+    assert.equal(picture.src, root + "default.webp", "failed specialist uses original default art");
+    assert.equal(picture.dataset.character, "default");
+    mountNpcPortrait(slot, "guard_male", "Marek", "wp693-missing-portrait");
+    assert.equal(picture.src, root + "default.webp", "popup refresh never reloads broken specialist");
+    mountNpcPortrait(slot, "baker_female", "Mira", "wp693-missing-portrait");
+    assert.equal(picture.src, root + "baker_female.webp", "recycled portrait remains person-specific");
+    assert.equal(picture.alt, "Illustration of Mira");
+    mountNpcPortrait(slot, "guard_male", "Marek", "wp693-missing-portrait");
+    assert.equal(picture.src, root + "default.webp", "missing artist fallback remains stable");
+    assert.equal(images.length, 1, "same channel reuses its existing image and DOM surface");
+    picture.onerror?.();
+    assert.equal(picture.src, root + "default.webp", "default errors cannot recurse");
+  } finally {
+    if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  }
 });
