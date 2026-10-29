@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Make Hero/Close 3D relief agree with SEED final-surface heights, legal feet & seamless LOD
+- WP-S003-004-001 — Align Hero/Close rendered relief, resident feet and building contact with the single SEED final surface
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
@@ -34,7 +34,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S005 — Transport & Traversal Network
 
 - WP-S005-001-001 — Lawful SEED multi-road travel: grade-safe bridges, actual resident arrival & honest route preview — COMPLETED and REVIEWED at 2026-10-27
-- WP-S005-002-001 — Connect bridge decks to dry-bank roads: matching 3D landings, legal grades & both-way walking
+- WP-S005-002-001 — Join real bridge decks to both dry-bank roads with matching heights, collision and lawful walking
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -61,7 +61,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-001-001 — Research playable first-session Advisor UX: persistent low-rank hero, inhabited village and accessible first advice
 - WP-S010-002-001 — Ship reusable mobile-safe Hero/Close 3D GLB kit: true doors, roofs, props & renderer parity
 - WP-S010-003-001 — Ground 2D resident art on SEED feet with real roof occlusion, stable picking & truthful metadata
-- WP-S010-003-002 — Add accessible inspect/tilt/follow controls without implicit zoom tilt or direct NPC control
+- WP-S010-003-002 — Provide explicit accessible inspect/tilt/follow controls while keeping pure zoom and NPC autonomy
 - WP-S010-004-001 — Prove real resident work shifts: lawful home→station arrival, capacity & visible 2D activity
 - WP-S010-004-002 — Make SEED-owned 3D homes grounded and reachable: real doorways, roads & legal slopes
 - WP-S010-004-003 — Ship canonical inventory UX: Simulation-owned items, legal transfers & replayable history
@@ -70,8 +70,8 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-002 — Make 3D service interiors enterable: lawful street→door→workstation with real resident occupancy
 - WP-S010-005-003 — Keep the same 2D resident through doors: Simulation occupancy, grounded feet & roof/depth parity
 - WP-S010-005-004 — Persist validated interior changes: canonical rooms, items, occupants & lawful exit/replay
-- WP-S010-005-005 — Light occupied homes only at 22:00–05:00 fantasy night; keep empty rooms dark and twilight separate
-- WP-S010-006-001 — Verify real Galaxy A55 default Chrome: sustained 30 FPS, input & WebGPU/WebGL2 recovery
+- WP-S010-005-005 — Bind occupied-home lighting to 22:00–05:00 fantasy night; keep dusk cosmetic and empty homes dark
+- WP-S010-006-001 — Certify real Galaxy A55 default-Chrome gameplay FPS, input, memory and renderer recovery
 
 - WP-S010-007-001 — Research local-first Advisor dialogue: versioned Sentence Library, autonomous choice & bounded LLM
 - WP-S010-007-002 — Build offline-first accessible Advisor chat with deterministic intents and truthful autonomous decision states
