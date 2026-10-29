@@ -561,6 +561,11 @@ test("S009 resident-only worker stays free of eager geometry/asset imports", asy
   assert.ok(bootstrap.indexOf('self.postMessage({ready:true})') >
     bootstrap.indexOf("self.onmessage ="),
     "workers must register their handler before advertising readiness");
+  assert.ok(renderer.indexOf("rebuildNaturalSurface(tile, emptyTerrain)") <
+    renderer.indexOf("await meshAssetsReady") &&
+    renderer.indexOf("await meshAssetsReady") <
+    renderer.indexOf("base = buildTile(tile, {skipBaseTerrain:proposed.replaced})"),
+    "natural terrain may overlap GLB loading but exact detail geometry must await all models");
   for (const requirement of ["buildTile(", "rebuildNaturalSurface(", "refineTileSurfacePresentation(",
     "buildVegetationGeometry(", "convertTileGeometryToEnu(", "await meshAssetsReady"]) {
     assert.ok(renderer.includes(requirement), `the exact terrain renderer still performs ${requirement}`);
