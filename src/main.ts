@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -298,11 +298,14 @@ const residentBatches = new Map<number, ResidentBatch>();
 const residentRunningWorkers = () => activeResidentWorkers(residentBatches.values());
 const generationReadyInUse = () => inFlight + uploads.length + residentRunningWorkers();
 function dispatchResidentQuery() {
-  // A stale camera query can finish while the latest focus takes an idle
-  // worker; each independent job retains its original actor/Simulation order.
-  if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, residentBatches.size > 0)) return;
-  if (!selectionDirty && ready) {
-    const available = generationLimit() - generationReadyInUse();
+  // Before first coherent terrain, precompute a close-view actor query only
+  // when spare workers/admission leave one worker and slot for mandatory tiles.
+  // Actors remain invisible until terrain readiness; no Simulation fact changes.
+  const early = !ready && residentColdQueryCanStart(selectionDirty, view.halfHeight,
+    idleWorkers.length, generationReadyInUse(), generationLimit());
+  if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, residentBatches.size > 0) && !early) return;
+  if (!selectionDirty && (ready || early)) {
+    const available = generationLimit() - generationReadyInUse() - (early ? 1 : 0);
     if (available > 0) {
       const job = residentQueries.take(true);
       if (job) {
@@ -1885,7 +1888,12 @@ async function start() {
       // Logical inspection remains available before optional meshes and billboards
       // finish. Actor allocation keeps the original strict close-detail budget.
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
-      const query = residentMode.inspect ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors) : undefined;
+      // Compute the canonical future close-view actor snapshot before terrain
+      // completes. The existing residentMode.actors gate still prevents sprites
+      // and selection from appearing before coherent world geometry.
+      const queryActors = residentMode.actors || (!ready && view.halfHeight < 20);
+      const query = residentMode.inspect || queryActors
+        ? residentRequestForView(simulation.tick, residentQueryLimitForView(queryActors), queryActors) : undefined;
       const previousSnapshot = residentQueries.current;
       if (query) {
         offerResidentQuery(query);
