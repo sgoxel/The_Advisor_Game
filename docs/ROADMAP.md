@@ -50,15 +50,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S009 — Performance, Stability, UI/UX & README Conformance
 
 - WP-S009-001-001 — First-use responsiveness: ≤120s cold, measured +25% CI p95 & SEED-safe streaming — COMPLETED and REVIEWED at 2026-10-29
-- WP-S009-002-001 — Eliminate idle label/panel reflow; preserve readable, accessible mobile picking and focus
-- WP-S009-003-001 — Bound total CPU+GPU memory and recover lost WebGPU in place without losing world or selection
-- WP-S009-004-001 — Audit deployed-SHA README gameplay, performance, UI/UX and renderer conformance with reproducible evidence
-- WP-S009-005-001 — Fix premature 100% loading and zoom-driven tilt; preserve focus, projection and honest first interaction
-- WP-S009-006-001 — Cache versioned SEED-derived world foundations across restarts without changing canonical truth
+- WP-S009-002-001 — Stop unchanged-frame atlas reflow; bound mobile resident picking and preserve focus/accessibility
+- WP-S009-003-001 — Enforce shared 1GB app-owned CPU+GPU admission; recover device loss without losing SEED focus/selection
+- WP-S009-004-001 — Audit exact deployed-SHA README conformance: gameplay truth, pure zoom, mobile UX, renderer and reproducible evidence
+- WP-S009-005-001 — Correct false 100% readiness and implicit zoom tilt; retain canonical focus/projection and first-use feedback
+- WP-S009-006-001 — Persist versioned SEED-derived geography/roads/terrain across browser restarts with measured warm-load reuse
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 
-- WP-S010-001-001 — Research playable first-session Advisor UX: persistent low-rank hero, inhabited village and accessible first advice
+- WP-S010-001-001 — Research first playable Advisor journey: persistent hero, seeded home, inspect→advise→observable decision UX
 - WP-S010-002-001 — Ship reusable mobile-safe Hero/Close 3D GLB kit: true doors, roofs, props & renderer parity
 - WP-S010-003-001 — Ground 2D resident art on SEED feet with real roof occlusion, stable picking & truthful metadata
 - WP-S010-003-002 — Provide explicit accessible inspect/tilt/follow controls while keeping pure zoom and NPC autonomy
@@ -71,13 +71,13 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-003 — Keep the same 2D resident through doors: Simulation occupancy, grounded feet & roof/depth parity
 - WP-S010-005-004 — Persist validated interior changes: canonical rooms, items, occupants & lawful exit/replay
 - WP-S010-005-005 — Bind occupied-home lighting to 22:00–05:00 fantasy night; keep dusk cosmetic and empty homes dark
-- WP-S010-006-001 — Certify real Galaxy A55 default-Chrome gameplay FPS, input, memory and renderer recovery
+- WP-S010-006-001 — Measure Galaxy A55 default-Chrome 30/60 FPS, touch latency, shared memory and WebGPU/WebGL2 recovery
 
 - WP-S010-007-001 — Research local-first Advisor dialogue: versioned Sentence Library, autonomous choice & bounded LLM
-- WP-S010-007-002 — Build offline-first accessible Advisor chat with deterministic intents and truthful autonomous decision states
-- WP-S010-007-003 — Demonstrate advice→independent character decision→legal Simulation travel and visible consequence
+- WP-S010-007-002 — Deliver accessible offline-first Advisor chat: deterministic intent routing, bounded LLM proposals and honest decisions
+- WP-S010-007-003 — Prove Advisor advice→autonomous choice→Simulation-valid travel→visible consequence/refusal
 - WP-S010-008-001 — Research campaign SEED/time authority: creation-derived fantasy clock, offline continuity & replay
-- WP-S010-008-002 — Ship honest campaign create/resume UX with accepted SEED, creation clock, same hero and save-state feedback
-- WP-S010-008-003 — Persist only Simulation-approved campaign events with atomic checkpoints and deterministic restart replay
+- WP-S010-008-002 — Deliver campaign SEED/time create-resume UX with persistent hero and truthful save-state reporting
+- WP-S010-008-003 — Replay atomic Simulation-approved campaign events across restart/offline time without duplicate authority
 - WP-S010-009-001 — Research SEED-faithful living fauna: habitats, lawful movement, real 3D art & mobile LOD
 - WP-S010-009-002 — Render 13 SEED-owned living 3D fauna species with lawful habitats, actions & mobile LOD
