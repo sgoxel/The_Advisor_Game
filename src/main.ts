@@ -1938,7 +1938,10 @@ async function start() {
       } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
         const residents = projectedResidents;
         if (snapshot) {
-          lastResidentSnapshot = snapshot.id;
+          // Do not consume the actor snapshot's presentation revision while
+          // coherent terrain is still pending. When ready flips, the SAME
+          // canonical early result must populate the visible actor pool.
+          if (residentMode.actors || !queryActors) lastResidentSnapshot = snapshot.id;
           actorSnapshotTick = simulation.tick;
           simulation.acceptResidentQuery(residents, snapshot.query);
         }
