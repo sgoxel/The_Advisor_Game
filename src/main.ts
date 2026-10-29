@@ -867,8 +867,11 @@ function tileLayerVisible(name:string):boolean {
   if (name === "nature") return layers.nature && forestBodiesVisible;
   if (name === "streetTrees") return layers.nature && layers.structures && settlementDetailVisible && smallDetailsVisible && forestBodiesVisible;
   if (name === "detail") return layers.structures && layers.nature && settlementDetailVisible && smallDetailsVisible;
-  if (["closeDetail", "nightGlow", "lampPools"].includes(name))
-    return layers.structures && settlementDetailVisible && smallDetailsVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > GLOW_VISIBILITY_EPSILON);
+  // Physical close-up objects remain present regardless of the lighting tier.
+  if (name === "closeDetail")
+    return layers.structures && settlementDetailVisible && smallDetailsVisible;
+  if (name === "nightGlow" || name === "lampPools")
+    return layers.structures && settlementDetailVisible && smallDetailsVisible && closeLightingVisible && eveningGlow > GLOW_VISIBILITY_EPSILON;
   return layers.structures && settlementDetailVisible && (name === "structures" || layers.nature);
 }
 function setLayers() {
