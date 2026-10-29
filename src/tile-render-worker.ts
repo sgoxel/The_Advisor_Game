@@ -24,18 +24,17 @@ export async function renderTileJob(job: TileJob, started: number) {
     let baseMs: number;
     let naturalMs: number | undefined, surfaceRefinementMs: number | undefined;
     if (job.kind === 'detail') {
-      // Detail meshes must still use the complete Blender asset registry.
-      // Coverage and resident facts have no model dependency and need not
-      // wait for nine separate optional GLB network requests.
-      await meshAssetsReady;
-      // Original detail building registered this canonical region before the
-      // adaptive pass. Keep that order and retain coarse ground when replacement
-      // is unnecessary; plain tiles must never become blank.
+      // Adaptive SEED surface work does not use optional mesh models. Compute
+      // it while the asset fetches are in flight instead of serially waiting
+      // for nine GLBs before starting the first ground tile.
       registerContinuityPatch(tile.minX+tile.size/2,tile.minZ+tile.size/2);
       const naturalStarted = performance.now();
       const proposed = rebuildNaturalSurface(tile, emptyTerrain);
       naturalMs = performance.now() - naturalStarted;
       natural = proposed;
+      // All actual detail structures still consume the complete exact Blender
+      // registry (or unchanged procedural fallback), never a partial asset set.
+      await meshAssetsReady;
       const buildStarted = performance.now();
       base = buildTile(tile, {skipBaseTerrain:proposed.replaced});
       baseMs = performance.now()-buildStarted;
