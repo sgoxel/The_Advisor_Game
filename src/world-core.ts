@@ -442,6 +442,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
       });
   }
 
+  let siteCandidateCount = 0;
   // Priority-9 site pads can never modify wet canonical ground. In the cold
   // resident metre route, a wet point otherwise pays for a site-index lookup
   // and pad sample even though the original modifier is always discarded.
@@ -449,6 +450,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   if (base.water.kind === "none") {
     const site = nearbyCriticalSites(x, z, 16, 1)[0],
       siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
+    siteCandidateCount = site ? 1 : 0;
     if (site && siteSample && siteSample.influence > 0)
       modifiers.push({
         id: `${site.code}/PAD`,
@@ -514,7 +516,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   }
   return {
     modifiers,
-    candidateCount: roadMatch.candidateCount + (place ? 2 : 0) + (site ? 1 : 0),
+    candidateCount: roadMatch.candidateCount + (place ? 2 : 0) + siteCandidateCount,
   };
 }
 
