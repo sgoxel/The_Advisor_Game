@@ -604,7 +604,7 @@ test("S009 long blocked-route terminal preflight retains exact every-metre legal
       terminalChecks++;
       return key(point) !== original[steps];
     }), false);
-    assert.equal(terminalChecks, 1,
-      "blocked destination rejects a long illegal dogleg before any other metre work");
+    assert.equal(terminalChecks, 2,
+      "after the original central safety probe, a blocked terminal rejects before the corridor scan");
   }
 });
