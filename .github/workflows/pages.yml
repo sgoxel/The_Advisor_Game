@@ -36,7 +36,6 @@ jobs:
       # Keep original PNGs even when capture fails so failure can be inspected.
       - name: Capture WP #550 real Hero/Close relief
         if: github.event_name == 'pull_request' && github.head_ref == 'agent1-wp550-hero-close-capture'
-        continue-on-error: true
         run: |
           python -m pip install playwright==1.63.0
           npx playwright install --with-deps chromium
@@ -47,13 +46,7 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          capture_failed=0
-          for backend in webgl2; do
-            timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ \\
-              --out "test-results/wp550-$backend" --scenario s003-hero-close-relief \\
-              --profile fullhd-landscape,fullhd-portrait --renderer "$backend" --timeout 180 || capture_failed=1
-          done
-          exit "$capture_failed"
+          timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp550-webgl2 --scenario s003-hero-close-relief --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --timeout 180
       - name: Archive original WP #550 screenshots
         if: always() && github.event_name == 'pull_request' && github.head_ref == 'agent1-wp550-hero-close-capture'
         uses: actions/upload-artifact@v4
