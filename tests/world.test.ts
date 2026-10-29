@@ -159,7 +159,7 @@ test("S009 wet route probes discard only site pads, never water or bridge author
   ];
   let wet = 0;
   for (const { x, z } of samples) {
-    const water = naturalSurfaceAt(x, z).water;
+    const water = wildernessTerrainAt(x, z, naturalSurfaceAt(x, z)).water;
     if (water.kind === "none") continue;
     wet++;
     const surface = finalSurfaceAt(x, z);
