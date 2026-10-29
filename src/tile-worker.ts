@@ -30,7 +30,7 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       simulation.advance(job.tick);
       // Optional instrumentation only in resident worker queries; zero
       // influence on canonical positions, routing or authoritative results.
-      const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, groundingMs: 0, evaluated: 0 };
+      const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, overnightStopsMs: 0, overnightRoutesMs: 0, groundingMs: 0, evaluated: 0 };
       const residents = simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true, phases,
         first => self.postMessage({ kind: "resident-first-fact", id: job.id, shard: job.shard?.index, resident: first }));
       const completedAt = performance.now(), workerSendEpochMs = performance.timeOrigin + completedAt;

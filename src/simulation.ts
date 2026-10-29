@@ -1834,7 +1834,7 @@ export function provablyLateWithStandingBounds(
     (remainingSeconds < 60 || minimumMetres > remainingSeconds * GOOD_ROAD_WALK_SPEED_MPS);
 }
 
-function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number): boolean {
+function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, priorTick: number, phases?: ResidentEvaluationPhases): boolean {
   const lon = place.canonicalPosition.lon, priorDay = localDayIndex(priorTick, lon),
     key = `${foundation.code}|${priorDay}|${foundation.homeOffset.eastM},${foundation.homeOffset.northM}`,
     cached = civilianOvernightRisk.get(key);
@@ -1900,6 +1900,10 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
     from: Offset; to: Offset; remainingSeconds: number;
     fromEntry?: Offset; toEntry?: Offset;
   };
+  // Diagnostics only: isolate exact standing-slot construction from the
+  // subsequently validated street/gate/bridge paths. Never use wall time
+  // to choose a route or a resident outcome.
+  const stopsStarted = phases ? performance.now() : 0;
   const legs: DeadlineLeg[] = [];
   let fromAnchor = plan[0].anchor,
     from = standingSpot(place, foundation, fromAnchor,
@@ -1924,6 +1928,8 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
   }
   // Check each street leg's actual normalized t=0 point before any earlier
   // path search. A reverse field-entry leg remains uncertain and is skipped.
+  if (phases) phases.overnightStopsMs = (phases.overnightStopsMs ?? 0) + performance.now() - stopsStarted;
+  const pathsStarted = phases ? performance.now() : 0;
   let risk = routineHasProvablyLateLeg(legs) ||
     routineHasBlockedOrigin(legs, originWalkable);
   // A single failed required leg proves overnight uncertainty, regardless
@@ -1941,6 +1947,7 @@ function civilianReturnAtRisk(place: Place, foundation: ResidentFoundation, prio
       break;
     }
   }
+  if (phases) phases.overnightRoutesMs = (phases.overnightRoutesMs ?? 0) + performance.now() - pathsStarted;
   civilianOvernightRisk.set(key, risk);
   // Three city rosters and their frequent direct-time queries fit without
   // evicting and recomputing every unique door route during bounded queries.
@@ -1969,7 +1976,7 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, 
   let needsHistory = replayOvernight && fixedRoster;
   if (replayOvernight && !fixedRoster) {
     const riskStarted = phases ? performance.now() : 0;
-    needsHistory = civilianReturnAtRisk(place, foundation, tick - second - 1);
+    needsHistory = civilianReturnAtRisk(place, foundation, tick - second - 1, phases);
     if (phases) phases.overnightRiskMs += performance.now() - riskStarted;
   }
   if (needsHistory) {
@@ -2185,6 +2192,8 @@ export type ResidentEvaluationPhases = {
   doorMs: number;
   scheduleMs: number;
   overnightRiskMs: number;
+  overnightStopsMs?: number;
+  overnightRoutesMs?: number;
   groundingMs: number;
   evaluated: number;
 };
