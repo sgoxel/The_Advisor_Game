@@ -14,7 +14,7 @@ import {
 } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
+import { nearestSurfacePlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";
 import {
@@ -390,7 +390,7 @@ const boundedEarthwork = (
 
 function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const modifiers: SurfaceModifier[] = [],
-    place = nearestPlace(x, z),
+    place = nearestSurfacePlace(x, z),
     roadMatch = surfaceRoadAt(x, z);
   if (place) {
     const dx = wrapSourceX(x - place.x),

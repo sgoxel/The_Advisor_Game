@@ -996,6 +996,28 @@ test("real-road resident connector rejects absent deck and never cuts across a w
     "bounded evidence cannot accept a journey longer than its explicit budget");
 });
 
+test("S009 NPCs trust accepted SEED road edges and validate only their off-road approaches", () => {
+  const road = [
+    { eastM: 0, northM: 0 }, { eastM: 10, northM: 0 },
+    { eastM: 20, northM: 0 }, { eastM: 30, northM: 0 },
+  ], from = { eastM: 0, northM: -3 }, to = { eastM: 30, northM: 3 };
+  const checked: string[] = [];
+  const connectorOnly = (a: typeof from, b: typeof from) => {
+    checked.push(`${a.eastM},${a.northM}->${b.eastM},${b.northM}`);
+    return a.northM !== 0 || b.northM !== 0;
+  };
+  // A synthetic generic/unaccepted road must still be rejected by full validation.
+  assert.equal(validatedResidentRoadPolyline(from, to, road, connectorOnly), null);
+  checked.length = 0;
+  const path = validatedResidentRoadPolyline(from, to, road, connectorOnly, 450, 6500, true);
+  assert.ok(path && path.length >= 5, "accepted road topology supplies a reusable physical route");
+  assert.deepEqual(checked, ["0,-3->0,0", "30,0->30,3"],
+    "neither village nor bridge SEED road interior is re-probed per resident");
+  assert.equal(validatedResidentRoadPolyline(from, to, road,
+    (a, b) => a.northM === 0 && b.northM === 0, 450, 6500, true), null,
+    "a disconnected home-to-road or road-to-work approach cannot be accepted");
+});
+
 test("outdoor journeys can legally detour around small barriers without crossing water or walls", () => {
   const from = { eastM: 0, northM: 0 }, to = { eastM: 100, northM: 0 },
     dry = (point: { eastM: number; northM: number }) =>

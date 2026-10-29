@@ -28,6 +28,9 @@ import {
   countries,
   cities,
   villages,
+  places,
+  nearestPlace,
+  nearestSurfacePlace,
   roads,
   roadJunctions,
   roadNetworkTelemetry,
@@ -68,6 +71,35 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
+
+test("S009 dry grade excludes only provably out-of-range settlement pads", () => {
+  // Independent original nearest choice remains authoritative if any nearby
+  // pad or the offset keep could influence this source coordinate.
+  for (const settlement of places.slice(0, 12))
+    for (const dz of [-300, -110, -44, -28, 0, 44, 110, 300])
+      for (const dx of [-120, 0, 120]) {
+        const x = settlement.x + dx, z = settlement.z + dz,
+          original = nearestPlace(x, z),
+          filtered = nearestSurfacePlace(x, z);
+        if (filtered) {
+          assert.equal(filtered, original, "the original nearest-place tie/order must remain");
+          continue;
+        }
+        if (!original) continue;
+        const padRadius = original.kind === "city" ? 1400 : 420,
+          padDistanceM = Math.hypot(
+            wrapSourceX(x - original.x) * Math.cos(original.canonicalPosition.lat),
+            z - original.z,
+          ) * CANONICAL_METRES_PER_SOURCE_UNIT,
+          keepDistance = Math.hypot(
+            wrapSourceX(x - (original.x - 30)), z - (original.z - 28),
+          );
+        assert.ok(padDistanceM >= padRadius + 180,
+          "excluded nearest place cannot own any settlement terrace");
+        assert.ok(keepDistance >= 16,
+          "excluded nearest place cannot own the offset keep pad");
+      }
+});
 
 test("S009 terrain coverage reuses exact canonical surface for every vertex tint", () => {
   // The noncached API remains an independent reference. These same values
