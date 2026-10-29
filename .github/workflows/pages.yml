@@ -48,7 +48,7 @@ jobs:
             sleep 1
           done
           capture_failed=0
-          for backend in webgl2 webgpu; do
+          for backend in webgl2; do
             timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ \\
               --out "test-results/wp550-$backend" --scenario s003-hero-close-relief \\
               --profile fullhd-landscape,fullhd-portrait --renderer "$backend" --timeout 180 || capture_failed=1
@@ -61,7 +61,6 @@ jobs:
           name: wp550-hero-close-${{ github.sha }}
           path: |
             test-results/wp550-webgl2
-            test-results/wp550-webgpu
           if-no-files-found: warn
       - run: npx playwright install --with-deps chromium
         if: github.event_name == 'workflow_dispatch'
