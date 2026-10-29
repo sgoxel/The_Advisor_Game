@@ -34,7 +34,12 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       const url = new URL(`characters/${requested}.webp`, document.baseURI).href;
       return new Promise<pc.StandardMaterial>((resolve, reject) => {
         app.assets.loadFromUrl(url, "texture", (error, asset) => {
-          if (error || !asset) { reject(new Error(`Resident artwork ${requested}: ${error}`)); return; }
+          if (error || !asset) {
+            if (requested !== "default")
+              console.warn("Resident illustration unavailable; using default cutout", requested, error);
+            reject(new Error(`Resident artwork ${requested}: ${error}`));
+            return;
+          }
           const texture = asset.resource as pc.Texture;
           const material = new pc.StandardMaterial();
           material.name = `SEED character cutout · ${requested}`;
