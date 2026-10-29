@@ -77,24 +77,30 @@ function recomputeNormals(geometry: Geometry) {
       vx = positions[ic] - positions[ia],
       vy = positions[ic + 1] - positions[ia + 1],
       vz = positions[ic + 2] - positions[ia + 2];
-    let nx = uy * vz - uz * vy,
+    const nx = uy * vz - uz * vy,
       ny = uz * vx - ux * vz,
       nz = ux * vy - uy * vx;
-    const length = Math.hypot(nx, ny, nz) || 1;
-    nx /= length;
-    ny /= length;
-    nz /= length;
-    // Preserve triangle index order without allocating a three-entry array
-    // for every triangle in worker-side ENU normal recomputation.
-    normals[ia] = nx;
-    normals[ia + 1] = ny;
-    normals[ia + 2] = nz;
-    normals[ib] = nx;
-    normals[ib + 1] = ny;
-    normals[ib + 2] = nz;
-    normals[ic] = nx;
-    normals[ic + 1] = ny;
-    normals[ic + 2] = nz;
+    // Adaptive natural terrain shares top vertices between triangles. Replacing
+    // their normal on each face used the last triangle's slope and discarded
+    // the smooth area-weighted normals constructed by the surface builder.
+    // Accumulate in ENU after height scaling; skirt/structure hard edges still
+    // have independent vertices and therefore retain their own face normals.
+    normals[ia] += nx;
+    normals[ia + 1] += ny;
+    normals[ia + 2] += nz;
+    normals[ib] += nx;
+    normals[ib + 1] += ny;
+    normals[ib + 2] += nz;
+    normals[ic] += nx;
+    normals[ic + 1] += ny;
+    normals[ic + 2] += nz;
+  }
+  for (let i = 0; i < normals.length; i += 3) {
+    const length = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
+    if (length === 0) continue;
+    normals[i] /= length;
+    normals[i + 1] /= length;
+    normals[i + 2] /= length;
   }
 }
 
