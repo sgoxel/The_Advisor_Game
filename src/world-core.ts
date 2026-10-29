@@ -492,7 +492,14 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         support=(t:number)=>{const px=tangent.cx+crossing.ux*t,pz=tangent.cz+crossing.uz*t,surface=naturalSurfaceBaseAt(px,pz);return {surface,height:Math.max(crossing.waterLevel+1,boundedEarthwork(roadProfileHeightAt(px,pz,road),surface.groundHeight,4,3))};},
         a=support(left),b=support(right),legal=a.surface.water.kind==='none'&&b.surface.water.kind==='none'&&a.height<=a.surface.groundHeight+3&&b.height<=b.surface.groundHeight+3&&Math.abs(b.height-a.height)/((right-left)*crossing.metresPerUnit)<=.08;
       if(legal){
-        if(left<=0&&right>=0)deckHeight=lerp(a.height,b.height,-left/(right-left));
+        if(left<=0&&right>=0){
+          deckHeight=lerp(a.height,b.height,-left/(right-left));
+          // A dry-bank landing is a physical continuation of the same deck.
+          // Cut/fill the existing roadbed to its walking top rather than leave
+          // the pre-bridge road profile buried beneath or floating above it.
+          // The pre-existing 4 m cut / 3 m fill bounds still fail closed.
+          if(base.water.kind==='none')roadHeight=boundedEarthwork(deckHeight,base.groundHeight,4,3);
+        }
         else if(base.water.kind==='none'){
           const gapM=Math.max(left,-right)*crossing.metresPerUnit;
           // A 24 m smoothstep can exceed an 8% walkable approach grade even with a legal deck.
@@ -510,7 +517,9 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: road.code,
-        deckHeight: distance <= carriagewayRadius && deckHeight !== undefined && deckHeight >= base.groundHeight ? deckHeight : undefined,
+        deckHeight: distance <= carriagewayRadius && deckHeight !== undefined &&
+          deckHeight >= (base.water.kind==='none' ? roadHeight : base.groundHeight)
+          ? deckHeight : undefined,
       });
     }
   }
