@@ -542,3 +542,23 @@ test("S009 roster-only daily activities preserve every canonical outdoor rank an
   assert.ok(standingEntries < fullEntries / 2,
     "a cold roster should not materialize the many unrelated indoor/time events");
 });
+
+test("S009 resident-only worker stays free of eager geometry/asset imports", async () => {
+  // A cold actor query must not evaluate rendering, mesh or GLB modules before
+  // its first Simulation result. The same tile renderer still handles every
+  // real coverage/detail job when that worker receives one.
+  const { readFileSync } = await import("node:fs");
+  const bootstrap = readFileSync(new URL("../src/tile-worker.ts", import.meta.url), "utf8");
+  const renderer = readFileSync(new URL("../src/tile-render-worker.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(bootstrap, /^import (?!type )/m,
+    "resident worker bootstrap must have no eager runtime module imports");
+  assert.match(bootstrap, /tileRendererReady \?\?= import\("\.\/tile-render-worker\.ts"\)/,
+    "rendering modules must load on demand, not during resident initialization");
+  assert.ok(bootstrap.indexOf('self.postMessage({ready:true})') >
+    bootstrap.indexOf("self.onmessage ="),
+    "workers must register their handler before advertising readiness");
+  for (const requirement of ["buildTile(", "rebuildNaturalSurface(", "refineTileSurfacePresentation(",
+    "buildVegetationGeometry(", "convertTileGeometryToEnu(", "await meshAssetsReady"]) {
+    assert.ok(renderer.includes(requirement), `the exact terrain renderer still performs ${requirement}`);
+  }
+});
