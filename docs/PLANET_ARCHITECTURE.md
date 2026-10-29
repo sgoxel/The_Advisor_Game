@@ -320,6 +320,7 @@ No required control may be clipped, overlap the center marker, or make the globe
 - Adapter/device/canvas initialization failure automatically falls back to WebGL2 without an experimental browser flag.
 - A failed WebGPU device/context is released before fallback.
 - WebGPU and WebGL2 render the same canonical world and expose the same Simulation behavior.
+- Owner screenshot approval rule (2026-10-29): retain WebGPU-first gameplay and automatic WebGL2 fallback, but use only actual WebGL2 screenshot-tool PNGs for visual approval. Do not request WebGPU screenshots for acceptance; renderer compatibility and functional tests remain separate requirements.
 - If both fail, show an actionable renderer error and retry control.
 - Device/backend affects render quality and telemetry only, never SEED/world values.
 
