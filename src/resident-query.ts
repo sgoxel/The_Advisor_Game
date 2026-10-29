@@ -29,17 +29,19 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
-/** During an initial close view, overlap the first genuine resident query with
- * remaining coarse tile preparation only when TWO existing workers and TWO
- * shared admission slots are free. Preserve one worker/slot for mandatory
- * terrain; one-worker devices keep the old terrain-first behavior. Renderer
- * readiness still gates all actor presentation. */
+/** Before first coherent terrain, use one idle worker for the first actual
+ * resident query. If a terrain worker is already generating required coverage,
+ * that worker remains untouched; otherwise reserve one idle worker AND one
+ * admission slot for the first terrain tile. Never preempt the only worker.
+ * Renderer readiness still gates actor presentation. */
 export function residentColdQueryCanStart(
   selectionDirty: boolean, halfHeight: number,
   idleWorkerCount: number, inUse: number, admissionLimit: number,
+  terrainInFlight: number,
 ): boolean {
+  const reserve = terrainInFlight > 0 ? 0 : 1;
   return !selectionDirty && Number.isFinite(halfHeight) && halfHeight < 20 &&
-    idleWorkerCount >= 2 && admissionLimit - inUse >= 2;
+    idleWorkerCount > reserve && admissionLimit - inUse > reserve;
 }
 
 /** A precomputed actor result remains unconsumed for presentation until
