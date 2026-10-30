@@ -237,6 +237,29 @@ test("WP #693 imported PlayCanvas blended opacity zero retains 2D cutout", () =>
   assert.equal(assignments.has(actor), false);
 });
 
+test("WP #693 canvas picking uses the same truly drawable 2D or 3D resident form", () => {
+  const actor = { enabled: true };
+  const cutoutNode = { enabled: true, parent: actor };
+  const modelNode = { enabled: true, parent: actor };
+  const mesh = { primitive: [{ count: 6 }] };
+  const cutout = {
+    enabled: true, entity: cutoutNode,
+    meshInstances: [{ visible: true, mesh, material: { opacity: 1, blendType: 3 } }],
+  };
+  const owner = {
+    enabled: true, entity: modelNode,
+    meshInstances: [{ visible: true, mesh, material: { opacity: 0, blendType: 2 } }],
+  };
+  const drawable = () => characterDrawableMeshes([cutout, owner], 3).length;
+  assert.equal(drawable(), 1, "blended invisible owner GLB cannot create a false click target");
+  cutoutNode.enabled = false;
+  assert.equal(drawable(), 0, "a missing visible 2D fallback cannot be reported as clickable");
+  owner.meshInstances[0].material.opacity = 1;
+  assert.equal(drawable(), 1, "the one genuinely rendered 3D form becomes pickable");
+  actor.enabled = false;
+  assert.equal(drawable(), 0, "disabled resident ancestor suppresses both rendered and picked forms");
+});
+
 test("WP #693 previously adopted owner model loss enables same-resident recovery", () => {
   const actor = {};
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();
