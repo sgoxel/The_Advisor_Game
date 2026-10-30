@@ -398,7 +398,7 @@ test("WP #693 disabled ancestor of visible owner GLB cannot suppress 2D art", ()
     "a disabled ancestor of the attached model also requires 2D fallback");
   disabledScene.enabled = true;
   assert.equal(characterModelRenderable(root, [component]), true);
-  const actor = {};
+  const actor = disabledScene;
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();
   assigned.set(actor, { name: "guard_male", residentCode: "resident-1" });
   hiddenGroup.enabled = false;
@@ -429,7 +429,8 @@ test("WP #693 imported PlayCanvas blended opacity zero retains 2D cutout", () =>
   // Imported StandardMaterial does not expose the legacy transparent flag.
   const BLEND_NONE = 3, BLEND_NORMAL = 2;
   const mesh = { primitive: [{ count: 6 }] };
-  const root = { enabled: true };
+  const actor = {};
+  const root = { enabled: true, parent: actor };
   const component = (opacity: number, blendType: number) => ({
     enabled: true, entity: { enabled: true, parent: root },
     meshInstances: [{ visible: true, mesh, material: { opacity, blendType } }],
@@ -442,7 +443,6 @@ test("WP #693 imported PlayCanvas blended opacity zero retains 2D cutout", () =>
     "visible translucent owner geometry may render");
   assert.equal(characterDrawableMeshes([component(0, BLEND_NONE)], BLEND_NONE).length, 1,
     "opaque GLB material ignores alpha as defined by the engine");
-  const actor = {};
   const assignments = new WeakMap<object, { name: string; residentCode: string }>();
   assignments.set(actor, { name: "guard_male", residentCode: "seed-resident-01" });
   const rendered = component(1, BLEND_NORMAL);
@@ -477,7 +477,8 @@ test("WP #693 canvas picking uses the same truly drawable 2D or 3D resident form
 });
 
 test("WP #693 a detached model mesh restores this resident's original 2D art", () => {
-  const root = { enabled: true };
+  const actor = {};
+  const root = { enabled: true, parent: actor };
   const foreignRoot = { enabled: true };
   const group = { enabled: true, parent: root };
   const component = {
@@ -485,7 +486,6 @@ test("WP #693 a detached model mesh restores this resident's original 2D art", (
     entity: { enabled: true, parent: group },
     meshInstances: [{ visible: true, mesh: { primitive: [{ count: 6 }] } }],
   };
-  const actor = {};
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();
   assigned.set(actor, { name: "guard_male", residentCode: "SEED-guard-1" });
   assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), true,
@@ -502,6 +502,29 @@ test("WP #693 a detached model mesh restores this resident's original 2D art", (
     "re-attached valid model hierarchy remains eligible");
 });
 
+test("WP #693 a detached model root restores 2D even if its geometry is still drawable", () => {
+  const resident = { enabled: true };
+  const foreignResident = { enabled: true };
+  const anchor = { enabled: true, parent: resident };
+  const component = {
+    enabled: true, entity: { enabled: true, parent: anchor },
+    meshInstances: [{ visible: true, mesh: { primitive: [{ count: 6 }] } }],
+  };
+  const assigned = new WeakMap<object, { name: string; residentCode: string }>();
+  assigned.set(resident, { name: "guard_male", residentCode: "SEED-guard-home-1" });
+  assert.equal(characterModelVisibleOrInvalidate(resident, anchor, [component], assigned), true,
+    "an attached drawable model may replace that same resident's 2D illustration");
+  anchor.parent = foreignResident;
+  assert.equal(characterModelRenderable(anchor, [component]), true,
+    "ordinary geometry checks alone still consider a moved 3D subtree drawable");
+  assert.equal(characterModelVisibleOrInvalidate(resident, anchor, [component], assigned), false,
+    "an owner root moved to another resident may no longer suppress original 2D art");
+  assert.equal(assigned.has(resident), false, "root detachment enables legal same-person recovery");
+  anchor.parent = resident;
+  assert.equal(characterModelVisibleOrInvalidate(resident, anchor, [component], assigned), true,
+    "re-adopting the valid model allows it to be drawn again");
+});
+
 test("WP #693 previously adopted owner model loss enables same-resident recovery", () => {
   const actor = {};
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();
@@ -509,7 +532,7 @@ test("WP #693 previously adopted owner model loss enables same-resident recovery
   assigned.set(actor, key);
   const mesh = { visible: true, mesh: { primitive: [{ count: 6 }] },
     material: { opacity: 1, transparent: false } };
-  const root = { enabled: true };
+  const root = { enabled: true, parent: actor };
   const component = { enabled: true, entity: { enabled: true, parent: root }, meshInstances: [mesh] };
   assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), true);
   assert.equal(sameCharacterAssignment(assigned.get(actor), key.name, key.residentCode), true,
