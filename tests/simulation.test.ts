@@ -10,7 +10,7 @@ import {
   LazySimulation,
   RESIDENTIAL_CAPACITY,
   gateCountFor,
-  guardCoverageAt,
+  guardCoverageAt, dutyGuardCodesNearView,
   guardsPerGateFor,
   populationOf,
   residentAt,
@@ -434,6 +434,28 @@ test("resident inspector can resolve facts and close-up actors independently of 
     "remote city and realm views do not issue expensive resident searches");
 });
 
+
+test("in-view gate duty facts are only real, physically reached day and night watchmen", () => {
+  const place = villages[0], gate = settlementExteriorFor(place).gates[0],
+    post = gate.guardPosts[0] ?? gate;
+  for (const hour of [9, 21]) {
+    const tick = tickAtLocalTime(WORKDAY, hour * HOUR, place.canonicalPosition.lon),
+      coverage = guardCoverageAt(place, tick)[0],
+      codes = dutyGuardCodesNearView(place, tick, post.x, post.z, .04);
+    assert.ok(coverage.onDuty > 0 && codes.length > 0, "a real watchman reaches the original post");
+    assert.deepEqual(codes, coverage.residentCodes,
+      "the renderer receives only the real on-duty physically staffed roster");
+    for (const code of codes) {
+      const guard = residentAt(place, Number(code.split("/").at(-1)), tick);
+      assert.ok(guard.grounded && !guard.indoors && guard.activity === "guard",
+        "valid actors keep the same physical duty state as Simulation");
+    }
+  }
+  assert.deepEqual(dutyGuardCodesNearView(place, 0, post.x + 500, post.z, .02), [],
+    "off-screen posts do not inject new people into the view");
+  assert.deepEqual(dutyGuardCodesNearView(place, 0, post.x, post.z, -1), [],
+    "invalid view cannot create guard sprites");
+});
 
 test("close street and gate watch remain character-visible at the navigation's real camera scale", async () => {
   const { HERO_HALF_HEIGHT } = await import("../src/handoff.ts");
