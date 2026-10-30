@@ -9,6 +9,7 @@ import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibl
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
+import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-layout-cache.ts";
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
@@ -1873,6 +1874,30 @@ async function start() {
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
   let labelFingerprint = "";
+  let labelAnchorKey = "";
+  let labelMeasurementsDirty = true;
+  const labelDimensions = new Map<string, { width: number; height: number }>();
+  let measuredObstacles: { x: number; y: number; width: number; height: number }[] = [];
+  const invalidateLabelMeasurements = () => { labelMeasurementsDirty = true; };
+  // ResizeObserver reports font, zoom, CSS and content size changes without
+  // reading layout on every unchanged game frame.
+  const labelResizeObserver = new ResizeObserver(invalidateLabelMeasurements);
+  const obstacleResizeObserver = new ResizeObserver(invalidateLabelMeasurements);
+  const obstacleAttributes = new MutationObserver(invalidateLabelMeasurements);
+  for (const name of [
+    "masthead", "region-panel", "cell-panel", "travel-panel", "bottom-bar",
+    "map-controls", "telemetry", "focus-coordinates", "centre-marker",
+  ]) {
+    for (const node of document.querySelectorAll(`#${name},.${name}`)) {
+      obstacleResizeObserver.observe(node);
+      obstacleAttributes.observe(node, {
+        attributes: true,
+        attributeFilter: ["class", "style", "hidden"],
+      });
+    }
+  }
+  window.addEventListener("resize", invalidateLabelMeasurements);
+  document.fonts?.addEventListener("loadingdone", invalidateLabelMeasurements);
   $("backend").textContent =
     `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
   $("backend").title = rendererState.fallbackReason;
@@ -2229,49 +2254,59 @@ async function start() {
         }
         labels.append(label);
         labelNodes.set(id, label);
+        labelResizeObserver.observe(label);
       }
       anchors.push({
         id,
         x: screen.x,
         y: screen.y,
-        width: label.offsetWidth,
-        height: label.offsetHeight,
+        width: 0,
+        height: 0,
       });
     }
     for (const [id, label] of labelNodes)
       if (!visibleLabels.has(id)) {
+        labelResizeObserver.unobserve(label);
         label.remove();
         labelNodes.delete(id);
+        labelDimensions.delete(id);
       }
-    const obstacles = [
-      "masthead",
-      "region-panel",
-      "cell-panel",
-      "travel-panel",
-      "bottom-bar",
-      "map-controls",
-      "telemetry",
-      "focus-coordinates",
-      "centre-marker",
-    ]
-      .flatMap((name) =>
-        Array.from(document.querySelectorAll(`#${name},.${name}`)),
-      )
-      .map((node) => node.getBoundingClientRect())
-      .filter((r) => r.width && r.height)
-      .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
-    const fingerprint = JSON.stringify([
-      innerWidth,
-      innerHeight,
-      anchors.map((a) => [
-        a.id,
-        Math.round(a.x),
-        Math.round(a.y),
-        a.width,
-        a.height,
-      ]),
-      obstacles,
-    ]);
+    // Compute the cheap canonical anchor key before any potentially synchronous
+    // DOM measurement. Stable camera/layout frames perform zero label/panel reads.
+    const anchorKey = labelAnchorFingerprint(innerWidth, innerHeight, anchors);
+    if (labelLayoutNeedsMeasurement(anchorKey, labelAnchorKey, labelMeasurementsDirty)) {
+      labelAnchorKey = anchorKey;
+      if (labelMeasurementsDirty) {
+        labelDimensions.clear();
+        measuredObstacles = [
+          "masthead", "region-panel", "cell-panel", "travel-panel",
+          "bottom-bar", "map-controls", "telemetry",
+          "focus-coordinates", "centre-marker",
+        ]
+          .flatMap((name) =>
+            Array.from(document.querySelectorAll(`#${name},.${name}`)),
+          )
+          .map((node) => node.getBoundingClientRect())
+          .filter((r) => r.width && r.height)
+          .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
+      }
+      labelMeasurementsDirty = false;
+      for (const anchor of anchors) {
+        let size = labelDimensions.get(anchor.id);
+        if (!size) {
+          const label = labelNodes.get(anchor.id)!;
+          size = { width: label.offsetWidth, height: label.offsetHeight };
+          labelDimensions.set(anchor.id, size);
+        }
+        anchor.width = size.width;
+        anchor.height = size.height;
+      }
+      const obstacles = measuredObstacles;
+      const fingerprint = JSON.stringify([
+        innerWidth, innerHeight,
+        anchors.map((a) => [a.id, Math.round(a.x), Math.round(a.y), a.width, a.height]),
+        obstacles,
+      ]);
     if (fingerprint !== labelFingerprint) {
       labelFingerprint = fingerprint;
       const placed = placeLabels(anchors, innerWidth, innerHeight, obstacles);
@@ -2301,6 +2336,7 @@ async function start() {
           leaders.append(line);
         }
       }
+    }
     }
     const speed = innerHeight * Math.min(dt, 0.05) * 0.2;
     const dx =
