@@ -20,6 +20,8 @@ import {
 } from "./settlement-exterior-core.ts";
 
 export type { SettlementArchetype, SettlementFieldForm, SettlementGatePlan, SettlementPoint, SettlementStreetPlan };
+/** Actual roofed guardhouse width at a SEED gate post; guards duty outside. */
+export const GUARD_POST_BUILDING_WIDTH_M = 4.5;
 export type SettlementService = CoreService | "merchant" | "headman";
 export type SettlementPlotKind = CorePlotPlan["kind"] | "garden";
 export type SettlementPlotPlan = Omit<CorePlotPlan, "kind" | "service"> & {
