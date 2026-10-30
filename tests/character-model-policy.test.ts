@@ -71,6 +71,28 @@ test("WP #693 resident presentation counters classify each visible actor only on
   assert.equal(lostModel.modelActors + lostModel.illustratedActors, lostModel.visibleActors);
 });
 
+test("WP #693 malformed owner registry roots cannot permanently poison future 3D selection", async () => {
+  for (const invalid of [null, [], 42, "not a manifest", false]) {
+    const cache: { pending?: Promise<ReturnType<typeof characterModelManifest>> } = {};
+    let requests = 0;
+    const load = async (): Promise<unknown> => {
+      requests++;
+      return requests === 1 ? invalid : { guard_male: "guard_male.glb" };
+    };
+    const invalidResult = await loadSharedCharacterManifest(cache, load);
+    assert.equal(characterModelFile("guard_male", invalidResult), null,
+      "malformed JSON root leaves the original illustrated NPC visible");
+    assert.equal(cache.pending, undefined,
+      "a bad registry root must not persist as an intentionally empty valid registry");
+    const recovered = await loadSharedCharacterManifest(cache, load);
+    assert.equal(characterModelFile("guard_male", recovered), "guard_male.glb",
+      "a later resident assignment can use a corrected real owner model mapping");
+    assert.strictEqual(await loadSharedCharacterManifest(cache, load), recovered,
+      "successfully corrected mappings are reused");
+    assert.equal(requests, 2);
+  }
+});
+
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
     const models = characterModelManifest(source);

@@ -24,7 +24,14 @@ export function loadSharedCharacterManifest(
   load: () => Promise<unknown>,
 ): Promise<CharacterModelManifest> {
   if (cache.pending) return cache.pending;
-  const pending = Promise.resolve().then(load).then(characterModelManifest).catch(() => {
+  const pending = Promise.resolve().then(load).then(value => {
+    // A fetched JSON literal/array is not a valid registry. Do not cache its
+    // normalized empty form as if an owner had intentionally deployed {}.
+    // Valid empty objects remain cached and keep every resident illustrated.
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Invalid optional character model registry");
+    return characterModelManifest(value);
+  }).catch(() => {
     if (cache.pending === pending) cache.pending = undefined;
     return characterModelManifest({});
   });
