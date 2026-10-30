@@ -2681,6 +2681,8 @@ export class LazySimulation {
     };
     const visible: Resident[] = [], indoorOrUnresolved: Resident[] = [];
     const fullOutdoorView = prioritizeActors && !!onOutdoorBatch;
+    const seenOutdoor = new Set<string>();
+    const earlyGuards = new Map<string, Resident>();
     const pendingOutdoor: Resident[] = [];
     const publishOutdoor = (resident: Resident) => {
       if (!onOutdoorBatch) return;
@@ -2691,6 +2693,32 @@ export class LazySimulation {
         onOutdoorBatch(pendingOutdoor.splice(0));
     };
     let exhausted = false, firstValidated = false;
+    // Before the expensive first complete spatial index, evaluate only the real
+    // duty guards whose fixed SEED posts lie in this camera's query. A night
+    // watch need not wait for unrelated indoor homes and work commutes. The
+    // result still uses residentAt: no invented standing, legal route or ground.
+    if (fullOutdoorView) for (const place of settlements) {
+      const hour = daySecond(this.tick, place) / HOUR;
+      const onDutyShift = hour >= 6 && hour < 18 ? 0 : 1;
+      let index = SERVICE_ROLES.length;
+      for (let gateIndex = 0; gateIndex < gateCountFor(place); gateIndex++)
+        for (let slot = 0; slot < guardsPerGateFor(place, gateIndex); slot++, index += 2) {
+          const residentIndex = index + onDutyShift;
+          const foundation = residentFoundationAt(place, residentIndex);
+          const post = canonicalOffset(place, foundation.workOffset.eastM, foundation.workOffset.northM);
+          const source = lonLatToSource(post.lon, post.lat);
+          if (sourceDistance(source.x, source.z, x, z) > radius + 3 / CANONICAL_METRES_PER_SOURCE_UNIT) continue;
+          const resident = residentAt(place, residentIndex, this.tick, phases);
+          earlyGuards.set(`${place.code}/${residentIndex}`, resident);
+          query.evaluatedResidents++;
+          if (sourceDistance(resident.x, resident.z, x, z) > radius ||
+              !resident.grounded || resident.indoors || resident.activity !== "guard" ||
+              seenOutdoor.has(resident.code)) continue;
+          seenOutdoor.add(resident.code);
+          visible.push(resident);
+          publishOutdoor(resident);
+        }
+    }
     // Do not eagerly build every nearby settlement's entire resident index.
     // The first bounded view can fill its canonical quota in one settlement;
     // later settlements then contribute no residents and need no cold index.
@@ -2719,7 +2747,8 @@ export class LazySimulation {
             exhausted = true;
             return true;
           }
-          const resident = residentAt(place, index, this.tick, phases);
+          const resident = earlyGuards.get(`${place.code}/${index}`) ??
+            residentAt(place, index, this.tick, phases);
           query.evaluatedResidents++;
           this.residentEvaluationsSinceAdvance++;
           if (sourceDistance(resident.x, resident.z, x, z) <= radius) {
@@ -2729,7 +2758,8 @@ export class LazySimulation {
             }
             if (!resident.grounded || resident.indoors) {
               if (indoorOrUnresolved.length < limit) indoorOrUnresolved.push(resident);
-            } else {
+            } else if (!seenOutdoor.has(resident.code)) {
+              seenOutdoor.add(resident.code);
               visible.push(resident);
               publishOutdoor(resident);
             }
@@ -2776,7 +2806,8 @@ export class LazySimulation {
           exhausted = true;
           break;
         }
-        const resident = early.get(index) ?? residentAt(place, index, this.tick, phases);
+        const resident = early.get(index) ?? earlyGuards.get(`${place.code}/${index}`) ??
+          residentAt(place, index, this.tick, phases);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
@@ -2788,7 +2819,8 @@ export class LazySimulation {
         }
         if (prioritizeActors && (!resident.grounded || resident.indoors)) {
           if (indoorOrUnresolved.length < limit) indoorOrUnresolved.push(resident);
-        } else {
+        } else if (!seenOutdoor.has(resident.code)) {
+          seenOutdoor.add(resident.code);
           visible.push(resident);
           if (prioritizeActors) publishOutdoor(resident);
         }
