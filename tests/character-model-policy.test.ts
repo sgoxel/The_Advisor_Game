@@ -8,18 +8,18 @@ test("authored 2D NPC colors survive rendering without extra tone mapping or dif
   // The material lives in a browser-only scene initializer. Keep this focused
   // source contract paired with real WebGL2/WebGPU screenshot acceptance.
   const source = readFileSync(new URL("../src/default-character.ts", import.meta.url), "utf8");
-  assert.match(source, /material\\.emissiveMap\\s*=\\s*texture;/,
+  assert.match(source, /material\.emissiveMap\s*=\s*texture;/,
     "actual illustrated RGB must be emitted by the unlit material");
-  assert.match(source, /material\\.emissive\\.set\\(1,\\s*1,\\s*1\\)/,
+  assert.match(source, /material\.emissive\.set\(1,\s*1,\s*1\)/,
     "white emissive tint must not crush or recolor the artist's original ink");
-  assert.match(source, /material\\.diffuse\\.set\\(0,\\s*0,\\s*0\\)/,
+  assert.match(source, /material\.diffuse\.set\(0,\s*0,\s*0\)/,
     "the same pixel must not be double-counted through diffuse shading");
-  assert.match(source, /material\\.useTonemap\\s*=\\s*false;/,
+  assert.match(source, /material\.useTonemap\s*=\s*false;/,
     "dark artwork must not be tone-mapped again");
-  assert.match(source, /material\\.useLighting\\s*=\\s*false;/);
-  assert.match(source, /material\\.opacityMap\\s*=\\s*texture;/);
-  assert.match(source, /material\\.opacityMapChannel\\s*=\\s*"a";/);
-  assert.doesNotMatch(source, /material\\.diffuseMap\\s*=\\s*texture;/);
+  assert.match(source, /material\.useLighting\s*=\s*false;/);
+  assert.match(source, /material\.opacityMap\s*=\s*texture;/);
+  assert.match(source, /material\.opacityMapChannel\s*=\s*"a";/);
+  assert.doesNotMatch(source, /material\.diffuseMap\s*=\s*texture;/);
 });
 
 test("WP #693 original 2D props extend above real body height without squeezing the person", () => {
