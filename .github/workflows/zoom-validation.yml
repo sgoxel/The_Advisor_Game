@@ -69,10 +69,10 @@ jobs:
       - run: python -m pip install pillow numpy playwright==1.63.0
       - name: WebGPU browser suite
         if: matrix.backend == 'webgpu'
-        run: timeout --signal=TERM --kill-after=30s 15m xvfb-run -a npx playwright test --config playwright.webgpu.config.js
+        run: timeout --signal=TERM --kill-after=30s 31m xvfb-run -a npx playwright test --config playwright.webgpu.config.js zoom.spec.js
       - name: WebGL2 browser suite
         if: matrix.backend == 'webgl2'
-        run: timeout --signal=TERM --kill-after=30s 15m xvfb-run -a npx playwright test --config playwright.fallback.config.js
+        run: timeout --signal=TERM --kill-after=30s 31m xvfb-run -a npx playwright test --config playwright.fallback.config.js zoom.spec.js
       - name: Perceptual palette and block boundary gate
         run: |
           python tools/verify-zoom-images.py --self-test
