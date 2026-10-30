@@ -1,12 +1,17 @@
+import { elevationToRenderY } from "./render-frame.ts";
+
 /** A single physical selection ring in the same 3D depth buffer as scenery.
- * Every vertex lies just above the selected actor's real foot anchor. Its
- * triangles are presentation only: no collider, resident or source position. */
+ * Radii and elevation are in canonical metres, NOT source/render units.
+ * Every vertex lies 12 cm above the selected actor's real foot anchor.
+ * Triangles are presentation only: no collider, resident or source position. */
 export function residentFootRingGeometry(segments = 24, innerRadius = 0.32, outerRadius = 0.38) {
   const positions: number[] = [], normals: number[] = [], indices: number[] = [];
+  const footClearance = elevationToRenderY(0.12);
   for (let i = 0; i < segments; i++) {
     const angle = i * 2 * Math.PI / segments;
     for (const radius of [innerRadius, outerRadius]) {
-      positions.push(Math.cos(angle) * radius, 0.12, Math.sin(angle) * radius);
+      positions.push(elevationToRenderY(Math.cos(angle) * radius), footClearance,
+        elevationToRenderY(Math.sin(angle) * radius));
       normals.push(0, 1, 0);
     }
   }
