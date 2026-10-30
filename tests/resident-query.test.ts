@@ -185,6 +185,32 @@ test("progressive outdoor results keep every valid NPC without duplicates or sta
   assert.equal(queue.current, undefined);
 });
 
+test("nearby camera movement reuses only recent, overlapping SEED residents without hiding the street", () => {
+  const queue = new ResidentQueryQueue(48, 24);
+  const street = { ...request("view-one", 100), actors: true, radius: 4 };
+  queue.offer(street);
+  const original = queue.take()!;
+  const known = { code: "seeded-resident", grounded: true, indoors: false };
+  assert.equal(queue.complete(original.id, { ...result, residents: [known] as never[] }, 100), true);
+  assert.equal(queue.current?.key, street.key);
+
+  // The old renderer sampled current only *after* changing the query key,
+  // so even a sub-metre pan discarded every real actor for that frame.
+  queue.offer({ ...street, key: "view-two", x: .2, tick: 101 });
+  assert.equal(queue.current, undefined, "new camera still needs its own complete query");
+  const retained = currentResidentSnapshot(queue.current, queue.latest, street.placeCode, 101, 48,
+    { x: .2, z: 0, radius: 4 });
+  assert.deepEqual(retained?.residents.map(entry => entry.code), ["seeded-resident"],
+    "previous real residents remain visible through a tiny camera drag");
+  assert.equal(queue.ready, false, "a nearby old view must never falsely complete the new query");
+  assert.equal(currentResidentSnapshot(queue.current, queue.latest, street.placeCode, 101, 48,
+    { x: 20, z: 0, radius: 4 }), undefined,
+    "a genuinely distant view cannot portray the old street as locally occupied");
+  assert.equal(currentResidentSnapshot(queue.current, queue.latest, street.placeCode, 149, 48,
+    { x: .2, z: 0, radius: 4 }), undefined,
+    "old positions cannot survive beyond the original finite Fantasy-Time freshness");
+});
+
 test("visible S006 residents retain a 44px CSS touch target without selecting distant actors", () => {
   const feet = { x: 100, y: 100 }, head = { x: 100, y: 94 };
   assert.equal(residentActorPickDistance(100, 97, feet, head), 0,
