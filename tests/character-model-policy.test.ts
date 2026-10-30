@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };
@@ -168,6 +168,32 @@ test("WP #693 fully transparent owner GLB geometry cannot hide its 2D resident",
   assert.deepEqual(characterDrawableMeshes([component([invisible, drawable, translucent, opaqueAlpha])]),
     [drawable, translucent, opaqueAlpha],
     "valid opaque, visible and semi-transparent GLB parts remain eligible without replacing 2D with invisible art");
+});
+
+test("WP #693 previously adopted owner model loss enables same-resident recovery", () => {
+  const actor = {};
+  const assigned = new WeakMap<object, { name: string; residentCode: string }>();
+  const key = { name: "guard_male", residentCode: "seed-guard-1" };
+  assigned.set(actor, key);
+  const mesh = { visible: true, mesh: { primitive: [{ count: 6 }] },
+    material: { opacity: 1, transparent: false } };
+  const root = { enabled: true };
+  const component = { enabled: true, entity: { enabled: true }, meshInstances: [mesh] };
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), true);
+  assert.equal(sameCharacterAssignment(assigned.get(actor), key.name, key.residentCode), true,
+    "working 3D resident must not retrigger asset loads each frame");
+  component.enabled = false;
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), false,
+    "lost model is replaced by the permanent 2D cutout");
+  assert.equal(sameCharacterAssignment(assigned.get(actor), key.name, key.residentCode), false,
+    "normal subsequent resident refresh can retry after renderer recovery");
+  component.enabled = true;
+  assigned.set(actor, key);
+  mesh.material.opacity = 0;
+  mesh.material.transparent = true;
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), false,
+    "model becoming fully transparent also restores 2D and permits later retry");
+  assert.equal(assigned.has(actor), false);
 });
 
 test("WP #693 previously visible owner model reverting invisible keeps 2D eligible", () => {
