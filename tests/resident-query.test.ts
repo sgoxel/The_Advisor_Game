@@ -151,6 +151,14 @@ test("a fixed Fantasy tick cannot move an original resident off the legal route"
   assert.equal(residentMotionFraction(absoluteTick, absoluteTick, 0), 0);
 });
 
+test("S010 cutout picking follows its real projected body, not an imaginary vertical head", () => {
+  const feet = { x: 100, y: 220 }, paintedHead = { x: 130, y: 180 };
+  assert.notEqual(residentActorPickDistance(130, 190, feet, paintedHead), null,
+    "a tap on the tilted painted silhouette must select its original resident");
+  assert.equal(residentActorPickDistance(130, 190, feet, { x: 100, y: 180 }), null,
+    "the old vertical proxy rectangle does not cover that visible silhouette");
+});
+
 test("first close-up residents are queried under a finite identical rendered/state budget", () => {
   assert.equal(residentQueryLimitForView(true), 8,
     "first street characters must not wait for 32 complete cold door-and-path evaluations");
