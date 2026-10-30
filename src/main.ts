@@ -1450,8 +1450,8 @@ function setupControls() {
     $("cell-panel").hidden = true;
   };
   $("overview").onclick = () => {
-    // Realm view: the whole globe, centred on the current focus, north up.
-    view.yaw = 0;
+    // Realm view changes scale only; the separate compass control resets north.
+    // Do not rotate the player's focus during globe/local zoom handoff.
     const wasGlobe = document.body.classList.contains("globe-mode");
     document.body.classList.add("globe-mode");
     globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
