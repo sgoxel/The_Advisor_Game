@@ -208,6 +208,35 @@ test("WP #693 fully transparent owner GLB geometry cannot hide its 2D resident",
     "valid opaque, visible and semi-transparent GLB parts remain eligible without replacing 2D with invisible art");
 });
 
+test("WP #693 imported PlayCanvas blended opacity zero retains 2D cutout", () => {
+  // PlayCanvas 2.23 material rendering uses BLEND_NONE=3, BLEND_NORMAL=2.
+  // Imported StandardMaterial does not expose the legacy transparent flag.
+  const BLEND_NONE = 3, BLEND_NORMAL = 2;
+  const mesh = { primitive: [{ count: 6 }] };
+  const component = (opacity: number, blendType: number) => ({
+    enabled: true, entity: { enabled: true },
+    meshInstances: [{ visible: true, mesh, material: { opacity, blendType } }],
+  });
+  assert.equal(characterDrawableMeshes([component(0, BLEND_NORMAL)], BLEND_NONE).length, 0,
+    "a real blended GLB with opacity zero may not displace illustrated resident");
+  assert.equal(characterDrawableMeshes([component(NaN, BLEND_NORMAL)], BLEND_NONE).length, 0,
+    "nonfinite transparent opacity remains fallback-only");
+  assert.equal(characterDrawableMeshes([component(0.5, BLEND_NORMAL)], BLEND_NONE).length, 1,
+    "visible translucent owner geometry may render");
+  assert.equal(characterDrawableMeshes([component(0, BLEND_NONE)], BLEND_NONE).length, 1,
+    "opaque GLB material ignores alpha as defined by the engine");
+  const actor = {};
+  const assignments = new WeakMap<object, { name: string; residentCode: string }>();
+  assignments.set(actor, { name: "guard_male", residentCode: "seed-resident-01" });
+  const rendered = component(1, BLEND_NORMAL);
+  const root = { enabled: true };
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [rendered], assignments, BLEND_NONE), true);
+  rendered.meshInstances[0].material.opacity = 0;
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [rendered], assignments, BLEND_NONE), false,
+    "on a formerly visible model becoming blended invisible, restore 2D and allow retry");
+  assert.equal(assignments.has(actor), false);
+});
+
 test("WP #693 previously adopted owner model loss enables same-resident recovery", () => {
   const actor = {};
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();

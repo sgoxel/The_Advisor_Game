@@ -68,7 +68,7 @@ export function characterDrawableMeshes<T extends {
   enabled: boolean;
   entity: CharacterHierarchyNode;
   meshInstances: readonly T[];
-}[]): T[] {
+}[], opaqueBlendType?: number): T[] {
   const drawable: T[] = [];
   for (const component of components) {
     if (!component.enabled || !characterNodeEnabled(component.entity)) continue;
@@ -83,9 +83,13 @@ export function characterDrawableMeshes<T extends {
       // contains zero. Only reject fully transparent *blended or masked*
       // materials; an otherwise opaque GLB must still be allowed.
       const alphaMat = material && typeof material === "object" ? material as {
-        transparent?: boolean; alphaTest?: number;
+        transparent?: boolean; alphaTest?: number; blendType?: number;
       } : null;
-      const usesAlpha = alphaMat?.transparent === true || (alphaMat?.alphaTest ?? 0) > 0;
+      // Imported PlayCanvas glTF StandardMaterials expose blendType, not a
+      // public transparent flag. Use runtime's actual BLEND_NONE enum value.
+      const usesAlpha = alphaMat?.transparent === true || (alphaMat?.alphaTest ?? 0) > 0 ||
+        (opaqueBlendType !== undefined && typeof alphaMat?.blendType === "number" &&
+          alphaMat.blendType !== opaqueBlendType);
       if (usesAlpha && typeof opacity === "number" &&
           (!Number.isFinite(opacity) || opacity <= 0)) continue;
       if (part.visible !== false && characterMeshHasGeometry([part]))
@@ -140,8 +144,8 @@ export function characterModelRenderable<T extends {
   enabled: boolean;
   entity: CharacterHierarchyNode;
   meshInstances: readonly T[];
-}[]): boolean {
-  return characterNodeEnabled(root) && characterDrawableMeshes(components).length > 0;
+}[], opaqueBlendType?: number): boolean {
+  return characterNodeEnabled(root) && characterDrawableMeshes(components, opaqueBlendType).length > 0;
 }
 
 /** A once-validated optional model may cease to render after device/scene
@@ -162,8 +166,9 @@ export function characterModelVisibleOrInvalidate<T extends object, M extends {
     meshInstances: readonly M[];
   }[],
   assigned: WeakMap<T, { name: string; residentCode: string }>,
+  opaqueBlendType?: number,
 ): boolean {
-  if (characterModelRenderable(root, components)) return true;
+  if (characterModelRenderable(root, components, opaqueBlendType)) return true;
   assigned.delete(actor);
   return false;
 }
