@@ -189,6 +189,9 @@ export class ResidentQueryQueue {
       tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }
   get ready() { return this.readyFor(this.desired?.key); }
+  /** A prior fully validated camera result is eligible only after the
+   * renderer confirms overlap and freshness for its current source view. */
+  get latest() { return this.snapshot; }
   get current() {
     const snapshot = this.snapshot;
     return snapshot && snapshot.key === this.desired?.key && this.desired &&
