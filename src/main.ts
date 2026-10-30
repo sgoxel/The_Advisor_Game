@@ -1469,19 +1469,19 @@ function setupControls() {
   $("focus-gate-watch").onclick = () => {
     const place = nearestPlace(view.x, view.z);
     if (!place) return;
-    const gate = settlementExteriorFor(place).gates[0];
+    const coverage = guardCoverageAt(place, simulation.tick);
+    // An actually staffed gate is preferable to a different SEED gate whose
+    // assigned guard has not legally arrived. Never invent vacancy coverage.
+    const watch = coverage.find(gate => gate.onDuty > 0) ?? coverage[0];
+    const gate = settlementExteriorFor(place).gates[watch?.gateIndex ?? 0];
     if (!gate) return;
     const post = gate.guardPosts[0] ?? gate;
     // Navigation is a camera-only visit to an actual SEED duty position.
-    // The normal population worker may take a long time to build its first
-    // index. Validate the real roster on demand instead of leaving the post
-    // visually empty while that background work runs.
+    // The cold population worker may still be preparing unrelated residents.
     navigate(post.x, post.z, HERO_HALF_HEIGHT * 3);
-    focusedWatchCodes = [];
-    const coverage = guardCoverageAt(place, simulation.tick)[0];
-    focusedWatchCodes = coverage?.residentCodes ?? [];
-    $("focus-gate-watch").title = coverage
-      ? `Gate watch: ${coverage.onDuty}/${coverage.required} physically present`
+    focusedWatchCodes = watch?.residentCodes ?? [];
+    $("focus-gate-watch").title = watch
+      ? `Gate ${watch.gateIndex + 1}: ${watch.onDuty}/${watch.required} guards physically present`
       : "Gate watch unavailable";
     $("cell-panel").hidden = true;
   };
