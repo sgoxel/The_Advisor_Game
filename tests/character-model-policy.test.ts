@@ -429,7 +429,7 @@ test("WP #693 imported PlayCanvas blended opacity zero retains 2D cutout", () =>
   // Imported StandardMaterial does not expose the legacy transparent flag.
   const BLEND_NONE = 3, BLEND_NORMAL = 2;
   const mesh = { primitive: [{ count: 6 }] };
-  const actor = {};
+  const actor = { enabled: true };
   const root = { enabled: true, parent: actor };
   const component = (opacity: number, blendType: number) => ({
     enabled: true, entity: { enabled: true, parent: root },
@@ -477,7 +477,7 @@ test("WP #693 canvas picking uses the same truly drawable 2D or 3D resident form
 });
 
 test("WP #693 a detached model mesh restores this resident's original 2D art", () => {
-  const actor = {};
+  const actor = { enabled: true };
   const root = { enabled: true, parent: actor };
   const foreignRoot = { enabled: true };
   const group = { enabled: true, parent: root };
@@ -526,7 +526,7 @@ test("WP #693 a detached model root restores 2D even if its geometry is still dr
 });
 
 test("WP #693 previously adopted owner model loss enables same-resident recovery", () => {
-  const actor = {};
+  const actor = { enabled: true };
   const assigned = new WeakMap<object, { name: string; residentCode: string }>();
   const key = { name: "guard_male", residentCode: "seed-guard-1" };
   assigned.set(actor, key);
