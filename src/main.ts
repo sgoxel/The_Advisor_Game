@@ -1988,7 +1988,7 @@ async function start() {
           const scale = elevationToRenderY(height / DEFAULT_CHARACTER_HEIGHT_M);
           actors[i].setLocalScale(scale, scale, scale);
           characterVisuals.palette(actors[i], visible[i].variant);
-          void characterVisuals.character(actors[i], visible[i].character);
+          void characterVisuals.character(actors[i], visible[i].character, visible[i].code);
           characterVisuals.move(actors[i], 0, 0, 1);
           actors[i].enabled = true;
           actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
