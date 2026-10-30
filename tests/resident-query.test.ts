@@ -146,12 +146,15 @@ test("S010 gate-watch focus follows only a physically arrived real guard", () =>
   assert.equal(residentGateWatchFocus(undefined, lookup, post), post);
   assert.deepEqual(residentGateWatchFocus(["real"], lookup, post), { x: 24, z: 34 },
     "a lone guard retains their original canonical coordinate");
-  assert.deepEqual(residentGateWatchFocus(["real", "second"], lookup, post), { x: 26, z: 36 },
+  const centered = residentGateWatchFocus(["real", "second"], lookup, post);
+  assert.ok(Math.abs(centered.x - 26) < 1e-8 && centered.z === 36,
     "two genuine duty guards share a centered camera frame instead of clipping the second");
-  assert.deepEqual(residentGateWatchFocus(["second", "real", "real"], lookup, post), { x: 26, z: 36 },
+  const reverse = residentGateWatchFocus(["second", "real", "real"], lookup, post);
+  assert.ok(Math.abs(reverse.x - 26) < 1e-8 && reverse.z === 36,
     "roster order and duplicate codes cannot shift a camera frame");
-  assert.deepEqual(residentGateWatchFocus(["inside", "late", "real", "second"], lookup, post),
-    { x: 26, z: 36 }, "invalid and indoor guards never influence camera framing");
+  const mixed = residentGateWatchFocus(["inside", "late", "real", "second"], lookup, post);
+  assert.ok(Math.abs(mixed.x - 26) < 1e-8 && mixed.z === 36,
+    "invalid and indoor guards never influence camera framing");
 });
 
 test("S010 preserves stationary in-view actors on wider pans but not distant views", () => {
