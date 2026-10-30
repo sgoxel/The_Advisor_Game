@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -95,9 +95,12 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   function hasVisibleModel(actor: pc.Entity): boolean {
     const model = activeModels.get(actor);
     if (!model) return false;
-    if (characterModelRenderable(model, modelComponents.get(actor) ?? [])) return true;
-    // A once-validated model can become disabled or have its components
-    // hidden after a renderer/scene change. Never leave its resident invisible.
+    // A previously valid model can disappear after renderer loss or a
+    // component/material change. The permanent 2D art returns immediately;
+    // invalidate this resident's completed assignment so a subsequent normal
+    // snapshot may try 3D again after recovery, without per-frame fetches.
+    if (characterModelVisibleOrInvalidate(actor, model, modelComponents.get(actor) ?? [], assigned))
+      return true;
     activeModels.delete(actor);
     modelComponents.delete(actor);
     model.destroy();
