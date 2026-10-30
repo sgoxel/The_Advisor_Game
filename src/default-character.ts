@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, characterCutoutOrientation, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -225,7 +225,13 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         actor.setEulerAngles(0, headings.get(actor) ?? 0, 0);
       } else {
         const p = actor.getPosition(), c = camera.getPosition();
-        actor.setEulerAngles(0, Math.atan2(c.x - p.x, c.z - p.z) * 180 / Math.PI, 0);
+        const facing = characterCutoutOrientation(p, c);
+        actor.setEulerAngles(0, facing.yaw, 0);
+        // The artist's original upright cutout was yaw-only: from a 60°
+        // elevated Hero camera its body collapsed into a squat silhouette.
+        // Tip ONLY the 2D visual about its mesh's foot-origin toward the
+        // camera, not the SEED actor, ground anchor, 3D owner model or camera.
+        shapes.get(actor)?.setLocalEulerAngles(facing.pitch, 0, 0);
       }
     },
     setLighting(_direction: pc.Vec3, _tint: readonly number[]) {
