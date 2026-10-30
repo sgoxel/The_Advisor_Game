@@ -446,7 +446,7 @@ test("close street and gate watch remain character-visible at the navigation's r
     "the settlement visit must request actual NPC illustrations");
   assert.equal(residentViewQuery(HERO_HALF_HEIGHT * 3, false, true).actors, true,
     "the gate-watch action must request actual duty residents");
-  const tick = tickAtLocalTime(4, 21 * 3600, place.canonicalPosition.lon),
+  const tick = tickAtLocalTime(WORKDAY, 21 * HOUR, place.canonicalPosition.lon),
     watch = guardCoverageAt(place, tick)[0];
   assert.ok(watch.onDuty > 0, "the original night watch has a genuinely reached SEED post");
   const guard = residentAt(place, 7, tick);
