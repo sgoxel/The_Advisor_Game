@@ -15,3 +15,9 @@ export function residentFactSuffix(requested: boolean, ready: boolean): string {
   if (!requested) return "";
   return ready ? " · residents ready" : " · residents pending";
 }
+
+/** Rendered terrain is not fully detailed just because a coarse preview exists. */
+export function terrainDetailLabel(coherent: boolean, currentDetailSettled: boolean): string {
+  if (!coherent) return "preparing terrain";
+  return currentDetailSettled ? "ready" : "refining detail";
+}
