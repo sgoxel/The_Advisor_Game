@@ -1781,6 +1781,11 @@ async function start() {
         }
         return;
       }
+      if (event.data.kind === "resident-progress") {
+        if (residentQueries.appendPartial(event.data.id, event.data.residents as Resident[],
+            Math.max(simulation.tick, clock.tickAt(Date.now())))) residentResultReady();
+        return; // A partial batch never releases the busy worker.
+      }
       if (event.data.kind === "residents") {
         idleWorkers.push(worker);
         if (event.data.error) { fail(`Resident query failed: ${event.data.error}`); return; }
@@ -1792,7 +1797,9 @@ async function start() {
           residentBatch.completed.add(event.data.shard);
           residentBatch.results.push(event.data);
           if (residentBatch.completed.size === residentBatch.count) {
-            const merged = mergeResidentQueries(residentBatch.results, residentBatch.job.limit, resident => residentOrder.get(resident.settlement)!(resident.index));
+            const merged = mergeResidentQueries(residentBatch.results,
+              residentBatch.job.actors ? Infinity : residentBatch.job.limit,
+              resident => residentOrder.get(resident.settlement)!(resident.index));
             residentBatches.delete(residentBatch.job.id);
             const accepted = residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())));
             const answeredAt = performance.now();
@@ -1881,7 +1888,7 @@ async function start() {
     residentPickSamples.record(performance.now() - pickStarted);
     return best;
   };
-  let lastSimulationRealSecond = -1, lastResidentSnapshot = -1;
+  let lastSimulationRealSecond = -1, lastResidentSnapshot = "";
   let actorSnapshotTick = -Infinity;
   residentResultReady = () => { lastSimulationRealSecond = -1; };
   if (pendingSiteVisitHistory !== undefined) {
@@ -2005,10 +2012,12 @@ async function start() {
       // An in-flight view query must not erase a still-grounded selected 3D actor
       // simply because its old finite result is no longer the desired key.
       // Never retain stale time/remote scenery; no actor is invented.
+      const snapshotRevision = snapshot
+        ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}` : "";
       const selectedFromSnapshot = inspectedCode && snapshot
         ? projectedResidents.find(resident => resident.code === inspectedCode) : undefined;
       const authoritativeSelected = inspectedCode && snapshot &&
-        snapshot.id !== lastResidentSnapshot && !selectedFromSnapshot
+        snapshotRevision !== lastResidentSnapshot && !selectedFromSnapshot
         ? simulation.projectedResidentByCode(inspectedCode) : undefined;
       const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
       const selectionNearby = residentMode.actors &&
@@ -2024,15 +2033,15 @@ async function start() {
           actorResidents.delete(actor);
           actorMotion.delete(actor);
         }
-      } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshot.id !== lastResidentSnapshot) {
+      } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshotRevision !== lastResidentSnapshot) {
         const residents = projectedResidents;
         if (snapshot) {
           // Do not consume the actor snapshot's presentation revision while
           // coherent terrain is still pending. When ready flips, the SAME
           // canonical early result must populate the visible actor pool.
-          if (residentActorSnapshotMayMarkPresented(residentMode.actors, queryActors)) lastResidentSnapshot = snapshot.id;
+          if (residentActorSnapshotMayMarkPresented(residentMode.actors, queryActors)) lastResidentSnapshot = snapshotRevision;
           actorSnapshotTick = simulation.tick;
-          simulation.acceptResidentQuery(residents, snapshot.query);
+          if (!snapshot.partial) simulation.acceptResidentQuery(residents, snapshot.query);
         }
         // A fresh snapshot may omit the clicked resident from its first eight.
         // Append only its actual current Simulation state when still in view.
@@ -2083,7 +2092,7 @@ async function start() {
           if (resident) showNpcPopup(resident, simulation.tick);
         }
         $("simulation-status").textContent =
-          `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
+          `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${snapshot?.partial ? "discovering more outdoor residents" : `${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated`}.`;
       }
     }
     // Per-frame walking: interpolate along the street route between Fantasy Time samples.
