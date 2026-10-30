@@ -1313,6 +1313,26 @@ body.globe-mode .travel-button {
 }
 /* One passive marker for the real onscreen resident currently open in the inspector.
    It never participates in picking, identity, movement or Simulation. */
+/* Nighttime gate watch is identified from the genuine visible guard actor,
+   never from an off-screen assignment. Noninteractive: canvas picks still work. */
+.duty-guard-label {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  pointer-events: none;
+  padding: 4px 7px;
+  border: 1px solid #edca7b;
+  border-radius: 5px;
+  background: #162a25ed;
+  color: #ffe9b5;
+  box-shadow: 0 2px 8px #000b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+}
 #selected-resident-marker {
   position: fixed;
   top: 0;
