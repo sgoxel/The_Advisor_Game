@@ -451,3 +451,35 @@ test('yard objects stay inside their footprint, within budget, close-up only and
     assert.deepEqual(g.closeDetail.positions, buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad}).closeDetail.positions);
   }
 });
+
+
+test('S010 square roofs align with actual gate, guard-post and guard-office walls at any yaw', () => {
+  // The old 4-sided cone put its eave vertices on cardinal axes, a 45-degree
+  // rotation from the square walls, and ignored the building yaw entirely.
+  const cases = [
+    {name: 'gate', feature: {kind: 'gate', widthM: 9, depthM: 4},
+      baseY: 5.25, roofs: [{x: -3.24, z: 0, w: 2.45, d: 2.45}, {x: 3.24, z: 0, w: 2.45, d: 2.45}]},
+    {name: 'guard-post', feature: {kind: 'guard-post', widthM: 4.5, depthM: 5.5},
+      baseY: 3.95, roofs: [{x: 0, z: 0, w: 4.5 * 1.12, d: 5.5 * 1.12}]},
+    {name: 'guard-office tower', feature: {kind: 'service', service: 'guard-office', widthM: 12, depthM: 10},
+      baseY: 6.65, roofs: [{x: 12 * .34, z: -10 * .28, w: 12 * .34 + .5, d: 10 * .36 + .5}]},
+  ];
+  const key = (x: number, z: number) => `${x.toFixed(3)},${z.toFixed(3)}`;
+  for (const yaw of [0, Math.PI / 4, -.83]) for (const sample of cases) {
+    const detail = buildPropForTest({...base, ...sample.feature, yawRad: yaw}, 8).detail;
+    assert.equal(tris(detail), sample.roofs.length * 4, `${sample.name}: exactly four faces per pyramid`);
+    finite(detail);
+    const actual = new Set<string>(), c = Math.cos(yaw), s = Math.sin(yaw);
+    for (let i = 0; i < detail.positions.length; i += 3) {
+      if (Math.abs(detail.positions[i + 1] - sample.baseY) > 1e-4) continue;
+      const x = detail.positions[i], z = detail.positions[i + 2];
+      actual.add(key(x * c - z * s, x * s + z * c));
+    }
+    const expected = new Set<string>();
+    for (const roof of sample.roofs) for (const dx of [-1, 1]) for (const dz of [-1, 1])
+      expected.add(key(roof.x + dx * roof.w / 2, roof.z + dz * roof.d / 2));
+    assert.deepEqual([...actual].sort(), [...expected].sort(), `${sample.name} yaw=${yaw}: eaves must coincide with rotated wall axes`);
+    for (let i = 1; i < detail.normals.length; i += 3)
+      assert.ok(detail.normals[i] > 0, `${sample.name}: roof slope faces upward rather than being backface-culling inverted`);
+  }
+});
