@@ -172,6 +172,7 @@ test("progressive outdoor results keep every valid NPC without duplicates or sta
   assert.equal(queue.appendPartial(job.id, [first] as never[], 100), true);
   assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar"]);
   assert.equal(queue.current?.partial, true);
+  assert.equal(queue.ready, false, "partial residents never claim that all current-view facts are ready");
   assert.equal(queue.appendPartial(job.id, [first, second] as never[], 100), true);
   assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar", "guard"]);
   assert.equal(queue.appendPartial(job.id, [{ ...outdoor("innkeeper"), indoors: true }] as never[], 100), false);
