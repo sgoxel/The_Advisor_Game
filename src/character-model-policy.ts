@@ -258,7 +258,11 @@ export function characterModelVisibleOrInvalidate<T extends object, M extends {
   assigned: WeakMap<T, { name: string; residentCode: string }>,
   opaqueBlendType?: number,
 ): boolean {
-  if (characterModelRenderable(root, components, opaqueBlendType)) return true;
+  // The neutral 3D anchor is adopted as a direct child of this same SEED
+  // resident. Removing/reparenting that anchor must reveal original 2D art
+  // even when the detached model still has live drawable meshes.
+  if (Object.is(root.parent, actor) && characterModelRenderable(root, components, opaqueBlendType))
+    return true;
   assigned.delete(actor);
   return false;
 }
