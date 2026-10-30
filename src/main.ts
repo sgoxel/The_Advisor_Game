@@ -15,7 +15,7 @@ import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-lay
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
-import { settlementHomeFor } from "./settlement-exterior.ts";
+import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
@@ -59,7 +59,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
+import { LazySimulation, populationOf, guardCoverageAt, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -376,6 +376,9 @@ const clock = new FantasyClock();
 const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
+// An explicit gate-watch camera visit may show only physically verified
+// Simulation residents while the cold full population worker is still busy.
+let focusedWatchCodes: string[] = [];
 /** Walking actors: positions at this and the next simulation second, animated per frame. */
 const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
@@ -1463,6 +1466,25 @@ function setupControls() {
     navigate(villages[0].x, villages[0].z + metresToSource(6), HERO_HALF_HEIGHT);
     $("cell-panel").hidden = true;
   };
+  $("focus-gate-watch").onclick = () => {
+    const place = nearestPlace(view.x, view.z);
+    if (!place) return;
+    const coverage = guardCoverageAt(place, simulation.tick);
+    // An actually staffed gate is preferable to a different SEED gate whose
+    // assigned guard has not legally arrived. Never invent vacancy coverage.
+    const watch = coverage.find(gate => gate.onDuty > 0) ?? coverage[0];
+    const gate = settlementExteriorFor(place).gates[watch?.gateIndex ?? 0];
+    if (!gate) return;
+    const post = gate.guardPosts[0] ?? gate;
+    // Navigation is a camera-only visit to an actual SEED duty position.
+    // The cold population worker may still be preparing unrelated residents.
+    navigate(post.x, post.z, HERO_HALF_HEIGHT * 3);
+    focusedWatchCodes = watch?.residentCodes ?? [];
+    $("focus-gate-watch").title = watch
+      ? `Gate ${watch.gateIndex + 1}: ${watch.onDuty}/${watch.required} guards physically present`
+      : "Gate watch unavailable";
+    $("cell-panel").hidden = true;
+  };
   $("overview").onclick = () => {
     // Realm view changes scale only; the separate compass control resets north.
     // Do not rotate the player's focus during globe/local zoom handoff.
@@ -1585,13 +1607,15 @@ function setupTravel() {
   };
   $("visit-city").onclick = () => {
     const place = cities.find((p) => p.id === city.value)!;
-    navigate(place.x, place.z, 450);
+    // A destination visit should arrive at readable street detail, not a
+    // map-only camera scale that disables every resident illustration.
+    navigate(place.x, place.z, HERO_HALF_HEIGHT * 4);
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
   $("visit-village").onclick = () => {
     const place = villages.find((p) => p.id === village.value)!;
-    navigate(place.x, place.z + 14, 97);
+    navigate(place.x, place.z + metresToSource(6), HERO_HALF_HEIGHT * 4);
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
@@ -2047,6 +2071,15 @@ async function start() {
         // Append only its actual current Simulation state when still in view.
         const visible = residentMode.actors
           ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
+        if (residentMode.actors && query) {
+          // The fast watch comes from the SAME authoritative Simulation as the
+          // regular worker results. It is never a guessed street/guard position.
+          for (const code of focusedWatchCodes) {
+            if (visible.some(resident => resident.code === code)) continue;
+            const watch = simulation.projectedResidentByCode(code);
+            if (selectedResidentVisibleInView(watch, query)) visible.push(watch!);
+          }
+        }
         if (snapshot && selectionNearby && selected &&
             !visible.some(resident => resident.code === selected.code)) visible.push(selected);
         for (let i = 0; i < visible.length; i++) {
