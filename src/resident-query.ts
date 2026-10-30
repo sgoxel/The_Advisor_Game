@@ -194,6 +194,22 @@ export function residentActorPickDistance(
   return Math.hypot(x - cx, y - cy);
 }
 
+/** Read the tapped station along the original projected painted body.
+ * A pitched 2D cutout can have different camera depths at head and feet.
+ * Comparing only midpoint depth could wrongly choose a rear person when
+ * silhouettes cross. The station is visual-only, never a Simulation move. */
+export function residentActorPaintedTapFraction(
+  x: number, y: number,
+  feet: { x: number; y: number }, head: { x: number; y: number },
+): number | null {
+  if (![x, y, feet.x, feet.y, head.x, head.y].every(Number.isFinite)) return null;
+  const dx = head.x - feet.x, dy = head.y - feet.y, lengthSq = dx * dx + dy * dy;
+  if (!Number.isFinite(lengthSq)) return null;
+  if (lengthSq <= 1e-8) return .5;
+  return Math.max(0, Math.min(1,
+    ((x - feet.x) * dx + (y - feet.y) * dy) / lengthSq));
+}
+
 /** Two projected cutouts can share a touch target. Prefer the actually
  * frontmost painted plane, as the world depth buffer does, rather than a
  * rear actor whose screen-space centre happens to be nearer the tap.

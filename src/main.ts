@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1963,11 +1963,11 @@ async function start() {
   pickResidentAt = (clientX: number, clientY: number) => {
     const pickStarted = performance.now();
     // Project each real painted cutout (with the existing accessible padding).
-    // When targets overlap, the rendered frontmost character wins, not the
-    // potentially invisible person whose projected centre is nearest.
+    // Compare the tapped station along each painted 3D cutout when targets
+    // overlap; a pitched head and feet need not share the midpoint's depth.
     const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top,
       lens = camera.camera!, feet = new pc.Vec3(), head = new pc.Vec3(),
-      paintedHeadWorld = new pc.Vec3(), paintedMidWorld = new pc.Vec3();
+      paintedHeadWorld = new pc.Vec3(), paintedTapWorld = new pc.Vec3();
     let best: Resident | undefined;
     let bestHit: { code: string; distance: number; viewDepth: number } | undefined;
     for (const actor of actors) {
@@ -1980,8 +1980,10 @@ async function start() {
       lens.worldToScreen(paintedHeadWorld, head);
       const distance = residentActorPickDistance(x, y, feet, head);
       if (distance === null) continue;
-      paintedMidWorld.lerp(actor.getPosition(), paintedHeadWorld, .5);
-      const viewDepth = lens.viewMatrix.transformPoint(paintedMidWorld, actorViewPoint).z;
+      const fraction = residentActorPaintedTapFraction(x, y, feet, head);
+      if (fraction === null) continue;
+      paintedTapWorld.lerp(actor.getPosition(), paintedHeadWorld, fraction);
+      const viewDepth = lens.viewMatrix.transformPoint(paintedTapWorld, actorViewPoint).z;
       const hit = { code: resident.code, distance, viewDepth };
       if (residentActorPickPrefersFront(hit, bestHit)) { best = resident; bestHit = hit; }
     }
