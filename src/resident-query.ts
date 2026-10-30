@@ -168,6 +168,14 @@ export function residentActorPickDistance(
   return Math.hypot(x - cx, y - cy);
 }
 
+/** An actor's painted head AND grounded feet must be in front of the camera.
+ * PlayCanvas view space has negative Z in front; a screen projection of an
+ * actor behind the eye cannot become a real hit, label or visual proof. */
+export function residentActorInFront(feetViewZ: number, headViewZ: number): boolean {
+  return Number.isFinite(feetViewZ) && Number.isFinite(headViewZ) &&
+    feetViewZ < 0 && headViewZ < 0;
+}
+
 /** At most two bounded requests: an obsolete in-flight camera query may
  * finish while the latest view uses another already-idle worker. Each query's
  * actor ordering and Simulation validations stay inside its own worker.
