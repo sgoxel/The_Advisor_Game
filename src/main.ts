@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1909,6 +1909,14 @@ async function start() {
     actor.findComponents("render") as pc.RenderComponent[], pc.BLEND_NONE,
   );
   const hasResidentMesh = (actor: pc.Entity) => drawableResidentMeshes(actor).length > 0;
+  const actorViewPoint = new pc.Vec3(), actorPaintedHead = new pc.Vec3();
+  function residentInFrontOfCamera(actor: pc.Entity): boolean {
+    const eye = camera.camera!.viewMatrix;
+    const feetDepth = eye.transformPoint(actor.getPosition(), actorViewPoint).z;
+    characterVisuals.headPoint(actor, actorPaintedHead);
+    const headDepth = eye.transformPoint(actorPaintedHead, actorViewPoint).z;
+    return residentActorInFront(feetDepth, headDepth);
+  }
   pickResidentAt = (clientX: number, clientY: number) => {
     const pickStarted = performance.now();
     // Project each visible sprite's feet and head to the screen and test the click against
@@ -1919,7 +1927,7 @@ async function start() {
     let best: Resident | undefined, bestDistance = Infinity;
     for (const actor of actors) {
       const resident = actorResidents.get(actor);
-      if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
+      if (!actor.enabled || !resident || !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
       // The visible authored illustration is pitched toward the camera.
       // Picking its imaginary vertical body misses the actual painted figure.
       lens.worldToScreen(actor.getPosition(), feet);
@@ -2225,7 +2233,8 @@ async function start() {
       selectedHomeDoorMarker.hidden = true;
     }
     const inspectedActor = inspectedCode && projectionTransition <= 0.001
-      ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
+      ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode &&
+          hasResidentMesh(actor) && residentInFrontOfCamera(actor))
       : undefined;
     if (inspectedActor) {
       const foot = inspectedActor.getPosition();
@@ -2710,7 +2719,7 @@ async function start() {
           paintedHead = new pc.Vec3(), midpoint = new pc.Vec3();
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
-          if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
+          if (!actor.enabled || !resident || !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
           const meshCount = drawableResidentMeshes(actor).length;
           characterVisuals.headPoint(actor, paintedHead);
           midpoint.lerp(actor.getPosition(), paintedHead, .5);
@@ -2743,7 +2752,8 @@ async function start() {
           characterVisuals.headPoint(actor, paintedHead);
           midpoint.lerp(actor.getPosition(), paintedHead, .5);
           camera.camera!.worldToScreen(midpoint, point);
-          const onScreen = point.x >= 12 && point.y >= 12 && point.x <= rect.width - 12 && point.y <= rect.height - 12;
+          const onScreen = residentInFrontOfCamera(actor) &&
+            point.x >= 12 && point.y >= 12 && point.x <= rect.width - 12 && point.y <= rect.height - 12;
           if (onScreen) counts.onScreen++;
           const clientX = rect.left + point.x, clientY = rect.top + point.y,
             obstruction = onScreen ? document.elementFromPoint(clientX, clientY) : null,
