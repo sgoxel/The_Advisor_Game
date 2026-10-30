@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, loadSharedCharacterArtwork, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -92,13 +92,27 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   const renders = new WeakMap<pc.Entity, pc.RenderComponent>();
   const shapes = new WeakMap<pc.Entity, pc.Entity>();
   const activeModels = new WeakMap<pc.Entity, pc.Entity>();
+  const modelComponents = new WeakMap<pc.Entity, pc.RenderComponent[]>();
   const headings = new WeakMap<pc.Entity, number>();
+  function hasVisibleModel(actor: pc.Entity): boolean {
+    const model = activeModels.get(actor);
+    if (!model) return false;
+    if (characterModelRenderable(model, modelComponents.get(actor) ?? [])) return true;
+    // A once-validated model can become disabled or have its components
+    // hidden after a renderer/scene change. Never leave its resident invisible.
+    activeModels.delete(actor);
+    modelComponents.delete(actor);
+    model.destroy();
+    const cutout = shapes.get(actor);
+    if (cutout) cutout.enabled = true;
+    return false;
+  }
   return {
     url: DEFAULT_CHARACTER_URL,
     clips: [] as string[],
     /** Truthful actor presentation, including mixtures of optional 3D and 2D. */
     format(actor: pc.Entity): CharacterVisualFormat {
-      return characterVisualFormat(activeModels.has(actor));
+      return characterVisualFormat(hasVisibleModel(actor));
     },
     create() {
       const actor = new pc.Entity("SEED resident visual");
@@ -124,6 +138,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       // art/model assets change asynchronously. Old model roots are removed.
       activeModels.get(actor)?.destroy();
       activeModels.delete(actor);
+      modelComponents.delete(actor);
       const cutout = shapes.get(actor)!;
       cutout.enabled = true;
       for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = fallback;
@@ -154,9 +169,8 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         // invisible mesh instances alongside genuine geometry. Such authored
         // data must never suppress the visible 2D NPC illustration.
         if (!model.enabled) throw new Error("disabled model root");
-        const pieces = characterDrawableMeshes(
-          model.findComponents("render") as pc.RenderComponent[],
-        );
+        const components = model.findComponents("render") as pc.RenderComponent[];
+        const pieces = characterDrawableMeshes(components);
         if (!pieces.length) throw new Error("no visible drawable model geometry");
         // Align the owner's model's actual feet and height to the same 1.782 m
         // nominal body used by the 2D quad; the actor parent still owns the
@@ -182,6 +196,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         // Reparent preserves local GLB scale/foot alignment, not world truth.
         model.reparent(actor);
         activeModels.set(actor, model);
+        modelComponents.set(actor, components);
         // Never turn off the 2D fallback until the 3D entity exists and has
         // real renderable geometry. Model failure only removes the optional art.
         cutout.enabled = false;
@@ -201,7 +216,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
     face(actor: pc.Entity, camera: pc.Entity) {
       // 2D sprites face the camera. Optional 3D models retain their movement
       // heading rather than changing NPC decisions with camera motion.
-      if (activeModels.has(actor)) {
+      if (hasVisibleModel(actor)) {
         actor.setEulerAngles(0, headings.get(actor) ?? 0, 0);
       } else {
         const p = actor.getPosition(), c = camera.getPosition();
