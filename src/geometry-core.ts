@@ -375,6 +375,12 @@ export function terrainTint(
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
+/** Share canonical ground pigment vertices across the observed Village LOD
+ * transition: 64/16 and 128/32 both sample 4 source units apart. */
+export function detailTerrainResolution(tileSize: number): number {
+  return Math.min(tileSize / 2, tileSize === 128 ? 32 : 16);
+}
+
 export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrain?:boolean} = {}): TileGeometry {
   if (!options.terrainOnly) registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
   const terrain = new Builder(),
@@ -386,7 +392,14 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
   // structures, canonical registration and other layers unmodified.
   if (!options.skipBaseTerrain) {
   // Prepared-surface refinement is owned by the common worker adapter.
-  const resolution = Math.min(options.terrainOnly ? 8 : 16, t.size / 2),
+  // A 64→128 source-unit LOD handoff must not double the pigment/ground
+  // sample spacing while the on-screen zoom changes by only a fraction of a
+  // percent. Keep both 64 and 128 tiles on the same 4-unit canonical grid.
+  // This refines only the observed Village-scale successor; other tile levels,
+  // the cheap coverage preview and all SEED/Simulation truth stay unchanged.
+  const resolution = options.terrainOnly
+      ? Math.min(8, t.size / 2)
+      : detailTerrainResolution(t.size),
     step = t.size / resolution;
   // Each emitted grid coordinate has one exact SEED surface and one pigment.
   // The cache lives only for this tile build, with at most the bounded grid's
