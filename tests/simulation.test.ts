@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { CHARACTER_TYPES } from "../src/characters.ts";
 import { cities, countries, villages } from "../src/geography.ts";
 import { CANONICAL_PLANET_RADIUS, greatCircleDistance, lonLatToSource, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
-import { settlementExteriorFor, settlementHomeFor } from "../src/settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeFor, GUARD_POST_BUILDING_WIDTH_M } from "../src/settlement-exterior.ts";
 import { featuresFor, finalSurfaceAt, finalSurfaceEvidenceAnchors, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
@@ -449,6 +449,30 @@ test("day and night guard assignments match every actual SEED gate and post", ()
         `${place.name}: staffing must correspond to physically generated guard posts`);
       assert.equal(watch[gateIndex].scheduled, guardsPerGateFor(place, gateIndex),
         "real watchmen have actual persistent home identities and posts");
+    }
+  }
+});
+
+test("real gate watch stands outdoors clear of its roofed guardhouse and inside the entrance", () => {
+  for (const place of [villages[0], cities[0]]) {
+    const gate = settlementExteriorFor(place).gates[0],
+      roof = gate.guardPosts[0] ?? gate,
+      scale = sourceUnitsPerMetreAt(roof.z);
+    for (const hour of [9, 21]) {
+      const tick = tickAtLocalTime(WORKDAY, hour * HOUR, place.canonicalPosition.lon),
+        resident = residentAt(place, hour === 9 ? 6 : 7, tick),
+        roofDistanceM = Math.hypot(wrapSourceX(resident.x - roof.x) / scale.x,
+          (resident.z - roof.z) / scale.z),
+        gateDistanceM = Math.hypot(wrapSourceX(resident.x - gate.x) / scale.x,
+          (resident.z - gate.z) / scale.z);
+      assert.ok(resident.grounded && !resident.indoors && resident.activity === "guard",
+        `${place.name}: real guard must legally reach the original physical gate`);
+      assert.ok(roofDistanceM > GUARD_POST_BUILDING_WIDTH_M / 2 + .5,
+        `${place.name}: guard cannot stand under the guard-post roof (${roofDistanceM.toFixed(2)}m)`);
+      assert.ok(gateDistanceM < 12,
+        `${place.name}: guard stands in view by the same gate, not a new destination`);
+      assert.deepEqual(residentAt(place, resident.index, tick).position, resident.position,
+        "SEED/time reproduces exact exterior duty placement independent of camera");
     }
   }
 });
