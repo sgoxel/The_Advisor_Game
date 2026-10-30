@@ -1,3 +1,4 @@
+import { residentFootRingGeometry } from "./resident-foot-ring.ts";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
@@ -1892,15 +1893,41 @@ async function start() {
     catch { /* no false claim of durable save when storage unavailable */ }
   };
   const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
+  // Unlike the old DOM ring, this one shares the actual world depth buffer.
+  // A guard behind a real parapet cannot acquire a floating ring on its roof.
+  const ring = residentFootRingGeometry();
+  const footRingMesh = new pc.Mesh(app.graphicsDevice);
+  footRingMesh.setPositions(ring.positions);
+  footRingMesh.setNormals(ring.normals);
+  footRingMesh.setIndices(ring.indices);
+  footRingMesh.update(pc.PRIMITIVE_TRIANGLES);
+  const footRingMaterial = new pc.StandardMaterial();
+  footRingMaterial.name = "SEED resident foot selection · world depth";
+  footRingMaterial.diffuse.set(0, 0, 0);
+  footRingMaterial.emissive.set(1, 0.82, 0.48);
+  footRingMaterial.useLighting = false;
+  footRingMaterial.useTonemap = false;
+  footRingMaterial.useFog = false;
+  footRingMaterial.useSkybox = false;
+  footRingMaterial.depthTest = true;
+  footRingMaterial.depthWrite = false;
+  footRingMaterial.cull = pc.CULLFACE_NONE;
+  footRingMaterial.update();
+  const selectedFootRing = new pc.Entity("Selected resident · depth-tested ground ring");
+  selectedFootRing.addComponent("render", {
+    meshInstances: [new pc.MeshInstance(footRingMesh, footRingMaterial)],
+    castShadows: false, receiveShadows: false,
+  });
+  flatRoot.addChild(selectedFootRing);
+  selectedFootRing.enabled = false;
   const actors: pc.Entity[] = [];
   const selectedResidentMarker = $("selected-resident-marker"),
     selectedResidentName = $("selected-resident-name"),
-    selectedResidentGroundMarker = $("selected-resident-ground-marker"),
     selectedResidentWorld = new pc.Vec3(), selectedResidentScreen = new pc.Vec3(),
     selectedResidentGround = new pc.Vec3(), selectedResidentGroundScreen = new pc.Vec3();
   const selectedHomeDoorMarker = $("selected-home-door-marker"),
     selectedHomeDoorWorld = new pc.Vec3(), selectedHomeDoorScreen = new pc.Vec3();
-  let markedResidentCode = "", markedResidentTransform = "", markedGroundTransform = "", markedDoorTransform = "", markedActorHeight = "";
+  let markedResidentCode = "", markedResidentTransform = "", markedDoorTransform = "";
   let selectedDoorPoint: { x: number; z: number; y: number } | undefined;
   // Real canvas picking and S006 evidence must see the same genuinely drawable
   // 2D/3D model that fallback uses: honor imported ancestors, mesh visibility,
@@ -2242,29 +2269,17 @@ async function start() {
       selectedResidentGround.set(foot.x, foot.y + .02, foot.z);
       camera.camera!.worldToScreen(selectedResidentGround, selectedResidentGroundScreen);
       const gx = Math.round(selectedResidentGroundScreen.x), gy = Math.round(selectedResidentGroundScreen.y);
-      if (gx >= 16 && gx <= innerWidth - 16 && gy >= 90 && gy <= innerHeight - 120) {
-        const groundTransform = `translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`;
-        if (groundTransform !== markedGroundTransform) {
-          selectedResidentGroundMarker.style.transform = groundTransform;
-          markedGroundTransform = groundTransform;
-        }
-        selectedResidentGroundMarker.hidden = false;
-      } else selectedResidentGroundMarker.hidden = true;
+      // This painted ring uses the same Simulation actor transform and scene
+      // depth as the world. Roofs and walls occlude it naturally on both GPUs.
+      selectedFootRing.enabled = gx >= 16 && gx <= innerWidth - 16 &&
+        gy >= 90 && gy <= innerHeight - 120;
+      if (selectedFootRing.enabled) selectedFootRing.setLocalPosition(inspectedActor.getLocalPosition());
       // Attach the selected caption to the actual transformed illustration.
       // Its painted head may extend toward the camera and above the body.
       characterVisuals.headPoint(inspectedActor, selectedResidentWorld);
       selectedResidentWorld.y += .04;
       camera.camera!.worldToScreen(selectedResidentWorld, selectedResidentScreen);
       const x = Math.round(selectedResidentScreen.x), y = Math.round(selectedResidentScreen.y);
-      // Physical-size bracket beside the *rendered* model. Its height is the
-      // current camera's actual projected head-to-foot distance, never a
-      // synthetic 2D character or an independent Simulation coordinate.
-      const projectedHeight = Math.max(0, gy - y);
-      const nextActorHeight = `${Math.round(Math.min(projectedHeight, innerHeight * .45))}px`;
-      if (projectedHeight > 1 && nextActorHeight !== markedActorHeight) {
-        selectedResidentGroundMarker.style.setProperty("--actor-projected-height", nextActorHeight);
-        markedActorHeight = nextActorHeight;
-      }
       if (x >= 80 && x <= innerWidth - 80 && y >= 110 && y <= innerHeight - 120) {
         if (markedResidentCode !== inspectedCode) {
           markedResidentCode = inspectedCode;
@@ -2289,7 +2304,7 @@ async function start() {
       } else selectedResidentMarker.hidden = true;
     } else {
       selectedResidentMarker.hidden = true;
-      selectedResidentGroundMarker.hidden = true;
+      selectedFootRing.enabled = false;
       if (inspectedCode !== markedResidentCode) selectedDoorPoint = undefined;
     }
     // The already-resolved SEED doorway stays visible after camera-only home
