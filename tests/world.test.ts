@@ -1,4 +1,4 @@
-import { detailTerrainResolution } from "../src/geometry-core.ts";
+import { detailTerrainResolution, waterPlaneSubdivisionCount } from "../src/geometry-core.ts";
 import { test } from "node:test";
 import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
@@ -73,6 +73,14 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
+
+test("WP #105 country handoff water plane uses the existing curved-ground grid", () => {
+  assert.equal(waterPlaneSubdivisionCount(2048),detailTerrainResolution(2048));
+  assert.equal(waterPlaneSubdivisionCount(2048),16);
+  for(const size of [32,64,128,256,512,1024,4096])
+    assert.equal(waterPlaneSubdivisionCount(size),1,
+      "other world tile levels keep their unchanged single water plane");
+});
 
 test("WP #105 forest 64/128/256 LODs retain canonical pigment grid spacing", () => {
   const fine=64/detailTerrainResolution(64);
