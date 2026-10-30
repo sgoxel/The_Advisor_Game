@@ -1,5 +1,5 @@
 import { compareText } from "./compare-text.ts";
-import { residentActorSearchContinues } from "./resident-query.ts";
+import { residentActorSearchContinues, residentFirstPreviewVisible } from "./resident-query.ts";
 import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
@@ -2807,7 +2807,7 @@ export class LazySimulation {
           query.evaluatedResidents++;
           this.residentEvaluationsSinceAdvance++;
           if (sourceDistance(resident.x, resident.z, x, z) <= radius) {
-            if (!firstValidated && onFirstValidated) {
+            if (!firstValidated && onFirstValidated && residentFirstPreviewVisible(resident, prioritizeActors)) {
               firstValidated = true;
               onFirstValidated(resident);
             }
@@ -2848,7 +2848,8 @@ export class LazySimulation {
         onFirstValidated && !firstValidated ? index => {
           const resident = residentAt(place, index, this.tick, phases);
           early.set(index, resident);
-          if (sourceDistance(resident.x, resident.z, x, z) > radius) return false;
+          if (sourceDistance(resident.x, resident.z, x, z) > radius ||
+              !residentFirstPreviewVisible(resident, prioritizeActors)) return false;
           firstValidated = true;
           onFirstValidated(resident);
           return true;
@@ -2868,7 +2869,7 @@ export class LazySimulation {
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
         // This is a complete SEED/Simulation/ground/route fact, not a guessed
         // candidate. The final deterministic actor/inspector batch is untouched.
-        if (!firstValidated && onFirstValidated) {
+        if (!firstValidated && onFirstValidated && residentFirstPreviewVisible(resident, prioritizeActors)) {
           firstValidated = true;
           onFirstValidated(resident);
         }
