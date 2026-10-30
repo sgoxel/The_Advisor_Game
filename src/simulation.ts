@@ -488,11 +488,25 @@ export function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundat
 function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
   return neighbourhoodSite(place, foundation, "garden");
 }
+/** Real guard assignments belong to the exact SEED gate geometry.
+ * The old independent GATE_COUNT/STAFF hashes disagreed with physical
+ * gate/guard-post generation (especially in cities). Never create a duty
+ * assignment for a nonexistent post or leave a generated gate unstaffed.
+ * This tiny derived roster cache is disposable, not a truth source. */
+const gateRosterCache = new Map<string, readonly number[]>();
+function gateRosterFor(place: Place): readonly number[] {
+  let counts = gateRosterCache.get(place.code);
+  if (counts) return counts;
+  counts = settlementExteriorFor(place).gates.map(gate => Math.max(1, gate.guardPosts.length));
+  gateRosterCache.set(place.code, counts);
+  while (gateRosterCache.size > 16) gateRosterCache.delete(gateRosterCache.keys().next().value!);
+  return counts;
+}
 export function gateCountFor(place: Place) {
-  return 1 + (digest(`${place.code}/GATE_COUNT`) % 2);
+  return gateRosterFor(place).length;
 }
 export function guardsPerGateFor(place: Place, gateIndex: number) {
-  return 1 + (digest(`${place.code}/GATE/${gateIndex}/STAFF`) % 2);
+  return gateRosterFor(place)[gateIndex] ?? 0;
 }
 function guardAssignmentFor(
   place: Place,
@@ -719,6 +733,21 @@ export function residentGuardPresence(
   if (!isGuardOnDuty(resident, tick, place)) return "off-duty";
   return physicallyPresent.includes(resident.code) ? "at-post" : "absent";
 }
+/** Prioritize only real on-duty residents whose lawful gate posts are
+ * within a close camera query. This does not create people or alter truth. */
+export function dutyGuardCodesNearView(
+  place: Place, tick: number, x: number, z: number, radius: number,
+): string[] {
+  if (!(radius >= 0) || !Number.isFinite(radius)) return [];
+  const gates = settlementExteriorFor(place).gates;
+  const nearby = gates.flatMap((gate, gateIndex) =>
+    (gate.guardPosts.length ? gate.guardPosts : [gate]).some(post =>
+      sourceDistance(post.x, post.z, x, z) <= radius) ? [gateIndex] : []);
+  if (!nearby.length) return [];
+  const coverage = guardCoverageAt(place, tick);
+  return nearby.flatMap(gateIndex => coverage[gateIndex]?.residentCodes ?? []);
+}
+
 /** Scheduled assignment and physical gate coverage are different facts.
  * A guard with an unresolved house or illegal commute cannot fill a post. */
 export function guardCoverageAt(place: Place, tick: number) {
