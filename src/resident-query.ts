@@ -183,11 +183,16 @@ export class ResidentQueryQueue {
       currentTick !== undefined && Math.abs(currentTick - flight.tick) <= this.maxAgeTicks;
   }
   readyFor(key: string | undefined, tick = this.desired?.tick) {
-    return !!key && this.snapshot?.key === key && tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
+    // Partial discoveries may already be rendered; they are not a completed
+    // current-view population or a valid 100%-ready indicator.
+    return !!key && !this.snapshot?.partial && this.snapshot?.key === key &&
+      tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }
   get ready() { return this.readyFor(this.desired?.key); }
   get current() {
-    return this.ready ? this.snapshot : undefined;
+    const snapshot = this.snapshot;
+    return snapshot && snapshot.key === this.desired?.key && this.desired &&
+      Math.abs(this.desired.tick - snapshot.tick) <= this.maxAgeTicks ? snapshot : undefined;
   }
   take(allowLatestBesideObsolete = false): ResidentQueryJob | undefined {
     if (!this.desired || this.current?.tick === this.desired.tick) return;
