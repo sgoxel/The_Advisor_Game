@@ -62,7 +62,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-002-001 — Ground & reuse GLB building/door/roof/prop assets; verify mobile 3D resource costs
 - WP-S010-003-001 — Prove 2D resident feet, roof/depth occlusion and accessible picking on both backends
 - WP-S010-003-002 — Add explicit accessible inspect/tilt/follow/reset; keep pure-zoom camera unchanged
-- WP-S010-003-003 — Preserve each NPC's original 2D art; validate optional owner GLBs and safe fallback
+- WP-S010-003-003 — Preserve each NPC's original 2D art; ship the optional owner-GLB pipeline and permanent fallback — COMPLETED and REVIEWED at 2026-10-30 (real owner-asset mixed 3D/2D visual validation remains conditional on asset delivery; NOT claimed PASS)
 - WP-S010-004-001 — Prove lawful worksite arrival, visible shift activity & homecoming for real residents
 - WP-S010-004-002 — Connect SEED-owned homes to legal paths, graded entrances & final-surface collision
 - WP-S010-004-003 — Make inventory playable: Simulation-owned item inspection, legal transfer & replay
