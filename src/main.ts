@@ -299,15 +299,15 @@ function residentRequestForView(tick: number, limit: number, actors: boolean): R
   const place = nearestPlace(view.x, view.z);
   if (!place) return;
   const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
-    viewportRadius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
+    viewportRadius = Math.hypot(view.halfHeight * view.aspect,
+      view.halfHeight / Math.sin(cameraElevationForHalfHeight(view.halfHeight))) / lonScale * 1.1,
     previous = residentSearchWindow,
     displacement = previous ? Math.hypot(wrapSourceX(view.x - previous.x), view.z - previous.z) : Infinity;
   if (!previous || previous.placeCode !== place.code || previous.actors !== actors ||
       previous.limit !== limit || displacement + viewportRadius > previous.radius) {
-    // Query a slightly larger real source-space circle, then retain it while
-    // the actual viewport remains inside. The old exact floating-point camera
-    // key invalidated every actor after even a tiny drag.
-    const radius = viewportRadius * 1.5;
+    // Reuse the existing viewBounds prefetch margin without enlarging cold
+    // population work; camera-only drags cannot invalidate visible actors.
+    const radius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1;
     residentSearchWindow = {
       key: `${place.code}|${view.x}|${view.z}|${radius}|${limit}|${actors}`,
       placeCode: place.code, x: view.x, z: view.z, radius, limit, actors,
