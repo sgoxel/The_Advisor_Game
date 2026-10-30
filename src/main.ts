@@ -677,8 +677,8 @@ function applyPresentation() {
     globe.setVisible(false);
     globe.setBlend(0);
     const distance = view.halfHeight * 2.2 + 200;
-    // RPG close-up: the camera lowers from a 60° map view to 34° at character zoom, so upright
-    // people and buildings keep true relative proportions and painted characters read as drawn.
+    // Zoom changes the orthographic footprint, never the local view pitch.
+    // Only an explicit bridge-inspection action may use a distinct fixed angle.
     const elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : cameraElevationForHalfHeight(view.halfHeight);
     const horizontal = distance * Math.cos(elevationAngle);
     camera.setPosition(
