@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { terrainProgressText, terrainLoadingMessage, residentFactSuffix } from "../src/readiness-presentation.ts";
+import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel } from "../src/readiness-presentation.ts";
 
 test("terrain percentage never asserts resident or full interaction readiness", () => {
   assert.equal(terrainProgressText(0), "Terrain 0%");
@@ -17,4 +17,11 @@ test("resident fact status distinguishes exact query absence, pending and ready"
   assert.equal(residentFactSuffix(false, true), "");
   assert.equal(residentFactSuffix(true, false), " · residents pending");
   assert.equal(residentFactSuffix(true, true), " · residents ready");
+});
+
+test("coherent preview still reports detail as refining until current view is settled", () => {
+  assert.equal(terrainDetailLabel(false, false), "preparing terrain");
+  assert.equal(terrainDetailLabel(false, true), "preparing terrain");
+  assert.equal(terrainDetailLabel(true, false), "refining detail");
+  assert.equal(terrainDetailLabel(true, true), "ready");
 });

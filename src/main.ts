@@ -6,7 +6,7 @@ import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
-import { terrainProgressText, terrainLoadingMessage, residentFactSuffix } from "./readiness-presentation.ts";
+import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel } from "./readiness-presentation.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
@@ -1194,12 +1194,21 @@ function processStreaming(material: pc.StandardMaterial) {
     Boolean(residentRequest),
     Boolean(residentRequest && residentQueries.readyFor(residentRequest.key, residentRequest.tick)),
   );
+  // Coarse terrain may be coherent while mandatory current-view detail is
+  // missing, transitioning or still streaming. Avoid false "tiles ready".
+  const currentDetailSettled =
+    complete && !selectionDirty && !lodTransition && pending.size === 0 &&
+    activeKeys.length === wanted.length &&
+    wanted.every(tile => activeKeys.includes(tile.key)) &&
+    Math.abs(surfaceDetail - (globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1)) < 0.002 &&
+    Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001;
+  const detailLabel = terrainDetailLabel(coverageComplete, currentDetailSettled);
   $("tile-status").textContent =
     (projectionTransition >= 0.999
       ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
       : projectionTransition > 0.001
-        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
-        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
+        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${detailLabel}`
+        : `${activeKeys.length || 1} tiles · ${detailLabel}`) +
     residentStatus + poleFeedback;
 }
 const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post", "park"]);
