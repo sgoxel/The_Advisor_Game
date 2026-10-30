@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -67,21 +67,19 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
     .catch(() => characterModelManifest({}));
   const resources = new Map<string, Promise<pc.ContainerResource | null>>();
   function ownerModel(file: string): Promise<pc.ContainerResource | null> {
-    const prior = resources.get(file);
-    if (prior) return prior;
-    const url = new URL(`characters/models/${file}`, document.baseURI).href;
-    const loaded = new Promise<pc.ContainerResource | null>((resolve) => {
-      app.assets.loadFromUrl(url, "container", (error, asset) => {
-        if (error || !asset?.resource) {
-          console.warn("Optional character model unavailable; keeping illustration", file, error);
-          resolve(null);
-          return;
-        }
-        resolve(asset.resource);
+    return loadSharedOwnerModel(file, resources, requested => {
+      const url = new URL(`characters/models/${requested}`, document.baseURI).href;
+      return new Promise<pc.ContainerResource | null>(resolve => {
+        app.assets.loadFromUrl(url, "container", (error, asset) => {
+          if (error || !asset?.resource) {
+            console.warn("Optional character model unavailable; keeping illustration", requested, error);
+            resolve(null);
+            return;
+          }
+          resolve(asset.resource);
+        });
       });
     });
-    resources.set(file, loaded);
-    return loaded;
   }
   // Keep real 2D geometry available immediately in every shipped version.
   // Missing specialist images retain the existing authored default.
