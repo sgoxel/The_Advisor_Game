@@ -4,6 +4,18 @@ import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
 import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, characterCutoutOrientation, characterCutoutScale, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
 
+test("S010 resident hitbox and selected label use the painted cutout world transform", () => {
+  const characters = readFileSync(new URL("../src/default-character.ts", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+  assert.match(characters, /headPoint\(actor: pc\.Entity, result: pc\.Vec3\)/);
+  assert.match(characters, /getWorldTransform\(\)\.transformPoint\(paintedTopLocal, result\)/,
+    "head follows the pitched sprite child or the real 3D actor, not a vertical overlay");
+  assert.match(main, /characterVisuals\.headPoint\(actor, paintedHeadWorld\)/,
+    "live pointer picking follows the displayed model");
+  assert.match(main, /characterVisuals\.headPoint\(inspectedActor, selectedResidentWorld\)/,
+    "selected labels follow the same displayed model");
+});
+
 test("authored 2D NPC colors survive rendering without extra tone mapping or diffuse darkening", () => {
   // The material lives in a browser-only scene initializer. Keep this focused
   // source contract paired with real WebGL2/WebGPU screenshot acceptance.
