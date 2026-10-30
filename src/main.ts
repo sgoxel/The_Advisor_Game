@@ -59,7 +59,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
+import { LazySimulation, populationOf, guardCoverageAt, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -376,6 +376,9 @@ const clock = new FantasyClock();
 const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 /** Resident drawn by each actor, for click picking. */
 const actorResidents = new Map<pc.Entity, Resident>();
+// An explicit gate-watch camera visit may show only physically verified
+// Simulation residents while the cold full population worker is still busy.
+let focusedWatchCodes: string[] = [];
 /** Walking actors: positions at this and the next simulation second, animated per frame. */
 const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
@@ -1468,9 +1471,18 @@ function setupControls() {
     if (!place) return;
     const gate = settlementExteriorFor(place).gates[0];
     if (!gate) return;
-    // Follow the real SEED guard post, not a camera-created or teleported NPC.
     const post = gate.guardPosts[0] ?? gate;
+    // Navigation is a camera-only visit to an actual SEED duty position.
+    // The normal population worker may take a long time to build its first
+    // index. Validate the real roster on demand instead of leaving the post
+    // visually empty while that background work runs.
     navigate(post.x, post.z, HERO_HALF_HEIGHT * 3);
+    focusedWatchCodes = [];
+    const coverage = guardCoverageAt(place, simulation.tick)[0];
+    focusedWatchCodes = coverage?.residentCodes ?? [];
+    $("focus-gate-watch").title = coverage
+      ? `Gate watch: ${coverage.onDuty}/${coverage.required} physically present`
+      : "Gate watch unavailable";
     $("cell-panel").hidden = true;
   };
   $("overview").onclick = () => {
@@ -2059,6 +2071,15 @@ async function start() {
         // Append only its actual current Simulation state when still in view.
         const visible = residentMode.actors
           ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
+        if (residentMode.actors && query) {
+          // The fast watch comes from the SAME authoritative Simulation as the
+          // regular worker results. It is never a guessed street/guard position.
+          for (const code of focusedWatchCodes) {
+            if (visible.some(resident => resident.code === code)) continue;
+            const watch = simulation.projectedResidentByCode(code);
+            if (selectedResidentVisibleInView(watch, query)) visible.push(watch!);
+          }
+        }
         if (snapshot && selectionNearby && selected &&
             !visible.some(resident => resident.code === selected.code)) visible.push(selected);
         for (let i = 0; i < visible.length; i++) {
