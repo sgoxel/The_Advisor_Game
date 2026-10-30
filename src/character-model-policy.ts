@@ -44,6 +44,31 @@ export function characterVisualFormat(usableModel: boolean): CharacterVisualForm
   return usableModel ? "3d-model" : "2d-cutout";
 }
 
+/** Report the actual displayed visual form once per visible resident. Calling
+ * format may itself invalidate a lost owner GLB and restore its 2D fallback;
+ * repeated scans could both waste render-tree walks and disagree within one
+ * diagnostic snapshot. This never changes authoritative resident state. */
+export function summarizeCharacterPresentations<T>(
+  visible: readonly T[],
+  format: (actor: T) => CharacterVisualFormat,
+): {
+  format: CharacterVisualFormat | "mixed-3d-model-and-2d-cutout";
+  visibleActors: number;
+  modelActors: number;
+  illustratedActors: number;
+} {
+  let modelActors = 0;
+  for (const actor of visible) if (format(actor) === "3d-model") modelActors++;
+  const illustratedActors = visible.length - modelActors;
+  return {
+    format: modelActors === 0 ? "2d-cutout"
+      : illustratedActors === 0 ? "3d-model" : "mixed-3d-model-and-2d-cutout",
+    visibleActors: visible.length,
+    modelActors,
+    illustratedActors,
+  };
+}
+
 /** A pooled visual belongs to one SEED resident, not merely one image type.
  * Reassignment of a same-type resident must restart stale asynchronous art or
  * optional model work, while repeated frames of the SAME resident do not. */

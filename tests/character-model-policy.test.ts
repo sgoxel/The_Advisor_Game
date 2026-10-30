@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };
@@ -43,6 +43,32 @@ test("WP #693 transient owner registry failure can recover without losing origin
     throw new Error("must not refetch valid empty registry");
   }), blank);
   assert.equal(emptyCalls, 1, "normal no-owner deployment must not retry its valid empty manifest");
+});
+
+test("WP #693 resident presentation counters classify each visible actor only once", () => {
+  const residents = ["guard", "farmer", "baker"];
+  const calls: string[] = [];
+  const mixed = summarizeCharacterPresentations(residents, actor => {
+    calls.push(actor);
+    return actor === "guard" ? "3d-model" : "2d-cutout";
+  });
+  assert.deepEqual(mixed, {
+    format: "mixed-3d-model-and-2d-cutout",
+    visibleActors: 3, modelActors: 1, illustratedActors: 2,
+  });
+  assert.deepEqual(calls, residents, "model visibility/invalidations are evaluated exactly once each");
+  assert.deepEqual(summarizeCharacterPresentations([], () => {
+    throw Error("empty set must not query a nonexistent actor");
+  }), { format: "2d-cutout", visibleActors: 0, modelActors: 0, illustratedActors: 0 });
+  assert.equal(summarizeCharacterPresentations(residents, () => "3d-model").format, "3d-model");
+  assert.equal(summarizeCharacterPresentations(residents, () => "2d-cutout").format, "2d-cutout");
+  let invocations = 0;
+  const lostModel = summarizeCharacterPresentations(["guard"], () => {
+    invocations++;
+    return "2d-cutout"; // format() invalidated a GLB during this very snapshot
+  });
+  assert.equal(invocations, 1, "a recovered 2D fallback is not rechecked or double counted");
+  assert.equal(lostModel.modelActors + lostModel.illustratedActors, lostModel.visibleActors);
 });
 
 test("WP #693 no owner model leaves residents in 2D", () => {
