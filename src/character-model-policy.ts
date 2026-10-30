@@ -1,7 +1,7 @@
 import { CHARACTER_TYPES } from "./characters.ts";
 
-/** Optional owner-supplied GLB models; 2D artwork is always the fallback. */
-const GLB_FILENAME = /^[a-z][a-z0-9_-]*\.glb$/;
+/** Optional owner-supplied GLB/glTF models; 2D artwork is always the fallback. */
+const OWNER_MODEL_FILENAME = /^[a-z][a-z0-9_-]*\.(?:glb|gltf)$/;
 export type CharacterModelManifest = Readonly<Record<string, string>>;
 
 export function characterModelManifest(value: unknown): CharacterModelManifest {
@@ -9,7 +9,7 @@ export function characterModelManifest(value: unknown): CharacterModelManifest {
   if (!value || typeof value !== "object" || Array.isArray(value)) return names;
   for (const [type, file] of Object.entries(value)) {
     if (Object.hasOwn(CHARACTER_TYPES, type) &&
-        typeof file === "string" && GLB_FILENAME.test(file))
+        typeof file === "string" && OWNER_MODEL_FILENAME.test(file))
       names[type] = file;
   }
   return names;
