@@ -1337,11 +1337,15 @@ body.globe-mode .travel-button {
   content: "";
   position: absolute;
   bottom: 0;
-  left: calc(50% - 3px);
+  right: 3px;
   width: 6px;
   height: 6px;
   background: #f0ce7e;
   border-radius: 50%;
+}
+#selected-resident-marker[data-anchor-side="left"]::after {
+  left: 3px;
+  right: auto;
 }
 /* A passive, Simulation-grounded indication of the selected resident's real
    SEED-resolved entrance. It does not add a door, change ownership or pick. */
