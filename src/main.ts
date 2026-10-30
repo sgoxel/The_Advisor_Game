@@ -1858,7 +1858,7 @@ async function start() {
   // ancestors, visible mesh instances and alpha-tested / blended owner art.
   // Use the same 2D/3D eligibility as model fallback, never a nominal component.
   const hasResidentMesh = (actor: pc.Entity) => characterDrawableMeshes(
-    actor.findComponents("render") as pc.RenderComponent[], pc.BLEND_NONE,
+    actor.findComponents("render") as pc.RenderComponent[],
   ).length > 0;
   pickResidentAt = (clientX: number, clientY: number) => {
     const pickStarted = performance.now();
