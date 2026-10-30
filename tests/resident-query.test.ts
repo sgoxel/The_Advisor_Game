@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -340,6 +340,22 @@ test("visible S006 residents retain a 44px CSS touch target without selecting di
   const tallHead = { x: 100, y: -20 };
   assert.notEqual(residentActorPickDistance(100, -18, feet, tallHead), null,
     "full-height nearby 3D characters remain selectable near their visible heads");
+});
+
+test("S010 tilted cutout picking compares actual tapped head/feet depths", () => {
+  const feet = { x: 100, y: 220 }, head = { x: 140, y: 140 };
+  assert.equal(residentActorPaintedTapFraction(100, 220, feet, head), 0,
+    "a tap at grounded feet uses their depth, not midpoint depth");
+  assert.equal(residentActorPaintedTapFraction(140, 140, feet, head), 1,
+    "a tap at the visibly pitched head uses its actual plane depth");
+  assert.equal(residentActorPaintedTapFraction(120, 180, feet, head), .5);
+  assert.equal(residentActorPaintedTapFraction(100, 100, feet, head), 1,
+    "touch padding beyond the painted top clamps to the top of the real quad");
+  assert.equal(residentActorPaintedTapFraction(100, 280, feet, head), 0,
+    "touch padding below the original feet cannot extrapolate into terrain");
+  assert.equal(residentActorPaintedTapFraction(50, 50, feet, feet), .5,
+    "degenerate projection keeps the stable previous midpoint depth");
+  assert.equal(residentActorPaintedTapFraction(NaN, 180, feet, head), null);
 });
 
 test("S010 overlapping real 2D residents pick the front painted plane, not a hidden rear centre", () => {
