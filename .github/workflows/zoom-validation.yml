@@ -28,7 +28,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zoom-validation-${{ github.event.pull_request.number || github.ref }}
+  # A PR merge emits 'closed'; it must not cancel that PR's active zoom
+  # screenshot/test job before original evidence is uploaded. New commits still
+  # replace older active runs, so no duplicate suites are scheduled.
+  group: zoom-validation-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'closed' && 'closed' || 'active' }}
   cancel-in-progress: true
 jobs:
   full-unit-diagnostics:
