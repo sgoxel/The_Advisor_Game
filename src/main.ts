@@ -1497,7 +1497,9 @@ function setupControls() {
     const post = gate.guardPosts[0] ?? gate;
     // Navigation is a camera-only visit to an actual SEED duty position.
     // The cold population worker may still be preparing unrelated residents.
-    // Focus the genuine SEED post at Hero scale so its on-duty people are legible.\n    // This only moves the observer camera; it never moves or creates guards.\n    navigate(post.x, post.z, HERO_HALF_HEIGHT);
+    // Focus the genuine SEED post at Hero scale so its on-duty people are legible.
+    // This only moves the observer camera; it never moves or creates guards.
+    navigate(post.x, post.z, HERO_HALF_HEIGHT);
     focusedWatchCodes = watch?.residentCodes ?? [];
     $("focus-gate-watch").title = watch
       ? `Gate ${watch.gateIndex + 1}: ${watch.onDuty}/${watch.required} guards physically present`
