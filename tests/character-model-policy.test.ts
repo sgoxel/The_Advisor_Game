@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -86,6 +86,26 @@ test("WP #693 rejected owner GLB promises also allow later independent recovery"
   assert.equal(await loadSharedOwnerModel("farmer_male.glb", cache, load),
     "restored shared owner GLB");
   assert.equal(calls, 2);
+});
+
+test("WP #693 parent-only foot alignment preserves imported GLB root transforms", () => {
+  const part = (x: number, y: number, z: number, hx: number, hy: number, hz: number) =>
+    ({ aabb: { center: { x, y, z }, halfExtents: { x: hx, y: hy, z: hz } } });
+  // Staged AABBs already account for authored root scale and translation:
+  // an 0.8m baked height is normalized by the NEW parent, not by replacing
+  // the imported GLB's own scale a second time.
+  const placement = characterModelFootPlacement([part(3, 5, -2, .2, .4, .1)], 1.782);
+  assert.ok(placement);
+  assert.ok(Math.abs(placement.scale - 1.782 / .8) < 1e-12);
+  assert.ok(Math.abs(placement.x + 3 * placement.scale) < 1e-12);
+  assert.ok(Math.abs(placement.y + 4.6 * placement.scale) < 1e-12);
+  assert.ok(Math.abs(placement.z - 2 * placement.scale) < 1e-12);
+  assert.ok(Math.abs(.8 * placement.scale - 1.782) < 1e-12,
+    "rendered height remains nominal with a nonunit authored source root");
+  assert.equal(characterModelFootPlacement([], 1.782), null);
+  assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, 0, 1)], 1.782), null);
+  assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, NaN, 1)], 1.782), null);
+  assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, 1, 1)], Infinity), null);
 });
 
 test("WP #693 render components with zero drawable primitives must keep 2D fallback", () => {

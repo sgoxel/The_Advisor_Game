@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -156,13 +156,16 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       const resource = await usableOwnerModel(file, ownerModel);
       if (!current() || !resource) return;
       let model: pc.Entity | undefined;
+      let anchor: pc.Entity | undefined;
       try {
         model = resource.instantiateRenderEntity({ castShadows: true, receiveShadows: true });
-        // PlayCanvas reports .enabled=false for every detached GraphNode,
-        // even when its authored enabled flag is true. Probe the model under
-        // the live scene root before evaluating its render components.
-        // This synchronous phase never hides the resident's original artwork.
-        app.root.addChild(model);
+        // The authored GLB root may already carry translation/rotation/scale.
+        // Ground a separate parent so normalization does not erase that art.
+        // PlayCanvas reports detached nodes disabled, so validate beneath the
+        // enabled live root without hiding the permanent 2D illustration.
+        anchor = new pc.Entity("Owner model foot alignment");
+        app.root.addChild(anchor);
+        anchor.addChild(model);
         // A GLB may contain hidden nodes, disabled render components or
         // invisible mesh instances alongside genuine geometry. Such authored
         // data must never suppress the visible 2D NPC illustration.
@@ -170,36 +173,25 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         const components = model.findComponents("render") as pc.RenderComponent[];
         const pieces = characterDrawableMeshes(components);
         if (!pieces.length) throw new Error("no visible drawable model geometry");
-        // Align the owner's model's actual feet and height to the same 1.782 m
-        // nominal body used by the 2D quad; the actor parent still owns the
-        // exact Simulation-derived physical scale and absolute world position.
-        let minX = Infinity, minY = Infinity, minZ = Infinity,
-          maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        for (const part of pieces) {
-          const box = part.aabb, c = box.center, h = box.halfExtents;
-          minX = Math.min(minX, c.x - h.x); maxX = Math.max(maxX, c.x + h.x);
-          minY = Math.min(minY, c.y - h.y); maxY = Math.max(maxY, c.y + h.y);
-          minZ = Math.min(minZ, c.z - h.z); maxZ = Math.max(maxZ, c.z + h.z);
-        }
-        const height = maxY - minY;
-        if (!Number.isFinite(height) || height <= 0 ||
-            ![minX, minY, minZ, maxX, maxZ].every(Number.isFinite))
-          throw new Error("invalid model bounds");
-        const factor = DEFAULT_CHARACTER_HEIGHT_M / height;
-        model.setLocalScale(factor, factor, factor);
-        model.setLocalPosition(-(minX + maxX) * factor / 2, -minY * factor,
-          -(minZ + maxZ) * factor / 2);
-        if (!current()) { model.destroy(); return; }
-        // Move the proven visible mesh to the same Simulation-owned actor.
-        // Reparent preserves local GLB scale/foot alignment, not world truth.
-        model.reparent(actor);
-        activeModels.set(actor, model);
+        // The AABBs include the owner's authored GLB root transform. Normalize
+        // only our neutral parent: replacing model.scale would multiply an
+        // already-scaled bound by the wrong factor and break ground contact.
+        const placement = characterModelFootPlacement(pieces, DEFAULT_CHARACTER_HEIGHT_M);
+        if (!placement) throw new Error("invalid model bounds");
+        anchor.setLocalScale(placement.scale, placement.scale, placement.scale);
+        anchor.setLocalPosition(placement.x, placement.y, placement.z);
+        if (!current()) { anchor.destroy(); return; }
+        // Attach to the same Simulation actor; original GLB local transforms
+        // and root-motion authority stay untouched (visual placement only).
+        anchor.reparent(actor);
+        activeModels.set(actor, anchor);
         modelComponents.set(actor, components);
         // Never turn off the 2D fallback until the 3D entity exists and has
         // real renderable geometry. Model failure only removes the optional art.
         cutout.enabled = false;
       } catch (error) {
-        model?.destroy();
+        if (anchor) anchor.destroy();
+        else model?.destroy();
         if (current()) console.warn("Invalid owner character model; keeping illustration", file, error);
       }
     },
