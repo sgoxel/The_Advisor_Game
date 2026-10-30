@@ -162,6 +162,28 @@ test("first outdoor canvas actor may use one bounded follow-up after an indoor-o
   assert.equal(residentActorSearchContinues(0, 0, 0), false);
 });
 
+test("progressive outdoor results keep every valid NPC without duplicates or stale camera actors", () => {
+  const queue = new ResidentQueryQueue(48);
+  const actorQuery = { ...request("street"), actors: true };
+  queue.offer(actorQuery);
+  const job = queue.take()!;
+  const outdoor = (code: string) => ({ code, grounded: true, indoors: false });
+  const first = outdoor("beggar"), second = outdoor("guard");
+  assert.equal(queue.appendPartial(job.id, [first] as never[], 100), true);
+  assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar"]);
+  assert.equal(queue.current?.partial, true);
+  assert.equal(queue.appendPartial(job.id, [first, second] as never[], 100), true);
+  assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar", "guard"]);
+  assert.equal(queue.appendPartial(job.id, [{ ...outdoor("innkeeper"), indoors: true }] as never[], 100), false);
+  assert.equal(queue.appendPartial(job.id, [second] as never[], 100), false);
+  assert.equal(queue.appendPartial(job.id, [outdoor("farmer")] as never[], 149), false);
+  assert.equal(queue.complete(job.id, { ...result, residents: [first, second] as never[] }, 100), true);
+  assert.equal(queue.current?.partial, undefined);
+  assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar", "guard"]);
+  queue.offer({ ...actorQuery, key: "elsewhere" });
+  assert.equal(queue.current, undefined);
+});
+
 test("visible S006 residents retain a 44px CSS touch target without selecting distant actors", () => {
   const feet = { x: 100, y: 100 }, head = { x: 100, y: 94 };
   assert.equal(residentActorPickDistance(100, 97, feet, head), 0,
