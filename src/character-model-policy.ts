@@ -74,6 +74,21 @@ export function characterDrawableMeshes<T extends {
   return drawable;
 }
 
+/** Re-check an already attached optional GLB: renderer/scene changes can
+ * disable its root or all drawable components after initial validation.
+ * A resident must immediately revert to their original 2D presentation. */
+export function characterModelRenderable<T extends {
+  visible?: boolean;
+  material?: unknown;
+  mesh?: { primitive?: readonly { count: number }[] } | null;
+}>(root: { enabled: boolean }, components: readonly {
+  enabled: boolean;
+  entity: { enabled: boolean };
+  meshInstances: readonly T[];
+}[]): boolean {
+  return root.enabled && characterDrawableMeshes(components).length > 0;
+}
+
 /** Reuse one texture/material promise per authored NPC illustration.
  * Missing specialist art resolves to the original shared default image,
  * including the default image's own proportions, without retrying every actor.

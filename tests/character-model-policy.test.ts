@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, loadSharedCharacterArtwork, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -98,6 +98,30 @@ test("WP #693 fully transparent owner GLB geometry cannot hide its 2D resident",
   assert.deepEqual(characterDrawableMeshes([component([invisible, drawable, translucent, opaqueAlpha])]),
     [drawable, translucent, opaqueAlpha],
     "valid opaque, visible and semi-transparent GLB parts remain eligible without replacing 2D with invisible art");
+});
+
+test("WP #693 previously visible owner model reverting invisible keeps 2D eligible", () => {
+  const root = { enabled: true };
+  const material = { opacity: 1, transparent: false };
+  const part = { visible: true, material, mesh: { primitive: [{ count: 6 }] } };
+  const component = { enabled: true, entity: { enabled: true }, meshInstances: [part] };
+  assert.equal(characterModelRenderable(root, [component]), true, "valid attached owner model is 3D");
+  component.enabled = false;
+  assert.equal(characterModelRenderable(root, [component]), false, "disabled component must restore 2D");
+  component.enabled = true;
+  part.visible = false;
+  assert.equal(characterModelRenderable(root, [component]), false, "hidden mesh must restore 2D");
+  part.visible = true;
+  material.opacity = 0;
+  material.transparent = true;
+  assert.equal(characterModelRenderable(root, [component]), false, "newly transparent mesh restores 2D");
+  material.opacity = 1;
+  material.transparent = false;
+  root.enabled = false;
+  assert.equal(characterModelRenderable(root, [component]), false, "disabled model root restores 2D");
+  root.enabled = true;
+  assert.equal(characterModelRenderable(root, [component]), true, "valid drawable hierarchy remains eligible");
+  assert.equal(characterModelRenderable(root, []), false, "missing render components cannot suppress 2D");
 });
 
 test("WP #693 missing specialist art shares default material and its correct sprite aspect", async () => {
