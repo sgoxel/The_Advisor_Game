@@ -85,6 +85,23 @@ export function summarizeCharacterPresentations<T>(
   };
 }
 
+/** Point an illustrated vertical cutout at the viewing camera in both
+ * yaw and elevation. The mesh's lower vertices sit at local y=0; rotating the
+ * visual at that pivot preserves Simulation-owned feet/world position while
+ * avoiding foreshortened, squat 2D people in steeper Hero/Close camera views.
+ * This affects only presentation; owner 3D GLBs keep independent heading. */
+export function characterCutoutOrientation(
+  actor: Readonly<{ x: number; y: number; z: number }>,
+  camera: Readonly<{ x: number; y: number; z: number }>,
+): { yaw: number; pitch: number } {
+  const dx = camera.x - actor.x, dy = camera.y - actor.y, dz = camera.z - actor.z;
+  const groundDistance = Math.hypot(dx, dz);
+  return {
+    yaw: Math.atan2(dx, dz) * 180 / Math.PI,
+    pitch: -Math.atan2(dy, groundDistance) * 180 / Math.PI,
+  };
+}
+
 /** A pooled visual belongs to one SEED resident, not merely one image type.
  * Reassignment of a same-type resident must restart stale asynchronous art or
  * optional model work, while repeated frames of the SAME resident do not. */
