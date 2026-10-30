@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -360,6 +360,31 @@ test("S010 overlapping real 2D residents pick the front painted plane, not a hid
   assert.equal(residentActorPickPrefersFront({ code: "seed/a", distance: 4, viewDepth: -8 },
     { code: "seed/b", distance: 4, viewDepth: -8 }), true,
     "identical depth and distance use stable SEED identity rather than actor pool order");
+});
+
+test("S010 keyboard inspection stops after its first truly pickable nearest resident", () => {
+  const far = { code: "SEED/far", x: 950, y: 50 };
+  const near = { code: "SEED/near", x: 540, y: 960 };
+  const visited: string[] = [];
+  assert.equal(nearestPickableKeyboardResident([far, near], 1080, 1920, resident => {
+    visited.push(resident.code);
+    return true;
+  })?.code, "SEED/near");
+  assert.deepEqual(visited, ["SEED/near"],
+    "a foreground accessible actor avoids repeating the entire pointer hit scan for distant residents");
+
+  const covered = { code: "SEED/covered", x: 540, y: 960 };
+  const visible = { code: "SEED/visible", x: 545, y: 960 };
+  const checked: string[] = [];
+  assert.equal(nearestPickableKeyboardResident([visible, covered, { code: "invalid", x: NaN, y: 0 }],
+    1080, 1920, resident => {
+      checked.push(resident.code);
+      return resident.code === "SEED/visible";
+    })?.code, "SEED/visible",
+  "a UI-covered or rear hit is rejected by the real picker before trying the next original actor");
+  assert.deepEqual(checked, ["SEED/covered", "SEED/visible"],
+    "invalid projections are excluded and input order cannot override centre distance");
+  assert.equal(nearestPickableKeyboardResident([far], 0, 1920, () => true), undefined);
 });
 
 test("selected S006 resident caption stays clear of portrait inspector without changing actor", () => {
