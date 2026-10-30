@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -17,7 +17,7 @@ import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
-import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
+import { clockLabel, localDayIndex, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -288,6 +288,7 @@ const uploads: {
 /** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
 const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2, TIME_SCALE);
 const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(place)]));
+const residentPlacesById = new Map(places.map(place => [place.id, place]));
 // Preserve a complete source-space search window across small camera pans.
 // Camera motion changes presentation only, never SEED or the query's authority.
 let residentSearchWindow: Omit<ResidentQuery, "tick"> | undefined;
@@ -2038,7 +2039,29 @@ async function start() {
         residentPhaseTimings.clearPending();
         residentQueries.clear();
       }
-      const snapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
+      const recentSnapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
+      // An actor known to be at a stationary SEED work/post location stays there
+      // until the next actual routine boundary. Reuse is limited to an overlapping
+      // camera and the SAME local day, never walking/indoor/blocked residents.
+      // The worker remains pending; this does not make a stale query "ready".
+      const original = previousSnapshot;
+      const nearOriginal = original && query?.actors &&
+        original.placeCode === query.placeCode &&
+        Math.hypot(wrapSourceX(original.x - query.x), original.z - query.z) <=
+          Math.min(original.radius, query.radius) * .25;
+      const stationaryResidents = !recentSnapshot && nearOriginal
+        ? original.residents.filter(resident => {
+            const place = residentPlacesById.get(resident.settlement);
+            return !!place && residentStationaryWithinActivity(resident,
+              localDayIndex(original.tick, place.canonicalPosition.lon),
+              localDayIndex(simulation.tick, place.canonicalPosition.lon),
+              localSecondOfDay(simulation.tick, place.canonicalPosition.lon)) &&
+              Math.hypot(wrapSourceX(resident.x - query!.x), resident.z - query!.z) <= query!.radius;
+          })
+        : [];
+      const snapshot = recentSnapshot ?? (original && stationaryResidents.length
+        ? { ...original, residents: stationaryResidents, tick: simulation.tick, partial: true }
+        : undefined);
       // The terrain worker returns immutable routine facts. Reconcile any
       // independently accepted visit here with the main Simulation event
       // before selection, inspector or pooled sprite allocation. No copies.
