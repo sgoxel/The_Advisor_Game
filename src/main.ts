@@ -2329,6 +2329,11 @@ async function start() {
         }
         // Displace the name to reveal the actual small on-scene character.
         const right = residentLabelRightOfActor(x, innerWidth, innerHeight);
+        // The caption sits beside the selected actor; its marker dot must
+        // face the actor, not point at a different person behind the label.
+        const anchorSide = right ? "left" : "right";
+        if (selectedResidentMarker.dataset.anchorSide !== anchorSide)
+          selectedResidentMarker.dataset.anchorSide = anchorSide;
         const transform = `translate3d(${x + (right ? 14 : -14)}px, ${y}px, 0) translate(${right ? "0" : "-100%"}, -110%)`;
         if (transform !== markedResidentTransform) {
           selectedResidentMarker.style.transform = transform;
