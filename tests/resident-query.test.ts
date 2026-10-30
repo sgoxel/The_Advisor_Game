@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -340,6 +340,26 @@ test("visible S006 residents retain a 44px CSS touch target without selecting di
   const tallHead = { x: 100, y: -20 };
   assert.notEqual(residentActorPickDistance(100, -18, feet, tallHead), null,
     "full-height nearby 3D characters remain selectable near their visible heads");
+});
+
+test("S010 overlapping real 2D residents pick the front painted plane, not a hidden rear centre", () => {
+  const rear = { code: "seed/rear", distance: 1, viewDepth: -15 };
+  const front = { code: "seed/front", distance: 14, viewDepth: -7 };
+  assert.equal(residentActorPickPrefersFront(front, rear), true,
+    "a visible foreground cutout must beat a rear actor closer to the tap centre");
+  assert.equal(residentActorPickPrefersFront(rear, front), false,
+    "pool iteration order cannot select the obscured rear actor");
+  assert.equal(residentActorPickPrefersFront(front), true);
+  assert.equal(residentActorPickPrefersFront({ code: "bad", distance: 0, viewDepth: 0 }), false,
+    "an actor behind the camera has no picking priority");
+  assert.equal(residentActorPickPrefersFront({ code: "bad", distance: NaN, viewDepth: -2 }), false);
+  assert.equal(residentActorPickPrefersFront({ code: "bad", distance: 2, viewDepth: -Infinity }), false);
+  const first = { code: "seed/a", distance: 4, viewDepth: -8 };
+  assert.equal(residentActorPickPrefersFront({ code: "seed/b", distance: 3, viewDepth: -8 }, first), true,
+    "equal-depth, overlapping cutouts choose the nearer projected painted centre");
+  assert.equal(residentActorPickPrefersFront({ code: "seed/a", distance: 4, viewDepth: -8 },
+    { code: "seed/b", distance: 4, viewDepth: -8 }), true,
+    "identical depth and distance use stable SEED identity rather than actor pool order");
 });
 
 test("selected S006 resident caption stays clear of portrait inspector without changing actor", () => {
