@@ -488,11 +488,25 @@ export function neighbourhoodSite(place: Place, foundation: Pick<ResidentFoundat
 function gardenSite(place: Place, foundation: Pick<ResidentFoundation, "code" | "homeOffset">): ActivitySite {
   return neighbourhoodSite(place, foundation, "garden");
 }
+/** Real guard assignments belong to the exact SEED gate geometry.
+ * The old independent GATE_COUNT/STAFF hashes disagreed with physical
+ * gate/guard-post generation (especially in cities). Never create a duty
+ * assignment for a nonexistent post or leave a generated gate unstaffed.
+ * This tiny derived roster cache is disposable, not a truth source. */
+const gateRosterCache = new Map<string, readonly number[]>();
+function gateRosterFor(place: Place): readonly number[] {
+  let counts = gateRosterCache.get(place.code);
+  if (counts) return counts;
+  counts = settlementExteriorFor(place).gates.map(gate => Math.max(1, gate.guardPosts.length));
+  gateRosterCache.set(place.code, counts);
+  while (gateRosterCache.size > 16) gateRosterCache.delete(gateRosterCache.keys().next().value!);
+  return counts;
+}
 export function gateCountFor(place: Place) {
-  return 1 + (digest(`${place.code}/GATE_COUNT`) % 2);
+  return gateRosterFor(place).length;
 }
 export function guardsPerGateFor(place: Place, gateIndex: number) {
-  return 1 + (digest(`${place.code}/GATE/${gateIndex}/STAFF`) % 2);
+  return gateRosterFor(place)[gateIndex] ?? 0;
 }
 function guardAssignmentFor(
   place: Place,
