@@ -15,7 +15,7 @@ import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-lay
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
-import { settlementHomeFor } from "./settlement-exterior.ts";
+import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
@@ -1463,6 +1463,16 @@ function setupControls() {
     navigate(villages[0].x, villages[0].z + metresToSource(6), HERO_HALF_HEIGHT);
     $("cell-panel").hidden = true;
   };
+  $("focus-gate-watch").onclick = () => {
+    const place = nearestPlace(view.x, view.z);
+    if (!place) return;
+    const gate = settlementExteriorFor(place).gates[0];
+    if (!gate) return;
+    // Follow the real SEED guard post, not a camera-created or teleported NPC.
+    const post = gate.guardPosts[0] ?? gate;
+    navigate(post.x, post.z, HERO_HALF_HEIGHT * 3);
+    $("cell-panel").hidden = true;
+  };
   $("overview").onclick = () => {
     // Realm view changes scale only; the separate compass control resets north.
     // Do not rotate the player's focus during globe/local zoom handoff.
@@ -1585,13 +1595,15 @@ function setupTravel() {
   };
   $("visit-city").onclick = () => {
     const place = cities.find((p) => p.id === city.value)!;
-    navigate(place.x, place.z, 450);
+    // A destination visit should arrive at readable street detail, not a
+    // map-only camera scale that disables every resident illustration.
+    navigate(place.x, place.z, HERO_HALF_HEIGHT * 4);
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
   $("visit-village").onclick = () => {
     const place = villages.find((p) => p.id === village.value)!;
-    navigate(place.x, place.z + 14, 97);
+    navigate(place.x, place.z + metresToSource(6), HERO_HALF_HEIGHT * 4);
     simulation.setFocus(place);
     $("travel-panel").hidden = true;
   };
