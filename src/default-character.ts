@@ -43,11 +43,17 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
           const texture = asset.resource as pc.Texture;
           const material = new pc.StandardMaterial();
           material.name = `SEED character cutout · ${requested}`;
-          material.diffuseMap = texture;
+          // Display the original WebP RGB as authored rather than lighting or
+          // tone-mapping dark ink a second time. Only the alpha mask cuts out
+          // the real 3D-resident silhouette; SEED position/feet are unchanged.
+          material.diffuse.set(0, 0, 0);
+          material.emissive.set(1, 1, 1);
+          material.emissiveMap = texture;
           material.opacityMap = texture;
           material.opacityMapChannel = "a";
           material.alphaTest = 0.08;
           material.useLighting = false;
+          material.useTonemap = false;
           material.useFog = false;
           material.useSkybox = false;
           material.cull = pc.CULLFACE_NONE;
