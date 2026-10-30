@@ -6,7 +6,7 @@ import { characterForRole, type CharacterAge, type CharacterSex } from "./charac
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
-import { settlementExteriorFor, settlementHomeAnchorFor } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeAnchorFor, GUARD_POST_BUILDING_WIDTH_M } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, dailyStandingActivities, moodAt, personalityFor, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
@@ -558,8 +558,26 @@ function firstMaintenanceLaborerFor(place: Place): number | undefined {
 function workOffsetFor(place: Place, index: number, role: ResidentRole, assignment: GuardAssignment | undefined, home: Offset, character: string): Offset {
   const anchors = settlementAnchors(place), pick = <T>(list: readonly T[], salt: string) => list[digest(`${place.code}/RESIDENT/${index}/${salt}`) % list.length];
   if (assignment && anchors.posts.length) {
-    const posts = anchors.posts[assignment.gateIndex % anchors.posts.length];
-    return posts[assignment.slot % posts.length];
+    const gate = settlementExteriorFor(place).gates[assignment.gateIndex],
+      posts = anchors.posts[assignment.gateIndex % anchors.posts.length],
+      post = posts[assignment.slot % posts.length];
+    if (!gate) return post;
+    // Guard-post features are real roofed buildings centred ON their SEED
+    // post anchors. The earlier "outdoor" guard at that exact centre was
+    // invisible under the roof. The lawful duty station is a fixed cleared
+    // point beside the gate opening, inside the border and outside both the
+    // guardhouse roof and the gate arch. The actual route and final surface
+    // must still validate; this never teleports or invents a guard.
+    const gateCentre = offsetForSource(place, gate.x, gate.z),
+      dx = gateCentre.eastM - post.eastM,
+      dz = gateCentre.northM - post.northM,
+      distance = Math.hypot(dx, dz);
+    if (!distance) return post;
+    const clear = GUARD_POST_BUILDING_WIDTH_M / 2 + 1.75;
+    return {
+      eastM: post.eastM + dx / distance * clear - Math.cos(gate.bearingRad) * clear,
+      northM: post.northM + dz / distance * clear - Math.sin(gate.bearingRad) * clear,
+    };
   }
   const service = (name: string) => anchors.services.get(name) ?? anchors.market;
   switch (role) {
