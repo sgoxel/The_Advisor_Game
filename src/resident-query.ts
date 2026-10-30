@@ -237,6 +237,21 @@ export class ResidentQueryQueue {
   }
 }
 
+/** Previously validated stationary outdoor actors keep their physical
+ * post only within the same original local day and schedule interval.
+ * Moving/blocked/indoor facts cannot be reused as stationary scenery. */
+export function residentStationaryWithinActivity(
+  resident: Pick<Resident, "grounded" | "indoors" | "activity" | "activityStart" | "activityEnd" | "travelProgress" | "route">,
+  originalDay: number, currentDay: number, currentLocalSecond: number,
+): boolean {
+  return originalDay === currentDay &&
+    resident.grounded && !resident.indoors &&
+    resident.activity !== "commute" && resident.travelProgress === undefined &&
+    !resident.route.startsWith("BLOCKED:") &&
+    currentLocalSecond >= resident.activityStart &&
+    currentLocalSecond < resident.activityEnd;
+}
+
 /** Count only actually running resident shards in the shared streaming queue.
  * Planned but not yet submitted shards cannot consume a worker slot. */
 export function activeResidentWorkers(batches: Iterable<{ count: number; completed: Set<number>; unsent: Set<number> }>): number {
