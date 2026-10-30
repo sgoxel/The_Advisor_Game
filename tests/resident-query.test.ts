@@ -1,6 +1,7 @@
 import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
+import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
@@ -850,4 +851,21 @@ test("S009 long blocked-route terminal preflight retains exact every-metre legal
     assert.equal(terminalChecks, 2,
       "after the original central safety probe, a blocked terminal rejects before the corridor scan");
   }
+});
+
+test("S010 opaque world walls prevent picking an illustrated resident behind their depth", () => {
+  const ownMesh = {}, wallMesh = {}, terrainMesh = {};
+  assert.equal(residentGpuHitAllows(-15, -7, [ownMesh], [wallMesh, ownMesh]), false,
+    "a visible touch rectangle does not grant selection through a closer opaque wall pixel");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh, terrainMesh]), true,
+    "the same actual resident remains selectable over deeper world terrain");
+  assert.equal(residentGpuHitAllows(-15, -15, [ownMesh], [ownMesh]), true,
+    "the actor itself is the nearest painted depth");
+  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh]), true,
+    "sky-touch padding remains eligible only when genuine actor pixels were rendered nearby");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [terrainMesh]), false,
+    "no original painted resident pixel means no invisible proxy selection");
+  assert.equal(residentGpuHitAllows(-15, -20, [], [ownMesh]), false);
+  assert.equal(residentGpuHitAllows(NaN, -20, [ownMesh], [ownMesh]), false);
+  assert.equal(residentGpuHitAllows(-15, NaN, [ownMesh], [ownMesh]), false);
 });
