@@ -288,6 +288,9 @@ const uploads: {
 /** Tile-generation worker pool: one worker per spare core (see generationWorkerCount). */
 const residentQueries = new ResidentQueryQueue(TIME_SCALE * 2, TIME_SCALE);
 const residentOrder = new Map(places.map(place => [place.id, residentOrderFor(place)]));
+// Preserve a complete source-space search window across small camera pans.
+// Camera motion changes presentation only, never SEED or the query's authority.
+let residentSearchWindow: Omit<ResidentQuery, "tick"> | undefined;
 // Resident index construction is cold and expensive: reuse its owning worker.
 const warmedResidentWorkers = new Set<number>();
 let residentResultReady = () => {};
@@ -295,9 +298,21 @@ function residentRequestForView(tick: number, limit: number, actors: boolean): R
   const place = nearestPlace(view.x, view.z);
   if (!place) return;
   const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
-    radius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
-    key = `${place.code}|${view.x}|${view.z}|${radius}|${limit}|${actors}`;
-  return { key, placeCode: place.code, x: view.x, z: view.z, radius, limit, tick, actors };
+    viewportRadius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
+    previous = residentSearchWindow,
+    displacement = previous ? Math.hypot(wrapSourceX(view.x - previous.x), view.z - previous.z) : Infinity;
+  if (!previous || previous.placeCode !== place.code || previous.actors !== actors ||
+      previous.limit !== limit || displacement + viewportRadius > previous.radius) {
+    // Query a slightly larger real source-space circle, then retain it while
+    // the actual viewport remains inside. The old exact floating-point camera
+    // key invalidated every actor after even a tiny drag.
+    const radius = viewportRadius * 1.5;
+    residentSearchWindow = {
+      key: `${place.code}|${view.x}|${view.z}|${radius}|${limit}|${actors}`,
+      placeCode: place.code, x: view.x, z: view.z, radius, limit, actors,
+    };
+  }
+  return { ...residentSearchWindow!, tick };
 }
 function offerResidentQuery(query: ResidentQuery) {
   const now = performance.now();
@@ -2014,7 +2029,9 @@ async function start() {
       const queryActors = residentMode.actors || (!ready && view.halfHeight < 20);
       const query = residentMode.inspect || queryActors
         ? residentRequestForView(simulation.tick, residentQueryLimitForView(queryActors), queryActors) : undefined;
-      const previousSnapshot = residentQueries.current;
+      // Read the previous authoritative result before switching camera keys;
+      // ResidentQueryQueue.current intentionally hides a nonmatching key.
+      const previousSnapshot = residentQueries.latest;
       if (query) {
         offerResidentQuery(query);
       } else {
