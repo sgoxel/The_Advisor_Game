@@ -238,6 +238,29 @@ export function nearestKeyboardResident<T extends { code: string; x: number; y: 
   return best;
 }
 
+/** Keyboard selection inspects the nearest eligible original actor first.
+ * The old caller ran the full pointer hit test for EVERY in-view resident
+ * before ranking, which multiplied work in a crowded street. Rank cheap
+ * projected centres once, then stop at the first genuinely pickable actor.
+ * The same depth-aware pointer picker still makes the final decision; no
+ * inferred resident, hidden-actor promotion or Simulation action occurs. */
+export function nearestPickableKeyboardResident<T extends { code: string; x: number; y: number }>(
+  candidates: readonly T[], width: number, height: number,
+  isPickable: (candidate: T) => boolean,
+): T | undefined {
+  if (!(width > 0 && height > 0)) return undefined;
+  const centerX = width * .5, centerY = height * .5;
+  const ordered = candidates.filter(candidate =>
+    Number.isFinite(candidate.x) && Number.isFinite(candidate.y))
+    .map(candidate => ({
+      candidate,
+      distance: Math.hypot(candidate.x - centerX, candidate.y - centerY),
+    })).sort((a, b) => a.distance - b.distance ||
+      compareText(a.candidate.code, b.candidate.code));
+  for (const { candidate } of ordered) if (isPickable(candidate)) return candidate;
+  return undefined;
+}
+
 /** At most two bounded requests: an obsolete in-flight camera query may
  * finish while the latest view uses another already-idle worker. Each query's
  * actor ordering and Simulation validations stay inside its own worker.

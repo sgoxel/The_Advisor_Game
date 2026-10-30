@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -2000,12 +2000,16 @@ async function start() {
       midpoint.lerp(actor.getPosition(), head, .5);
       camera.camera!.worldToScreen(midpoint, center);
       if (center.x < 12 || center.y < 12 || center.x > rect.width - 12 || center.y > rect.height - 12) continue;
-      const clientX = rect.left + center.x, clientY = rect.top + center.y;
-      if (document.elementFromPoint(clientX, clientY) !== canvas ||
-          pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
       candidates.push({ code: resident.code, x: center.x, y: center.y, resident });
     }
-    return nearestKeyboardResident(candidates, rect.width, rect.height)?.resident;
+    // Cheap nearest-first screen ordering precedes any expensive canvas hit
+    // test. A visible resident near the screen centre now needs one full hit
+    // scan instead of repeating it for every pooled actor.
+    return nearestPickableKeyboardResident(candidates, rect.width, rect.height, candidate => {
+      const clientX = rect.left + candidate.x, clientY = rect.top + candidate.y;
+      return document.elementFromPoint(clientX, clientY) === canvas &&
+        pickResidentAt?.(clientX, clientY)?.code === candidate.code;
+    })?.resident;
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = "";
   let actorSnapshotTick = -Infinity;
