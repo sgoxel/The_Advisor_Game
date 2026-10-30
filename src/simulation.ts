@@ -573,9 +573,12 @@ function workOffsetFor(place: Place, index: number, role: ResidentRole, assignme
       if (index === firstLaborer) return habitat.maintenance[0];
       return sites.length ? pick(sites, "TRADE") : anchors.fieldsSites.length ? pick(anchors.fieldsSites, "FIELD") : home;
     }
-    // A city's clergy minister at the well square and, for two in three, at a shrine in a neighbourhood garden, not all on one spot.
+    // City ministries use the existing legal neighbourhood garden shrines.
+    // A small central clerical presence remains at the original civic well;
+    // the former one-in-three allocation made dozens stand at one tiny square.
     case "clergy": {
-      if (place.kind !== "city" || !anchors.gardens.length || !(digest(`${place.code}/RESIDENT/${index}/SHRINE`) % 3)) return anchors.plaza;
+      if (place.kind !== "city" || !anchors.gardens.length ||
+          !(digest(`${place.code}/RESIDENT/${index}/SHRINE`) % 17)) return anchors.plaza;
       const shrine: ActivitySite = { ...neighbourhoodSite(place, { code: `${place.code}/RESIDENT/${index}`, homeOffset: home }, "garden"), label: "Tending the shrine" };
       return shrine;
     }

@@ -2050,6 +2050,45 @@ test("outdoor trades use many real plots instead of one farmstead", () => {
   }
 });
 
+test("real clergy and elders no longer concentrate their morning duties at the same civic well", () => {
+  const city = cities[0], foundations = Array.from({ length: populationOf(city) }, (_, i) =>
+    residentFoundationAt(city, i)), clergy = foundations.filter(r => r.role === "clergy"),
+    civicClergy = clergy.filter(r => !("id" in r.workOffset)),
+    neighbourhoodShrines = new Set(clergy.map(r => r.workplace).filter(code => code.includes("/GARDEN/")));
+  assert.ok(clergy.length > 0);
+  assert.ok(neighbourhoodShrines.size > civicClergy.length,
+    "more authentic individual garden shrine duties than centralized civic clergy");
+  const elders = foundations.filter(r => r.ageGroup === "elder");
+  const plans = elders.map(r => dailyPlan({
+    code: r.code, role: r.role, ageGroup: r.ageGroup, guardShift: r.guardShift,
+  }, r.traits, WORKDAY, 1));
+  const morning = plans.map(plan => plan.find(activity => activity.kind === "stroll")).filter(Boolean);
+  assert.ok(morning.some(activity => activity!.anchor === "garden"),
+    "elderly morning activities have real neighbourhood destinations");
+  assert.ok(morning.some(activity => activity!.anchor === "plaza"),
+    "a genuine central gathering remains part of town life");
+  for (const plan of plans.slice(0, 12)) assert.deepEqual(
+    dailyPlan({ code: elders[plans.indexOf(plan)].code, role: elders[plans.indexOf(plan)].role,
+      ageGroup: elders[plans.indexOf(plan)].ageGroup, guardShift: elders[plans.indexOf(plan)].guardShift },
+      elders[plans.indexOf(plan)].traits, WORKDAY, 1), plan,
+    "individual identity and day reconstruct exactly the same NPC schedule");
+});
+
+test("rest-day adult prayers use distinct real civic and neighbourhood destinations", () => {
+  const city = cities[0], restDay = 6;
+  const anchors = new Set<string>(), starts = new Set<number>();
+  for (let index = 6; index < Math.min(populationOf(city), 300); index++) {
+    const f = residentFoundationAt(city, index);
+    if (f.role === "clergy" || f.role === "innkeeper" || f.role === "beggar" || f.ageGroup === "elder") continue;
+    const plan = dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup,
+      guardShift: f.guardShift }, f.traits, restDay, restDay);
+    const prayer = plan.find(activity => activity.kind === "pray");
+    if (prayer) { anchors.add(prayer.anchor); starts.add(prayer.start); }
+  }
+  assert.ok(anchors.has("garden") && anchors.has("plaza"), "the real rest day has distributed prayer locations");
+  assert.ok(starts.size > 1, "rest-day worship cannot make everyone arrive at the same instant");
+});
+
 test("elders share several nearby gardens while retaining town-square visits", () => {
   const place = cities[0], tick = tickAtLocalTime(WORKDAY, 10.5 * HOUR, place.canonicalPosition.lon), gardens = new Set<string>();
   let square = 0;
