@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -157,6 +157,15 @@ test("S010 cutout picking follows its real projected body, not an imaginary vert
     "a tap on the tilted painted silhouette must select its original resident");
   assert.equal(residentActorPickDistance(130, 190, feet, { x: 100, y: 180 }), null,
     "the old vertical proxy rectangle does not cover that visible silhouette");
+});
+
+test("S010 only camera-front painted residents can be clicked or receive a selected marker", () => {
+  assert.equal(residentActorInFront(-2, -1), true, "painted head and physical feet are in front");
+  assert.equal(residentActorInFront(2, 1), false, "behind-camera ghost projections are not pickable");
+  assert.equal(residentActorInFront(-2, 1), false, "partially behind-camera cutouts cannot claim a valid screen hit");
+  assert.equal(residentActorInFront(0, -1), false, "a foot at the eye plane is not a visible resident");
+  assert.equal(residentActorInFront(Number.NaN, -1), false);
+  assert.equal(residentActorInFront(-1, Infinity), false);
 });
 
 test("first close-up residents are queried under a finite identical rendered/state budget", () => {
