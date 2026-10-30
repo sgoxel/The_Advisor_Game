@@ -165,7 +165,7 @@ test("S010 selected ground ring is a closed planar world mesh with no screen-spa
   assert.equal(positions.length, 24 * 2 * 3);
   assert.equal(normals.length, positions.length);
   assert.equal(indices.length, 24 * 2 * 3);
-  assert.ok(positions.every((coordinate, index) => index % 3 !== 1 || coordinate === 0.035),
+  assert.ok(positions.every((coordinate, index) => index % 3 !== 1 || coordinate === 0.12),
     "each ring vertex is at the same fixed height above the original actor root");
   assert.ok(indices.every(index => index >= 0 && index < positions.length / 3));
   assert.ok(indices.some(index => index === 0) && indices.some(index => index === 47),
