@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
@@ -47,6 +47,45 @@ test("WP #693 missing model, failed loader and invalid resource never remove 2D 
   assert.equal(characterVisualFormat(false), "2d-cutout");
   assert.deepEqual(await usableOwnerModel("guard_male.glb", load), { file: "guard_male.glb" });
   assert.equal(characterVisualFormat(true), "3d-model");
+});
+
+test("WP #693 failed owner GLB is not permanently cached after network recovery", async () => {
+  const cache = new Map<string, Promise<{ file: string } | null>>();
+  let online = false;
+  const calls: Record<string, number> = Object.create(null);
+  const load = async (file: string) => {
+    calls[file] = (calls[file] ?? 0) + 1;
+    return online ? { file } : null;
+  };
+  const original = loadSharedOwnerModel("guard_male.glb", cache, load);
+  assert.strictEqual(original, loadSharedOwnerModel("guard_male.glb", cache, load),
+    "multiple residents share the same in-flight optional GLB request");
+  assert.equal(await original, null, "offline owner model leaves 2D fallback intact");
+  assert.equal(cache.has("guard_male.glb"), false,
+    "a failed model must not become a permanent negative cache entry");
+  online = true;
+  const recovered = await loadSharedOwnerModel("guard_male.glb", cache, load);
+  assert.deepEqual(recovered, { file: "guard_male.glb" },
+    "a later resident can adopt the real model after connectivity returns");
+  assert.deepEqual({ ...calls }, { "guard_male.glb": 2 });
+  assert.strictEqual(await loadSharedOwnerModel("guard_male.glb", cache, load), recovered,
+    "successfully loaded GLB stays shared without repeated downloads");
+  assert.equal(calls["guard_male.glb"], 2);
+});
+
+test("WP #693 rejected owner GLB promises also allow later independent recovery", async () => {
+  const cache = new Map<string, Promise<string | null>>();
+  let calls = 0;
+  const load = async () => {
+    if (++calls === 1) throw new Error("offline model download");
+    return "restored shared owner GLB";
+  };
+  const first = loadSharedOwnerModel("farmer_male.glb", cache, load);
+  await assert.rejects(first, /offline/);
+  assert.equal(cache.has("farmer_male.glb"), false);
+  assert.equal(await loadSharedOwnerModel("farmer_male.glb", cache, load),
+    "restored shared owner GLB");
+  assert.equal(calls, 2);
 });
 
 test("WP #693 render components with zero drawable primitives must keep 2D fallback", () => {

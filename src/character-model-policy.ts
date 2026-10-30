@@ -118,6 +118,30 @@ export function loadSharedCharacterArtwork<T>(
   return pending;
 }
 
+/** Successful owner GLBs are shared across residents, while a transient
+ * missing/corrupt/offline result is never retained as a permanent no-model
+ * decision. All residents sharing one in-flight request still receive 2D
+ * fallback on failure; a later resident may try again after recovery. */
+export function loadSharedOwnerModel<T>(
+  file: string,
+  cache: Map<string, Promise<T | null>>,
+  load: (file: string) => Promise<T | null>,
+): Promise<T | null> {
+  const existing = cache.get(file);
+  if (existing) return existing;
+  const pending = Promise.resolve().then(() => load(file));
+  cache.set(file, pending);
+  void pending.then(
+    resource => {
+      if (resource === null && cache.get(file) === pending) cache.delete(file);
+    },
+    () => {
+      if (cache.get(file) === pending) cache.delete(file);
+    },
+  );
+  return pending;
+}
+
 /** An optional model load is never allowed to fail resident presentation. */
 export async function usableOwnerModel<T>(
   file: string | null,
