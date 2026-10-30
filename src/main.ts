@@ -2094,14 +2094,35 @@ async function start() {
         const painted = await residentDepthPicker.getSelectionAsync(
           Math.max(0, px - halfTarget), Math.max(0, py - halfTarget),
           2 * halfTarget + 1, 2 * halfTarget + 1);
+        // The first picker can give the nearby resident's transparent quad
+        // the winning ID even at a wall-covered touch pixel. Render a second
+        // on-demand pass with only the resident mesh IDs suppressed, so the
+        // actual opaque world surface competes without the character.
+        // This changes picker eligibility, never scene visibility or truth.
+        const hiddenFromPicker: { mesh: pc.MeshInstance; pick: boolean }[] = [];
+        try {
+          for (const candidate of actors) {
+            if (!candidate.enabled) continue;
+            for (const mesh of drawableResidentMeshes(candidate)) {
+              hiddenFromPicker.push({ mesh, pick: mesh.pick });
+              mesh.pick = false;
+            }
+          }
+          residentDepthPicker.prepare(lens, app.scene);
+        } finally {
+          for (const { mesh, pick } of hiddenFromPicker) mesh.pick = pick;
+        }
+        const worldOnly = await residentDepthPicker.getWorldPointAsync(px, py);
         if (generation !== residentPickGeneration || scenePose() !== poseAtTap ||
             !actor.enabled || actorResidents.get(actor)?.code !== resident.code ||
             actor.getPosition().distance(feet) > modelHeight * .5 ||
             lens !== camera.camera) return false;
         const foregroundDepth = nearest
           ? lens.viewMatrix.transformPoint(nearest, eyePoint).z : null;
+        const worldDepth = worldOnly
+          ? lens.viewMatrix.transformPoint(worldOnly, eyePoint).z : null;
         return residentGpuHitAllows(actorDepth, foregroundDepth,
-          drawableResidentMeshes(actor), painted, exactPixel);
+          drawableResidentMeshes(actor), painted, exactPixel, worldDepth);
       } catch {
         // A lost/unsupported picker never makes a hidden character selectable;
         // the live renderer can recover and recreate these disposable buffers.
