@@ -38,13 +38,17 @@ export function sameCharacterAssignment(
   return previous?.name === name && previous.residentCode === residentCode;
 }
 
-/** A container can have render components but no drawable triangular faces.
- * A primitive with only one or two vertices cannot draw a triangle; accepting
- * it could hide a resident's original 2D illustration behind empty 3D art.
- * This is a presentation-only check, not Simulation geometry authority. */
-export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: readonly { count: number }[] } | null }[]): boolean {
+/** Line/point-only owner GLBs cannot displace a person's original 2D art.
+ * PlayCanvas 2.23 topology: 0–3 points/lines, 4 triangles, 5 triangle strip,
+ * 6 triangle fan. Missing type retains the triangle default of test meshes.
+ * This is presentation eligibility, never authoritative Simulation collision. */
+export function characterMeshHasGeometry(parts: readonly { mesh?: {
+  primitive?: readonly { count: number; type?: number }[]
+} | null }[]): boolean {
   return parts.some(part => part.mesh?.primitive?.some(primitive =>
-    Number.isFinite(primitive.count) && primitive.count >= 3));
+    Number.isInteger(primitive.count) && primitive.count >= 3 &&
+    (primitive.type === undefined || primitive.type === 4 ||
+      primitive.type === 5 || primitive.type === 6)));
 }
 
 /** A child with enabled=true is still hidden if an authored GLB parent is
@@ -63,7 +67,7 @@ function characterNodeEnabled(node: CharacterHierarchyNode): boolean {
 export function characterDrawableMeshes<T extends {
   visible?: boolean;
   material?: unknown;
-  mesh?: { primitive?: readonly { count: number }[] } | null;
+  mesh?: { primitive?: readonly { count: number; type?: number }[] } | null;
 }>(components: readonly {
   enabled: boolean;
   entity: CharacterHierarchyNode;
@@ -139,7 +143,7 @@ export function characterModelFootPlacement(
 export function characterModelRenderable<T extends {
   visible?: boolean;
   material?: unknown;
-  mesh?: { primitive?: readonly { count: number }[] } | null;
+  mesh?: { primitive?: readonly { count: number; type?: number }[] } | null;
 }>(root: CharacterHierarchyNode, components: readonly {
   enabled: boolean;
   entity: CharacterHierarchyNode;
@@ -156,7 +160,7 @@ export function characterModelRenderable<T extends {
 export function characterModelVisibleOrInvalidate<T extends object, M extends {
   visible?: boolean;
   material?: unknown;
-  mesh?: { primitive?: readonly { count: number }[] } | null;
+  mesh?: { primitive?: readonly { count: number; type?: number }[] } | null;
 }>(
   actor: T,
   root: CharacterHierarchyNode,

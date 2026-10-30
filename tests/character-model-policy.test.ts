@@ -143,6 +143,28 @@ test("WP #693 render components with zero drawable primitives must keep 2D fallb
   ]), true, "valid drawable meshes remain eligible for optional 3D");
 });
 
+test("WP #693 point/line-only owner GLBs cannot suppress original 2D residents", () => {
+  // Actual PlayCanvas 2.23 topologies: points 0; lines 1/2/3; filled 4/5/6.
+  const primitive = (type: number, count: number) =>
+    ({ mesh: { primitive: [{ type, count }] }, visible: true });
+  for (const type of [0, 1, 2, 3]) {
+    assert.equal(characterMeshHasGeometry([primitive(type, 60)]), false,
+      "many non-triangle vertices are not a rendered character surface");
+    const actor = { enabled: true };
+    assert.equal(characterDrawableMeshes([{
+      enabled: true, entity: actor, meshInstances: [primitive(type, 60)],
+    }]).length, 0, "line/point-only GLB is not eligible for replacing 2D or picking");
+  }
+  for (const type of [4, 5, 6])
+    assert.equal(characterMeshHasGeometry([primitive(type, 3)]), true,
+      "triangle, triangle strip and triangle fan have valid filled surfaces");
+  assert.equal(characterMeshHasGeometry([primitive(7, 60)]), false,
+    "unsupported primitive topology may not hide the original NPC art");
+  assert.equal(characterMeshHasGeometry([{
+    mesh: { primitive: [{ type: 1, count: 60 }, { type: 4, count: 3 }] },
+  }]), true, "a GLB with real triangles alongside line decoration remains eligible");
+});
+
 test("WP #693 hidden GLB nodes/components/meshes cannot suppress 2D residents", () => {
   const drawable = { visible: true, mesh: { primitive: [{ count: 6 }] } };
   const hidden = { visible: false, mesh: { primitive: [{ count: 6 }] } };
