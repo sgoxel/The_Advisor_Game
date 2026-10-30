@@ -279,6 +279,24 @@ export function loadSharedOwnerModel<T>(
   return pending;
 }
 
+/** A container may download successfully yet fail to instantiate or carry
+ * any usable rendered GLB geometry. Do not cache that unusable successful
+ * resource forever: a later normal resident assignment may recover if the
+ * owner fixes the deployed model. Compare identity and the exact cache entry
+ * so a stale failure cannot evict a newer successfully loaded container. */
+export function invalidateSharedOwnerModel<T>(
+  file: string,
+  cache: Map<string, Promise<T | null>>,
+  invalidResource: T,
+): void {
+  const pending = cache.get(file);
+  if (!pending) return;
+  void pending.then(resource => {
+    if (resource === invalidResource && cache.get(file) === pending)
+      cache.delete(file);
+  }, () => {});
+}
+
 /** An optional model load is never allowed to fail resident presentation. */
 export async function usableOwnerModel<T>(
   file: string | null,
