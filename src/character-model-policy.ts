@@ -115,7 +115,11 @@ export function characterModelFootPlacement(
     minZ = Math.min(minZ, c.z - h.z); maxZ = Math.max(maxZ, c.z + h.z);
   }
   const height = maxY - minY;
-  if (!Number.isFinite(height) || height <= 0) return null;
+  // Imported triangle records can describe a zero-area vertical line.
+  // It has height but no visible face and must never hide the original 2D
+  // resident. Allow planar GLB silhouettes (one horizontal axis can be flat).
+  if (!Number.isFinite(height) || height <= 0 ||
+      (maxX <= minX && maxZ <= minZ)) return null;
   const scale = nominalHeightM / height;
   const x = -(minX + maxX) * scale / 2;
   const y = -minY * scale;
