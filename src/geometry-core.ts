@@ -382,6 +382,12 @@ export function detailTerrainResolution(tileSize: number): number {
   return Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16);
 }
 
+/** Only original full-country 2048-unit tiles need to follow the existing
+ * 16-cell ground curvature grid; fine water planes remain unchanged. */
+export function waterPlaneSubdivisionCount(tileSize: number): number {
+  return tileSize === 2048 ? detailTerrainResolution(tileSize) : 1;
+}
+
 export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrain?:boolean} = {}): TileGeometry {
   if (!options.terrainOnly) registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
   const terrain = new Builder(),
@@ -503,16 +509,31 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
     return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
       smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
   };
-  if (!options.terrainOnly) terrain.quadGradient(
-    [t.minX, 0, t.minZ],
-    [t.minX, 0, t.minZ + t.size],
-    [t.minX + t.size, 0, t.minZ + t.size],
-    [t.minX + t.size, 0, t.minZ],
-    waterTint(t.minX, t.minZ),
-    waterTint(t.minX, t.minZ + t.size),
-    waterTint(t.minX + t.size, t.minZ + t.size),
-    waterTint(t.minX + t.size, t.minZ),
-  );
+  if (!options.terrainOnly) {
+    // At the observed 2048-unit Country/handoff tile, one old water quad
+    // spans dozens of kilometres. Globe projection bends only its four
+    // corners, so its huge chord may pierce curved inland terrain as a
+    // sea-coloured triangle. Reuse the already-bounded ground grid instead.
+    const waterCells = waterPlaneSubdivisionCount(t.size),
+      waterStep = t.size / waterCells,
+      waterColours = new Map<string, RGB>();
+    const waterColorAt = (x: number, z: number): RGB => {
+      const key = `${x}/${z}`, cached = waterColours.get(key);
+      if (cached) return cached;
+      const value = waterTint(x,z);
+      waterColours.set(key,value);
+      return value;
+    };
+    for (let z = 0; z < waterCells; z++) for (let x = 0; x < waterCells; x++) {
+      const ax=t.minX+x*waterStep,az=t.minZ+z*waterStep,
+        bx=ax+waterStep,bz=az+waterStep;
+      terrain.quadGradient(
+        [ax,0,az],[ax,0,bz],[bx,0,bz],[bx,0,az],
+        waterColorAt(ax,az),waterColorAt(ax,bz),
+        waterColorAt(bx,bz),waterColorAt(bx,az),
+      );
+    }
+  }
   }
   if (t.size <= 512 && !options.terrainOnly)
     // Settlement plots with physical metre sizes (widthM) are drawn by geometry.ts; never as legacy 18-unit fields.
