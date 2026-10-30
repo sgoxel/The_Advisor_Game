@@ -1343,38 +1343,6 @@ body.globe-mode .travel-button {
   background: #f0ce7e;
   border-radius: 50%;
 }
-/* Ground-space selection ring, projected from the actual rendered resident's feet.
-   Presentation only: no picking collider or independent position source. */
-#selected-resident-ground-marker {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 13;
-  width: 25px;
-  height: 15px;
-  box-sizing: border-box;
-  border: 2px solid #ffe8a2;
-  border-radius: 50%;
-  background: #e0ab3f22;
-  box-shadow: 0 0 0 2px #162521b8, 0 0 12px #ffda70aa;
-  pointer-events: none;
-}
-/* Bracket the real 3D character beside its model (not across its pixels):
-   the height is supplied from the rendered actor's projected head and feet.
-   This highlights physical scale only; no selection/picking proxy is added. */
-#selected-resident-ground-marker::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  bottom: 50%;
-  width: 8px;
-  height: var(--actor-projected-height, 12px);
-  border-left: 2px solid #ffe8a2;
-  border-top: 2px solid #ffe8a2;
-  border-bottom: 2px solid #ffe8a2;
-  border-radius: 3px 0 0 3px;
-  filter: drop-shadow(0 1px 3px #071512);
-}
 /* A passive, Simulation-grounded indication of the selected resident's real
    SEED-resolved entrance. It does not add a door, change ownership or pick. */
 #selected-home-door-marker {
