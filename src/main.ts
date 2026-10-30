@@ -1888,7 +1888,7 @@ async function start() {
     "masthead", "region-panel", "cell-panel", "travel-panel", "bottom-bar",
     "map-controls", "telemetry", "focus-coordinates", "centre-marker",
   ]) {
-    for (const node of document.querySelectorAll(`#${name},.${name}`)) {
+    for (const node of Array.from(document.querySelectorAll(`#${name},.${name}`))) {
       obstacleResizeObserver.observe(node);
       obstacleAttributes.observe(node, {
         attributes: true,
