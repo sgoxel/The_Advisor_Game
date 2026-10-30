@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -401,6 +401,7 @@ let lastDutyGuardRevision = "";
 const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
+let pickResidentByKeyboard: (() => Resident | undefined) | undefined;
 let navigationFingerprint = "";
 let rulerState = {
   pixels: 0,
@@ -1537,6 +1538,17 @@ function setupControls() {
     };
   window.addEventListener("keydown", measureInput<KeyboardEvent>((event) => {
     if (document.activeElement !== canvas) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!event.repeat && projectionTransition <= .001) {
+        const resident = pickResidentByKeyboard?.();
+        if (resident) {
+          showNpcPopup(resident, simulation.tick);
+          document.querySelector<HTMLButtonElement>(".npc-close")?.focus({ preventScroll: true });
+        }
+      }
+      return;
+    }
     if (
       [
         "ArrowUp",
@@ -1965,6 +1977,25 @@ async function start() {
     }
     residentPickSamples.record(performance.now() - pickStarted);
     return best;
+  };
+  pickResidentByKeyboard = () => {
+    // Enter inspects only an actually rendered, canvas-visible SEED resident;
+    // the same hit test accepts both pointer and touch taps on its illustration.
+    const rect = canvas.getBoundingClientRect(), midpoint = new pc.Vec3(), head = new pc.Vec3(), center = new pc.Vec3();
+    const candidates: { code: string; x: number; y: number; resident: Resident }[] = [];
+    for (const actor of actors) {
+      const resident = actorResidents.get(actor);
+      if (!actor.enabled || !resident || !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
+      characterVisuals.headPoint(actor, head);
+      midpoint.lerp(actor.getPosition(), head, .5);
+      camera.camera!.worldToScreen(midpoint, center);
+      if (center.x < 12 || center.y < 12 || center.x > rect.width - 12 || center.y > rect.height - 12) continue;
+      const clientX = rect.left + center.x, clientY = rect.top + center.y;
+      if (document.elementFromPoint(clientX, clientY) !== canvas ||
+          pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
+      candidates.push({ code: resident.code, x: center.x, y: center.y, resident });
+    }
+    return nearestKeyboardResident(candidates, rect.width, rect.height)?.resident;
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = "";
   let actorSnapshotTick = -Infinity;
