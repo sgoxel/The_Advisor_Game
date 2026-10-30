@@ -174,6 +174,17 @@ function offsetLocal(x: number, z: number, yaw: number, lx: number, lz: number) 
   return { x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos };
 }
 
+/** Four-sided pitched roof with eave corners exactly parallel to its building footprint. */
+function pyramidRoofYaw(builder: Builder, x: number, y: number, z: number, width: number, depth: number, height: number, yaw: number, tint: RGB) {
+  const corners = [[-width / 2, -depth / 2], [width / 2, -depth / 2], [width / 2, depth / 2], [-width / 2, depth / 2]] as const;
+  const apex: Point = [x, y + height, z];
+  for (let i = 0; i < corners.length; i++) {
+    const a = offsetLocal(x, z, yaw, corners[i][0], corners[i][1]);
+    const b = offsetLocal(x, z, yaw, corners[(i + 1) % corners.length][0], corners[(i + 1) % corners.length][1]);
+    builder.triangle([a.x, y, a.z], apex, [b.x, y, b.z], tint);
+  }
+}
+
 function addServiceGeometry(structures: Builder, detail: Builder, service: string | undefined, x: number, y: number, z: number, width: number, depth: number, yaw: number, close = false) {
   const timber = color(82, 60, 40), plaster = color(201, 183, 143), stone = color(154, 153, 136), roof = color(103, 67, 49), dark = color(75, 72, 64);
   if (service === "market" || service === "merchant") {
@@ -193,7 +204,7 @@ function addServiceGeometry(structures: Builder, detail: Builder, service: strin
     structures.boxYaw(x, y + 4.7, z, width * .82, .65, depth * .82, yaw, dark);
     const tower = offsetLocal(x, z, yaw, width * .34, -depth * .28);
     structures.boxYaw(tower.x, y - .08, tower.z, width * .34, 6.8, depth * .36, yaw, color(143, 143, 129));
-    detail.cone(tower.x, y + 6.65, tower.z, Math.max(1.7, width * .22), 2.2, roof, 4);
+    pyramidRoofYaw(detail, tower.x, y + 6.65, tower.z, Math.max(3.1, width * .34 + .5), Math.max(3.1, depth * .36 + .5), 2.2, yaw, roof);
     return;
   }
   if (service === "farmstead") {
@@ -1325,13 +1336,13 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     structures.boxYaw(right.x, y - .06, right.z, 1.8, 5.4, 1.8, yaw, stone);
     structures.boxYaw(x, y + 4.45, z, postSpan + 1.8, .7, 1.65, yaw, timber);
     if (tileSize <= 64) {
-      detail.cone(left.x, y + 5.25, left.z, 1.55, 2.1, color(99, 66, 48), 4);
-      detail.cone(right.x, y + 5.25, right.z, 1.55, 2.1, color(99, 66, 48), 4);
+      pyramidRoofYaw(detail, left.x, y + 5.25, left.z, 2.45, 2.45, 2.1, yaw, color(99, 66, 48));
+      pyramidRoofYaw(detail, right.x, y + 5.25, right.z, 2.45, 2.45, 2.1, yaw, color(99, 66, 48));
     }
   } else if (feature.kind === "guard-post") {
     structures.boxYaw(x, y - .05, z, width, 3.8, depth, yaw, color(143, 142, 126));
     structures.boxYaw(x, y + 3.55, z, width * 1.05, .55, depth * 1.05, yaw, color(91, 65, 47));
-    if (tileSize <= 64) detail.cone(x, y + 3.95, z, Math.max(width, depth) * .72, 2.15, color(104, 70, 50), 4);
+    if (tileSize <= 64) pyramidRoofYaw(detail, x, y + 3.95, z, width * 1.12, depth * 1.12, 2.15, yaw, color(104, 70, 50));
   } else if (feature.kind === "border" && variant >= 2) {
     const length = feature.length || depth || 4,
       at = (lx: number, lz: number) => offsetLocal(x, z, yaw, lx, lz);
