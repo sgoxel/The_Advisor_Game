@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -127,6 +127,24 @@ test("S009 cached neighbourhood sites retain seeded garden/market and exact home
       }
     }
   }
+});
+
+test("S010 gate-watch focus follows only a physically arrived real guard", () => {
+  const post = { x: 4, z: 9 };
+  const residents = new Map([
+    ["late", { x: 20, z: 30, grounded: false, indoors: false, activity: "guard" }],
+    ["inside", { x: 22, z: 32, grounded: true, indoors: true, activity: "guard" }],
+    ["real", { x: 24, z: 34, grounded: true, indoors: false, activity: "guard" }],
+    ["visitor", { x: 26, z: 36, grounded: true, indoors: false, activity: "work" }],
+  ]);
+  const lookup = (code: string) => residents.get(code);
+  assert.deepEqual(residentGateWatchFocus(["late", "inside", "real", "visitor"], lookup, post),
+    { x: 24, z: 34 }, "camera follows the first real on-duty guard, not an unused gate post");
+  assert.equal(residentGateWatchFocus(["visitor", "late"], lookup, post), post,
+    "unstaffed or physically absent gate retains the original SEED post");
+  assert.equal(residentGateWatchFocus(undefined, lookup, post), post);
+  assert.deepEqual(residentGateWatchFocus(["real"], lookup, post), { x: 24, z: 34 },
+    "independent view refreshes select the same canonical guard position");
 });
 
 test("S010 preserves stationary in-view actors on wider pans but not distant views", () => {

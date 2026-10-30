@@ -99,6 +99,24 @@ export function residentActorSearchContinues(evaluated: number, outdoorCount: nu
     (outdoorCount === 0 || evaluated < limit);
 }
 
+/** The Watch camera targets a genuinely present guard, not the first design-time
+ * post of a staffed gate (which may be occupied by a different shift). An
+ * invalid/unresolved roster returns the original SEED post; lookup never
+ * creates residents or changes their authoritative Simulation coordinates. */
+export function residentGateWatchFocus(
+  residentCodes: readonly string[] | undefined,
+  lookup: (code: string) => Pick<Resident, "x" | "z" | "grounded" | "indoors" | "activity"> | undefined,
+  fallback: { x: number; z: number },
+): { x: number; z: number } {
+  for (const code of residentCodes ?? []) {
+    const resident = lookup(code);
+    if (resident && resident.grounded && !resident.indoors && resident.activity === "guard" &&
+        Number.isFinite(resident.x) && Number.isFinite(resident.z))
+      return { x: resident.x, z: resident.z };
+  }
+  return fallback;
+}
+
 /** Place the world-anchored selected-resident caption away from the inspector
  * in tall viewports. Positioning alone changes; actor and identity stay fixed.
  * No per-frame DOM geometry reads or camera-dependent Simulation behavior. */
