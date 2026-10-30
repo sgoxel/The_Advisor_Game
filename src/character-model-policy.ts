@@ -98,7 +98,7 @@ export function characterCutoutOrientation(
   const groundDistance = Math.hypot(dx, dz);
   return {
     yaw: Math.atan2(dx, dz) * 180 / Math.PI,
-    pitch: -Math.atan2(dy, groundDistance) * 180 / Math.PI,
+    pitch: dy === 0 ? 0 : -Math.atan2(dy, groundDistance) * 180 / Math.PI,
   };
 }
 
