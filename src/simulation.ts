@@ -806,7 +806,12 @@ function slotOffset(place: Place, anchors: SettlementAnchors, area: StandArea, n
         return false;
       };
     while (state.valid.length <= n && !state.exhausted) {
-      const j = state.next++, radius = SLOT_SPIRAL * Math.sqrt(j + .5);
+      // Distinct farm patches share one valid SEED field ground. The old
+      // 0.6 m spiral placed an entire field workforce in a single tight knot
+      // by the road; spread their standing slots farther across that SAME
+      // legal field while keeping the original street/ground/rival checks.
+      const spacing = area.field ? Math.min(1.1, Math.max(.8, area.radiusM / 9)) : SLOT_SPIRAL,
+        j = state.next++, radius = spacing * Math.sqrt(j + .5);
       if (radius > area.radiusM * 4) { state.exhausted = true; break; }
       const angle = phase + j * 2.399963229728653, point = { eastM: area.eastM + Math.cos(angle) * radius, northM: area.northM + Math.sin(angle) * radius };
       if (radius < area.clearM || onStreetBand(place, anchors, point, area.kerbM)
