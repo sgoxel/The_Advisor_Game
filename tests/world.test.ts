@@ -1,3 +1,4 @@
+import { detailTerrainResolution } from "../src/geometry-core.ts";
 import { test } from "node:test";
 import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
@@ -72,6 +73,18 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
+
+test("WP #105 Village 64-to-128 LOD terrain uses identical canonical pigment grid spacing", () => {
+  const fine=64/detailTerrainResolution(64);
+  const coarse=128/detailTerrainResolution(128);
+  assert.equal(fine,4);
+  assert.equal(coarse,fine,
+    "0.2% zoom must not double the world-space pigment sampling stride");
+  assert.equal(detailTerrainResolution(32),16,
+    "unaffected close-up geometry keeps its existing grid");
+  assert.equal(detailTerrainResolution(256),16,
+    "larger tiles retain their existing bounded mobile geometry cost");
+});
 
 test("pure zoom leaves the local camera pitch unchanged across Hero, Close and overview magnifications", () => {
   const initial = cameraElevationForHalfHeight(230);
