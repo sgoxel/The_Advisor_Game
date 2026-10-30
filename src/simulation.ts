@@ -719,6 +719,21 @@ export function residentGuardPresence(
   if (!isGuardOnDuty(resident, tick, place)) return "off-duty";
   return physicallyPresent.includes(resident.code) ? "at-post" : "absent";
 }
+/** Prioritize only real on-duty residents whose lawful gate posts are
+ * within a close camera query. This does not create people or alter truth. */
+export function dutyGuardCodesNearView(
+  place: Place, tick: number, x: number, z: number, radius: number,
+): string[] {
+  if (!(radius >= 0) || !Number.isFinite(radius)) return [];
+  const gates = settlementExteriorFor(place).gates;
+  const nearby = gates.flatMap((gate, gateIndex) =>
+    (gate.guardPosts.length ? gate.guardPosts : [gate]).some(post =>
+      sourceDistance(post.x, post.z, x, z) <= radius) ? [gateIndex] : []);
+  if (!nearby.length) return [];
+  const coverage = guardCoverageAt(place, tick);
+  return nearby.flatMap(gateIndex => coverage[gateIndex]?.residentCodes ?? []);
+}
+
 /** Scheduled assignment and physical gate coverage are different facts.
  * A guard with an unresolved house or illegal commute cannot fill a post. */
 export function guardCoverageAt(place: Place, tick: number) {
