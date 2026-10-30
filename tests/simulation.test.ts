@@ -435,6 +435,24 @@ test("resident inspector can resolve facts and close-up actors independently of 
 });
 
 
+test("day and night guard assignments match every actual SEED gate and post", () => {
+  for (const place of [villages[0], villages[1], cities[0], cities[1]]) {
+    const gates = settlementExteriorFor(place).gates;
+    assert.ok(gates.length >= 1 && gates.length <= 2, "settlement retains its authored one/two gates");
+    assert.equal(gateCountFor(place), gates.length,
+      `${place.name}: no physical gate is absent from the Simulation roster`);
+    const tick = tickAtLocalTime(WORKDAY, 21 * HOUR, place.canonicalPosition.lon),
+      watch = guardCoverageAt(place, tick);
+    for (let gateIndex = 0; gateIndex < gates.length; gateIndex++) {
+      assert.equal(guardsPerGateFor(place, gateIndex),
+        Math.max(1, gates[gateIndex].guardPosts.length),
+        `${place.name}: staffing must correspond to physically generated guard posts`);
+      assert.equal(watch[gateIndex].scheduled, guardsPerGateFor(place, gateIndex),
+        "real watchmen have actual persistent home identities and posts");
+    }
+  }
+});
+
 test("in-view gate duty facts are only real, physically reached day and night watchmen", () => {
   const place = villages[0], gate = settlementExteriorFor(place).gates[0],
     post = gate.guardPosts[0] ?? gate;
