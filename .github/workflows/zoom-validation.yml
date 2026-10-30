@@ -82,7 +82,7 @@ jobs:
           npm run preview -- --port 4174 > /tmp/zoom-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
-          timeout --signal=TERM --kill-after=30s 9m xvfb-run -a python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/zoom-country-${{ matrix.backend }} --scenario zoom-country --profile desktop,phone --renderer ${{ matrix.backend }} --timeout 240
+          timeout --signal=TERM --kill-after=30s 9m xvfb-run -a python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/zoom-country-${{ matrix.backend }} --scenario zoom-country --profile fullhd-landscape,fullhd-portrait --renderer ${{ matrix.backend }} --timeout 240
       - uses: actions/upload-artifact@v4
         if: always()
         with:
