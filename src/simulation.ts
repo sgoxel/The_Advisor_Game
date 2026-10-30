@@ -2654,6 +2654,7 @@ export class LazySimulation {
     prioritizeActors = false,
     phases?: ResidentEvaluationPhases,
     onFirstValidated?: (resident: Resident) => void,
+    onOutdoorBatch?: (residents: readonly Resident[]) => void,
   ) {
     this.lastResidentIndexBuildMs = 0;
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
@@ -2679,6 +2680,16 @@ export class LazySimulation {
       returnedResidents: 0,
     };
     const visible: Resident[] = [], indoorOrUnresolved: Resident[] = [];
+    const fullOutdoorView = prioritizeActors && !!onOutdoorBatch;
+    const pendingOutdoor: Resident[] = [];
+    const publishOutdoor = (resident: Resident) => {
+      if (!onOutdoorBatch) return;
+      pendingOutdoor.push(resident);
+      // First street actor appears immediately; all remaining real outdoor
+      // residents arrive in existing query-sized batches as the worker scans.
+      if (visible.length === 1 || pendingOutdoor.length >= limit)
+        onOutdoorBatch(pendingOutdoor.splice(0));
+    };
     let exhausted = false, firstValidated = false;
     // Do not eagerly build every nearby settlement's entire resident index.
     // The first bounded view can fill its canonical quota in one settlement;
@@ -2704,7 +2715,7 @@ export class LazySimulation {
         const scanned = residentIndexFor(place, shard, undefined, (index, bounds) => {
           if (!residentBucketBoundsOverlap(bounds, search)) return false;
           query.candidateResidents++;
-          if (!residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+          if (!fullOutdoorView && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
             exhausted = true;
             return true;
           }
@@ -2716,11 +2727,15 @@ export class LazySimulation {
               firstValidated = true;
               onFirstValidated(resident);
             }
-            if (!resident.grounded || resident.indoors) indoorOrUnresolved.push(resident);
-            else visible.push(resident);
+            if (!resident.grounded || resident.indoors) {
+              if (indoorOrUnresolved.length < limit) indoorOrUnresolved.push(resident);
+            } else {
+              visible.push(resident);
+              publishOutdoor(resident);
+            }
           }
-          if (visible.length >= limit ||
-              !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+          if (!fullOutdoorView && (visible.length >= limit ||
+              !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit))) {
             exhausted = true;
             return true;
           }
@@ -2756,7 +2771,8 @@ export class LazySimulation {
       if (phases) phases.candidateLookupMs += performance.now() - candidateStarted;
       query.candidateResidents += candidates.length;
       for (const index of candidates) {
-        if (prioritizeActors && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
+        if (prioritizeActors && !fullOutdoorView &&
+            !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit)) {
           exhausted = true;
           break;
         }
@@ -2770,17 +2786,23 @@ export class LazySimulation {
           firstValidated = true;
           onFirstValidated(resident);
         }
-        if (prioritizeActors && (!resident.grounded || resident.indoors)) indoorOrUnresolved.push(resident);
-        else visible.push(resident);
-        if (visible.length >= limit) break;
+        if (prioritizeActors && (!resident.grounded || resident.indoors)) {
+          if (indoorOrUnresolved.length < limit) indoorOrUnresolved.push(resident);
+        } else {
+          visible.push(resident);
+          if (prioritizeActors) publishOutdoor(resident);
+        }
+        if (!fullOutdoorView && visible.length >= limit) break;
       }
-      if (exhausted || visible.length >= limit ||
-          (prioritizeActors && !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit))) break;
+      if (exhausted || (!fullOutdoorView && visible.length >= limit) ||
+          (prioritizeActors && !fullOutdoorView &&
+            !residentActorSearchContinues(query.evaluatedResidents, visible.length, limit))) break;
     }
     // Keep indoor residents inspectable, but never let eight indoor-only facts
     // hide a real legal street actor from the first close-up canvas selection.
+    if (pendingOutdoor.length) onOutdoorBatch?.(pendingOutdoor.splice(0));
     if (prioritizeActors && visible.length < limit)
-      visible.push(...indoorOrUnresolved.slice(0, limit - visible.length));
+      visible.push(...indoorOrUnresolved.slice(0, Math.max(0, limit - visible.length)));
     query.returnedResidents = visible.length;
     this.lastQuery = query;
     this.updateInspector(visible, query);

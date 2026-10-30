@@ -39,7 +39,10 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       const residents = (() => {
         try {
           return simulation.focusedResidents(job.x, job.z, job.radius, job.limit, job.shard, job.actors === true, phases,
-            first => self.postMessage({ kind: "resident-first-fact", id: job.id, shard: job.shard?.index, resident: first }));
+            first => self.postMessage({ kind: "resident-first-fact", id: job.id, shard: job.shard?.index, resident: first }),
+            job.actors === true ? batch => self.postMessage({
+              kind: "resident-progress", id: job.id, shard: job.shard?.index, residents: batch,
+            }) : undefined);
         } finally { if (routeProbes) endResidentRouteProbes(); }
       })();
       const completedAt = performance.now(), workerSendEpochMs = performance.timeOrigin + completedAt;

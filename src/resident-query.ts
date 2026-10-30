@@ -53,11 +53,9 @@ export function residentActorSnapshotMayMarkPresented(actorsVisible: boolean, qu
 
 /** Split ordinary cold resident facts across at most two existing idle
  * workers; each owns exactly its own SEED index and legal route checks.
- * Actor queries retain a single worker: their early-stop rule prioritizes
- * real outdoor residents, and independently stopped shards would change
- * which canonical actors appear depending on transient worker availability.
- * This preserves deterministic selection until exact actor-stage fan-out can
- * reconstruct that global stop rule. No new workers or direct actor actions. */
+ * Actor queries retain a single worker so progressive real outdoor facts arrive
+ * in canonical order, independently of transient worker availability.
+ * No new workers or direct actor actions. */
 export function residentWorkerShardPlan(
   idleWorkerIds: readonly number[], warmedWorkerIds: ReadonlySet<number> = new Set(),
   prioritizeActors = false,
@@ -163,7 +161,7 @@ export class ResidentQueryQueue {
   private desired?: ResidentQuery;
   private readonly flights = new Map<number, ResidentQueryJob>();
   private sequence = 0;
-  private snapshot?: ResidentQueryJob & ResidentQueryResult;
+  private snapshot?: ResidentQueryJob & ResidentQueryResult & { partial?: boolean };
   private maxAgeTicks: number;
   private sampleIntervalTicks: number;
   constructor(maxAgeTicks: number, sampleIntervalTicks = 0) {
@@ -185,11 +183,16 @@ export class ResidentQueryQueue {
       currentTick !== undefined && Math.abs(currentTick - flight.tick) <= this.maxAgeTicks;
   }
   readyFor(key: string | undefined, tick = this.desired?.tick) {
-    return !!key && this.snapshot?.key === key && tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
+    // Partial discoveries may already be rendered; they are not a completed
+    // current-view population or a valid 100%-ready indicator.
+    return !!key && !this.snapshot?.partial && this.snapshot?.key === key &&
+      tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }
   get ready() { return this.readyFor(this.desired?.key); }
   get current() {
-    return this.ready ? this.snapshot : undefined;
+    const snapshot = this.snapshot;
+    return snapshot && snapshot.key === this.desired?.key && this.desired &&
+      Math.abs(this.desired.tick - snapshot.tick) <= this.maxAgeTicks ? snapshot : undefined;
   }
   take(allowLatestBesideObsolete = false): ResidentQueryJob | undefined {
     if (!this.desired || this.current?.tick === this.desired.tick) return;
@@ -200,6 +203,26 @@ export class ResidentQueryQueue {
     const job: ResidentQueryJob = { ...this.desired, kind: "residents", id: ++this.sequence };
     this.flights.set(job.id, job);
     return job;
+  }
+  /** Progressive authentic outdoor actors from the current worker only. */
+  appendPartial(id: number, residents: readonly Resident[], currentTick = this.desired?.tick) {
+    const flight = this.flights.get(id);
+    if (!flight?.actors || !this.desired || flight.key !== this.desired.key ||
+        currentTick === undefined || Math.abs(currentTick - flight.tick) > this.maxAgeTicks ||
+        residents.length === 0) return false;
+    const previous = this.snapshot?.id === id ? this.snapshot.residents : [];
+    const seen = new Set(previous.map(resident => resident.code));
+    const incoming = residents.filter(resident => {
+      if (!resident.grounded || resident.indoors || seen.has(resident.code)) return false;
+      seen.add(resident.code);
+      return true;
+    });
+    if (!incoming.length) return false;
+    const all = [...previous, ...incoming];
+    this.snapshot = { ...flight, residents: all, partial: true, query: {
+      settlements: 0, candidateResidents: 0, evaluatedResidents: 0, returnedResidents: all.length,
+    } };
+    return true;
   }
   complete(id: number, result: ResidentQueryResult, currentTick = this.desired?.tick) {
     const finished = this.flights.get(id);
