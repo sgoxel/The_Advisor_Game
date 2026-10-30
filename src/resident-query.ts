@@ -194,6 +194,23 @@ export function residentActorPickDistance(
   return Math.hypot(x - cx, y - cy);
 }
 
+/** Two projected cutouts can share a touch target. Prefer the actually
+ * frontmost painted plane, as the world depth buffer does, rather than a
+ * rear actor whose screen-space centre happens to be nearer the tap.
+ * A depth tie uses the same finite projected distance and stable SEED code,
+ * not pool order, worker timing or a new Simulation identity. */
+export function residentActorPickPrefersFront(
+  candidate: { code: string; distance: number; viewDepth: number },
+  previous?: { code: string; distance: number; viewDepth: number },
+): boolean {
+  if (!Number.isFinite(candidate.distance) || candidate.distance < 0 ||
+      !Number.isFinite(candidate.viewDepth) || candidate.viewDepth >= 0) return false;
+  if (!previous) return true;
+  if (candidate.viewDepth !== previous.viewDepth) return candidate.viewDepth > previous.viewDepth;
+  if (candidate.distance !== previous.distance) return candidate.distance < previous.distance;
+  return compareText(candidate.code, previous.code) < 0;
+}
+
 /** An actor's painted head AND grounded feet must be in front of the camera.
  * PlayCanvas view space has negative Z in front; a screen projection of an
  * actor behind the eye cannot become a real hit, label or visual proof. */
