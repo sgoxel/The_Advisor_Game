@@ -27,6 +27,7 @@ on:
       - 'src/resident-inspector.css'
       - 'src/default-character.ts'
       - 'src/resident-query.ts'
+      - 'src/resident-foot-ring.ts'
       - 'tools/screenshot_tool.py'
       - '.github/workflows/agent1-s006-resident-evidence.yml'
 concurrency:
