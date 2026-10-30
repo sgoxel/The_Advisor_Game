@@ -122,6 +122,7 @@ import {
   type StreamingBudget,
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
+import { residentGpuHitAllows } from "./resident-gpu-pick.ts";
 import { BoundedTimingSamples, ResidentQueryPhaseSamples, TileWorkerPhaseSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
@@ -401,7 +402,9 @@ let lastDutyGuardRevision = "";
 const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
 let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
-let pickResidentByKeyboard: (() => Resident | undefined) | undefined;
+let pickResidentByKeyboard: (() => { resident: Resident; clientX: number; clientY: number } | undefined) | undefined;
+let verifyResidentAtTap: ((resident: Resident, x: number, y: number) => Promise<boolean>) | undefined;
+let residentPickGeneration = 0;
 let navigationFingerprint = "";
 let rulerState = {
   pixels: 0,
@@ -1407,6 +1410,8 @@ function setupControls() {
     moved = false,
     lastPinch = 0;
   canvas.addEventListener("pointerdown", measureInput<PointerEvent>((event) => {
+    // A newer tap or drag invalidates an outstanding GPU selection readback.
+    residentPickGeneration++;
     try {
       canvas.setPointerCapture(event.pointerId);
     } catch {
@@ -1449,8 +1454,16 @@ function setupControls() {
       const resident = pickResidentAt?.(event.clientX, event.clientY);
       // Inspect the already-visible resident without moving the map and invalidating terrain coverage.
       // Camera focus is a separate explicit action; selection must keep its world context.
-      if (resident) showNpcPopup(resident, simulation.tick);
-      else { hideNpcPopup(); inspectCell(event.clientX, event.clientY); }
+      if (resident && verifyResidentAtTap) {
+        const generation = residentPickGeneration, x = event.clientX, y = event.clientY;
+        // A resident behind an opaque 3D wall is not actually selectable,
+        // even when its projected 44px touch target overlaps that wall.
+        void verifyResidentAtTap(resident, x, y).then(visible => {
+          if (generation !== residentPickGeneration) return;
+          if (visible) showNpcPopup(resident, simulation.tick);
+          else { hideNpcPopup(); inspectCell(x - canvas.getBoundingClientRect().left, y - canvas.getBoundingClientRect().top); }
+        });
+      } else { hideNpcPopup(); inspectCell(event.clientX - canvas.getBoundingClientRect().left, event.clientY - canvas.getBoundingClientRect().top); }
     }
     pointers.delete(event.pointerId);
     lastPinch = 0;
@@ -1544,10 +1557,14 @@ function setupControls() {
     if (event.key === "Enter") {
       event.preventDefault();
       if (!event.repeat && projectionTransition <= .001) {
-        const resident = pickResidentByKeyboard?.();
-        if (resident) {
-          showNpcPopup(resident, simulation.tick);
-          document.querySelector<HTMLButtonElement>(".npc-close")?.focus({ preventScroll: true });
+        const selected = pickResidentByKeyboard?.();
+        if (selected && verifyResidentAtTap) {
+          const generation = ++residentPickGeneration;
+          void verifyResidentAtTap(selected.resident, selected.clientX, selected.clientY).then(visible => {
+            if (generation !== residentPickGeneration || !visible) return;
+            showNpcPopup(selected.resident, simulation.tick);
+            document.querySelector<HTMLButtonElement>(".npc-close")?.focus({ preventScroll: true });
+          });
         }
       }
       return;
@@ -2002,6 +2019,86 @@ async function start() {
     residentPickSamples.record(performance.now() - pickStarted);
     return best;
   };
+  // The CPU body projection is the responsive 44px candidate filter only.
+  // The final 3D hit must also survive the real scene's depth buffer.
+  // Reuse one on-demand GPU picker; no per-frame picking or actor truth changes.
+  let residentDepthPicker: pc.Picker | undefined;
+  let pickerLossRevision = -1, pickerWidth = 0, pickerHeight = 0;
+  let pendingResidentPick: Promise<void> = Promise.resolve();
+  verifyResidentAtTap = (resident, clientX, clientY) => {
+    const generation = residentPickGeneration;
+    const lens = camera.camera!, rect = canvas.getBoundingClientRect();
+    const actor = actors.find(candidate => candidate.enabled &&
+      actorResidents.get(candidate)?.code === resident.code && hasResidentMesh(candidate));
+    if (!actor || !residentInFrontOfCamera(actor) || !rect.width || !rect.height ||
+        clientX < rect.left || clientY < rect.top ||
+        clientX >= rect.right || clientY >= rect.bottom) return Promise.resolve(false);
+    const feet = actor.getPosition().clone(), headWorld = new pc.Vec3(),
+      head = new pc.Vec3(), footScreen = new pc.Vec3(), tapped = new pc.Vec3(),
+      eyePoint = new pc.Vec3();
+    characterVisuals.headPoint(actor, headWorld);
+    lens.worldToScreen(feet, footScreen);
+    lens.worldToScreen(headWorld, head);
+    const fraction = residentActorPaintedTapFraction(
+      clientX - rect.left, clientY - rect.top, footScreen, head);
+    if (fraction === null) return Promise.resolve(false);
+    tapped.lerp(feet, headWorld, fraction);
+    const actorDepth = lens.viewMatrix.transformPoint(tapped, eyePoint).z;
+    const scenePose = () =>
+      `${view.x}/${view.z}/${view.halfHeight}/${view.yaw}/${projectionTransition}/${bridgeInspectionAngle}`;
+    const poseAtTap = scenePose(), modelHeight = feet.distance(headWorld);
+    const readDepth = async (): Promise<boolean> => {
+      if (generation !== residentPickGeneration || scenePose() !== poseAtTap ||
+          !actor.enabled || actorResidents.get(actor)?.code !== resident.code ||
+          actor.getPosition().distance(feet) > modelHeight * .5 ||
+          lens !== camera.camera) return false;
+      try {
+        // Half-resolution ID/depth targets stay bounded and are created only
+        // on a real user interaction, not during rendering or worker streaming.
+        const width = Math.max(1, Math.floor(rect.width * .5)),
+          height = Math.max(1, Math.floor(rect.height * .5));
+        if (pickerLossRevision !== rendererLossCount) {
+          residentDepthPicker?.destroy();
+          residentDepthPicker = undefined;
+          pickerLossRevision = rendererLossCount;
+          pickerWidth = pickerHeight = 0;
+        }
+        if (!residentDepthPicker) residentDepthPicker = new pc.Picker(app, width, height, true);
+        if (pickerWidth !== width || pickerHeight !== height) {
+          residentDepthPicker.resize(width, height);
+          pickerWidth = width; pickerHeight = height;
+        }
+        residentDepthPicker.prepare(lens, app.scene);
+        const px = Math.min(width - 1, Math.max(0, Math.floor((clientX - rect.left) * width / rect.width))),
+          py = Math.min(height - 1, Math.max(0, Math.floor((clientY - rect.top) * height / rect.height))),
+          halfTarget = Math.max(1, Math.round(22 * width / rect.width));
+        const nearest = await residentDepthPicker.getWorldPointAsync(px, py);
+        const painted = await residentDepthPicker.getSelectionAsync(
+          Math.max(0, px - halfTarget), Math.max(0, py - halfTarget),
+          2 * halfTarget + 1, 2 * halfTarget + 1);
+        if (generation !== residentPickGeneration || scenePose() !== poseAtTap ||
+            !actor.enabled || actorResidents.get(actor)?.code !== resident.code ||
+            actor.getPosition().distance(feet) > modelHeight * .5 ||
+            lens !== camera.camera) return false;
+        const foregroundDepth = nearest
+          ? lens.viewMatrix.transformPoint(nearest, eyePoint).z : null;
+        return residentGpuHitAllows(actorDepth, foregroundDepth,
+          drawableResidentMeshes(actor), painted);
+      } catch {
+        // A lost/unsupported picker never makes a hidden character selectable;
+        // the live renderer can recover and recreate these disposable buffers.
+        try { residentDepthPicker?.destroy(); } catch { /* lost device */ }
+        residentDepthPicker = undefined;
+        pickerWidth = pickerHeight = 0;
+        return false;
+      }
+    };
+    // One reusable GPU buffer must not be prepared while an earlier async
+    // readback still owns it. New taps invalidate old results before display.
+    const result = pendingResidentPick.then(readDepth, readDepth);
+    pendingResidentPick = result.then(() => {}, () => {});
+    return result;
+  };
   pickResidentByKeyboard = () => {
     // Enter inspects only an actually rendered, canvas-visible SEED resident;
     // the same hit test accepts both pointer and touch taps on its illustration.
@@ -2019,11 +2116,14 @@ async function start() {
     // Cheap nearest-first screen ordering precedes any expensive canvas hit
     // test. A visible resident near the screen centre now needs one full hit
     // scan instead of repeating it for every pooled actor.
-    return nearestPickableKeyboardResident(candidates, rect.width, rect.height, candidate => {
+    const selected = nearestPickableKeyboardResident(candidates, rect.width, rect.height, candidate => {
       const clientX = rect.left + candidate.x, clientY = rect.top + candidate.y;
       return document.elementFromPoint(clientX, clientY) === canvas &&
         pickResidentAt?.(clientX, clientY)?.code === candidate.code;
-    })?.resident;
+    });
+    return selected
+      ? { resident: selected.resident, clientX: rect.left + selected.x, clientY: rect.top + selected.y }
+      : undefined;
   };
   let lastSimulationRealSecond = -1, lastResidentSnapshot = "";
   let actorSnapshotTick = -Infinity;
