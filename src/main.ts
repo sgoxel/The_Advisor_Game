@@ -59,7 +59,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, guardCoverageAt, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
+import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -395,6 +395,7 @@ const actorResidents = new Map<pc.Entity, Resident>();
 // An explicit gate-watch camera visit may show only physically verified
 // Simulation residents while the cold full population worker is still busy.
 let focusedWatchCodes: string[] = [];
+let lastDutyGuardRevision = "";
 /** Walking actors: positions at this and the next simulation second, animated per frame. */
 const actorMotion = new Map<pc.Entity, { points: { x: number; z: number }[]; lengths: number[]; total: number; startTick: number }>();
 /** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
@@ -2086,7 +2087,22 @@ async function start() {
       const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
       const selectionNearby = residentMode.actors &&
         selectedResidentVisibleInView(selected, query);
-      const holdSelected = !snapshot && selectionNearby &&
+      // A legally staffed gate is part of the living world, not a dependent
+      // result of the potentially slow full-population worker or a shortcut.
+      // Reconstruct only the genuine on-duty guards at SEED posts intersecting
+      // the actual close camera, with the authoritative Simulation validator.
+      const dutyGuards: Resident[] = [];
+      if (residentMode.actors && query) {
+        const place = nearestPlace(view.x, view.z);
+        if (place) for (const code of dutyGuardCodesNearView(place, simulation.tick,
+            query.x, query.z, query.radius)) {
+          const guard = simulation.projectedResidentByCode(code);
+          if (guard?.activity === "guard" &&
+              selectedResidentVisibleInView(guard, query)) dutyGuards.push(guard);
+        }
+      }
+      const dutyGuardRevision = `${query?.key ?? ""}/${dutyGuards.map(guard => guard.code).join(",")}`;
+      const holdSelected = !dutyGuards.length && !snapshot && selectionNearby &&
         simulation.tick >= actorSnapshotTick &&
         simulation.tick - actorSnapshotTick <= TIME_SCALE * 2;
       if (holdSelected) {
@@ -2097,7 +2113,9 @@ async function start() {
           actorResidents.delete(actor);
           actorMotion.delete(actor);
         }
-      } else if (!residentMode.inspect || !residentMode.actors || !snapshot || snapshotRevision !== lastResidentSnapshot) {
+      } else if (!residentMode.inspect || !residentMode.actors || !snapshot ||
+          snapshotRevision !== lastResidentSnapshot || dutyGuardRevision !== lastDutyGuardRevision) {
+        lastDutyGuardRevision = dutyGuardRevision;
         const residents = projectedResidents;
         if (snapshot) {
           // Do not consume the actor snapshot's presentation revision while
@@ -2112,12 +2130,15 @@ async function start() {
         const visible = residentMode.actors
           ? residents.filter((resident) => resident.grounded && !resident.indoors) : [];
         if (residentMode.actors && query) {
-          // The fast watch comes from the SAME authoritative Simulation as the
-          // regular worker results. It is never a guessed street/guard position.
+          // The real active watch is independent of resident-worker latency.
+          // Reuse the same canonical actor pool, with no fake guards or routes.
+          for (const guard of dutyGuards)
+            if (!visible.some(resident => resident.code === guard.code)) visible.push(guard);
           for (const code of focusedWatchCodes) {
             if (visible.some(resident => resident.code === code)) continue;
             const watch = simulation.projectedResidentByCode(code);
-            if (selectedResidentVisibleInView(watch, query)) visible.push(watch!);
+            if (watch?.activity === "guard" && selectedResidentVisibleInView(watch, query))
+              visible.push(watch);
           }
         }
         if (snapshot && selectionNearby && selected &&
