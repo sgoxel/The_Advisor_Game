@@ -6,7 +6,7 @@ export function residentFootRingGeometry(segments = 24, innerRadius = 0.32, oute
   for (let i = 0; i < segments; i++) {
     const angle = i * 2 * Math.PI / segments;
     for (const radius of [innerRadius, outerRadius]) {
-      positions.push(Math.cos(angle) * radius, 0.12, Math.sin(angle) * radius);
+      positions.push(Math.cos(angle) * radius, 0.22, Math.sin(angle) * radius);
       normals.push(0, 1, 0);
     }
   }
