@@ -27,6 +27,17 @@ export function characterVisualFormat(usableModel: boolean): CharacterVisualForm
   return usableModel ? "3d-model" : "2d-cutout";
 }
 
+/** A pooled visual belongs to one SEED resident, not merely one image type.
+ * Reassignment of a same-type resident must restart stale asynchronous art or
+ * optional model work, while repeated frames of the SAME resident do not. */
+export function sameCharacterAssignment(
+  previous: { name: string; residentCode: string } | undefined,
+  name: string,
+  residentCode: string,
+): boolean {
+  return previous?.name === name && previous.residentCode === residentCode;
+}
+
 /** A container can have render components but no drawable mesh primitives.
  * Never hide the resident's 2D illustration for a zero-geometry owner GLB.
  * This is a presentation-only check; it does not affect Simulation identity. */
