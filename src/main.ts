@@ -1914,15 +1914,17 @@ async function start() {
     // Project each visible sprite's feet and head to the screen and test the click against
     // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
     const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top,
-      lens = camera.camera!, feet = new pc.Vec3(), head = new pc.Vec3();
+      lens = camera.camera!, feet = new pc.Vec3(), head = new pc.Vec3(),
+      paintedHeadWorld = new pc.Vec3();
     let best: Resident | undefined, bestDistance = Infinity;
     for (const actor of actors) {
       const resident = actorResidents.get(actor);
       if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
-      const scale = actor.getLocalScale(), up = actor.getRotation().transformVector(new pc.Vec3(0, scale.y * DEFAULT_CHARACTER_HEIGHT_M, 0)), base = actor.getPosition(),
-        bottom = base.clone(), top = base.clone().add(up);
-      lens.worldToScreen(bottom, feet);
-      lens.worldToScreen(top, head);
+      // The visible authored illustration is pitched toward the camera.
+      // Picking its imaginary vertical body misses the actual painted figure.
+      lens.worldToScreen(actor.getPosition(), feet);
+      characterVisuals.headPoint(actor, paintedHeadWorld);
+      lens.worldToScreen(paintedHeadWorld, head);
       const distance = residentActorPickDistance(x, y, feet, head);
       if (distance !== null && distance < bestDistance) { best = resident; bestDistance = distance; }
     }
@@ -2239,7 +2241,10 @@ async function start() {
         }
         selectedResidentGroundMarker.hidden = false;
       } else selectedResidentGroundMarker.hidden = true;
-      selectedResidentWorld.set(foot.x, foot.y + inspectedActor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M + .04, foot.z);
+      // Attach the selected caption to the actual transformed illustration.
+      // Its painted head may extend toward the camera and above the body.
+      characterVisuals.headPoint(inspectedActor, selectedResidentWorld);
+      selectedResidentWorld.y += .04;
       camera.camera!.worldToScreen(selectedResidentWorld, selectedResidentScreen);
       const x = Math.round(selectedResidentScreen.x), y = Math.round(selectedResidentScreen.y);
       // Physical-size bracket beside the *rendered* model. Its height is the
@@ -2701,12 +2706,15 @@ async function start() {
       },
       /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
       residentEvidencePick() {
-        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
+        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3(),
+          paintedHead = new pc.Vec3(), midpoint = new pc.Vec3();
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
           if (!actor.enabled || !resident || !hasResidentMesh(actor)) continue;
           const meshCount = drawableResidentMeshes(actor).length;
-          camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
+          characterVisuals.headPoint(actor, paintedHead);
+          midpoint.lerp(actor.getPosition(), paintedHead, .5);
+          camera.camera!.worldToScreen(midpoint, point);
           const clientX = rect.left + point.x, clientY = rect.top + point.y;
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
           if (document.elementFromPoint(clientX, clientY) !== canvas) continue;
@@ -2720,7 +2728,8 @@ async function start() {
       /** Read-only, bounded explanation of why real resident meshes fail a canvas click.
        * The screenshot gate must never substitute these counts for visual evidence. */
       residentEvidenceDiagnosis() {
-        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
+        const rect = canvas.getBoundingClientRect(), point = new pc.Vec3(),
+          paintedHead = new pc.Vec3(), midpoint = new pc.Vec3();
         const counts = { enabled: 0, withResident: 0, withMesh: 0, onScreen: 0, unoccluded: 0, pickMatched: 0 };
         const samples: { index: number; mesh: boolean; x: number; y: number; depth: number; obstruction: string; pickMatched: boolean }[] = [];
         for (const actor of actors) {
@@ -2731,7 +2740,9 @@ async function start() {
           counts.withResident++;
           const mesh = hasResidentMesh(actor);
           if (mesh) counts.withMesh++;
-          camera.camera!.worldToScreen(actor.getPosition().clone().add(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * .5, 0)), point);
+          characterVisuals.headPoint(actor, paintedHead);
+          midpoint.lerp(actor.getPosition(), paintedHead, .5);
+          camera.camera!.worldToScreen(midpoint, point);
           const onScreen = point.x >= 12 && point.y >= 12 && point.x <= rect.width - 12 && point.y <= rect.height - 12;
           if (onScreen) counts.onScreen++;
           const clientX = rect.left + point.x, clientY = rect.top + point.y,
