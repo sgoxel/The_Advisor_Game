@@ -135,6 +135,14 @@ function characterNodeEnabled(node: CharacterHierarchyNode): boolean {
   return true;
 }
 
+/** A render node that was detached or moved to another hierarchy cannot
+ * represent this resident, even when its mesh remains locally enabled. */
+function characterNodeInside(node: CharacterHierarchyNode, root: CharacterHierarchyNode): boolean {
+  for (let current: CharacterHierarchyNode | null = node; current; current = current.parent ?? null)
+    if (current === root) return true;
+  return false;
+}
+
 /** Only genuinely renderable, visible owner meshes may replace an actor's 2D art.
  * A valid GLB can contain disabled nodes, render components, mesh instances
  * or authored materials with no visible opacity. Never hide the 2D resident
@@ -224,7 +232,10 @@ export function characterModelRenderable<T extends {
   entity: CharacterHierarchyNode;
   meshInstances: readonly T[];
 }[], opaqueBlendType?: number): boolean {
-  return characterNodeEnabled(root) && characterDrawableMeshes(components, opaqueBlendType).length > 0;
+  return characterNodeEnabled(root) && characterDrawableMeshes(
+    components.filter(component => characterNodeInside(component.entity, root)),
+    opaqueBlendType,
+  ).length > 0;
 }
 
 /** A once-validated optional model may cease to render after device/scene
