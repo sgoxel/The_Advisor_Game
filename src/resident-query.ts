@@ -176,6 +176,25 @@ export function residentActorInFront(feetViewZ: number, headViewZ: number): bool
     feetViewZ < 0 && headViewZ < 0;
 }
 
+/** Choose one already-validated on-canvas resident for keyboard inspection.
+ * The caller supplies only true mesh-visible, front-facing, pointer-pickable
+ * residents. Camera choice changes UI focus, never Simulation identity. */
+export function nearestKeyboardResident<T extends { code: string; x: number; y: number }>(
+  candidates: readonly T[], width: number, height: number,
+): T | undefined {
+  if (!(width > 0 && height > 0)) return undefined;
+  let best: T | undefined, bestDistance = Infinity;
+  for (const candidate of candidates) {
+    if (!Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) continue;
+    const distance = Math.hypot(candidate.x - width * .5, candidate.y - height * .5);
+    if (!best || distance < bestDistance || (distance === bestDistance && candidate.code < best.code)) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 /** At most two bounded requests: an obsolete in-flight camera query may
  * finish while the latest view uses another already-idle worker. Each query's
  * actor ordering and Simulation validations stay inside its own worker.

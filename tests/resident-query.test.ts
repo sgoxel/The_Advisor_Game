@@ -1,7 +1,7 @@
 import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -170,6 +170,20 @@ test("S010 selected ground ring is a closed planar world mesh with no screen-spa
   assert.ok(indices.every(index => index >= 0 && index < positions.length / 3));
   assert.ok(indices.some(index => index === 0) && indices.some(index => index === 47),
     "the final segment wraps to the first with no broken seam");
+});
+
+test("S010 Enter inspection picks one deterministic real visible resident near the canvas centre", () => {
+  const visible = [
+    { code: "seed/guard", x: 80, y: 50 },
+    { code: "seed/farmer", x: 48, y: 50 },
+    { code: "seed/beggar", x: 52, y: 50 },
+  ];
+  assert.equal(nearestKeyboardResident(visible, 100, 100)?.code, "seed/beggar",
+    "equidistant painted bodies tie-break by canonical ID, not worker arrival");
+  assert.equal(nearestKeyboardResident([...visible].reverse(), 100, 100)?.code, "seed/beggar");
+  assert.equal(nearestKeyboardResident([{ code: "invalid", x: NaN, y: 2 }, ...visible], 100, 100)?.code, "seed/beggar");
+  assert.equal(nearestKeyboardResident([], 100, 100), undefined);
+  assert.equal(nearestKeyboardResident(visible, 0, 100), undefined);
 });
 
 test("S010 only camera-front painted residents can be clicked or receive a selected marker", () => {
