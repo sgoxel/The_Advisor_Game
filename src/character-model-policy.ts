@@ -15,6 +15,23 @@ export function characterModelManifest(value: unknown): CharacterModelManifest {
   return names;
 }
 
+/** One optional registry read is shared by current residents. A successful
+ * (including intentionally empty) owner manifest stays cached; a transient
+ * network/HTTP/parse failure retains illustrated 2D art and lets a later
+ * resident assignment retry, rather than poisoning the whole session. */
+export function loadSharedCharacterManifest(
+  cache: { pending?: Promise<CharacterModelManifest> },
+  load: () => Promise<unknown>,
+): Promise<CharacterModelManifest> {
+  if (cache.pending) return cache.pending;
+  const pending = Promise.resolve().then(load).then(characterModelManifest).catch(() => {
+    if (cache.pending === pending) cache.pending = undefined;
+    return characterModelManifest({});
+  });
+  cache.pending = pending;
+  return pending;
+}
+
 /** An absent model cannot suppress an existing 2D character. */
 export function characterModelFile(key: string, manifest: CharacterModelManifest): string | null {
   return Object.hasOwn(CHARACTER_TYPES, key) && Object.hasOwn(manifest, key)

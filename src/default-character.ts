@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -60,11 +60,14 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   // The owner may deploy GLBs later by uploading characters/models/*.glb
   // and adding matching illustration-type filenames to models.json. An empty,
   // absent or invalid manifest never starts a 3D request or delays 2D actors.
-  const manifest: Promise<CharacterModelManifest> = fetch(
-    new URL("characters/models.json", document.baseURI).href,
-  ).then(response => response.ok ? response.json() : {})
-    .then(characterModelManifest)
-    .catch(() => characterModelManifest({}));
+  const manifestCache: { pending?: Promise<CharacterModelManifest> } = {};
+  function ownerManifest(): Promise<CharacterModelManifest> {
+    return loadSharedCharacterManifest(manifestCache, async () => {
+      const response = await fetch(new URL("characters/models.json", document.baseURI).href);
+      if (!response.ok) throw new Error(`Optional owner model manifest HTTP ${response.status}`);
+      return response.json();
+    });
+  }
   const resources = new Map<string, Promise<pc.ContainerResource | null>>();
   function ownerModel(file: string): Promise<pc.ContainerResource | null> {
     return loadSharedOwnerModel(file, resources, requested => {
@@ -156,7 +159,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       }).catch(error => {
         if (current()) console.warn("Resident illustration unavailable", name, error);
       });
-      const models = await manifest;
+      const models = await ownerManifest();
       if (!current()) return;
       const file = characterModelFile(name, models);
       if (!file) return;

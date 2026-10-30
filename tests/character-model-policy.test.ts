@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };
@@ -12,6 +12,37 @@ test("WP #693 pooled actor assignment tracks actual SEED resident, not just port
     "different resident with same artwork must reset stale optional model/heading");
   assert.equal(sameCharacterAssignment(first, "farmer_male", "seed-guard-1"), false,
     "a different authored appearance also resets visual work");
+});
+
+test("WP #693 transient owner registry failure can recover without losing original 2D residents", async () => {
+  const cache: { pending?: Promise<ReturnType<typeof characterModelManifest>> } = {};
+  let calls = 0;
+  const load = async (): Promise<unknown> => {
+    if (++calls === 1) throw new Error("offline manifest fetch");
+    return { guard_male: "guard_male.glb", unrelated: "../bad.glb" };
+  };
+  const first = loadSharedCharacterManifest(cache, load);
+  assert.strictEqual(first, loadSharedCharacterManifest(cache, load),
+    "current residents coalesce one in-flight optional registry request");
+  const offline = await first;
+  assert.equal(characterModelFile("guard_male", offline), null,
+    "HTTP/network failure must keep the existing illustrated NPC");
+  assert.equal(cache.pending, undefined, "a failed registry read is not a permanent empty manifest");
+  const recovered = await loadSharedCharacterManifest(cache, load);
+  assert.equal(characterModelFile("guard_male", recovered), "guard_male.glb");
+  assert.equal(characterModelFile("unrelated", recovered), null);
+  assert.strictEqual(await loadSharedCharacterManifest(cache, load), recovered,
+    "successful owner registry is shared without more network requests");
+  assert.equal(calls, 2);
+  const intentionallyEmpty = { pending: undefined as Promise<ReturnType<typeof characterModelManifest>> | undefined };
+  let emptyCalls = 0;
+  const blank = await loadSharedCharacterManifest(intentionallyEmpty, async () => { emptyCalls++; return {}; });
+  assert.equal(characterModelFile("guard_male", blank), null);
+  assert.strictEqual(await loadSharedCharacterManifest(intentionallyEmpty, async () => {
+    emptyCalls++;
+    throw new Error("must not refetch valid empty registry");
+  }), blank);
+  assert.equal(emptyCalls, 1, "normal no-owner deployment must not retry its valid empty manifest");
 });
 
 test("WP #693 no owner model leaves residents in 2D", () => {
