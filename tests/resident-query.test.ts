@@ -1,4 +1,5 @@
 import test from "node:test";
+import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
@@ -157,6 +158,18 @@ test("S010 cutout picking follows its real projected body, not an imaginary vert
     "a tap on the tilted painted silhouette must select its original resident");
   assert.equal(residentActorPickDistance(130, 190, feet, { x: 100, y: 180 }), null,
     "the old vertical proxy rectangle does not cover that visible silhouette");
+});
+
+test("S010 selected ground ring is a closed planar world mesh with no screen-space proxy", () => {
+  const { positions, normals, indices } = residentFootRingGeometry();
+  assert.equal(positions.length, 24 * 2 * 3);
+  assert.equal(normals.length, positions.length);
+  assert.equal(indices.length, 24 * 2 * 3);
+  assert.ok(positions.every((coordinate, index) => index % 3 !== 1 || coordinate === 0.035),
+    "each ring vertex is at the same fixed height above the original actor root");
+  assert.ok(indices.every(index => index >= 0 && index < positions.length / 3));
+  assert.ok(indices.some(index => index === 0) && indices.some(index => index === 47),
+    "the final segment wraps to the first with no broken seam");
 });
 
 test("S010 only camera-front painted residents can be clicked or receive a selected marker", () => {
