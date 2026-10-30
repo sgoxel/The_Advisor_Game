@@ -3,7 +3,7 @@ import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -274,6 +274,58 @@ test("progressive outdoor results keep every valid NPC without duplicates or sta
   queue.offer({ ...actorQuery, key: "elsewhere" });
   assert.equal(queue.current, undefined);
 });
+
+test("S010 streaming a new camera view keeps only real stationary overlap until final facts arrive", () => {
+  const queue = new ResidentQueryQueue(48), firstView = {
+    ...request("before-pan", 100), actors: true, radius: 4,
+  };
+  const resident = (code: string, x: number, change: Record<string, unknown> = {}) =>
+    ({ code, x, z: 0, grounded: true, indoors: false, ...change });
+  const atPost = resident("SEED/still-at-post", 1);
+  const offscreen = resident("SEED/now-offscreen", -3);
+  const indoor = resident("SEED/indoors", 1, { indoors: true });
+  queue.offer(firstView);
+  const firstJob = queue.take()!;
+  assert.equal(queue.complete(firstJob.id, {
+    ...result, residents: [atPost, offscreen, indoor] as never[],
+  }, 100), true);
+  const previous = queue.latest!;
+  const nextView = { ...firstView, key: "after-pan", x: 3, tick: 101 };
+  queue.offer(nextView);
+  const nextJob = queue.take()!;
+  const seen: string[] = [];
+  const retained = residentStationaryPartialCarryover(previous, nextView, (person, oldTick, newTick) => {
+    seen.push(person.code);
+    assert.equal(oldTick, 100);
+    assert.equal(newTick, 101);
+    return true; // The caller has independently validated the same original local routine.
+  });
+  assert.deepEqual(retained.map(person => person.code), ["SEED/still-at-post"],
+    "a pan retains only the grounded original position within both real camera searches");
+  assert.equal(seen.includes("SEED/now-offscreen"), true);
+  const arrived = resident("SEED/new-street-person", 3.5);
+  assert.equal(queue.appendPartial(nextJob.id, [arrived] as never[], 101, retained as never[]), true);
+  assert.deepEqual(queue.current?.residents.map(person => person.code),
+    ["SEED/still-at-post", "SEED/new-street-person"],
+    "first real partial worker fact does not erase a stationary actor behind the pan");
+  assert.equal(queue.ready, false, "stationary carryover never makes a partial batch authoritative");
+  assert.equal(queue.appendPartial(nextJob.id, [atPost] as never[], 101), false,
+    "a repeated real resident never duplicates the original SEED identity");
+  assert.equal(queue.complete(nextJob.id, {
+    ...result, residents: [arrived] as never[],
+  }, 101), true);
+  assert.deepEqual(queue.current?.residents.map(person => person.code), ["SEED/new-street-person"],
+    "complete worker facts replace every temporary old-camera visual");
+  assert.deepEqual(residentStationaryPartialCarryover(previous,
+    { ...nextView, x: 20 }, () => true), [], "nonoverlapping distant pans retain no actors");
+  assert.deepEqual(residentStationaryPartialCarryover(previous,
+    { ...nextView, placeCode: "another-place" }, () => true), [], "different SEED settlements never mix");
+  assert.deepEqual(residentStationaryPartialCarryover(previous,
+    { ...nextView, actors: false }, () => true), [], "inspector-only queries never paint temporary actors");
+  assert.deepEqual(residentStationaryPartialCarryover(previous, nextView, () => false), [],
+    "a schedule/day/route change invalidates even a physically nearby former resident");
+});
+
 
 test("slow population scans preserve only grounded stationary on-duty NPCs", () => {
   const person = {

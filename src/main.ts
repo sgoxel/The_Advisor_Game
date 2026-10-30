@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1818,6 +1818,19 @@ async function start() {
   coarseTerrainMaterial.depthWrite = false;
   coarseTerrainMaterial.depthTest = false;
   coarseTerrainMaterial.update();
+  // Preserve only original, still-legal stationary cutouts while an
+  // overlapping new camera query streams its first real residents.
+  // Worker completion always replaces these temporary previous-view facts.
+  const stationaryForView = (previous: ResidentQueryJob & ResidentQueryResult, next: ResidentQuery): Resident[] =>
+    residentStationaryPartialCarryover(previous, next, (resident, originalTick, nextTick) => {
+      const place = residentPlacesById.get(resident.settlement);
+      if (!place) return false;
+      const actualTick = Math.max(nextTick, simulation.tick);
+      return residentStationaryWithinActivity(resident,
+        localDayIndex(originalTick, place.canonicalPosition.lon),
+        localDayIndex(actualTick, place.canonicalPosition.lon),
+        localSecondOfDay(actualTick, place.canonicalPosition.lon));
+    });
   workerStartedAt=performance.now();
   // The first worker starts alone so the first screen loads as fast as with a single worker; the
   // rest of the pool starts once it is ready, instead of all competing for the CPU at start-up.
@@ -1858,10 +1871,11 @@ async function start() {
         return;
       }
       if (event.data.kind === "resident-progress") {
+        const batch = residentBatches.get(event.data.id), prior = residentQueries.latest;
+        const retained = batch && prior && prior.id !== event.data.id
+          ? stationaryForView(prior, batch.job) : [];
         if (residentQueries.appendPartial(event.data.id, event.data.residents as Resident[],
-            Math.max(simulation.tick, clock.tickAt(Date.now())))) {
-          // The first actual streamed grounded outdoor actor may arrive from
-          // gate duty before an ordinary first-fact preview can be sent.
+            Math.max(simulation.tick, clock.tickAt(Date.now())), retained)) {
           if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
             firstResidentFactMs = performance.now() - firstResidentQueryOfferedAt;
           residentResultReady();
@@ -2243,19 +2257,8 @@ async function start() {
       // still-legal grounded outdoor residents while fresh worker facts arrive.
       // This is incomplete presentation, never a new authoritative query.
       const original = previousSnapshot;
-      const overlappingOriginal = original && query?.actors &&
-        original.placeCode === query.placeCode &&
-        residentQueryAreasOverlap(original, query);
-      const stationaryResidents = !recentSnapshot && overlappingOriginal
-        ? original.residents.filter(resident => {
-            const place = residentPlacesById.get(resident.settlement);
-            return !!place && residentStationaryWithinActivity(resident,
-              localDayIndex(original.tick, place.canonicalPosition.lon),
-              localDayIndex(simulation.tick, place.canonicalPosition.lon),
-              localSecondOfDay(simulation.tick, place.canonicalPosition.lon)) &&
-              Math.hypot(wrapSourceX(resident.x - query!.x), resident.z - query!.z) <= query!.radius;
-          })
-        : [];
+      const stationaryResidents = !recentSnapshot && original && query
+        ? stationaryForView(original, query) : [];
       const snapshot = recentSnapshot ?? (original && stationaryResidents.length
         ? { ...original, residents: stationaryResidents, tick: simulation.tick, partial: true }
         : undefined);
