@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1962,12 +1962,14 @@ async function start() {
   }
   pickResidentAt = (clientX: number, clientY: number) => {
     const pickStarted = performance.now();
-    // Project each visible sprite's feet and head to the screen and test the click against
-    // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
+    // Project each real painted cutout (with the existing accessible padding).
+    // When targets overlap, the rendered frontmost character wins, not the
+    // potentially invisible person whose projected centre is nearest.
     const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top,
       lens = camera.camera!, feet = new pc.Vec3(), head = new pc.Vec3(),
-      paintedHeadWorld = new pc.Vec3();
-    let best: Resident | undefined, bestDistance = Infinity;
+      paintedHeadWorld = new pc.Vec3(), paintedMidWorld = new pc.Vec3();
+    let best: Resident | undefined;
+    let bestHit: { code: string; distance: number; viewDepth: number } | undefined;
     for (const actor of actors) {
       const resident = actorResidents.get(actor);
       if (!actor.enabled || !resident || !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
@@ -1977,7 +1979,11 @@ async function start() {
       characterVisuals.headPoint(actor, paintedHeadWorld);
       lens.worldToScreen(paintedHeadWorld, head);
       const distance = residentActorPickDistance(x, y, feet, head);
-      if (distance !== null && distance < bestDistance) { best = resident; bestDistance = distance; }
+      if (distance === null) continue;
+      paintedMidWorld.lerp(actor.getPosition(), paintedHeadWorld, .5);
+      const viewDepth = lens.viewMatrix.transformPoint(paintedMidWorld, actorViewPoint).z;
+      const hit = { code: resident.code, distance, viewDepth };
+      if (residentActorPickPrefersFront(hit, bestHit)) { best = resident; bestHit = hit; }
     }
     residentPickSamples.record(performance.now() - pickStarted);
     return best;
