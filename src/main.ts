@@ -10,6 +10,7 @@ import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrain
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
+import { characterDrawableMeshes } from "./character-model-policy.ts";
 import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-layout-cache.ts";
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
@@ -1853,10 +1854,12 @@ async function start() {
     selectedHomeDoorWorld = new pc.Vec3(), selectedHomeDoorScreen = new pc.Vec3();
   let markedResidentCode = "", markedResidentTransform = "", markedGroundTransform = "", markedDoorTransform = "", markedActorHeight = "";
   let selectedDoorPoint: { x: number; z: number; y: number } | undefined;
-  // A logical resident without an installed visible 3D mesh is not an on-screen click target.
-  // Keep normal pointer picking and the S006 real-click evidence under the same predicate.
-  const hasResidentMesh = (actor: pc.Entity) => (actor.findComponents("render") as pc.RenderComponent[])
-    .some(render => render.enabled && render.entity.enabled && render.meshInstances.length > 0);
+  // A rendered click target must be genuinely drawable, including enabled
+  // ancestors, visible mesh instances and alpha-tested / blended owner art.
+  // Use the same 2D/3D eligibility as model fallback, never a nominal component.
+  const hasResidentMesh = (actor: pc.Entity) => characterDrawableMeshes(
+    actor.findComponents("render") as pc.RenderComponent[], pc.BLEND_NONE,
+  ).length > 0;
   pickResidentAt = (clientX: number, clientY: number) => {
     const pickStarted = performance.now();
     // Project each visible sprite's feet and head to the screen and test the click against
