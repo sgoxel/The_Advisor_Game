@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };
@@ -176,6 +176,34 @@ test("WP #693 rejected owner GLB promises also allow later independent recovery"
   assert.equal(await loadSharedOwnerModel("farmer_male.glb", cache, load),
     "restored shared owner GLB");
   assert.equal(calls, 2);
+});
+
+test("WP #693 unusable loaded owner GLB is evicted without clobbering a recovered resource", async () => {
+  const file = "guard_male.glb";
+  const cache = new Map<string, Promise<{ version: string } | null>>();
+  let loads = 0;
+  const broken = { version: "loaded but no valid render geometry" };
+  const repaired = { version: "owner corrected GLB" };
+  const load = async () => ++loads === 1 ? broken : repaired;
+  const first = await loadSharedOwnerModel(file, cache, load);
+  assert.strictEqual(first, broken);
+  invalidateSharedOwnerModel(file, cache, broken);
+  await Promise.resolve();
+  assert.equal(cache.has(file), false,
+    "valid download followed by invalid geometry/initialization must not poison cache");
+  const second = await loadSharedOwnerModel(file, cache, load);
+  assert.strictEqual(second, repaired);
+  invalidateSharedOwnerModel(file, cache, broken);
+  await Promise.resolve();
+  assert.strictEqual(await loadSharedOwnerModel(file, cache, load), repaired,
+    "a stale invalidation cannot evict the newer valid owner model");
+  assert.equal(loads, 2, "usable repaired owner mesh remains shared");
+  const concurrent = loadSharedOwnerModel("farmer_male.glb", cache, async () => repaired);
+  invalidateSharedOwnerModel("farmer_male.glb", cache, broken);
+  assert.strictEqual(await concurrent, repaired);
+  await Promise.resolve();
+  assert.strictEqual(cache.get("farmer_male.glb"), concurrent,
+    "a failure for a different resource cannot invalidate a healthy shared request");
 });
 
 test("WP #693 parent-only foot alignment preserves imported GLB root transforms", () => {
