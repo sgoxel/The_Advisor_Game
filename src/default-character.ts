@@ -99,7 +99,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
     // component/material change. The permanent 2D art returns immediately;
     // invalidate this resident's completed assignment so a subsequent normal
     // snapshot may try 3D again after recovery, without per-frame fetches.
-    if (characterModelVisibleOrInvalidate(actor, model, modelComponents.get(actor) ?? [], assigned))
+    if (characterModelVisibleOrInvalidate(actor, model, modelComponents.get(actor) ?? [], assigned, pc.BLEND_NONE))
       return true;
     activeModels.delete(actor);
     modelComponents.delete(actor);
@@ -178,7 +178,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         // data must never suppress the visible 2D NPC illustration.
         if (!model.enabled) throw new Error("disabled model root");
         const components = model.findComponents("render") as pc.RenderComponent[];
-        const pieces = characterDrawableMeshes(components);
+        const pieces = characterDrawableMeshes(components, pc.BLEND_NONE);
         if (!pieces.length) throw new Error("no visible drawable model geometry");
         // The AABBs include the owner's authored GLB root transform. Normalize
         // only our neutral parent: replacing model.scale would multiply an
