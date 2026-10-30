@@ -15,7 +15,7 @@ import {
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
 import { settlementHomeIndicesNear, settlementLotCount, SETTLEMENT_POPULATION } from "./settlement-exterior-core.ts";
-import { settlementExteriorFor, settlementHomeFor, settlementSpareHomeFor, settlementShopFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeFor, settlementSpareHomeFor, settlementShopFor, visibleSettlementStreetSegments, GUARD_POST_BUILDING_WIDTH_M, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
@@ -617,7 +617,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       add("gate", gate.x, gate.z, digest(gate.id), `${place.id}/gate/${gate.id}`, { name: gateLabel, label: `${place.name} gate`, entranceX: plan.centre.x, entranceZ: plan.centre.z, yawRad: gateYaw, footprintWidth: metresToSource(11), footprintDepth: metresToSource(2), widthM: 11, depthM: 2 });
       for (let index = 0; index < gate.guardPosts.length; index++) {
         const post = gate.guardPosts[index];
-        add("guard-post", post.x, post.z, digest(`${gate.id}/${index}`), `${place.id}/guard-post/${gate.id}/${index}`, { name: `${gateLabel} guard post`, service: "guard-office", capacity: 2, residents: 1, label: "Guard post", entranceX: gate.x, entranceZ: gate.z, yawRad: gateYaw, footprintWidth: metresToSource(4.5), footprintDepth: metresToSource(4.5), widthM: 4.5, depthM: 4.5 });
+        add("guard-post", post.x, post.z, digest(`${gate.id}/${index}`), `${place.id}/guard-post/${gate.id}/${index}`, { name: `${gateLabel} guard post`, service: "guard-office", capacity: 2, residents: 1, label: "Guard post", entranceX: gate.x, entranceZ: gate.z, yawRad: gateYaw, footprintWidth: metresToSource(GUARD_POST_BUILDING_WIDTH_M), footprintDepth: metresToSource(GUARD_POST_BUILDING_WIDTH_M), widthM: GUARD_POST_BUILDING_WIDTH_M, depthM: GUARD_POST_BUILDING_WIDTH_M });
       }
     }
     if(tile.size<=8)for(const lamp of mainStreetLampAnchors(plan)){
