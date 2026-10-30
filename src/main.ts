@@ -1915,7 +1915,8 @@ async function start() {
   footRingMesh.update(pc.PRIMITIVE_TRIANGLES);
   const footRingMaterial = new pc.StandardMaterial();
   footRingMaterial.name = "SEED resident foot selection · world depth";
-  footRingMaterial.diffuse.set(0, 0, 0);
+  // Gold is visible on unlit WebGPU/WebGL2 meshes even without an emissive map.
+  footRingMaterial.diffuse.set(1, 0.82, 0.48);
   footRingMaterial.emissive.set(1, 0.82, 0.48);
   footRingMaterial.useLighting = false;
   footRingMaterial.useTonemap = false;
