@@ -83,6 +83,13 @@ jobs:
       # Do not substitute simulated pixels or counts for this real PNG.
 # Put night-watch metadata in a subfolder: the resident screenshot tool
       # writes its own capture.json at the parent root and otherwise overwrites it.
+      # WP-S010-003-001: the original full-HD night-gate PNG shows the
+      # second genuinely on-duty guard from Simulation behind a solid sloping
+      # gate-wall roof. Pixel (980,720) is the foreground opaque wall over
+      # that guard's grounded projected lower body. Tap the *real canvas*
+      # before the single original PNG: a hidden resident must never open
+      # an NPC inspector through this wall. Keep the same fixed tick, actual
+      # PlayCanvas render, camera, backends, resolution and screenshot count.
       - name: Capture physically staffed night gate at 1920x1080
         if: matrix.profile == 'fullhd-landscape'
         run: |
@@ -101,7 +108,7 @@ jobs:
             const delta=(21*3600-now+86400)%86400;
             console.log(start+Math.ceil(delta/TIME_SCALE*1000));
           ')
-          GATE_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(3);click:#focus-gate-watch;until:(window.__watch=window.advisorWorld.gateWatchEvidence())&&window.__watch.dutyCodes.length>0&&window.__watch.displayed.some(g=>g.mesh);settle;shot:village-night-gate-1920x1080'
+          GATE_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(3);click:#focus-gate-watch;until:(window.__watch=window.advisorWorld.gateWatchEvidence())&&window.__watch.dutyCodes.length>0&&window.__watch.displayed.some(g=>g.mesh);settle;tap:980,720;wait:2000;eval:document.getElementById("npc-popup").hidden||Promise.reject(new Error("WP-S010-003-001: a night guard was selected through the real gate-wall roof"));shot:village-night-gate-1920x1080'
           if [ "${{ runner.os }}" = "macOS" ]; then
             python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --browser-channel chrome --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }}/night-watch --name gate-watch --width 1920 --height 1080 --profile fullhd-landscape --renderer ${{ matrix.renderer }} --fixed-time-ms "$NIGHT_TIME_MS" --initial-ready-only --timeout 180 --steps "$GATE_STEPS"
           else
