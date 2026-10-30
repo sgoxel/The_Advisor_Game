@@ -189,6 +189,9 @@ export class ResidentQueryQueue {
       tick !== undefined && Math.abs(tick - this.snapshot.tick) <= this.maxAgeTicks;
   }
   get ready() { return this.readyFor(this.desired?.key); }
+  /** A prior fully validated camera result is eligible only after the
+   * renderer confirms overlap and freshness for its current source view. */
+  get latest() { return this.snapshot; }
   get current() {
     const snapshot = this.snapshot;
     return snapshot && snapshot.key === this.desired?.key && this.desired &&
@@ -232,6 +235,21 @@ export class ResidentQueryQueue {
     this.snapshot = { ...finished, ...result };
     return true;
   }
+}
+
+/** Previously validated stationary outdoor actors keep their physical
+ * post only within the same original local day and schedule interval.
+ * Moving/blocked/indoor facts cannot be reused as stationary scenery. */
+export function residentStationaryWithinActivity(
+  resident: Pick<Resident, "grounded" | "indoors" | "activity" | "activityStart" | "activityEnd" | "travelProgress" | "route">,
+  originalDay: number, currentDay: number, currentLocalSecond: number,
+): boolean {
+  return originalDay === currentDay &&
+    resident.grounded && !resident.indoors &&
+    resident.activity !== "commute" && resident.travelProgress === undefined &&
+    !resident.route.startsWith("BLOCKED:") &&
+    currentLocalSecond >= resident.activityStart &&
+    currentLocalSecond < resident.activityEnd;
 }
 
 /** Count only actually running resident shards in the shared streaming queue.
