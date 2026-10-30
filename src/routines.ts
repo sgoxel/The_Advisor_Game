@@ -172,13 +172,22 @@ export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, 
   // Daytime by kind of person.
   let dayEnd: number;
   if (ageGroup === "elder" || role === "elder") {
-    add("stroll", p.piety > .6 ? "plaza" : "garden", leave + 30 * MINUTE, p.piety > .6 ? "Morning prayers" : "Morning garden stroll", false);
+    // Nearby garden shrines take most daily prayers. A small SEED-stable
+    // subset still visit the civic well; camera position never selects it.
+    const squarePrayer = p.piety > .6 && unit(`${code}/CIVIC_PRAYER`) < .2;
+    add("stroll", squarePrayer ? "plaza" : "garden", leave + 30 * MINUTE,
+      p.piety > .6 ? "Morning prayers" : "Morning garden stroll", false);
     add("rest", "home", 11 * HOUR + d("ELDREST", 40), "Resting at home", true);
     add("errand", p.sociability > .5 ? "market" : "garden", 15 * HOUR + d("ELDERRAND", 50), p.sociability > .5 ? "Chatting at the market" : "Visiting a neighbourhood garden", false);
     dayEnd = 17 * HOUR + d("ELDEND", 40);
   } else if (restDay && role !== "innkeeper" && role !== "clergy" && role !== "beggar") {
-    // Rest day: worship, the market and company, then the usual evening.
-    add("pray", "plaza", Math.max(leave, 9 * HOUR), p.piety > .4 ? "Attending the shrine" : "Gathering in the square", false);
+    // Rest-day worship cannot send every adult in a city to the same well
+    // at exactly 09:00. Most visit their real local garden shrine; a
+    // SEED-stable minority attend the civic square at individually timed hours.
+    const publicGathering = unit(`${code}/PUBLIC_GATHERING`) < .2;
+    add("pray", publicGathering ? "plaza" : "garden",
+      Math.max(leave, 9 * HOUR + d("PRAYER", 55)),
+      p.piety > .4 ? "Attending the shrine" : publicGathering ? "Gathering in the square" : "Meeting neighbours at the garden", false);
     add("errand", "market", 10.5 * HOUR + d("RESTMKT", 40), "Visiting the market", false);
     add("lunch", p.sociability > .6 ? "inn" : "home", 12.5 * HOUR, "Rest-day lunch", true);
     add("stroll", p.sociability > .7 ? "plaza" : "garden", 14 * HOUR + d("RESTHOME", 60), p.sociability > .7 ? "Meeting neighbours in the square" : "Resting in a neighbourhood garden", false);
