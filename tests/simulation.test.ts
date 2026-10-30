@@ -2407,6 +2407,23 @@ function workdayTick(place: (typeof villages)[number], hour: number) {
   return tickAtLocalTime(day, hour * HOUR, lon);
 }
 
+test("real Alderwick field workers distribute legally around the source field without overlapping the street", () => {
+  const place = villages.find(v => v.name === "Alderwick");
+  assert.ok(place, "the user's real Alderwick scene exists in the canonical SEED");
+  const tick = tickAtLocalTime(WORKDAY, 10 * HOUR, place.canonicalPosition.lon),
+    scale = sourceUnitsPerMetreAt(place.z),
+    farmhands = Array.from({ length: populationOf(place) }, (_, index) => residentAt(place, index, tick))
+      .filter(r => r.grounded && !r.indoors && r.travelProgress === undefined &&
+        r.workplace.includes("/PATCH/") && r.activity === "work");
+  assert.ok(farmhands.length > 0, "original workers still reach their actual seeded field plots");
+  const spread = farmhands.map(r => ({ e: r.x / scale.x, n: r.z / scale.z }));
+  for (let i = 0; i < spread.length; i++) for (let j = i + 1; j < spread.length; j++)
+    assert.ok(Math.hypot(spread[i].e-spread[j].e, spread[i].n-spread[j].n) >= .6,
+      "the same legitimate field cannot visually pile independent original workers on one spot");
+  for (const r of farmhands) assert.deepEqual(residentAt(place, r.index, tick).position, r.position,
+    "camera or evaluation order cannot change a worker's canonical location");
+});
+
 test("townspeople who stand outdoors at local midday never share a spot or stand on a street", () => {
   for (const place of [cities[0], cities[2], villages[0]]) {
     const tick = workdayTick(place, 12), metre = sourceUnitsPerMetreAt(place.z), plan = settlementExteriorFor(place), standing: { code: string; task: string; e: number; n: number; x: number; z: number }[] = [];
