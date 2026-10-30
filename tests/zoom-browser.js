@@ -55,6 +55,15 @@ export function zoomTests(test, expect, webgl2) {
       pointer('pointerup',1,-25);
     });
     await assertPureZoom(beforePinch,'pinch');
+    // The ten owner-defined scale anchors are actual zoom controls, too:
+    // changing the select cannot turn or recenter the current view.
+    const beforeScale=await zoomSnapshot();
+    await page.evaluate(()=>{
+      const scale=document.querySelector('#map-scale');
+      scale.value='250';
+      scale.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+    await assertPureZoom(beforeScale,'scale 1/250');
     const beforeRealm=await zoomSnapshot();
     await page.locator('#overview').click();
     await assertPureZoom(beforeRealm,'Realm view');
