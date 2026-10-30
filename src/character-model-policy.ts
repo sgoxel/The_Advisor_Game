@@ -130,6 +130,30 @@ export function characterModelRenderable<T extends {
   return root.enabled && characterDrawableMeshes(components).length > 0;
 }
 
+/** A once-validated optional model may cease to render after device/scene
+ * changes. Restore 2D now, and let the next normal resident assignment retry
+ * the already-shared owner asset instead of permanently pinning this actor to
+ * the failed model. Do not retry from the render loop: invalidating the
+ * assignment only on actual loss prevents unbounded per-frame reloads. */
+export function characterModelVisibleOrInvalidate<T extends object, M extends {
+  visible?: boolean;
+  material?: unknown;
+  mesh?: { primitive?: readonly { count: number }[] } | null;
+}>(
+  actor: T,
+  root: { enabled: boolean },
+  components: readonly {
+    enabled: boolean;
+    entity: { enabled: boolean };
+    meshInstances: readonly M[];
+  }[],
+  assigned: WeakMap<T, { name: string; residentCode: string }>,
+): boolean {
+  if (characterModelRenderable(root, components)) return true;
+  assigned.delete(actor);
+  return false;
+}
+
 /** Reuse one texture/material promise per authored NPC illustration.
  * Missing specialist art resolves to the original shared default image,
  * including the default image's own proportions, without retrying every actor.
