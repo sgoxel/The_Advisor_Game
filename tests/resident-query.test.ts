@@ -131,7 +131,7 @@ test("S009 cached neighbourhood sites retain seeded garden/market and exact home
 
 test("S010 gate-watch focus follows only a physically arrived real guard", () => {
   const post = { x: 4, z: 9 };
-  const residents = new Map([
+  const residents = new Map<string, { x: number; z: number; grounded: boolean; indoors: boolean; activity: "guard" | "work" }>([
     ["late", { x: 20, z: 30, grounded: false, indoors: false, activity: "guard" }],
     ["inside", { x: 22, z: 32, grounded: true, indoors: true, activity: "guard" }],
     ["real", { x: 24, z: 34, grounded: true, indoors: false, activity: "guard" }],
