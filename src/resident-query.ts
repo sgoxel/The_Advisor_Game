@@ -99,22 +99,30 @@ export function residentActorSearchContinues(evaluated: number, outdoorCount: nu
     (outdoorCount === 0 || evaluated < limit);
 }
 
-/** The Watch camera targets a genuinely present guard, not the first design-time
- * post of a staffed gate (which may be occupied by a different shift). An
- * invalid/unresolved roster returns the original SEED post; lookup never
- * creates residents or changes their authoritative Simulation coordinates. */
+/** Frame the real physically present watch, not an unoccupied design-time
+ * post. With two on-duty guards, frame their wrapped source-space midpoint
+ * so the second person is not forced off-screen by the first guard's location.
+ * This moves only the observer camera; Simulation owns both original positions.
+ * Missing/invalid duty falls back to the existing SEED post. */
 export function residentGateWatchFocus(
   residentCodes: readonly string[] | undefined,
   lookup: (code: string) => Pick<Resident, "x" | "z" | "grounded" | "indoors" | "activity"> | undefined,
   fallback: { x: number; z: number },
 ): { x: number; z: number } {
-  for (const code of residentCodes ?? []) {
+  let first: { x: number; z: number } | undefined;
+  let sumDx = 0, sumDz = 0, count = 0;
+  for (const code of new Set(residentCodes ?? [])) {
     const resident = lookup(code);
-    if (resident && resident.grounded && !resident.indoors && resident.activity === "guard" &&
-        Number.isFinite(resident.x) && Number.isFinite(resident.z))
-      return { x: resident.x, z: resident.z };
+    if (!resident || !resident.grounded || resident.indoors || resident.activity !== "guard" ||
+        !Number.isFinite(resident.x) || !Number.isFinite(resident.z)) continue;
+    if (!first) first = { x: resident.x, z: resident.z };
+    sumDx += wrapSourceX(resident.x - first.x);
+    sumDz += resident.z - first.z;
+    count++;
   }
-  return fallback;
+  if (!first) return fallback;
+  if (count === 1) return first;
+  return { x: wrapSourceX(first.x + sumDx / count), z: first.z + sumDz / count };
 }
 
 /** Place the world-anchored selected-resident caption away from the inspector

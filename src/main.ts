@@ -1498,7 +1498,7 @@ function setupControls() {
       code => simulation.projectedResidentByCode(code), gate.guardPosts[0] ?? gate);
     // Navigation is a camera-only visit to an actual SEED duty position.
     // The cold population worker may still be preparing unrelated residents.
-    // Focus the genuine SEED post at Hero scale so its on-duty people are legible.
+    // Frame physically present on-duty residents at Hero scale without moving them.
     // This only moves the observer camera; it never moves or creates guards.
     navigate(post.x, post.z, HERO_HALF_HEIGHT);
     focusedWatchCodes = watch?.residentCodes ?? [];
