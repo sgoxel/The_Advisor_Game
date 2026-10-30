@@ -1,7 +1,20 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, characterCutoutOrientation, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, characterCutoutOrientation, characterCutoutScale, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
+
+test("WP #693 original 2D props extend above real body height without squeezing the person", () => {
+  const normal = characterCutoutScale(.4453);
+  assert.deepEqual(normal, { x: 1, y: 1 }, "existing prop-free fallback remains unchanged");
+  for (const [aspect, propTop] of [[.5104, .07], [.5469, .06], [.5391, .05]]) {
+    const scaled = characterCutoutScale(aspect, propTop);
+    assert.ok(Math.abs(scaled.y * (1 - propTop) - 1) < 1e-12,
+      "illustrated body retains its canonical physical height below the raised prop");
+    assert.ok(Math.abs(scaled.x * .4453 / scaled.y - aspect) < 1e-12,
+      "the original painted prop and body width/height proportions are not squashed");
+    assert.ok(scaled.y > 1, "authored prop extends above the head rather than shrinking the body");
+  }
+});
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };

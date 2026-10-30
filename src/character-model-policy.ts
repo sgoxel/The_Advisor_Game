@@ -102,6 +102,19 @@ export function characterCutoutOrientation(
   };
 }
 
+/** Some original NPC paintings include a prop above the person's head.
+ * The SEED actor and owner GLB use true body height, but the illustrated
+ * quad must be taller AND proportionally wider so the body isn't squashed.
+ * Scale is about the permanent feet-origin, never the Simulation actor. */
+export function characterCutoutScale(
+  aspect: number,
+  propTop = 0,
+  defaultAspect = .4453,
+): { x: number; y: number } {
+  const artworkHeight = 1 / (1 - propTop);
+  return { x: aspect / defaultAspect * artworkHeight, y: artworkHeight };
+}
+
 /** A pooled visual belongs to one SEED resident, not merely one image type.
  * Reassignment of a same-type resident must restart stale asynchronous art or
  * optional model work, while repeated frames of the SAME resident do not. */
