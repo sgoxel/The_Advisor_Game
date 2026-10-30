@@ -93,6 +93,44 @@ test("WP #693 malformed owner registry roots cannot permanently poison future 3D
   }
 });
 
+test("WP #693 invalid known owner filename recovers without hiding other valid artwork", async () => {
+  const cache: { pending?: Promise<ReturnType<typeof characterModelManifest>> } = {};
+  let requests = 0;
+  const load = async (): Promise<unknown> => {
+    requests++;
+    return requests === 1
+      ? { guard_male: "../bad.glb", farmer_male: "farmer_male.glb", unexpected: "ignored.glb" }
+      : { guard_male: "guard_male.glb", farmer_male: "farmer_male.glb" };
+  };
+  const first = loadSharedCharacterManifest(cache, load);
+  assert.strictEqual(loadSharedCharacterManifest(cache, load), first,
+    "simultaneous NPCs reuse the in-flight optional registry request");
+  const sanitized = await first;
+  assert.equal(characterModelFile("guard_male", sanitized), null,
+    "invalid owner path must retain the original guard 2D cutout");
+  assert.equal(characterModelFile("farmer_male", sanitized), "farmer_male.glb",
+    "a malformed guard mapping must not suppress another resident's valid GLB");
+  assert.equal(cache.pending, undefined,
+    "invalid known-type mapping must not poison recovery of a corrected owner registry");
+  const recovered = await loadSharedCharacterManifest(cache, load);
+  assert.equal(characterModelFile("guard_male", recovered), "guard_male.glb");
+  assert.equal(requests, 2);
+  assert.strictEqual(await loadSharedCharacterManifest(cache, load), recovered,
+    "corrected valid registry remains cached for all resident assignments");
+  const unknownOnly = { pending: undefined as Promise<ReturnType<typeof characterModelManifest>> | undefined };
+  let stableCalls = 0;
+  const stable = await loadSharedCharacterManifest(unknownOnly, async () => {
+    stableCalls++;
+    return { unexpected: "ignored.glb" };
+  });
+  assert.equal(characterModelFile("guard_male", stable), null);
+  assert.strictEqual(await loadSharedCharacterManifest(unknownOnly, async () => {
+    stableCalls++;
+    throw new Error("unknown entries alone must not trigger repeated reads");
+  }), stable);
+  assert.equal(stableCalls, 1);
+});
+
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
     const models = characterModelManifest(source);

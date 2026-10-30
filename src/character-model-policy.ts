@@ -30,7 +30,16 @@ export function loadSharedCharacterManifest(
     // Valid empty objects remain cached and keep every resident illustrated.
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("Invalid optional character model registry");
-    return characterModelManifest(value);
+    const sanitized = characterModelManifest(value);
+    // A recognized NPC type with an unsafe/mistyped filename is not an
+    // intentionally empty registry. Keep usable mappings for this resident,
+    // but let a later assignment recover after the owner fixes the manifest.
+    // Unknown keys do not disrupt otherwise valid registered artwork.
+    if (Object.keys(value).some(type =>
+      Object.hasOwn(CHARACTER_TYPES, type) && !Object.hasOwn(sanitized, type)) &&
+        cache.pending === pending)
+      cache.pending = undefined;
+    return sanitized;
   }).catch(() => {
     if (cache.pending === pending) cache.pending = undefined;
     return characterModelManifest({});
