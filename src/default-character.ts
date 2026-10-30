@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, characterCutoutOrientation, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, characterCutoutOrientation, characterCutoutScale, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -155,8 +155,12 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       void artwork(name).then(({ name: artworkName, value: material }) => {
         if (!current()) return;
         for (const instance of renders.get(actor)?.meshInstances ?? []) instance.material = material;
-        // A missing specialist image uses the shared default proportions too.
-        cutout.setLocalScale(CHARACTER_TYPES[artworkName].aspect / .4453, 1, 1);
+        // The original prop (bow, pickaxe or crook) can rise above the
+        // SEED person's real body height. Enlarge the entire authored image
+        // uniformly about its feet; never change the 3D actor/model scale.
+        const type = CHARACTER_TYPES[artworkName];
+        const size = characterCutoutScale(type.aspect, type.propTop);
+        cutout.setLocalScale(size.x, size.y, 1);
       }).catch(error => {
         if (current()) console.warn("Resident illustration unavailable", name, error);
       });
