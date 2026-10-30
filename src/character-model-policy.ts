@@ -74,6 +74,36 @@ export function characterDrawableMeshes<T extends {
   return drawable;
 }
 
+/** Compute the neutral parent's foot alignment from staged world-space
+ * AABBs, which already include every authored GLB node/root transform.
+ * Apply this to a NEW parent, never overwrite the imported GLB's own scale.
+ * Returns null for corrupt/nonfinite/flat geometry so 2D art stays visible. */
+export function characterModelFootPlacement(
+  parts: readonly { aabb: { center: { x: number; y: number; z: number };
+    halfExtents: { x: number; y: number; z: number } } }[],
+  nominalHeightM: number,
+): { scale: number; x: number; y: number; z: number } | null {
+  if (!parts.length || !Number.isFinite(nominalHeightM) || nominalHeightM <= 0) return null;
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const part of parts) {
+    const { center: c, halfExtents: h } = part.aabb;
+    if (![c.x, c.y, c.z, h.x, h.y, h.z].every(Number.isFinite) ||
+        h.x < 0 || h.y < 0 || h.z < 0) return null;
+    minX = Math.min(minX, c.x - h.x); maxX = Math.max(maxX, c.x + h.x);
+    minY = Math.min(minY, c.y - h.y); maxY = Math.max(maxY, c.y + h.y);
+    minZ = Math.min(minZ, c.z - h.z); maxZ = Math.max(maxZ, c.z + h.z);
+  }
+  const height = maxY - minY;
+  if (!Number.isFinite(height) || height <= 0) return null;
+  const scale = nominalHeightM / height;
+  const x = -(minX + maxX) * scale / 2;
+  const y = -minY * scale;
+  const z = -(minZ + maxZ) * scale / 2;
+  return [scale, x, y, z].every(Number.isFinite) && scale > 0
+    ? { scale, x, y, z } : null;
+}
+
 /** Re-check an already attached optional GLB: renderer/scene changes can
  * disable its root or all drawable components after initial validation.
  * A resident must immediately revert to their original 2D presentation. */
