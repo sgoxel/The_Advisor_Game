@@ -141,8 +141,11 @@ class Builder {
     sides = 6,
   ) {
     for (let i = 0; i < sides; i++) {
-      const a = (i * Math.PI * 2) / sides,
-        b = ((i + 1) * Math.PI * 2) / sides;
+      // Four-sided cones sit on square keep towers: eave corners belong at
+      // the square's corners, not 45 degrees across its wall faces.
+      const phase = sides === 4 ? Math.PI / 4 : 0,
+        a = (i * Math.PI * 2) / sides + phase,
+        b = ((i + 1) * Math.PI * 2) / sides + phase;
       this.triangle(
         [x + Math.cos(b) * radius, y, z + Math.sin(b) * radius],
         [x, y + h, z],
