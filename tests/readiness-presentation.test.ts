@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel } from "../src/readiness-presentation.ts";
+import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "../src/readiness-presentation.ts";
 
 test("terrain percentage never asserts resident or full interaction readiness", () => {
   assert.equal(terrainProgressText(0), "Terrain 0%");
@@ -24,4 +24,18 @@ test("coherent preview still reports detail as refining until current view is se
   assert.equal(terrainDetailLabel(false, true), "preparing terrain");
   assert.equal(terrainDetailLabel(true, false), "refining detail");
   assert.equal(terrainDetailLabel(true, true), "ready");
+});
+
+test("coherent preview is interactive but never completes initial world loading before required detail and resident facts", () => {
+  assert.equal(initialWorldReady(false, false, false, false), false);
+  assert.equal(initialWorldReady(true, false, false, false), false,
+    "a coherent terrain preview is not completed 3D scenery");
+  assert.equal(initialWorldReady(true, true, true, false), false,
+    "resident facts still pending cannot complete initial loading");
+  assert.equal(initialWorldReady(true, true, true, true), true,
+    "first required resident facts and mandatory geometry are ready");
+  assert.equal(initialWorldReady(true, true, false, false), true,
+    "a zoom level with no resident query may finish after terrain detail settles");
+  assert.equal(initialWorldReady(false, true, true, true), false,
+    "neither resident data nor detail can stand in for coherent terrain");
 });
