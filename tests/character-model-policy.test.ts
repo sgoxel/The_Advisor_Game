@@ -269,8 +269,9 @@ test("WP #693 unusable loaded owner GLB is evicted without clobbering a recovere
 test("WP #693 original 2D cutouts face raised Hero cameras without changing grounded feet", () => {
   const actor = { x: 0, y: 0, z: 0 };
   const front = characterCutoutOrientation(actor, { x: 0, y: 0, z: 10 });
-  assert.deepEqual(front, { yaw: 0, pitch: 0 },
-    "level camera retains original yaw-only upright illustration");
+  assert.equal(front.yaw, 0);
+  assert.ok(front.pitch === 0,
+    "level camera retains original yaw-only upright illustration (including signed zero)");
   const raised = characterCutoutOrientation(actor, { x: 0, y: 10, z: 10 });
   assert.equal(raised.yaw, 0);
   assert.equal(raised.pitch, -45,
