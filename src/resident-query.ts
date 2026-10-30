@@ -187,6 +187,25 @@ export function residentQueryAreasOverlap(
     previous.radius + current.radius;
 }
 
+/** When the first genuine result for a panned view arrives, don't drop
+ * still-in-view original stationary actors just because the new partial batch
+ * contains fewer people. The caller checks their actual local day/activity
+ * against SEED/Simulation before supplying any carryover; this helper also
+ * requires same settlement, actual overlapping views and original positions.
+ * Final authoritative worker results replace these temporary visuals. */
+export function residentStationaryPartialCarryover(
+  previous: ResidentQuery & ResidentQueryResult,
+  next: ResidentQuery,
+  unchangedActivity: (resident: Resident, originalTick: number, nextTick: number) => boolean,
+): Resident[] {
+  if (!previous.actors || !next.actors || previous.placeCode !== next.placeCode ||
+      !residentQueryAreasOverlap(previous, next)) return [];
+  return previous.residents.filter(resident =>
+    unchangedActivity(resident, previous.tick, next.tick) &&
+    resident.grounded && !resident.indoors &&
+    Math.hypot(wrapSourceX(resident.x - next.x), resident.z - next.z) <= next.radius);
+}
+
 /** A small visible resident must still be individually tappable. Screen-space
  * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
  * Return null outside a minimum 44px target; nearest projected actor wins. */
@@ -340,13 +359,16 @@ export class ResidentQueryQueue {
     this.flights.set(job.id, job);
     return job;
   }
-  /** Progressive authentic outdoor actors from the current worker only. */
-  appendPartial(id: number, residents: readonly Resident[], currentTick = this.desired?.tick) {
+  /** Progressive authentic outdoor actors, plus only caller-revalidated
+   * stationary holdovers from an overlapping previous camera view. */
+  appendPartial(id: number, residents: readonly Resident[], currentTick = this.desired?.tick,
+    retained: readonly Resident[] = []) {
     const flight = this.flights.get(id);
     if (!flight?.actors || !this.desired || flight.key !== this.desired.key ||
         currentTick === undefined || Math.abs(currentTick - flight.tick) > this.maxAgeTicks ||
         residents.length === 0) return false;
-    const previous = this.snapshot?.id === id ? this.snapshot.residents : [];
+    const previous = this.snapshot?.id === id ? this.snapshot.residents
+      : retained.filter(resident => resident.grounded && !resident.indoors);
     const seen = new Set(previous.map(resident => resident.code));
     const incoming = residents.filter(resident => {
       if (!resident.grounded || resident.indoors || seen.has(resident.code)) return false;
