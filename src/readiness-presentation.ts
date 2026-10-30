@@ -21,3 +21,16 @@ export function terrainDetailLabel(coherent: boolean, currentDetailSettled: bool
   if (!coherent) return "preparing terrain";
   return currentDetailSettled ? "ready" : "refining detail";
 }
+
+/** The initial 100% milestone is the first genuinely usable current view,
+ * not merely an available coarse terrain preview. Keep player access open
+ * while authoritative resident facts and required fine geometry settle. */
+export function initialWorldReady(
+  coherentTerrain: boolean,
+  requiredDetailSettled: boolean,
+  residentFactRequested: boolean,
+  residentFactReady: boolean,
+): boolean {
+  return coherentTerrain && requiredDetailSettled &&
+    (!residentFactRequested || residentFactReady);
+}
