@@ -6,7 +6,7 @@ import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
-import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel } from "./readiness-presentation.ts";
+import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "./readiness-presentation.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
@@ -202,6 +202,7 @@ let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
 let coverageTiles: Tile[] = [], coverageComplete = false, coverageStartedAt = 0, coverageDurationMs = 0;
 let loadPercent = 0;
+let initialWorldComplete = false;
 const LOAD_MESSAGES = ["Reading the land from its seed…", "Raising mountains…", "Filling the rivers…", "Paving the roads…", "Building the villages…", "Polishing the castle…", "Waking the advisors…"];
 /** Monotonic, honest progress: worker start is 15 %, the rest is the share of terrain tiles prepared. */
 function setLoadingProgress(percent: number) {
@@ -1105,7 +1106,10 @@ function processStreaming(material: pc.StandardMaterial) {
     firstCoherentTerrainSinceWorkersMs = performance.now() - workerStartedAt;
   if (coverageComplete && !ready) {
     ready = true;
-    setLoadingProgress(100);
+    // Make coherent terrain interactive immediately, but 100% means the
+    // required scene and first authoritative resident facts are also ready.
+    // Remaining stages continue to report through the visible tile status.
+    setLoadingProgress(99);
     setTimeout(()=>$("loading").classList.add("done"),350);
     // The first rendered resident is player-facing state, not optional scenery.
     // At the exact frame coarse terrain becomes usable, reserve an idle worker
@@ -1202,6 +1206,15 @@ function processStreaming(material: pc.StandardMaterial) {
     wanted.every(tile => activeKeys.includes(tile.key)) &&
     Math.abs(surfaceDetail - (globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1)) < 0.002 &&
     Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001;
+  if (!initialWorldComplete && ready && initialWorldReady(
+    coverageComplete,
+    currentDetailSettled,
+    Boolean(residentRequest),
+    Boolean(residentRequest && residentQueries.readyFor(residentRequest.key, residentRequest.tick)),
+  )) {
+    initialWorldComplete = true;
+    setLoadingProgress(100);
+  }
   const detailLabel = terrainDetailLabel(coverageComplete, currentDetailSettled);
   $("tile-status").textContent =
     (projectionTransition >= 0.999
