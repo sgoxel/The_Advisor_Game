@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -2041,16 +2041,16 @@ async function start() {
         residentQueries.clear();
       }
       const recentSnapshot = currentResidentSnapshot(residentQueries.current, previousSnapshot, query?.placeCode, simulation.tick, TIME_SCALE * 2, query);
-      // An actor known to be at a stationary SEED work/post location stays there
-      // until the next actual routine boundary. Reuse is limited to an overlapping
-      // camera and the SAME local day, never walking/indoor/blocked residents.
-      // The worker remains pending; this does not make a stale query "ready".
+      // A camera shift of more than one quarter of the query radius does
+      // not make still-visible, previously verified stationary people vanish.
+      // Reuse only actual overlapping locations, same local day/routine and
+      // still-legal grounded outdoor residents while fresh worker facts arrive.
+      // This is incomplete presentation, never a new authoritative query.
       const original = previousSnapshot;
-      const nearOriginal = original && query?.actors &&
+      const overlappingOriginal = original && query?.actors &&
         original.placeCode === query.placeCode &&
-        Math.hypot(wrapSourceX(original.x - query.x), original.z - query.z) <=
-          Math.min(original.radius, query.radius) * .25;
-      const stationaryResidents = !recentSnapshot && nearOriginal
+        residentQueryAreasOverlap(original, query);
+      const stationaryResidents = !recentSnapshot && overlappingOriginal
         ? original.residents.filter(resident => {
             const place = residentPlacesById.get(resident.settlement);
             return !!place && residentStationaryWithinActivity(resident,

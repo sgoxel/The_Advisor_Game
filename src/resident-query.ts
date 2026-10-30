@@ -137,6 +137,21 @@ export function selectedResidentVisibleInView(
     Math.hypot(wrapSourceX(resident.x - view.x), resident.z - view.z) <= view.radius;
 }
 
+/** Previously validated stationary NPCs may remain in the next actual
+ * viewport after a wider pan. Overlap is geometric, not an arbitrary
+ * quarter-radius camera-motion threshold or a new Simulation authority.
+ * The caller separately checks every NPC's legal ground, unchanged routine,
+ * local day and inclusion in the requested view. */
+export function residentQueryAreasOverlap(
+  previous: Pick<ResidentQuery, "x" | "z" | "radius">,
+  current: Pick<ResidentQuery, "x" | "z" | "radius">,
+): boolean {
+  if (![previous.x, previous.z, previous.radius, current.x, current.z, current.radius].every(Number.isFinite) ||
+      previous.radius <= 0 || current.radius <= 0) return false;
+  return Math.hypot(wrapSourceX(previous.x - current.x), previous.z - current.z) <=
+    previous.radius + current.radius;
+}
+
 /** A small visible resident must still be individually tappable. Screen-space
  * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
  * Return null outside a minimum 44px target; nearest projected actor wins. */

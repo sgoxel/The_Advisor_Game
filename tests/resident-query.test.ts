@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -125,6 +125,16 @@ test("S009 cached neighbourhood sites retain seeded garden/market and exact home
       }
     }
   }
+});
+
+test("S010 preserves stationary in-view actors on wider pans but not distant views", () => {
+  const original = { x: 100, z: 20, radius: 10 };
+  assert.equal(residentQueryAreasOverlap(original, { x: 106, z: 20, radius: 10 }), true,
+    "a 6m pan exceeds the old 2.5m cutoff while both views still contain the same legal residents");
+  assert.equal(residentQueryAreasOverlap(original, { x: 121, z: 20, radius: 10 }), false,
+    "distant nonoverlapping views must not reuse old actor data");
+  assert.equal(residentQueryAreasOverlap(original, { x: 100, z: 20, radius: 0 }), false);
+  assert.equal(residentQueryAreasOverlap(original, { x: Number.NaN, z: 20, radius: 10 }), false);
 });
 
 test("a fixed Fantasy tick cannot move an original resident off the legal route", () => {
