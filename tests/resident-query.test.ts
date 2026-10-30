@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -183,6 +183,25 @@ test("progressive outdoor results keep every valid NPC without duplicates or sta
   assert.deepEqual(queue.current?.residents.map(r => r.code), ["beggar", "guard"]);
   queue.offer({ ...actorQuery, key: "elsewhere" });
   assert.equal(queue.current, undefined);
+});
+
+test("slow population scans preserve only grounded stationary on-duty NPCs", () => {
+  const person = {
+    grounded: true, indoors: false, activity: "work" as "work" | "guard" | "commute",
+    activityStart: 7 * 3600, activityEnd: 12 * 3600,
+    travelProgress: undefined as number | undefined, route: "SEED/WORKPLACE",
+  };
+  const stays = (change: Partial<typeof person> = {}, day = 3, second = 8 * 3600) =>
+    residentStationaryWithinActivity({ ...person, ...change }, 3, day, second);
+  assert.equal(stays(), true, "validated work position remains until the resident's next scheduled event");
+  assert.equal(stays({ activity: "guard" }), true, "a physically arrived night guard does not vanish while on watch");
+  assert.equal(stays({ indoors: true }), false);
+  assert.equal(stays({ grounded: false }), false);
+  assert.equal(stays({ activity: "commute" }), false, "a walking resident needs a current Simulation path");
+  assert.equal(stays({ travelProgress: .5 }), false);
+  assert.equal(stays({ route: "BLOCKED: work" }), false);
+  assert.equal(stays({}, 4), false, "new local day needs new canonical schedule");
+  assert.equal(stays({}, 3, 12 * 3600), false, "activity boundary needs fresh Simulation facts");
 });
 
 test("nearby camera movement reuses only recent, overlapping SEED residents without hiding the street", () => {
