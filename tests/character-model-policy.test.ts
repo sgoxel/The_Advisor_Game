@@ -113,11 +113,33 @@ test("WP #693 valid model can coexist with an unmatched resident's illustration"
   });
   assert.equal(characterModelFile("guard_male", models), "guard_male.glb");
   assert.equal(characterModelFile("farmer_male", models), "farmer_2.glb");
-  for (const name of ["baker_female", "default", "unknown", "noblewoman_female", "constructor"])
+  assert.equal(characterModelFile("noblewoman_female", models), "noblewoman_female.gltf",
+    "owner-approved standalone glTF files are eligible for the same container/fallback path");
+  for (const name of ["baker_female", "default", "unknown", "constructor"])
     assert.equal(characterModelFile(name, models), null, name);
   assert.equal(characterVisualFormat(true), "3d-model");
   assert.equal(characterVisualFormat(false), "2d-cutout");
   assert.equal(Object.getPrototypeOf(models), null);
+});
+
+test("WP #693 only approved safe GLB and glTF filenames can enter owner container loading", () => {
+  const invalidFiles = [
+    "../escaped.gltf", "folder/model.gltf", "https://example.com/model.glb",
+    "%2e%2e.gltf", "guard.gltf?cache=1", "guard.GLTF", "guard.fbx",
+    "guard.gltf.bin", "guard\\\\hidden.glb", "", "guard..glb",
+  ];
+  for (const filename of invalidFiles) {
+    const models = characterModelManifest({ guard_male: filename });
+    assert.equal(characterModelFile("guard_male", models), null, filename);
+    assert.equal(characterVisualFormat(false), "2d-cutout",
+      "invalid owner mapping never displaces the original illustration");
+  }
+  for (const filename of ["guard_male.glb", "guard_male.gltf"]) {
+    const models = characterModelManifest({ guard_male: filename });
+    assert.equal(characterModelFile("guard_male", models), filename);
+    assert.equal(characterModelFile("farmer_male", models), null,
+      "unmatched resident must keep its authored 2D cutout in a mixed scene");
+  }
 });
 
 test("WP #693 invalid entries cannot select a model or defeat existing artwork", () => {
