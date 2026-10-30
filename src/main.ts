@@ -10,7 +10,7 @@ import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrain
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
-import { characterDrawableMeshes } from "./character-model-policy.ts";
+import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
 import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-layout-cache.ts";
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
@@ -2637,6 +2637,12 @@ async function start() {
           ),
           surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
           surfaceGpuBytes = Math.ceil(surfaceBytes * 4 / 3);
+        // A model lost during this snapshot can restore 2D immediately.
+        // Classify each visible actor once so counters and format agree.
+        const visibleResidentActors = actors.filter(actor => actor.enabled);
+        const visualSummary = summarizeCharacterPresentations(
+          visibleResidentActors, actor => characterVisuals.format(actor),
+        );
         return {
           ready,
           error: errorText,
@@ -2802,19 +2808,19 @@ async function start() {
           smallDetailsVisible,
           lighting: {displayed:displayedDaylight,target:targetDaylight},
           closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0},
-          visibleResidents: actors.filter(actor => actor.enabled).length,
+          visibleResidents: visualSummary.visibleActors,
           residentPresentation: {
             logicalResidents: simulation.stats.logicalResidents,
             pooledActors: actors.length,
-            visibleActors: actors.filter(actor => actor.enabled).length,
-            format: actors.some(actor => actor.enabled && characterVisuals.format(actor) === "3d-model")
-              ? (actors.some(actor => actor.enabled && characterVisuals.format(actor) === "2d-cutout")
-                ? "mixed-3d-model-and-2d-cutout" : "3d-model") : "2d-cutout",
-            modelActors: actors.filter(actor => actor.enabled && characterVisuals.format(actor) === "3d-model").length,
-            illustratedActors: actors.filter(actor => actor.enabled && characterVisuals.format(actor) === "2d-cutout").length,
-            generatedActors: actors.filter(actor => actor.enabled && actor.tags.has("generated-npc")).length, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
-            physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * CANONICAL_METRES_PER_SOURCE_UNIT),
-            worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M, 0)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
+            ...visualSummary,
+            generatedActors: visibleResidentActors.filter(actor => actor.tags.has("generated-npc")).length,
+            enabledActors: visualSummary.visibleActors,
+            firstActor: visibleResidentActors.length ? {
+              position: visibleResidentActors[0].getPosition().toString(),
+              scale: visibleResidentActors[0].getLocalScale().toString(),
+            } : null,
+            physicalHeightsM: visibleResidentActors.map(actor => actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M * CANONICAL_METRES_PER_SOURCE_UNIT),
+            worldHeightsM: visibleResidentActors.map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M, 0)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
