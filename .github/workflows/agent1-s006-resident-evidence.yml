@@ -105,6 +105,34 @@ jobs:
           else
             xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 840s python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name residents --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --fixed-time-ms "$FIXED_TIME_MS" --initial-ready-only --timeout 180 --steps "$RESIDENT_STEPS"
           fi
+      # Active WP-S010-003-001: a real 1920x1080 night gate in the same
+      # screenshot_tool.py pipeline. Full landscape evidence is essential:
+      # selecting a character indoors or far from a gate is not proof of watch.
+      # Do not substitute simulated pixels or counts for this real PNG.
+      - name: Capture physically staffed night gate at 1920x1080
+        if: matrix.profile == 'fullhd-landscape'
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-gate-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          NIGHT_TIME_MS=$(node --experimental-strip-types --input-type=module -e '
+            import { FantasyClock, TIME_SCALE, localSecondOfDay } from "./src/clock.ts";
+            import { villages } from "./src/geography.ts";
+            const start=1792874335750, clock=new FantasyClock();
+            const now=localSecondOfDay(clock.tickAt(start), villages[0].canonicalPosition.lon);
+            const delta=(21*3600-now+86400)%86400;
+            console.log(start+Math.ceil(delta/TIME_SCALE*1000));
+          ')
+          GATE_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(3);click:#focus-gate-watch;until:(window.__watch=window.advisorWorld.gateWatchEvidence())&&window.__watch.dutyCodes.length>0&&window.__watch.displayed.some(g=>g.mesh);settle;shot:night-gate-post-1920x1080'
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --browser-channel chrome --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name gate-watch --width 1920 --height 1080 --profile fullhd-landscape --renderer ${{ matrix.renderer }} --fixed-time-ms "$NIGHT_TIME_MS" --initial-ready-only --timeout 180 --steps "$GATE_STEPS"
+          else
+            xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 420s python tools/screenshot_tool.py 'http://127.0.0.1:4174/?resident-route-probes=1' --headed --out test-results/s006-${{ matrix.renderer }}-${{ matrix.profile }} --name gate-watch --width 1920 --height 1080 --profile fullhd-landscape --renderer ${{ matrix.renderer }} --fixed-time-ms "$NIGHT_TIME_MS" --initial-ready-only --timeout 180 --steps "$GATE_STEPS"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
