@@ -153,6 +153,34 @@ test("WP #693 hidden GLB nodes/components/meshes cannot suppress 2D residents", 
   ]), [drawable], "only a genuinely visible mesh can activate a supplied 3D model");
 });
 
+test("WP #693 disabled ancestor of visible owner GLB cannot suppress 2D art", () => {
+  const drawable = { visible: true, mesh: { primitive: [{ count: 6 }] } };
+  // The component's own node can be enabled while an imported group above it
+  // is disabled. GraphNode.enabled alone does not reflect that hierarchy.
+  const hiddenGroup = { enabled: false, parent: null };
+  const component = {
+    enabled: true, entity: { enabled: true, parent: hiddenGroup }, meshInstances: [drawable],
+  };
+  assert.deepEqual(characterDrawableMeshes([component]), [],
+    "a locally enabled render node inside a disabled group is not drawable");
+  hiddenGroup.enabled = true;
+  assert.deepEqual(characterDrawableMeshes([component]), [drawable],
+    "reactivating the authored group restores real 3D eligibility");
+  const disabledScene = { enabled: false, parent: null };
+  const root = { enabled: true, parent: disabledScene };
+  assert.equal(characterModelRenderable(root, [component]), false,
+    "a disabled ancestor of the attached model also requires 2D fallback");
+  disabledScene.enabled = true;
+  assert.equal(characterModelRenderable(root, [component]), true);
+  const actor = {};
+  const assigned = new WeakMap<object, { name: string; residentCode: string }>();
+  assigned.set(actor, { name: "guard_male", residentCode: "resident-1" });
+  hiddenGroup.enabled = false;
+  assert.equal(characterModelVisibleOrInvalidate(actor, root, [component], assigned), false);
+  assert.equal(assigned.has(actor), false,
+    "a hidden group invalidates only the visual assignment so recovery can retry");
+});
+
 test("WP #693 fully transparent owner GLB geometry cannot hide its 2D resident", () => {
   const geometry = { primitive: [{ count: 6 }] };
   const invisible = { visible: true, mesh: geometry, material: { opacity: 0, transparent: true } };
