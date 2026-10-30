@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -85,7 +85,7 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
   // Missing specialist images retain the existing authored default.
   const fallback = (await artwork("default")).value;
   const requested = new WeakMap<pc.Entity, string>();
-  const assigned = new WeakMap<pc.Entity, string>();
+  const assigned = new WeakMap<pc.Entity, { name: string; residentCode: string }>();
   const revisions = new WeakMap<pc.Entity, number>();
   const renders = new WeakMap<pc.Entity, pc.RenderComponent>();
   const shapes = new WeakMap<pc.Entity, pc.Entity>();
@@ -124,11 +124,15 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       shapes.set(actor, cutout);
       return actor;
     },
-    async character(actor: pc.Entity, key: string) {
+    async character(actor: pc.Entity, key: string, residentCode: string) {
       const name = Object.hasOwn(CHARACTER_TYPES, key) ? key : "default";
       requested.set(actor, name);
-      if (assigned.get(actor) === name) return;
-      assigned.set(actor, name);
+      // Pooled visual slots can move between distinct SEED residents sharing
+      // one authored presentation type. Never retain the previous resident's
+      // heading or a failed optional GLB decision for the next person.
+      if (sameCharacterAssignment(assigned.get(actor), name, residentCode)) return;
+      assigned.set(actor, { name, residentCode });
+      headings.delete(actor);
       const revision = (revisions.get(actor) ?? 0) + 1;
       revisions.set(actor, revision);
       const current = () => requested.get(actor) === name && revisions.get(actor) === revision;
