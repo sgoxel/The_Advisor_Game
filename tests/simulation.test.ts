@@ -434,6 +434,26 @@ test("resident inspector can resolve facts and close-up actors independently of 
     "remote city and realm views do not issue expensive resident searches");
 });
 
+
+test("close street and gate watch remain character-visible at the navigation's real camera scale", async () => {
+  const { HERO_HALF_HEIGHT } = await import("../src/handoff.ts");
+  const place = villages[0];
+  const gate = settlementExteriorFor(place).gates[0];
+  const station = gate.guardPosts[0] ?? gate;
+  assert.ok(Number.isFinite(station.x) && Number.isFinite(station.z),
+    "the focus uses the real SEED gate post, not a fabricated map coordinate");
+  assert.equal(residentViewQuery(HERO_HALF_HEIGHT * 4, false, true).actors, true,
+    "the settlement visit must request actual NPC illustrations");
+  assert.equal(residentViewQuery(HERO_HALF_HEIGHT * 3, false, true).actors, true,
+    "the gate-watch action must request actual duty residents");
+  const tick = tickAtLocalTime(4, 21 * 3600, place.canonicalPosition.lon),
+    watch = guardCoverageAt(place, tick)[0];
+  assert.ok(watch.onDuty > 0, "the original night watch has a genuinely reached SEED post");
+  const guard = residentAt(place, 7, tick);
+  assert.ok(guard.grounded && !guard.indoors && guard.activity === "guard",
+    "the post's original person is physically present, not a map decoration");
+});
+
 test("zero resident query budget yields no residents, evaluations or index work", () => {
   const place = villages[0], simulation = new LazySimulation();
   simulation.setFocus(place);
