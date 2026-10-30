@@ -412,9 +412,11 @@ test("resident inspector can resolve facts for cold actors in exact completed-in
   const expected = indexed.focusedResidents(place.x, place.z, 8, 2, undefined, true);
   assert.ok(first.length > 0, "actual settled SEED village must have inspectable actors");
   assert.deepEqual(first, expected, "bounded cold scan cannot change a resident, order, route or ground verdict");
-  assert.equal(previews.length, 1, "only one fully validated preview is published");
-  assert.deepEqual(previews[0], residentAt(place, previews[0].index, tick),
-    "early first fact must have the complete original Simulation ground and route validation");
+  const drawable = first.filter(resident => resident.grounded && !resident.indoors);
+  assert.deepEqual(previews, drawable.slice(0, 1),
+    "only the first grounded outdoor character may be previewed; an indoor-only cold batch must not claim a visible actor");
+  if (previews.length) assert.deepEqual(previews[0], residentAt(place, previews[0].index, tick),
+    "the first drawable actor must retain complete original Simulation ground and route validation");
   assert.ok(cold.stats.query.evaluatedResidents <= 4,
     "limit-two outdoor scan must never evaluate more than four real residents");
 });

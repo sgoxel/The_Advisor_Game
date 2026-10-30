@@ -90,6 +90,15 @@ export function residentQueryLimitForView(actors: boolean): number {
   return actors ? 8 : 24;
 }
 
+/** The first close-up 2D actor preview must be a resident the canvas
+ * may actually draw. Indoor and legally ungrounded people remain valid
+ * inspector facts but cannot count as the first visible street character. */
+export function residentFirstPreviewVisible(
+  resident: Pick<Resident, "grounded" | "indoors">, prioritizeActors: boolean,
+): boolean {
+  return !prioritizeActors || (resident.grounded && !resident.indoors);
+}
+
 /** After an initial indoor-only result, inspect at most one further eight-person
  * batch for a real outdoor actor. Stop as soon as the first street actor is
  * found after the original quota, or when the eight-actor quota is full.

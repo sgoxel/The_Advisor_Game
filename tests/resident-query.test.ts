@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -340,6 +340,19 @@ test("visible S006 residents retain a 44px CSS touch target without selecting di
   const tallHead = { x: 100, y: -20 };
   assert.notEqual(residentActorPickDistance(100, -18, feet, tallHead), null,
     "full-height nearby 3D characters remain selectable near their visible heads");
+});
+
+test("S010 first actor preview never mistakes an indoor resident for visible street population", () => {
+  assert.equal(residentFirstPreviewVisible({ grounded: true, indoors: false }, true), true,
+    "original outdoor grounded character remains eligible for early 2D display");
+  assert.equal(residentFirstPreviewVisible({ grounded: true, indoors: true }, true), false,
+    "legal indoor inspector fact is not a visible street actor");
+  assert.equal(residentFirstPreviewVisible({ grounded: false, indoors: false }, true), false,
+    "invalid foot contact may never be previewed as a drawable character");
+  assert.equal(residentFirstPreviewVisible({ grounded: true, indoors: true }, false), true,
+    "inspector-only queries retain indoor resident facts without hiding identities");
+  assert.equal(residentFirstPreviewVisible({ grounded: false, indoors: false }, false), true,
+    "original inspector fact validation still comes entirely from Simulation");
 });
 
 test("S010 tilted cutout picking compares actual tapped head/feet depths", () => {

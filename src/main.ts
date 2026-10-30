@@ -1832,7 +1832,9 @@ async function start() {
             simulation.acceptResidentQuery(first, {
               settlements: 1, candidateResidents: 1, evaluatedResidents: 1, returnedResidents: first.length,
             });
-            if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
+            // Inspector-valid indoor facts are not drawable street actors.
+            if (batch.job.actors && first.some(resident => resident.grounded && !resident.indoors) &&
+                firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
               firstResidentFactMs = performance.now() - firstResidentQueryOfferedAt;
           }
         }
@@ -1840,7 +1842,13 @@ async function start() {
       }
       if (event.data.kind === "resident-progress") {
         if (residentQueries.appendPartial(event.data.id, event.data.residents as Resident[],
-            Math.max(simulation.tick, clock.tickAt(Date.now())))) residentResultReady();
+            Math.max(simulation.tick, clock.tickAt(Date.now())))) {
+          // The first actual streamed grounded outdoor actor may arrive from
+          // gate duty before an ordinary first-fact preview can be sent.
+          if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
+            firstResidentFactMs = performance.now() - firstResidentQueryOfferedAt;
+          residentResultReady();
+        }
         return; // A partial batch never releases the busy worker.
       }
       if (event.data.kind === "residents") {
@@ -1862,7 +1870,11 @@ async function start() {
             const answeredAt = performance.now();
             residentPhaseTimings.complete(event.data.id, accepted, answeredAt, event.data.residentTiming, wasWarm);
             if (accepted) {
-              if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
+              // Completion cannot masquerade as first on-canvas street actor
+              // when this original resident batch contains only indoor facts.
+              if (residentBatch.job.actors &&
+                  merged.residents.some(resident => resident.grounded && !resident.indoors) &&
+                  firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
                 firstResidentFactMs = answeredAt - firstResidentQueryOfferedAt;
               residentResultReady();
             }
