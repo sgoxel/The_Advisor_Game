@@ -6,13 +6,18 @@
 export function residentGpuHitAllows(
   actorViewDepth: number, nearestViewDepth: number | null,
   actorMeshes: readonly object[], renderedSelection: readonly object[],
+  exactPixelSelection: readonly object[] = [],
 ): boolean {
   if (!Number.isFinite(actorViewDepth) || actorViewDepth >= 0 ||
       !actorMeshes.length || !renderedSelection.some(mesh => actorMeshes.includes(mesh)))
     return false;
-  // No first-surface pixel (for example a touch-padding point over sky)
-  // cannot occlude the actual painted resident proven by the nearby ID read.
-  if (nearestViewDepth === null) return true;
+  // A missing depth sample is not proof of empty sky. The original real
+  // WebGL2 wall click reproduced a null-depth hole even while an opaque wall
+  // had an ID at that exact pixel. Accept sky padding only when there is
+  // genuinely no foreground ID, or the resident itself owns that pixel.
+  if (nearestViewDepth === null)
+    return exactPixelSelection.length === 0 ||
+      exactPixelSelection.some(mesh => actorMeshes.includes(mesh));
   if (!Number.isFinite(nearestViewDepth) || nearestViewDepth >= 0) return false;
   // Depth buffer and render/screen projection can differ by small precision
   // errors near a coplanar foot; an actual wall has positive front separation.

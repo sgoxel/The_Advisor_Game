@@ -913,8 +913,12 @@ test("S010 opaque world walls prevent picking an illustrated resident behind the
     "the same actual resident remains selectable over deeper world terrain");
   assert.equal(residentGpuHitAllows(-15, -15, [ownMesh], [ownMesh]), true,
     "the actor itself is the nearest painted depth");
-  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh]), true,
-    "sky-touch padding remains eligible only when genuine actor pixels were rendered nearby");
+  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], []), true,
+    "empty sky-touch padding remains eligible when genuine actor pixels are nearby");
+  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [wallMesh]), false,
+    "a null depth sample must not excuse an opaque wall ID at the exact clicked pixel");
+  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [ownMesh]), true,
+    "a pixel on the real resident remains valid if depth readback is unavailable");
   assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [terrainMesh]), false,
     "no original painted resident pixel means no invisible proxy selection");
   assert.equal(residentGpuHitAllows(-15, -20, [], [ownMesh]), false);

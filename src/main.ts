@@ -2087,6 +2087,10 @@ async function start() {
           py = Math.min(height - 1, Math.max(0, Math.floor((clientY - rect.top) * height / rect.height))),
           halfTarget = Math.max(1, Math.round(22 * width / rect.width));
         const nearest = await residentDepthPicker.getWorldPointAsync(px, py);
+        // A 44px area can contain the guard's visible head while the
+        // *clicked pixel* belongs to a solid foreground roof. Check its own
+        // ID before considering the padded actor search rectangle.
+        const exactPixel = await residentDepthPicker.getSelectionAsync(px, py, 1, 1);
         const painted = await residentDepthPicker.getSelectionAsync(
           Math.max(0, px - halfTarget), Math.max(0, py - halfTarget),
           2 * halfTarget + 1, 2 * halfTarget + 1);
@@ -2097,7 +2101,7 @@ async function start() {
         const foregroundDepth = nearest
           ? lens.viewMatrix.transformPoint(nearest, eyePoint).z : null;
         return residentGpuHitAllows(actorDepth, foregroundDepth,
-          drawableResidentMeshes(actor), painted);
+          drawableResidentMeshes(actor), painted, exactPixel);
       } catch {
         // A lost/unsupported picker never makes a hidden character selectable;
         // the live renderer can recover and recreate these disposable buffers.
