@@ -57,7 +57,7 @@ jobs:
           python tools/screenshot_tool.py http://127.0.0.1:4174/ \
             --out "test-results/s004-${RENDERER}" \
             --name settlement-exterior \
-            --profile desktop,phone,phone-landscape \
+            --profile fullhd-landscape,phone,phone-landscape \
             --renderer "$RENDERER" \
             --timeout 300 \
             --steps "$STEPS"
