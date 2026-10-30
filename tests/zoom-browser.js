@@ -15,6 +15,46 @@ export function zoomTests(test, expect, webgl2) {
     await expandInformation(page);
     await page.waitForFunction(()=>window.advisorWorld?.state.settled);
     expect(await page.evaluate(()=>window.advisorRenderer.backend)).toBe(webgl2?'webgl2':'webgpu');
+
+    // WP-S009-005-001: exercise the actual zoom handlers before changing
+    // geography. These inputs may change only magnification, not the SEED
+    // focus or the player's heading. Reuse this existing browser job.
+    const zoomSnapshot=()=>page.evaluate(()=>{
+      const s=window.advisorWorld.state;
+      return {focus:{...s.navigation.focus},yaw:s.view.yaw,halfHeight:s.view.halfHeight};
+    });
+    const initialZoom=await zoomSnapshot();
+    const assertPureZoom=async(before,label)=>{
+      const after=await zoomSnapshot();
+      expect(after.focus,label+' changed geographic focus').toEqual(before.focus);
+      expect(after.yaw,label+' changed camera heading').toBe(before.yaw);
+      expect(after.halfHeight,label+' did not change scale').not.toBe(before.halfHeight);
+    };
+    // Native canvas wheel handler, with no pan/orbit controller involved.
+    await page.evaluate(()=>document.querySelector('#world').dispatchEvent(
+      new WheelEvent('wheel',{deltaY:-140,bubbles:true,cancelable:true})));
+    await assertPureZoom(initialZoom,'wheel');
+    const beforePlus=await zoomSnapshot();
+    await page.locator('#zoom-in').click();
+    await assertPureZoom(beforePlus,'zoom-in button');
+    const beforeMinus=await zoomSnapshot();
+    await page.locator('#zoom-out').click();
+    await assertPureZoom(beforeMinus,'zoom-out button');
+    const beforePinch=await zoomSnapshot();
+    await page.evaluate(()=>{
+      const canvas=document.querySelector('#world'),rect=canvas.getBoundingClientRect();
+      const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+      const pointer=(type,id,dx)=>canvas.dispatchEvent(new PointerEvent(type,{
+        bubbles:true,pointerType:'touch',pointerId:id,isPrimary:id===1,
+        clientX:x+dx,clientY:y,
+      }));
+      pointer('pointerdown',1,-25);
+      pointer('pointerdown',2,25);
+      pointer('pointermove',2,55);
+      pointer('pointerup',2,55);
+      pointer('pointerup',1,-25);
+    });
+    await assertPureZoom(beforePinch,'pinch');
     await page.locator('#overview').click();
     await page.waitForFunction(()=>window.advisorWorld.state.globe.complete,null,{timeout:240000});
     // Stable ground gate excludes genuinely new trees/buildings and DOM labels.
