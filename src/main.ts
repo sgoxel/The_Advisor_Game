@@ -2675,6 +2675,30 @@ async function start() {
         },
       },
       renderer: rendererState,
+      /** Read-only, bounded actual gate-watch visual proof, in source space.
+       * The watch roster is calculated by Simulation, never from the actor pool.
+       * Screenshot jobs compare that real duty with actually enabled sprites. */
+      gateWatchEvidence() {
+        const place = nearestPlace(view.x, view.z);
+        if (!place) return null;
+        const bounds = viewBounds(view),
+          radius = Math.hypot(bounds.rx, bounds.rz),
+          dutyCodes = dutyGuardCodesNearView(place, simulation.tick, view.x, view.z, radius),
+          displayed = actors.filter(actor => actor.enabled)
+            .map(actor => ({ actor, resident: actorResidents.get(actor) }))
+            .filter(entry => !!entry.resident && dutyCodes.includes(entry.resident.code))
+            .map(entry => ({
+              code: entry.resident!.code,
+              x: entry.resident!.x, z: entry.resident!.z,
+              mesh: hasResidentMesh(entry.actor),
+            }));
+        return { place: place.name, tick: simulation.tick,
+          halfHeight: view.halfHeight, viewport: { width: innerWidth, height: innerHeight },
+          coverage: guardCoverageAt(place, simulation.tick).map(gate => ({
+            gateIndex: gate.gateIndex, required: gate.required,
+            onDuty: gate.onDuty, missing: gate.missing,
+          })), dutyCodes, displayed };
+      },
       /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
       residentEvidencePick() {
         const rect = canvas.getBoundingClientRect(), point = new pc.Vec3();
