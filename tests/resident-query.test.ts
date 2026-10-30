@@ -1,5 +1,6 @@
 import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorInFront, nearestKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
@@ -165,8 +166,14 @@ test("S010 selected ground ring is a closed planar world mesh with no screen-spa
   assert.equal(positions.length, 24 * 2 * 3);
   assert.equal(normals.length, positions.length);
   assert.equal(indices.length, 24 * 2 * 3);
-  assert.ok(positions.every((coordinate, index) => index % 3 !== 1 || coordinate === 0.12),
-    "each ring vertex is at the same fixed height above the original actor root");
+  assert.ok(positions.every((coordinate, index) => index % 3 !== 1 ||
+      Math.abs(coordinate * CANONICAL_METRES_PER_SOURCE_UNIT - 0.12) < 1e-10),
+    "ring ground clearance is 12 physical centimetres, not 0.12 render units");
+  for (let index = 0; index < positions.length; index += 3) {
+    const radiusM = Math.hypot(positions[index], positions[index + 2]) * CANONICAL_METRES_PER_SOURCE_UNIT;
+    assert.ok(Math.abs(radiusM - (index / 3 % 2 === 0 ? 0.32 : 0.38)) < 1e-10,
+      "ring radius follows the same physical-metre to render-unit transform as the resident");
+  }
   assert.ok(indices.every(index => index >= 0 && index < positions.length / 3));
   assert.ok(indices.some(index => index === 0) && indices.some(index => index === 47),
     "the final segment wraps to the first with no broken seam");
