@@ -1,4 +1,4 @@
-import { detailTerrainResolution } from "../src/geometry-core.ts";
+import { detailTerrainResolution, detailTerrainColourRefinementDepth } from "../src/geometry-core.ts";
 import { test } from "node:test";
 import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
@@ -73,6 +73,14 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
+
+test("WP #105 preserve newer 256-unit world resolution while refining only sharp pigment cells", () => {
+  for(const [size,depth] of [[32,0],[64,1],[128,1],[256,1],[512,0],[1024,0]])
+    assert.equal(detailTerrainColourRefinementDepth(size),depth);
+  for(const size of [64,128,256])
+    assert.equal(size/detailTerrainResolution(size)/2,2,
+      "one contrast-only level retains the original fine pigment sampling stride");
+});
 
 test("WP #105 forest 64/128/256 LODs retain canonical pigment grid spacing", () => {
   const fine=64/detailTerrainResolution(64);

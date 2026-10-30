@@ -378,6 +378,13 @@ export function terrainTint(
 /** Share canonical pigment vertices across the observed 64/128/256
  * terrain LOD transitions. The 4-source-unit grid prevents a tiny zoom
  * change from remapping forest stands onto huge interpolated polygons. */
+/** Only verified Village/Province pigment contrast cells receive a single
+ * extra level. Preserve the newer 256-unit 64-cell ground grid and all
+ * other existing tile/preview budgets without changing SEED truth. */
+export function detailTerrainColourRefinementDepth(tileSize: number): number {
+  return tileSize === 64 || tileSize === 128 || tileSize === 256 ? 1 : 0;
+}
+
 export function detailTerrainResolution(tileSize: number): number {
   return Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16);
 }
@@ -434,12 +441,21 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
   const coverageQuad = (x:number,z:number,size:number,depth=0):void => {
     const a=point(x,z),b=point(x,z+size),c=point(x+size,z+size),d=point(x+size,z);
     const colours=[tintAt(a),tintAt(b),tintAt(c),tintAt(d)];
+    const [ca,cb,cc,cd]=colours;
     const range=Math.max(...[0,1,2].map(k=>Math.max(...colours.map(v=>v[k]))-Math.min(...colours.map(v=>v[k]))));
-    if(depth<4 && range>10){
+    // Extra vertices are only added where the composed world actually has
+    // a sharp or enclosed pigment transition, not in ordinary uniform land.
+    const limit=options.terrainOnly?4:detailTerrainColourRefinementDepth(t.size);
+    const centre=!options.terrainOnly&&depth<limit
+      ? tintAt(point(x+size/2,z+size/2)) : undefined;
+    const centreError=centre?Math.max(...[0,1,2].map(k=>
+      Math.abs(centre[k]-(ca[k]+cb[k]+cc[k]+cd[k])/4))):0;
+    if(depth<limit && (range>10 || centreError>10)){
       const half=size/2;
       coverageQuad(x,z,half,depth+1);coverageQuad(x+half,z,half,depth+1);
       coverageQuad(x,z+half,half,depth+1);coverageQuad(x+half,z+half,half,depth+1);
-    }else terrain.quadGradient(a,b,c,d,colours[0],colours[1],colours[2],colours[3]);
+    }else if(options.terrainOnly||Math.max(a[1],b[1],c[1],d[1])>0)
+      terrain.quadGradient(a,b,c,d,ca,cb,cc,cd);
   };
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
@@ -450,17 +466,9 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
         b = point(ax, az + step),
         c = point(ax + step, az + step),
         d = point(ax + step, az);
-      if (options.terrainOnly || Math.max(a[1], b[1], c[1], d[1]) > 0)
-        terrain.quadGradient(
-          a,
-          b,
-          c,
-          d,
-          tintAt(a),
-          tintAt(b),
-          tintAt(c),
-          tintAt(d),
-        );
+      if (detailTerrainColourRefinementDepth(t.size)) coverageQuad(ax,az,step);
+      else if (Math.max(a[1], b[1], c[1], d[1]) > 0)
+        terrain.quadGradient(a,b,c,d,tintAt(a),tintAt(b),tintAt(c),tintAt(d));
       if (z === 0 && !options.terrainOnly)
         terrain.quad(
           a,

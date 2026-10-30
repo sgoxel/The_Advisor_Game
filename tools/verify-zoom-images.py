@@ -42,12 +42,27 @@ def contour(a):
 def expand(mask):
     return np.asarray(Image.fromarray((mask*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(17)))>0
 
+
+def comparison_mask(stable):
+    # Dense but matching legitimate relief/forest boundaries can cover the
+    # entire image. In that case test *more* pixels, not an arbitrary empty
+    # subset; unchanged rich scenes remain valid, while actual palette/LOD
+    # pops must still satisfy the original strict DeltaE and edge checks.
+    return stable if stable.mean() >= 0.4 else np.ones_like(stable, dtype=bool)
+
 if sys.argv[1:] == ['--self-test']:
     rich=lab(np.full((40,40,3),[55,88,66],dtype=float))
     pale=lab(np.full((40,40,3),[155,168,125],dtype=float))
     delta=float(np.linalg.norm(rich-pale,axis=2).mean())
     blocks=rich.copy(); blocks[:,20:]=pale[:,20:]
     assert delta>20 and edges(blocks)-edges(rich)>3
+    patterned = np.where((np.indices((48,48)).sum(axis=0)%2)[...,None]==0,
+      np.array([55.,88.,66.]),np.array([155.,168.,125.]))
+    dense = lab(patterned)
+    mask = comparison_mask(~expand(contour(dense)))
+    assert mask.all(), 'dense existing contours require a strict full-frame comparison'
+    assert float(np.linalg.norm(dense-dense,axis=2)[mask].mean())==0
+    assert float(np.linalg.norm(dense-lab(np.full((48,48,3),[155,168,125],dtype=float)),axis=2)[mask].mean())>10
     print(json.dumps({'historicalPaletteFixtureDeltaE76':delta,'newBlockEdge':edges(blocks),'rejected':True}))
     sys.exit(0)
 
@@ -69,12 +84,9 @@ for file in sys.argv[1:]:
         # of moved pixels into a large percentage. Broad/new seams still fail this
         # area gate and the independent new-edge-contrast gate.
         stable=~near_a
-        if stable.mean()<0.4:
-            raise ValueError(f"Too little stable ground in {file}: {pair['fixture']} "
-                             f"at height {pair['before']['height']} "
-                             f"({stable.mean():.3%}, {retained_image(pair['before'])})")
+        sample_mask=comparison_mask(stable)
         mismatch=max(float((cb&~near_a).mean()),float((ca&~near_b).mean()))
-        result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d[stable].mean()),'p95DeltaE76':float(np.percentile(d[stable],95)),'stableGroundFraction':float(stable.mean()),'contourMismatchFraction':mismatch,'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
+        result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d[sample_mask].mean()),'p95DeltaE76':float(np.percentile(d[sample_mask],95)),'stableGroundFraction':float(stable.mean()),'contourMismatchFraction':mismatch,'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
         result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3 and mismatch<=0.005
         results.append(result)
 Path('test-results/zoom-metrics.json').write_text(json.dumps(results,indent=2))
