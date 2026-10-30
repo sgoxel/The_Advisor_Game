@@ -96,7 +96,7 @@ test("WP #693 parent-only foot alignment preserves imported GLB root transforms"
   // the imported GLB's own scale a second time.
   const placement = characterModelFootPlacement([part(3, 5, -2, .2, .4, .1)], 1.782);
   assert.ok(placement);
-  assert.equal(placement.scale, 1.782 / .8);
+  assert.ok(Math.abs(placement.scale - 1.782 / .8) < 1e-12);
   assert.ok(Math.abs(placement.x + 3 * placement.scale) < 1e-12);
   assert.ok(Math.abs(placement.y + 4.6 * placement.scale) < 1e-12);
   assert.ok(Math.abs(placement.z - 2 * placement.scale) < 1e-12);
