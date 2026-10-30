@@ -115,6 +115,10 @@ test("WP #693 parent-only foot alignment preserves imported GLB root transforms"
     "rendered height remains nominal with a nonunit authored source root");
   assert.equal(characterModelFootPlacement([], 1.782), null);
   assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, 0, 1)], 1.782), null);
+  assert.equal(characterModelFootPlacement([part(0, 0, 0, 0, 1, 0)], 1.782), null,
+    "a zero-footprint vertical line has no visible GLB face and must retain original 2D art");
+  assert.ok(characterModelFootPlacement([part(0, 0, 0, 1, 1, 0)], 1.782),
+    "a genuinely visible planar GLB silhouette must not be rejected for having zero depth");
   assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, NaN, 1)], 1.782), null);
   assert.equal(characterModelFootPlacement([part(0, 0, 0, 1, 1, 1)], Infinity), null);
 });
