@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES } from "./characters.ts";
 import {
-  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, usableOwnerModel,
+  characterModelManifest, characterModelFile, characterVisualFormat, characterDrawableMeshes, characterModelRenderable, characterModelVisibleOrInvalidate, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel,
   type CharacterVisualFormat, type CharacterModelManifest,
 } from "./character-model-policy.ts";
 
@@ -202,6 +202,10 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       } catch (error) {
         if (anchor) anchor.destroy();
         else model?.destroy();
+        // A successfully downloaded GLB can still fail initialization or
+        // renderability. Retrying a permanently cached corrupt container
+        // cannot recover when the owner fixes it on the server.
+        invalidateSharedOwnerModel(file, resources, resource);
         if (current()) console.warn("Invalid owner character model; keeping illustration", file, error);
       }
     },
