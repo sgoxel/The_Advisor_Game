@@ -137,17 +137,6 @@ export function selectedResidentVisibleInView(
     Math.hypot(wrapSourceX(resident.x - view.x), resident.z - view.z) <= view.radius;
 }
 
-/** Passive role identifier only for an actual rendered SEED guard physically
- * on watch. It never supplies an actor, a route, staffing, or selection. */
-export function residentGuardIdentifierEligible(
-  resident: Pick<Resident, "role" | "activity" | "grounded" | "indoors" | "route"> | undefined,
-  drawable: boolean, closeDetail: boolean,
-): boolean {
-  return !!resident && drawable && closeDetail && resident.role === "guard" &&
-    resident.activity === "guard" && resident.grounded && !resident.indoors &&
-    !resident.route.startsWith("BLOCKED:");
-}
-
 /** A small visible resident must still be individually tappable. Screen-space
  * distances are CSS pixels, independent of device pixel ratio or 3D model LOD.
  * Return null outside a minimum 44px target; nearest projected actor wins. */

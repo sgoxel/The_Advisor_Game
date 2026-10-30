@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentGuardIdentifierEligible, residentMotionFraction, residentStationaryWithinActivity, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -546,22 +546,6 @@ test("panning retains fresh world positions while a newer view query is submitte
     "old world positions are not refreshed indefinitely");
   assert.equal(currentResidentSnapshot(undefined, previous, undefined, 101, 48), undefined,
     "leaving actor detail clears any fallback");
-});
-
-test("only actual grounded, on-duty, drawable SEED watchmen receive a visible night label", () => {
-  const valid = { role: "guard" as const, activity: "guard" as const,
-    grounded: true, indoors: false, route: "SEED/GATE/0/POST/0" };
-  assert.equal(residentGuardIdentifierEligible(valid, true, true), true);
-  assert.equal(residentGuardIdentifierEligible(undefined, true, true), false);
-  assert.equal(residentGuardIdentifierEligible(valid, false, true), false,
-    "no label can stand in for an absent 2D/3D mesh");
-  assert.equal(residentGuardIdentifierEligible(valid, true, false), false,
-    "map and distant views cannot show a floating pretend guard");
-  assert.equal(residentGuardIdentifierEligible({ ...valid, indoors: true }, true, true), false);
-  assert.equal(residentGuardIdentifierEligible({ ...valid, grounded: false }, true, true), false);
-  assert.equal(residentGuardIdentifierEligible({ ...valid, route: "BLOCKED: post" }, true, true), false);
-  assert.equal(residentGuardIdentifierEligible({ ...valid, role: "farmer" }, true, true), false);
-  assert.equal(residentGuardIdentifierEligible({ ...valid, activity: "commute" }, true, true), false);
 });
 
 test("selected real actor stays visible during nearby population handoff, never when absent or elsewhere", () => {
