@@ -949,14 +949,15 @@ export type View = {
   pixels: number;
 };
 /** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
-/**
- * Camera elevation above the horizon for a zoom level: a 60° map view that
- * lowers to 34° at character zoom (RPG close-up). Shared by the renderer and
- * tile coverage so the streamed ground always covers the whole screen.
+/** Local presentation angle is a player-view state, not a function of zoom.
+ * Keep the already-established 60° 3/4 camera while magnification changes;
+ * worldBounds and the real renderer both use this value, so visible geometry
+ * remains covered throughout wheel, pinch and scale-button zoom.
+ * A separate explicit inspection action may use another angle.
  */
-export function cameraElevationForHalfHeight(halfHeight: number) {
-  const closeUp = Math.max(0, Math.min(1, (Math.log(4) - Math.log(Math.max(halfHeight, 1e-6))) / (Math.log(4) - Math.log(0.5))));
-  return (60 - 26 * closeUp) * Math.PI / 180;
+export const LOCAL_CAMERA_ELEVATION = Math.PI / 3;
+export function cameraElevationForHalfHeight(_halfHeight: number) {
+  return LOCAL_CAMERA_ELEVATION;
 }
 export function viewBounds(view: View) {
   const hw = view.halfHeight * view.aspect,

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { cameraElevationForHalfHeight, LOCAL_CAMERA_ELEVATION } from "../src/world-core.ts";
 import {
   cellAt,
   finalSurfaceAt,
@@ -71,6 +72,15 @@ import { landformAt, wildernessTerrainAt } from "../src/wilderness-terrain.ts";
 import { naturalSurfaceAt, naturalElevationAt, naturalWaterKindAt } from "../src/hydrology.ts";
 import { sparseNaturalWildernessWaterKindAt } from "../src/natural-surface-mesh.ts";
 
+
+test("pure zoom leaves the local camera pitch unchanged across Hero, Close and overview magnifications", () => {
+  const initial = cameraElevationForHalfHeight(230);
+  assert.equal(initial, LOCAL_CAMERA_ELEVATION);
+  for (const halfHeight of [0.18, 0.2, 0.5, 1, 2, 4, 18, 70, 230, 900, 2000, 15000]) {
+    assert.equal(cameraElevationForHalfHeight(halfHeight), initial,
+      `zoom to halfHeight=${halfHeight} silently tilted the camera`);
+  }
+});
 
 test("S009 dry grade excludes only provably out-of-range settlement pads", () => {
   // Independent original nearest choice remains authoritative if any nearby
