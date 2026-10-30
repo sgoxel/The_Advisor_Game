@@ -55,7 +55,9 @@ export function zoomTests(test, expect, webgl2) {
       pointer('pointerup',1,-25);
     });
     await assertPureZoom(beforePinch,'pinch');
+    const beforeRealm=await zoomSnapshot();
     await page.locator('#overview').click();
+    await assertPureZoom(beforeRealm,'Realm view');
     await page.waitForFunction(()=>window.advisorWorld.state.globe.complete,null,{timeout:240000});
     // Stable ground gate excludes genuinely new trees/buildings and DOM labels.
     await page.locator('#structures').uncheck();
