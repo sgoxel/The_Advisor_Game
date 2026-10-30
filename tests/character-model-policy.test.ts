@@ -382,7 +382,7 @@ test("WP #693 disabled ancestor of visible owner GLB cannot suppress 2D art", ()
   const drawable = { visible: true, mesh: { primitive: [{ count: 6 }] } };
   // The component's own node can be enabled while an imported group above it
   // is disabled. GraphNode.enabled alone does not reflect that hierarchy.
-  const disabledScene = { enabled: false, parent: null };
+  const disabledScene = { enabled: true, parent: null };
   const root = { enabled: true, parent: disabledScene };
   const hiddenGroup = { enabled: false, parent: root };
   const component = {
@@ -393,6 +393,7 @@ test("WP #693 disabled ancestor of visible owner GLB cannot suppress 2D art", ()
   hiddenGroup.enabled = true;
   assert.deepEqual(characterDrawableMeshes([component]), [drawable],
     "reactivating the authored group restores real 3D eligibility");
+  disabledScene.enabled = false;
   assert.equal(characterModelRenderable(root, [component]), false,
     "a disabled ancestor of the attached model also requires 2D fallback");
   disabledScene.enabled = true;
