@@ -38,12 +38,13 @@ export function sameCharacterAssignment(
   return previous?.name === name && previous.residentCode === residentCode;
 }
 
-/** A container can have render components but no drawable mesh primitives.
- * Never hide the resident's 2D illustration for a zero-geometry owner GLB.
- * This is a presentation-only check; it does not affect Simulation identity. */
+/** A container can have render components but no drawable triangular faces.
+ * A primitive with only one or two vertices cannot draw a triangle; accepting
+ * it could hide a resident's original 2D illustration behind empty 3D art.
+ * This is a presentation-only check, not Simulation geometry authority. */
 export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: readonly { count: number }[] } | null }[]): boolean {
   return parts.some(part => part.mesh?.primitive?.some(primitive =>
-    Number.isFinite(primitive.count) && primitive.count > 0));
+    Number.isFinite(primitive.count) && primitive.count >= 3));
 }
 
 /** A child with enabled=true is still hidden if an authored GLB parent is

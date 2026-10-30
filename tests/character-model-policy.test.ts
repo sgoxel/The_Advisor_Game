@@ -127,6 +127,12 @@ test("WP #693 render components with zero drawable primitives must keep 2D fallb
   assert.equal(characterMeshHasGeometry([]), false);
   assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [] } }]), false);
   assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 0 }] } }]), false);
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 1 }] } }]), false,
+    "one vertex cannot make a visible triangle and must keep the 2D cutout");
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 2 }] } }]), false,
+    "a two-vertex primitive is not drawable triangular character geometry");
+  assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: 3 }] } }]), true,
+    "the smallest valid triangular face remains eligible for real 3D");
   assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: NaN }] } }]), false);
   assert.equal(characterMeshHasGeometry([{ mesh: { primitive: [{ count: Infinity }] } }]), false);
   assert.equal(characterMeshHasGeometry([{}, { mesh: null }]), false);
