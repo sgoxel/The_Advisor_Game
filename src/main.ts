@@ -6,6 +6,7 @@ import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
+import { terrainProgressText, terrainLoadingMessage, residentFactSuffix } from "./readiness-presentation.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
@@ -209,9 +210,9 @@ function setLoadingProgress(percent: number) {
   loadPercent = next;
   const bar = $("loading-bar");
   $("loading-fill").style.width = `${next}%`;
-  $("loading-percent").textContent = `${next}%`;
+  $("loading-percent").textContent = terrainProgressText(next);
   bar.setAttribute("aria-valuenow", String(next));
-  $("loading-text").textContent = LOAD_MESSAGES[Math.min(LOAD_MESSAGES.length - 1, Math.floor(next / (100 / LOAD_MESSAGES.length)))];
+  $("loading-text").textContent = terrainLoadingMessage(next, LOAD_MESSAGES[Math.min(LOAD_MESSAGES.length - 1, Math.floor(next / (100 / LOAD_MESSAGES.length)))]);
 }
 let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<string,number> = {};
 // Fixed-size performance samples; percentile sorting occurs only in the on-demand state getter.
@@ -1183,13 +1184,23 @@ function processStreaming(material: pc.StandardMaterial) {
     poleLimit && performance.now() < poleLimitUntil
       ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
       : "";
+  // Terrain completion does not imply the current-view Simulation resident
+  // query has returned. Read-only presentation; never changes a decision.
+  const residentMode = residentViewQuery(view.halfHeight, !$("travel-panel").hidden, ready);
+  const residentRequest = residentMode.inspect
+    ? residentRequestForView(simulation.tick, residentQueryLimitForView(residentMode.actors), residentMode.actors)
+    : undefined;
+  const residentStatus = residentFactSuffix(
+    Boolean(residentRequest),
+    Boolean(residentRequest && residentQueries.readyFor(residentRequest.key, residentRequest.tick)),
+  );
   $("tile-status").textContent =
     (projectionTransition >= 0.999
       ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
       : projectionTransition > 0.001
         ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
         : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
-    poleFeedback;
+    residentStatus + poleFeedback;
 }
 const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post", "park"]);
 /** Centre the view on a source point, keeping the zoom unless it is too far out to see the target. */
