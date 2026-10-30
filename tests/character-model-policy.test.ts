@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, characterCutoutOrientation, sameCharacterAssignment, characterModelVisibleOrInvalidate, loadSharedCharacterArtwork, loadSharedCharacterManifest, loadSharedOwnerModel, invalidateSharedOwnerModel, usableOwnerModel, summarizeCharacterPresentations } from "../src/character-model-policy.ts";
 
 test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
   const first = { name: "guard_male", residentCode: "seed-guard-1" };
@@ -264,6 +264,31 @@ test("WP #693 unusable loaded owner GLB is evicted without clobbering a recovere
   await Promise.resolve();
   assert.strictEqual(cache.get("farmer_male.glb"), concurrent,
     "a failure for a different resource cannot invalidate a healthy shared request");
+});
+
+test("WP #693 original 2D cutouts face raised Hero cameras without changing grounded feet", () => {
+  const actor = { x: 0, y: 0, z: 0 };
+  const front = characterCutoutOrientation(actor, { x: 0, y: 0, z: 10 });
+  assert.deepEqual(front, { yaw: 0, pitch: 0 },
+    "level camera retains original yaw-only upright illustration");
+  const raised = characterCutoutOrientation(actor, { x: 0, y: 10, z: 10 });
+  assert.equal(raised.yaw, 0);
+  assert.equal(raised.pitch, -45,
+    "raised camera tips the separate 2D art toward the viewer");
+  const diagonal = { x: 3, y: 12, z: 4 };
+  const look = characterCutoutOrientation(actor, diagonal);
+  const yaw = look.yaw * Math.PI / 180, pitch = look.pitch * Math.PI / 180;
+  const normal = [Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch),
+    Math.cos(yaw) * Math.cos(pitch)];
+  const magnitude = Math.hypot(diagonal.x, diagonal.y, diagonal.z);
+  const dot = (normal[0] * diagonal.x + normal[1] * diagonal.y +
+    normal[2] * diagonal.z) / magnitude;
+  assert.ok(Math.abs(dot - 1) < 1e-12,
+    "2D picture normal aims at real 3D camera, so original vertical art is not foreshortened");
+  assert.deepEqual(actor, { x: 0, y: 0, z: 0 },
+    "orientation is presentation-only; Simulation/SEED ground anchor is immutable");
+  assert.equal(characterCutoutOrientation(actor, { x: 0, y: 5, z: 0 }).pitch, -90,
+    "straight-overhead camera does not collapse the pictured resident into a line");
 });
 
 test("WP #693 parent-only foot alignment preserves imported GLB root transforms", () => {
