@@ -46,6 +46,15 @@ export function characterMeshHasGeometry(parts: readonly { mesh?: { primitive?: 
     Number.isFinite(primitive.count) && primitive.count > 0));
 }
 
+/** A child with enabled=true is still hidden if an authored GLB parent is
+ * disabled. PlayCanvas GraphNode.enabled is local, not hierarchy-effective. */
+type CharacterHierarchyNode = { enabled: boolean; parent?: CharacterHierarchyNode | null };
+function characterNodeEnabled(node: CharacterHierarchyNode): boolean {
+  for (let current: CharacterHierarchyNode | null = node; current; current = current.parent ?? null)
+    if (!current.enabled) return false;
+  return true;
+}
+
 /** Only genuinely renderable, visible owner meshes may replace an actor's 2D art.
  * A valid GLB can contain disabled nodes, render components, mesh instances
  * or authored materials with no visible opacity. Never hide the 2D resident
@@ -56,12 +65,12 @@ export function characterDrawableMeshes<T extends {
   mesh?: { primitive?: readonly { count: number }[] } | null;
 }>(components: readonly {
   enabled: boolean;
-  entity: { enabled: boolean };
+  entity: CharacterHierarchyNode;
   meshInstances: readonly T[];
 }[]): T[] {
   const drawable: T[] = [];
   for (const component of components) {
-    if (!component.enabled || !component.entity.enabled) continue;
+    if (!component.enabled || !characterNodeEnabled(component.entity)) continue;
     for (const part of component.meshInstances) {
       // Imported glTF standard materials express full transparency with
       // opacity=0. A hidden mesh still has primitives and positive bounds,
@@ -122,12 +131,12 @@ export function characterModelRenderable<T extends {
   visible?: boolean;
   material?: unknown;
   mesh?: { primitive?: readonly { count: number }[] } | null;
-}>(root: { enabled: boolean }, components: readonly {
+}>(root: CharacterHierarchyNode, components: readonly {
   enabled: boolean;
-  entity: { enabled: boolean };
+  entity: CharacterHierarchyNode;
   meshInstances: readonly T[];
 }[]): boolean {
-  return root.enabled && characterDrawableMeshes(components).length > 0;
+  return characterNodeEnabled(root) && characterDrawableMeshes(components).length > 0;
 }
 
 /** A once-validated optional model may cease to render after device/scene
@@ -141,10 +150,10 @@ export function characterModelVisibleOrInvalidate<T extends object, M extends {
   mesh?: { primitive?: readonly { count: number }[] } | null;
 }>(
   actor: T,
-  root: { enabled: boolean },
+  root: CharacterHierarchyNode,
   components: readonly {
     enabled: boolean;
-    entity: { enabled: boolean };
+    entity: CharacterHierarchyNode;
     meshInstances: readonly M[];
   }[],
   assigned: WeakMap<T, { name: string; residentCode: string }>,
