@@ -120,6 +120,29 @@ SCENARIOS: dict[str, str] = {
         "wheel:-900;wait:250;shot:zoom-transient;settle;shot:street;"
         "wheel:900;wait:250;shot:return-transient;settle;shot:return-settled"
     ),
+    # WP-S003-004-001: real character-scale capture. Overview 1/10 and 1/20
+    # intentionally omit small buildings and residents, so they cannot prove
+    # Hero/Close terrain or feet/door grounding. Run with fullhd-landscape and
+    # fullhd-portrait profiles, using the owner-approved WebGL2 evidence path.
+    # WP-S003-004-001: each distinct geography gets a fresh real browser page.
+    # The previous five-shot single-page sequence reproduced a compositor
+    # readback stall after the first two actual inhabited PNGs. This isolates
+    # the known stale-GPU capture path without inventing pixels or game state.
+    "s003-hero-close-village": (
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages[0].canonicalPosition.lon,window.advisorWorld.geography.villages[0].canonicalPosition.lat);"
+        "select:#map-scale=0.5;settle;shot:inhabited-close;"
+        "select:#map-scale=0.2;settle;shot:inhabited-hero"
+    ),
+    "s003-hero-close-slope": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "select:#map-scale=0.5;settle;shot:legal-steep-close"
+    ),
+    "s003-hero-close-cliff": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "select:#map-scale=0.5;settle;shot:blocked-cliff-close"
+    ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
