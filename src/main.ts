@@ -2728,6 +2728,28 @@ async function start() {
             onDuty: gate.onDuty, missing: gate.missing,
           })), dutyCodes, displayed };
       },
+      /** The same real selected resident/feet and depth-tested mesh that the
+       * screenshot tool photographs. No DOM proxy or camera-owned position.
+       * This is read-only: it cannot create actors, move feet or select NPCs. */
+      residentFootRingEvidence() {
+        const code = npcPopupCode(),
+          actor = code
+            ? actors.find(candidate => candidate.enabled &&
+                actorResidents.get(candidate)?.code === code)
+            : undefined,
+          ringMeshes = selectedFootRing.render?.meshInstances ?? [];
+        return {
+          code,
+          actorCode: actor ? actorResidents.get(actor)?.code : null,
+          shown: !!actor && selectedFootRing.enabled &&
+            !!selectedFootRing.render?.enabled &&
+            ringMeshes.some(mesh => mesh.visible),
+          grounded: !!actor && selectedFootRing.getLocalPosition().equals(actor.getLocalPosition()),
+          depthTest: footRingMaterial.depthTest,
+          depthWrite: footRingMaterial.depthWrite,
+          meshCount: ringMeshes.length,
+        };
+      },
       /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
       residentEvidencePick() {
         const rect = canvas.getBoundingClientRect(), point = new pc.Vec3(),
