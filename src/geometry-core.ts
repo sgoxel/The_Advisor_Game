@@ -375,10 +375,11 @@ export function terrainTint(
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
-/** Share canonical ground pigment vertices across the observed Village LOD
- * transition: 64/16 and 128/32 both sample 4 source units apart. */
+/** Share canonical pigment vertices across the observed 64/128/256
+ * terrain LOD transitions. The 4-source-unit grid prevents a tiny zoom
+ * change from remapping forest stands onto huge interpolated polygons. */
 export function detailTerrainResolution(tileSize: number): number {
-  return Math.min(tileSize / 2, tileSize === 128 ? 32 : 16);
+  return Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16);
 }
 
 export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrain?:boolean} = {}): TileGeometry {
@@ -392,11 +393,11 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
   // structures, canonical registration and other layers unmodified.
   if (!options.skipBaseTerrain) {
   // Prepared-surface refinement is owned by the common worker adapter.
-  // A 64→128 source-unit LOD handoff must not double the pigment/ground
-  // sample spacing while the on-screen zoom changes by only a fraction of a
-  // percent. Keep both 64 and 128 tiles on the same 4-unit canonical grid.
-  // This refines only the observed Village-scale successor; other tile levels,
-  // the cheap coverage preview and all SEED/Simulation truth stay unchanged.
+  // Original WebGL2 forest evidence also shows a visible 128→256 LOD
+  // albedo block pop. Keep 64/128/256 vertices on the same canonical
+  // 4-source-unit pigment grid instead of abruptly quadrupling their stride.
+  // The cheap coverage preview, larger-scale mesh budgets and all
+  // SEED/Simulation surface truth remain unchanged.
   const resolution = options.terrainOnly
       ? Math.min(8, t.size / 2)
       : detailTerrainResolution(t.size),
