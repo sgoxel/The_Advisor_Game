@@ -1,4 +1,4 @@
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentMotionFraction, residentStationaryWithinActivity, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentGuardIdentifierEligible, residentMotionFraction, residentStationaryWithinActivity, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -1893,6 +1893,8 @@ async function start() {
   };
   const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
   const actors: pc.Entity[] = [];
+  const dutyGuardLabels = new Map<pc.Entity, HTMLSpanElement>(),
+    dutyGuardLabelWorld = new pc.Vec3(), dutyGuardLabelScreen = new pc.Vec3();
   const selectedResidentMarker = $("selected-resident-marker"),
     selectedResidentName = $("selected-resident-name"),
     selectedResidentGroundMarker = $("selected-resident-ground-marker"),
@@ -2211,6 +2213,40 @@ async function start() {
     // All true on-world 2D illustrated residents face the current camera;
     // their feet, routes, identities and picker remain Simulation-authoritative.
     for (const actor of actors) if (actor.enabled) characterVisuals.face(actor, camera);
+    // Small legible labels identify genuine watchmen even in nighttime
+    // lighting. Anchor each label above that specific rendered mesh; never
+    // use duty assignments to create a label or a replacement character.
+    const activeDutyLabels = new Set<pc.Entity>();
+    if (projectionTransition <= .001 && view.halfHeight < 20) {
+      for (const actor of actors) {
+        const resident = actorResidents.get(actor);
+        if (!actor.enabled || !resident || resident.role !== "guard" ||
+            resident.code === npcPopupCode() ||
+            !residentGuardIdentifierEligible(resident, hasResidentMesh(actor), true)) continue;
+        const foot = actor.getPosition();
+        dutyGuardLabelWorld.set(foot.x,
+          foot.y + actor.getLocalScale().y * DEFAULT_CHARACTER_HEIGHT_M + .22, foot.z);
+        camera.camera!.worldToScreen(dutyGuardLabelWorld, dutyGuardLabelScreen);
+        const x = Math.round(dutyGuardLabelScreen.x), y = Math.round(dutyGuardLabelScreen.y);
+        if (x < 50 || x > innerWidth - 50 || y < 120 || y > innerHeight - 115) continue;
+        let label = dutyGuardLabels.get(actor);
+        if (!label) {
+          label = document.createElement("span");
+          label.className = "duty-guard-label";
+          label.textContent = "Guard";
+          label.setAttribute("aria-hidden", "true");
+          document.body.appendChild(label);
+          dutyGuardLabels.set(actor, label);
+        }
+        label.dataset.residentCode = resident.code;
+        label.title = `${resident.name} · on watch`;
+        const next = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
+        if (label.style.transform !== next) label.style.transform = next;
+        activeDutyLabels.add(actor);
+      }
+    }
+    for (const [actor, label] of dutyGuardLabels)
+      if (!activeDutyLabels.has(actor)) { label.remove(); dutyGuardLabels.delete(actor); }
     // Keep one screen-space marker attached to the actual enabled 3D-world actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
