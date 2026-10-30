@@ -12,7 +12,9 @@ permissions:
   id-token: write
 concurrency:
   # Closing a PR cancels its obsolete long checks; main deploys independently.
-  group: github-pages-${{ github.event.pull_request.number || github.ref }}
+  # PR close events must not cancel a still-running original PNG capture.
+  # Ordinary new pushes/synchronizations still cancel superseded active runs.
+  group: github-pages-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'closed' && 'closed' || 'active' }}
   cancel-in-progress: true
 jobs:
   build:
@@ -36,7 +38,7 @@ jobs:
       # original WebGL2 Hero/Close PNGs. A capture failure stays visible in the
       # artifact without blocking a safe gameplay build/deploy.
       - name: Capture WP #550 real Hero/Close relief
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent1-wp550-fresh-hero-close-webgl2'
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'agent1-wp550-')
         continue-on-error: true
         run: |
           python -m pip install playwright==1.63.0
@@ -50,7 +52,7 @@ jobs:
           done
           timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp550-webgl2 --scenario s003-hero-close-village,s003-hero-close-slope,s003-hero-close-cliff --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --timeout 180
       - name: Archive original WP #550 screenshots and failure diagnostics
-        if: always() && github.event_name == 'pull_request' && github.head_ref == 'agent1-wp550-fresh-hero-close-webgl2'
+        if: always() && github.event_name == 'pull_request' && startsWith(github.head_ref, 'agent1-wp550-')
         uses: actions/upload-artifact@v4
         with:
           name: wp550-hero-close-${{ github.sha }}
