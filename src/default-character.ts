@@ -57,8 +57,9 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
       });
     });
   }
-  // The owner may deploy GLBs later by uploading characters/models/*.glb
-  // and adding matching illustration-type filenames to models.json. An empty,
+  // The owner may deploy PlayCanvas-compatible GLB/glTF models under
+  // characters/models/ and map matching illustration types in models.json.
+  // An empty,
   // absent or invalid manifest never starts a 3D request or delays 2D actors.
   const manifestCache: { pending?: Promise<CharacterModelManifest> } = {};
   function ownerManifest(): Promise<CharacterModelManifest> {
