@@ -1,7 +1,18 @@
 import { test } from "node:test";
 import { mountNpcPortrait } from "../src/npc-portrait.ts";
 import assert from "node:assert/strict";
-import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+import { characterModelManifest, characterModelFile, characterVisualFormat, characterMeshHasGeometry, characterDrawableMeshes, characterModelRenderable, characterModelFootPlacement, sameCharacterAssignment, loadSharedCharacterArtwork, loadSharedOwnerModel, usableOwnerModel } from "../src/character-model-policy.ts";
+
+test("WP #693 pooled actor assignment tracks actual SEED resident, not just portrait type", () => {
+  const first = { name: "guard_male", residentCode: "seed-guard-1" };
+  assert.equal(sameCharacterAssignment(undefined, first.name, first.residentCode), false);
+  assert.equal(sameCharacterAssignment(first, "guard_male", "seed-guard-1"), true,
+    "same resident across consecutive refreshes reuses visual state and shared assets");
+  assert.equal(sameCharacterAssignment(first, "guard_male", "seed-guard-2"), false,
+    "different resident with same artwork must reset stale optional model/heading");
+  assert.equal(sameCharacterAssignment(first, "farmer_male", "seed-guard-1"), false,
+    "a different authored appearance also resets visual work");
+});
 
 test("WP #693 no owner model leaves residents in 2D", () => {
   for (const source of [undefined, null, "", [], {}, 5]) {
