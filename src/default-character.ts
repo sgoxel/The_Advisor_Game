@@ -13,6 +13,9 @@ export const DEFAULT_CHARACTER_URL = new URL("characters/default.webp", document
 export async function loadDefaultCharacter(app: pc.AppBase) {
   // One shared upright quad in metres, with its feet at the authoritative
   // resident ground anchor. World-space scale comes from main's SEED height.
+  // The exact painted top is transformed with the cutout child, not guessed
+  // vertically above the actor after its camera-facing Hero/Close pitch.
+  const paintedTopLocal = new pc.Vec3(0, DEFAULT_CHARACTER_HEIGHT_M, 0);
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions([
     -DEFAULT_CHARACTER_HEIGHT_M * .4453 / 2, 0, 0,
@@ -219,6 +222,15 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
         invalidateSharedOwnerModel(file, resources, resource);
         if (current()) console.warn("Invalid owner character model; keeping illustration", file, error);
       }
+    },
+    /** The actual 3D-world head of the painted 2D silhouette or owner GLB.
+     * A tilted cutout's top is NOT vertically above its anchored feet.
+     * This point is used only by labels and picking; it never moves a resident. */
+    headPoint(actor: pc.Entity, result: pc.Vec3) {
+      const sprite = shapes.get(actor);
+      const visibleModel = hasVisibleModel(actor);
+      (sprite && !visibleModel ? sprite : actor)
+        .getWorldTransform().transformPoint(paintedTopLocal, result);
     },
     palette(_actor: pc.Entity, _variant: number) {
       // The authored illustrations already express the SEED-picked character.
