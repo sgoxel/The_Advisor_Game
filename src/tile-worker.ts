@@ -18,21 +18,36 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       // receipt against its OWN send clock without comparing worker epochs.
       self.postMessage({ kind:"resident-started", id:job.id, shard:job.shard?.index,
         mainSentEpochMs:job.mainSentEpochMs });
+      const { places, nearbyPlaces } = await import("./geography.ts"),
+        place = places.find(place => place.code === job.placeCode);
+      if (!place) throw new Error("Unknown resident settlement");
+      // Exact same immutable settlement candidate prefilter used by
+      // LazySimulation.focusedResidents. A wilderness view with ZERO matching
+      // SEED settlements in the original focused country cannot return residents, and must not cold
+      // initialize the entire 22,800-person Simulation/routine index merely
+      // to return the empty list. No camera/SEED/actor facts are substituted.
+      const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, overnightStopsMs: 0, overnightRoutesMs: 0, groundingMs: 0, evaluated: 0 };
+      if (!nearbyPlaces(job.x, job.z).some(candidate =>
+        candidate.continent === place.continent && candidate.country === place.country)) {
+        const completedAt = performance.now();
+        self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index,
+          residents: [], query: { settlements: 0, candidateResidents: 0, evaluatedResidents: 0, returnedResidents: 0 },
+          residentTiming: { preparationMs: completedAt - started, queryMs: 0, indexBuildMs: 0,
+            ...phases, mainSentEpochMs: job.mainSentEpochMs, workerReceiveEpochMs,
+            workerSendEpochMs: performance.timeOrigin + completedAt } });
+        return;
+      }
       residentSimulation ??= import("./simulation.ts").then(module => ({
         simulation: new module.LazySimulation(),
         beginResidentRouteProbes: module.beginResidentRouteProbes,
         endResidentRouteProbes: module.endResidentRouteProbes,
       }));
-      const { simulation, beginResidentRouteProbes, endResidentRouteProbes } = await residentSimulation,
-        { places } = await import("./geography.ts"),
-        place = places.find(place => place.code === job.placeCode);
-      if (!place) throw new Error("Unknown resident settlement");
+      const { simulation, beginResidentRouteProbes, endResidentRouteProbes } = await residentSimulation;
       const preparedAt = performance.now();
       simulation.setFocus(place);
       simulation.advance(job.tick);
       // Optional instrumentation only in resident worker queries; zero
       // influence on canonical positions, routing or authoritative results.
-      const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, overnightStopsMs: 0, overnightRoutesMs: 0, groundingMs: 0, evaluated: 0 };
       // Count only this synchronous resident query. Always clear the observer
       // even if a worker query fails; no mutable counter can affect decisions.
       const routeProbes = job.routeProbes === true ? beginResidentRouteProbes() : undefined;
