@@ -3,7 +3,7 @@ import test from "node:test";
 import { existsSync } from "node:fs";
 import { CHARACTER_TYPES } from "../src/characters.ts";
 import { cities, countries, villages } from "../src/geography.ts";
-import { CANONICAL_PLANET_RADIUS, greatCircleDistance, lonLatToSource, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_PLANET_RADIUS, enuToPosition, greatCircleDistance, lonLatToSource, normalizeLongitude, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { settlementExteriorFor, settlementHomeFor, GUARD_POST_BUILDING_WIDTH_M } from "../src/settlement-exterior.ts";
 import { featuresFor, finalSurfaceAt, finalSurfaceEvidenceAnchors, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
@@ -89,6 +89,25 @@ test("resident inspector can resolve facts: S009 cached exact route endpoints pr
     point => residentEndpointWalkable(place, point)),
     offsets.slice(0, 2).every(point => legalPosition(place, point.eastM, point.northM).grounded),
     "negative preflight still requires both independently grounded endpoints");
+
+  // WP #550's original blocked cliff is an actual rendered, SEED-owned
+  // coordinate, not a synthetic Boolean surface. Reuse the same continuous
+  // metre-step validator as real NPC walking at that exact cliff. This is a
+  // negative physical traversal proof, not a claim that an actor travelled
+  // from the distant village to this location.
+  const cliff = targets[1], origin = { ...sourceToLonLat(cliff.x, cliff.z), elevation: 0 };
+  const sampleRealCliff = (eastM: number, northM: number) => {
+    const position = enuToPosition({ east: eastM, north: northM, up: 0 }, origin),
+      source = lonLatToSource(position.lon, position.lat);
+    return residentWalkableSurface(finalSurfaceAt(source.x, source.z));
+  };
+  assert.equal(residentWalkableSurface(finalSurfaceAt(cliff.x, cliff.z)), false,
+    "the actual pictured cliff does not admit a resident regardless of inspector UI");
+  assert.equal(sampleRealCliff(0, 0), false,
+    "reprojected original cliff is equally blocked to Simulation feet");
+  assert.equal(continuousWalkableOffsetSegmentCoordinates(
+    { eastM: -2, northM: 0 }, { eastM: 2, northM: 0 }, sampleRealCliff), false,
+    "no continuous four-metre resident segment may cross the displayed blocked cliff");
 });
 
 const HOUR = 3600;
