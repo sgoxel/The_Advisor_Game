@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ResidentQueryQueue } from "../src/resident-query.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { cameraElevationForHalfHeight, LOCAL_CAMERA_ELEVATION } from "../src/world-core.ts";
+import { cameraElevationForHalfHeight, LOCAL_CAMERA_ELEVATION, viewBounds } from "../src/world-core.ts";
 import {
   cellAt,
   finalSurfaceAt,
@@ -87,6 +87,18 @@ test("WP #105 forest 64/128/256 LODs retain canonical pigment grid spacing", () 
     "closer detail keeps its existing grid");
   assert.equal(detailTerrainResolution(512),16,
     "unobserved larger tile budgets and preview sampling remain unchanged");
+});
+
+test("opt-in low-angle relief expands real streamed camera footprint without changing zoom", () => {
+  const ordinary = { x: 0, z: 0, halfHeight: 12, aspect: 1, yaw: 0, pixels: 1080 },
+    normal = viewBounds(ordinary),
+    relief = viewBounds({ ...ordinary, elevationAngle: Math.PI / 6 });
+  assert.equal(relief.rx, normal.rx,
+    "actual horizontal zoom/SEED coordinates remain unchanged");
+  assert.ok(relief.rz > normal.rz,
+    "real low-angle camera sees more terrain along its ground footprint");
+  assert.deepEqual(viewBounds({ ...ordinary, elevationAngle: undefined }), normal,
+    "return to standard map angle restores the original exact tile bounds");
 });
 
 test("pure zoom leaves the local camera pitch unchanged across Hero, Close and overview magnifications", () => {
