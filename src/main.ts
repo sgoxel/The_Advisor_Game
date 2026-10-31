@@ -1383,7 +1383,13 @@ function inspectCell(screenX: number, screenY: number) {
     $("cell-height").title =
       `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${elevation.toFixed(2)} m`;
     $("cell-tile").textContent = `${cell.tile} · derived render tile`;
-    $("cell-walkable").textContent = surface.walkable ? "Yes" : "No";
+    // Show the actual composed upper walking surface, not a speculative
+    // render material: a road or bridge can be legal where raw ground is not.
+    const walkingSurface = {
+      bridge: "bridge deck", road: "graded road", difficult: "difficult ground",
+      open: "open ground", blocked: "blocked",
+    }[surface.traversal];
+    $("cell-walkable").textContent = `${surface.walkable ? "Yes" : "No"} · ${walkingSurface}`;
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
       district = patch.parent,
