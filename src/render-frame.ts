@@ -41,17 +41,26 @@ export function tiltedGroundPickDistance(
       !Number.isFinite(farDistance) || farDistance <= initialDistance ||
       !Number.isFinite(rayDirectionY) || rayDirectionY >= -1e-6)
     return initialDistance;
-  let distance = initialDistance, previous = NaN;
+  let distance = initialDistance, previousDistance = NaN, previousGap = NaN;
   for (let i = 0; i < 6; i++) {
     let surfaceY: number;
     try { surfaceY = groundedYAt(distance); }
     catch { return initialDistance; }
     if (!Number.isFinite(surfaceY)) return initialDistance;
-    const next = distance + (surfaceY - rayYAt(distance)) / rayDirectionY;
+    const gap = rayYAt(distance) - surfaceY;
+    if (!Number.isFinite(gap)) return initialDistance;
+    if (Math.abs(gap) < 1e-4) return distance;
+    // One secant update solves a uniformly graded road exactly. Unlike an
+    // unbounded fixed-point chase, a discontinuous cliff or a nonconvergent
+    // sample never becomes a claimed new ground intersection.
+    const grade = Number.isFinite(previousDistance) && distance !== previousDistance
+      ? (gap - previousGap) / (distance - previousDistance) : rayDirectionY;
+    if (!Number.isFinite(grade) || Math.abs(grade) < 1e-6) return initialDistance;
+    const next = distance - gap / grade;
     if (!Number.isFinite(next) || next < 0 || next > farDistance ||
-        Math.abs(next - previous) < 1e-4) return initialDistance;
-    if (Math.abs(next - distance) < 1e-4) return next;
-    previous = distance;
+        Math.abs(next - previousDistance) < 1e-4) return initialDistance;
+    previousDistance = distance;
+    previousGap = gap;
     distance = next;
   }
   return initialDistance;
