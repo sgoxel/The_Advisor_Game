@@ -10,6 +10,8 @@ import {
   dryCellReliefMidpointNeeded,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
+import { convertTileGeometryToEnu } from "../src/render-frame.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import { closeDryReliefMidpointNeeded, detailTerrainResolution } from "../src/geometry-core.ts";
 import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
@@ -327,7 +329,7 @@ test("dry landform midpoint close fallback retains real dry curvature but never 
     "wet/shore cells must remain under their own shoreline replacement");
 });
 
-test("dry landform midpoint retains nonplanar canonical heights", () => {
+test("dry landform midpoint retains nonplanar canonical heights through original cliff and slope mesh", () => {
   assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 24), true,
     "a SEED-owned hill peak must survive an otherwise flat dry quad");
   assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, -3), true,
@@ -336,4 +338,46 @@ test("dry landform midpoint retains nonplanar canonical heights", () => {
     "a truly planar slope must not need extra triangles");
   assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 10.02), false,
     "two-centimetre numeric difference does not merit extra triangles");
+
+  // These exact positions are also used by the original in-game S003 cliff
+  // and difficult-slope screenshots. Check the real detail-worker mesh path,
+  // rather than treating a static inspector label as rendered height proof.
+  const witnesses = [
+    { name: "blocked cliff", x: -26817.80086086045, z: 27316.75066655874, walkable: false },
+    { name: "difficult slope", x: -24190.289130830573, z: 28768.45437654417, walkable: true },
+  ];
+  for (const witness of witnesses) {
+    assert.equal(finalSurfaceAt(witness.x, witness.z).walkable, witness.walkable,
+      `${witness.name} changed its canonical traversal verdict`);
+    for (const level of [14, 17]) {
+      const tile = tileForPosition(witness.x, witness.z, level);
+      const empty = { positions: new Float32Array(), normals: new Float32Array(),
+        colors: new Uint8Array(), indices: new Uint32Array() };
+      // Match tile-render-worker: natural replacement before base terrain,
+      // then the exact tile ENU conversion consumed by the renderer.
+      const refined = rebuildNaturalSurface(tile, empty);
+      assert.ok(refined.replaced && refined.surfaceVertices > 0,
+        `${witness.name} L${level} has no original final-surface detail mesh`);
+      const originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
+      const expectedHeights: number[] = [];
+      for (let v = 0; v < refined.surfaceVertices; v++) {
+        const i = v * 3, x = originX + refined.geometry.positions[i],
+          z = originZ + refined.geometry.positions[i + 2],
+          surface = finalSurfaceAt(x, z);
+        const height = surface.water.kind === "none"
+          ? surface.groundHeight : surface.water.level + 0.0025;
+        assert.ok(Math.abs(refined.geometry.positions[i + 1] - height) < 0.002,
+          `${witness.name} L${level} source vertex ${v} diverges from composed height`);
+        expectedHeights.push(height);
+      }
+      const data = buildTile(tile, { skipBaseTerrain: true });
+      data.terrain = refined.geometry;
+      convertTileGeometryToEnu(tile, data);
+      for (let v = 0; v < refined.surfaceVertices; v++) {
+        const renderedMetres = data.terrain.positions[v * 3 + 1] * CANONICAL_METRES_PER_SOURCE_UNIT;
+        assert.ok(Math.abs(renderedMetres - expectedHeights[v]) < 0.01,
+          `${witness.name} L${level} ENU vertex ${v} diverges from original final surface`);
+      }
+    }
+  }
 });
