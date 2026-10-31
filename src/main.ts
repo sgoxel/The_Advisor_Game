@@ -60,7 +60,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
-import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
+import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -1390,6 +1390,9 @@ function inspectCell(screenX: number, screenY: number) {
       open: "open ground", blocked: "blocked",
     }[surface.traversal];
     $("cell-walkable").textContent = `${surface.walkable ? "Yes" : "No"} · ${walkingSurface}`;
+    // A traversable final surface is not automatically legal resident footing
+    // (e.g. dry ground at the waterline). Do not imply a whole route is valid.
+    $("cell-footing").textContent = residentWalkableSurface(surface) ? "Legal at point" : "Not legal at point";
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
       district = patch.parent,
