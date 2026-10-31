@@ -19,7 +19,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localDayIndex, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
-import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -281,6 +281,8 @@ const pending = new Set<string>();
 // Screenshot-tool-only: keep game/Simulation rendering live while deferring
 // background GPU buffer churn during a bounded real WebGPU readback.
 let captureStreamingQuiesced = false;
+ // Camera-only label for a real validated SEED owned home; never a world actor or collision.
+ let focusedOwnedDoorPin: OwnedDoorViewPin | undefined;
 const uploads: {
   kind: TileJobKind;
   jobKey: string;
@@ -1523,6 +1525,13 @@ function setupControls() {
       setTerrainReliefView(true, false);
     }
     navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT, innerHeight));
+    // Keep the exact inspected door labelled when the portrait character
+    // inspector closes to reveal its actual front-wall geometry.
+    focusedOwnedDoorPin = facing === undefined ? undefined : {
+      x: view.x, z: view.z,
+      y: finalSurfaceAt(view.x, view.z).surfaceHeight + 0.12,
+      homeEntrance: document.getElementById("npc-home-entrance")?.textContent?.trim() ?? "",
+    };
   });
   $("home").onclick = () => {
     view.yaw = -0.22;
@@ -2596,6 +2605,8 @@ async function start() {
     // Keep one screen-space marker attached to the actual enabled 3D-world actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
+    const pinnedDoor = ownedDoorPinAtFocus(focusedOwnedDoorPin, view.x, view.z, inspectedCode);
+    if (focusedOwnedDoorPin && !pinnedDoor) focusedOwnedDoorPin = undefined;
     // A cached door belongs only to its original selected SEED resident.
     // Switching inspectors while the new actor is offscreen must never expose
     // the previous person's entrance as this person's authoritative home.
@@ -2662,8 +2673,10 @@ async function start() {
     }
     // The already-resolved SEED doorway stays visible after camera-only home
     // focus even when the selected character leaves the actor render query.
-    if (inspectedCode && selectedDoorPoint && projectionTransition <= 0.001) {
-      const door = renderFrame.sourceToRender(selectedDoorPoint.x, selectedDoorPoint.z, selectedDoorPoint.y);
+    const markedDoor = inspectedCode ? selectedDoorPoint : pinnedDoor;
+    if (markedDoor && projectionTransition <= 0.001) {
+      if (pinnedDoor) selectedHomeDoorMarker.dataset.homeEntrance = pinnedDoor.homeEntrance;
+      const door = renderFrame.sourceToRender(markedDoor.x, markedDoor.z, markedDoor.y);
       selectedHomeDoorWorld.set(door.x, door.y, door.z);
       camera.camera!.worldToScreen(selectedHomeDoorWorld, selectedHomeDoorScreen);
       const dx = Math.round(selectedHomeDoorScreen.x), dy = Math.round(selectedHomeDoorScreen.y),
@@ -2686,7 +2699,7 @@ async function start() {
     if (!inspectedCode) {
       markedResidentCode = "";
       selectedDoorPoint = undefined;
-      selectedHomeDoorMarker.dataset.homeEntrance = "";
+      if (!pinnedDoor) selectedHomeDoorMarker.dataset.homeEntrance = "";
     }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
