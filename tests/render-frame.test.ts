@@ -9,6 +9,7 @@ import {
   LocalRenderFrame,
   convertTileGeometryToEnu,
   visibleSurfaceElevation,
+  tiltedGroundPickDistance,
 } from "../src/render-frame.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -285,4 +286,23 @@ test("visible point inspection follows exposed ground, water and legal decks wit
   assert.notEqual(water.water.kind,"none");
   assert.equal(visibleSurfaceElevation(water),water.water.level);
   assert.ok(visibleSurfaceElevation(water)>water.groundHeight,"clicks must hit the water, not the submerged bed");
+});
+
+test("explicit tilted camera picks a real graded final surface without moving SEED ground", () => {
+  const rayYAt = (t: number) => 100 - t * 0.5;
+  // The old focus-height plane hits at t=160, but a gentle canonical
+  // rising grade at this screen point intersects the ray at t=133.333…
+  const initial = 160, target = 80 / 0.6;
+  const hit = tiltedGroundPickDistance(initial, 500, -0.5, rayYAt,
+    t => 20 + t * 0.1);
+  assert.ok(Math.abs(hit - target) < 1e-4,
+    `tilted map should pick the actual grade at ${target}, got ${hit}`);
+  assert.equal(tiltedGroundPickDistance(initial, 500, -0.5, rayYAt,
+    () => 20), initial, "level ground keeps the original exact camera pick");
+  assert.equal(tiltedGroundPickDistance(initial, 500, -0.5, rayYAt,
+    () => NaN), initial, "an impassable cliff cannot become a fictitious legal ground pick");
+  assert.equal(tiltedGroundPickDistance(initial, 500, -0.5, rayYAt,
+    () => 300), initial, "out-of-ray ground never teleports picking");
+  assert.equal(tiltedGroundPickDistance(initial, 500, 0, rayYAt,
+    () => 20), initial, "an unsupported camera ray retains the original pick");
 });

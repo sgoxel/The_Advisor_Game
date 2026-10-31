@@ -26,6 +26,37 @@ export const GPU_LOCAL_LIMIT_M = 8_192;
 /** Move the presentation origin before the focus drifts far enough to lose precision. */
 export const REBASE_THRESHOLD_M = 2_048;
 
+/** Correct the existing focus-height plane pick only where the actual final
+ * surface varies smoothly. This is a bounded presentation ray correction,
+ * not a new terrain/collision authority. A cliff, invalid sample or unstable
+ * iteration falls back to the original pick rather than inventing a crossing. */
+export function tiltedGroundPickDistance(
+  initialDistance: number,
+  farDistance: number,
+  rayDirectionY: number,
+  rayYAt: (distance: number) => number,
+  groundedYAt: (distance: number) => number,
+): number {
+  if (!Number.isFinite(initialDistance) || initialDistance < 0 ||
+      !Number.isFinite(farDistance) || farDistance <= initialDistance ||
+      !Number.isFinite(rayDirectionY) || rayDirectionY >= -1e-6)
+    return initialDistance;
+  let distance = initialDistance, previous = NaN;
+  for (let i = 0; i < 6; i++) {
+    let surfaceY: number;
+    try { surfaceY = groundedYAt(distance); }
+    catch { return initialDistance; }
+    if (!Number.isFinite(surfaceY)) return initialDistance;
+    const next = distance + (surfaceY - rayYAt(distance)) / rayDirectionY;
+    if (!Number.isFinite(next) || next < 0 || next > farDistance ||
+        Math.abs(next - previous) < 1e-4) return initialDistance;
+    if (Math.abs(next - distance) < 1e-4) return next;
+    previous = distance;
+    distance = next;
+  }
+  return initialDistance;
+}
+
 export type RenderPoint = { x: number; y: number; z: number };
 export type PatchTransform = { x: number; z: number; yawDegrees: number };
 export type PatchConversionStats = {
