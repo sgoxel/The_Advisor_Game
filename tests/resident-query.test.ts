@@ -1,18 +1,33 @@
 import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT, lonLatToSource } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_POLE_DISTANCE, lonLatToSource } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
-import { villages, cities, type Place } from "../src/geography.ts";
+import { villages, cities, nearbyPlaces, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
 import { continuousWalkableOffsetSegment, residentEndpointWalkable, legalPosition } from "../src/simulation.ts";
 import { dailyPlan, dailyStandingActivities, personalityFor, traitsFor, type RoutineSubject } from "../src/routines.ts";
 
 const request = (key = "town-a", tick = 100) => ({ key, tick, placeCode: "town", x: 0, z: 0, radius: 2, limit: 160 });
 const result = { residents: [], query: { settlements: 1, candidateResidents: 20, evaluatedResidents: 20, returnedResidents: 0 } };
+
+test("WP #550 empty remote wilderness returns no residents without a cold population index", () => {
+  const x = 0, z = SOURCE_PRESENTATION_POLE_DISTANCE - 1;
+  assert.equal(nearbyPlaces(x, z).length, 0,
+    "the canonical polar wilderness has no SEED settlement candidates");
+  // The worker uses this identical immutable prefilter BEFORE importing and
+  // constructing Simulation. The old full query must have the same empty fact.
+  const simulation = new LazySimulation();
+  simulation.setFocus(villages[0]);
+  assert.deepEqual(simulation.focusedResidents(x, z, 16, 8), [],
+    "an empty source region never authorizes an invented visible resident");
+  assert.equal(simulation.stats.query.settlements, 0);
+  assert.ok(nearbyPlaces(villages[0].x, villages[0].z).some(place => place.code === villages[0].code),
+    "an inhabited view must still use its complete normal Simulation query");
+});
 
 test("S009 unchanged prior-day anchors cannot require a physical homecoming route", () => {
   assert.equal(routineHasAnchorChange([{ anchor: "home" }, { anchor: "home" }, { anchor: "home" }]), false);
