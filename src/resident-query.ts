@@ -34,6 +34,19 @@ export function residentWalkingPolyline(path: readonly { x: number; z: number }[
   return { points, lengths, total };
 }
 
+/** Convert a canonical walking segment into a local horizontal bearing.
+ * Longitude source units stretch with latitude; this changes only 3D visual
+ * facing, never the deterministic SEED path or Simulation walking result. */
+export function residentWalkingHeadingDelta(
+  a: { x: number; z: number }, b: { x: number; z: number },
+) {
+  const lat = sourceToLonLat(a.x, (a.z + b.z) / 2).lat;
+  return {
+    east: wrapSourceX(b.x - a.x) * Math.cos(lat),
+    south: b.z - a.z,
+  };
+}
+
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number; actors?: boolean };
 export type ResidentQueryJob = ResidentQuery & { kind: "residents"; id: number; shard?: { index: number; count: number }; mainSentEpochMs?: number; routeProbes?: boolean };
 export type ResidentQueryResult = { residents: Resident[]; query: QueryStats };
