@@ -60,7 +60,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 - WP-S010-001-001 — Research first-play Advisor UX: inspect hero, give advice, observe autonomous decision and world consequence
 - WP-S010-002-001 — Reuse grounded GLB buildings, doors, roofs and props with measured mobile cost
-- WP-S010-003-001 — Keep grounded 2D residents visible; reject roof/wall-occluded picks across WebGPU and WebGL2
+- WP-S010-003-001 — Keep grounded 2D residents visible; reject roof/wall-occluded picks across WebGPU and WebGL2 — COMPLETED and REVIEWED at 2026-10-31
 - WP-S010-003-002 — Offer accessible inspect, tilt, follow and reset controls independent of pure zoom
 - WP-S010-003-003 — Preserve each NPC's original 2D art; ship the optional owner-GLB pipeline and permanent fallback — COMPLETED and REVIEWED at 2026-10-30 (real owner-asset mixed 3D/2D visual validation remains conditional on asset delivery; NOT claimed PASS)
 - WP-S010-004-001 — Show actual lawful NPC work, guard duty and homecoming instead of labels or camera-made crowds
