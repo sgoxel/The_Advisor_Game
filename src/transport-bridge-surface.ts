@@ -1,6 +1,6 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt, RURAL_BRIDGE_MAX_LENGTH_M } from "./world-core.ts";
 import { ROUTE_CORRIDOR_STATION_LIMIT, riverBridgeDeckAboveWater, sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
@@ -34,6 +34,20 @@ export function selectedRoadBridgeDeckWalkable(
     surface.surfaceHeight === surface.deckHeight && surface.walkable &&
     surface.traversal === "bridge" &&
     surface.deckOwnerIds.includes(roadCode) &&
+    surface.contributingModifierIds.includes(roadCode);
+}
+
+/** Dry landfall must expose the same physical, road-owned deck as the wet span.
+ * A walkable bank by itself cannot certify that the bridge actually touches it. */
+export function selectedRoadDryLandingDeckWalkable(
+  surface: Pick<ReturnType<typeof finalSurfaceAt>,
+    "surfaceHeight" | "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
+  roadCode: string,
+): boolean {
+  return surface.water.kind === "none" && Number.isFinite(surface.surfaceHeight) &&
+    surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
+    surface.surfaceHeight === surface.deckHeight && surface.walkable &&
+    surface.traversal === "bridge" && surface.deckOwnerIds.includes(roadCode) &&
     surface.contributingModifierIds.includes(roadCode);
 }
 
@@ -238,6 +252,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     matchingCrossing: false,
     wetStations: 0,
     deckStationsWalkable: false,
+    dryLandingStations: 0,
+    dryLandingDeckContact: false,
     bankStationsWalkable: false,
     approachStations: 0,
     approachStationsOnRoad: false,
@@ -266,6 +282,18 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   // as the bank and full-crossing probes, not a potentially false tangent.
   const wet = transportRoadWetStations(edge.centerline, bridge.x, bridge.z, crossing)
     .map(point => finalSurfaceAt(point.x, point.z));
+  // The final-surface compositor only extends a legal deck by the existing
+  // source-derived pier allowance, bounded by the original <=120 m bridge law.
+  // Inspect its physical halfway point on EACH dry bank along the actual road,
+  // rather than accepting a walkable approach merely adjacent to wet deck.
+  const pierMetres = Math.max(0, Math.min(5, (RURAL_BRIDGE_MAX_LENGTH_M - crossing.spanM) / 2)),
+    dryLandingPoints = pierMetres > 0 ? transportRoadArcStations(
+      edge.centerline, bridge.x, bridge.z,
+      crossing.lo * crossing.metresPerUnit - pierMetres / 2,
+      crossing.hi * crossing.metresPerUnit + pierMetres / 2, 1,
+    ) : [],
+    dryLandingDeckContact = dryLandingPoints.length === 2 && dryLandingPoints.every(point =>
+      selectedRoadDryLandingDeckWalkable(finalSurfaceAt(point.x, point.z), edge.code));
   // Fixed 2–18 m bank probes now trace the same SEED-owned road curve
   // as the route samples. Missing road endpoints cannot be extrapolated.
   const bankPoints = transportRoadBankApproaches(edge.centerline, bridge.x, bridge.z, crossing),
@@ -330,6 +358,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     wetStations: wet.length,
     deckStationsWalkable: wet.length === 5 && wet.every(surface =>
       selectedRoadBridgeDeckWalkable(surface, edge.code)),
+    dryLandingStations: dryLandingPoints.length,
+    dryLandingDeckContact,
     bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
@@ -380,7 +410,7 @@ export function sampledBridgeCrossingPass(
   span: ReturnType<typeof transportBridgeSpanAt>,
 ): boolean {
   return centerDeckWalkable && span.matchingCrossing &&
-    span.deckStationsWalkable && span.bankStationsWalkable &&
+    span.deckStationsWalkable && span.dryLandingDeckContact && span.bankStationsWalkable &&
     span.approachStationsWalkable && span.approachGradeWithinLimit &&
     span.routeStationsWalkable && span.routeGradeWithinLimit &&
     span.routeStationsTopLegal && span.approachStationsTopLegal;
