@@ -172,6 +172,18 @@ export function selectedResidentVisibleInView(
     Math.hypot(wrapSourceX(resident.x - view.x), resident.z - view.z) <= view.radius;
 }
 
+/** During a cold camera-only refocus, only the already displayed SAME actor
+ * may continue, and only at their freshly queried Simulation-owned outdoor
+ * position. No time-based expiry, stale coordinates or phantom selection. */
+export function selectedResidentCurrentCarryover(
+  actorCode: string | undefined,
+  current: Pick<Resident, "code" | "x" | "z" | "grounded" | "indoors"> | undefined,
+  view: { x: number; z: number; radius: number } | undefined,
+): boolean {
+  return !!actorCode && current?.code === actorCode &&
+    selectedResidentVisibleInView(current, view);
+}
+
 /** Previously validated stationary NPCs may remain in the next actual
  * viewport after a wider pan. Overlap is geometric, not an arbitrary
  * quarter-radius camera-motion threshold or a new Simulation authority.

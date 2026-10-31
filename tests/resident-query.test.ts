@@ -4,7 +4,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -961,4 +961,23 @@ test("S010 opaque world walls prevent picking an illustrated resident behind the
   assert.equal(residentGpuHitAllows(-15, -20, [], [ownMesh]), false);
   assert.equal(residentGpuHitAllows(NaN, -20, [ownMesh], [ownMesh]), false);
   assert.equal(residentGpuHitAllows(-15, NaN, [ownMesh], [ownMesh]), false);
+});
+
+test("WP #550: selected visible resident retains only current Simulation feet during worker handoff", () => {
+  const view = {x: 10, z: 20, radius: 3};
+  const resident = {code: "SEED/RESIDENT/7", x: 11, z: 21, grounded: true, indoors: false};
+  assert.equal(selectedResidentCurrentCarryover(resident.code, resident, view), true,
+    "same resident at current lawful outdoor position can survive a slow view refocus");
+  assert.equal(selectedResidentCurrentCarryover(resident.code, {...resident, x: 12}, view), true,
+    "live Simulation movement remains valid during the same pending worker query");
+  assert.equal(selectedResidentCurrentCarryover("SEED/RESIDENT/8", resident, view), false,
+    "never replace an inspected person with another actor");
+  assert.equal(selectedResidentCurrentCarryover(resident.code, {...resident, indoors: true}, view), false,
+    "re-entering an actual home removes the outdoor mesh immediately");
+  assert.equal(selectedResidentCurrentCarryover(resident.code, {...resident, grounded: false}, view), false,
+    "unlawful or ungrounded residents cannot be held");
+  assert.equal(selectedResidentCurrentCarryover(resident.code, {...resident, x: 50}, view), false,
+    "moving outside the actual camera query must not keep a phantom");
+  assert.equal(selectedResidentCurrentCarryover(resident.code, undefined, view), false,
+    "missing current Simulation authority cannot be replaced by a cached sprite");
 });
