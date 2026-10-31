@@ -2,6 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
+import { structuralMeshBlocksSegment } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
@@ -903,6 +904,19 @@ test("S009 long blocked-route terminal preflight retains exact every-metre legal
     assert.equal(terminalChecks, 2,
       "after the original central safety probe, a blocked terminal rejects before the corridor scan");
   }
+});
+
+test("S010 exact structural ray refuses a real wall before an illustrated resident", () => {
+  const wall = [-2, -2, 0, 2, -2, 0, 2, 2, 0, -2, 2, 0],
+    triangles = [0, 1, 2, 0, 2, 3];
+  assert.equal(structuralMeshBlocksSegment({x:0,y:0,z:2}, {x:0,y:0,z:-2}, wall, triangles), true,
+    "actual near roof/wall triangles block a ray to the resident behind");
+  assert.equal(structuralMeshBlocksSegment({x:3,y:0,z:2}, {x:3,y:0,z:-2}, wall, triangles), false,
+    "nearby visible resident ray must not be hidden by a different wall");
+  assert.equal(structuralMeshBlocksSegment({x:0,y:0,z:2}, {x:0,y:0,z:1}, wall, triangles), false,
+    "world geometry behind a foreground resident never rejects its selection");
+  assert.equal(structuralMeshBlocksSegment({x:0,y:0,z:-1}, {x:0,y:0,z:2}, wall, triangles), true,
+    "two-sided structural geometry blocks from either side without culling");
 });
 
 test("S010 opaque world walls prevent picking an illustrated resident behind their depth", () => {
