@@ -514,3 +514,30 @@ test('WP #550: Hero/Close access path follows actual composed terrain at each re
   assert.deepEqual(path, buildPropForTest(feature, 8).structures,
     'same SEED, same exact presentation mesh independent of visit/cache order');
 });
+
+test('WP #550: real graded streets and their pavements follow the composed final surface', () => {
+  const centre = {x: -24190.289130830573, z: 28768.45437654417},
+    y = finalSurfaceAt(centre.x, centre.z).surfaceHeight;
+  const road = {...centre, y, kind: 'street', code: 'REAL-S003-GRADED-STREET',
+    yawRad: .4, length: metresToSource(6), footprintWidth: metresToSource(4),
+    pavementWidth: metresToSource(1.8), variant: 0};
+  const close = buildPropForTest(road, 8).structures;
+  assert.ok(close.indices.length > 0, 'graded street must render real pavement and road');
+  finite(close);
+  const actualOffsets = new Set<number>();
+  for (let i = 0; i < close.positions.length; i += 3) {
+    const px = centre.x + close.positions[i], pz = centre.z + close.positions[i + 2],
+      offsetM = close.positions[i + 1] - (finalSurfaceAt(px, pz).surfaceHeight - y);
+    const expected = [-.02, .018, .05, .093].find(v => Math.abs(v - offsetM) < .002);
+    assert.notEqual(expected, undefined,
+      `close street vertex ${i / 3} floats/cuts through composed grade: ${offsetM}m`);
+    actualOffsets.add(expected!);
+  }
+  assert.deepEqual([...actualOffsets].sort((a, b) => a - b), [-.02, .018, .05, .093],
+    'both original road and lower pavement surfaces remain present');
+  assert.deepEqual(close, buildPropForTest(road, 8).structures,
+    'same SEED and location produce the exact same graded road vertices');
+  const overview = buildPropForTest(road, 16).structures;
+  assert.ok(overview.indices.length < close.indices.length,
+    'distant street still uses the existing inexpensive mesh');
+});

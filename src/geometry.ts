@@ -1302,11 +1302,43 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     for (const side of [-1, 1]) { const post = offsetLocal(x, z, yaw, side * 1.2, 0); detail.boxYaw(post.x, 0, post.z, .18, 3, .18, yaw, color(82, 60, 40)); }
     structures.boxYaw(x, 3, z, 3, .25, 3, yaw, color(116, 69, 47));
   } else if (feature.kind === "street") {
-    const roadWidth = Math.max(metresToSource(2.8), width), length = feature.length || depth || 4;
-    // The pavement is part of the street: one stone slab under the road, a little wider on each side and
-    // 43 mm lower (top at .05, road top at .093), so where streets cross the road surface clearly covers the neighbouring pavement.
-    if (feature.pavementWidth) structures.boxYaw(x, y - .02, z, roadWidth + 2 * feature.pavementWidth, .07, length, yaw, PAVEMENT);
-    structures.boxYaw(x, y + .018, z, roadWidth, .075, length, yaw, color(119, 99, 68));
+    const roadWidth = Math.max(metresToSource(2.8), width), length = feature.length || depth || 4,
+      roadTint = color(119, 99, 68);
+    if (!close) {
+      // Overview retains its inexpensive existing road and pavement slabs.
+      if (feature.pavementWidth) structures.boxYaw(x, y - .02, z, roadWidth + 2 * feature.pavementWidth, .07, length, yaw, PAVEMENT);
+      structures.boxYaw(x, y + .018, z, roadWidth, .075, length, yaw, roadTint);
+    } else {
+      // Single-height street slabs floated or burrowed into steep final
+      // terrain. Only the Hero/Close visual mesh follows the canonical grade;
+      // SEED roads, routes, collision, traversal and ownership do not change.
+      const steps = Math.max(1, Math.min(24, Math.ceil(length / metresToSource(2)))),
+        c = Math.cos(yaw), s = Math.sin(yaw);
+      const gradedStrip = (stripWidth: number, bottom: number, top: number, tint: RGB) => {
+        const stations = Array.from({length: steps + 1}, (_, index) => {
+          const sample = (side: number) => {
+            const lx = side * stripWidth / 2, lz = (index / steps - .5) * length,
+              px = lx * c + lz * s, pz = -lx * s + lz * c,
+              elevation = finalSurfaceAt(feature.x + px, feature.z + pz).surfaceHeight - feature.y;
+            return {low: [px, elevation + bottom, pz] as Point,
+              high: [px, elevation + top, pz] as Point};
+          };
+          return {left: sample(-1), right: sample(1)};
+        });
+        for (let i = 0; i < steps; i++) {
+          const a = stations[i], b = stations[i + 1];
+          structures.quad(a.left.high, b.left.high, b.right.high, a.right.high, tint);
+          structures.quad(a.left.low, b.left.low, b.left.high, a.left.high, tint);
+          structures.quad(a.right.high, b.right.high, b.right.low, a.right.low, tint);
+        }
+        const first = stations[0], last = stations[steps];
+        structures.quad(first.left.low, first.left.high, first.right.high, first.right.low, tint);
+        structures.quad(last.right.low, last.right.high, last.left.high, last.left.low, tint);
+      };
+      // Exact old top offsets: pavement 0.050 m, road 0.093 m.
+      if (feature.pavementWidth) gradedStrip(roadWidth + 2 * feature.pavementWidth, -.02, .05, PAVEMENT);
+      gradedStrip(roadWidth, .018, .093, roadTint);
+    }
   } else if (feature.kind === "street-joint") {
     // Flat 12-sided caps at a bend (source units, same tops/colours as the street) so segments meet without wedge gaps.
     const roadWidth = Math.max(metresToSource(2.8), feature.footprintWidth ?? width);
