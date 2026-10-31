@@ -192,7 +192,10 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "eval:window.advisorWorld.setHalfHeight(8);settle;" + POINT_INSPECTION +
         "eval:window.composed.walkable===false||Promise.reject(new Error('Original cliff must remain blocked'));"
-        "click:#relief-view;settle;shot:blocked-cliff-relief-context"
+        "click:#relief-view;settle;shot:blocked-cliff-relief-context;"
+        # Preserve the original first-hit blocked point and inspect the same
+        # real terrain at the game's actual Hero height, not just an 8m overview.
+        "eval:window.advisorWorld.setHalfHeight(0.421875);settle;shot:blocked-cliff-hero-close"
     ),
     "s003-hero-close-slope-context": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
