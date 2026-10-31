@@ -947,6 +947,8 @@ export type View = {
   aspect: number;
   yaw: number;
   pixels: number;
+  /** Optional explicit, presentation-only low-angle terrain inspection. */
+  elevationAngle?: number;
 };
 /** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
 /** Local presentation angle is a player-view state, not a function of zoom.
@@ -961,7 +963,7 @@ export function cameraElevationForHalfHeight(_halfHeight: number) {
 }
 export function viewBounds(view: View) {
   const hw = view.halfHeight * view.aspect,
-    hz = view.halfHeight / Math.sin(cameraElevationForHalfHeight(view.halfHeight));
+    hz = view.halfHeight / Math.sin(view.elevationAngle ?? cameraElevationForHalfHeight(view.halfHeight));
   const c = Math.abs(Math.cos(view.yaw)),
     s = Math.abs(Math.sin(view.yaw));
   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
