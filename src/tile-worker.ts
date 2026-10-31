@@ -23,11 +23,12 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       if (!place) throw new Error("Unknown resident settlement");
       // Exact same immutable settlement candidate prefilter used by
       // LazySimulation.focusedResidents. A wilderness view with ZERO matching
-      // SEED settlements cannot return ordinary residents, and must not cold
+      // SEED settlements in the original focused country cannot return residents, and must not cold
       // initialize the entire 22,800-person Simulation/routine index merely
       // to return the empty list. No camera/SEED/actor facts are substituted.
       const phases = { candidateLookupMs: 0, foundationMs: 0, doorMs: 0, scheduleMs: 0, overnightRiskMs: 0, overnightStopsMs: 0, overnightRoutesMs: 0, groundingMs: 0, evaluated: 0 };
-      if (nearbyPlaces(job.x, job.z, job.radius).length === 0) {
+      if (!nearbyPlaces(job.x, job.z).some(candidate =>
+        candidate.continent === place.continent && candidate.country === place.country)) {
         const completedAt = performance.now();
         self.postMessage({ kind: "residents", id: job.id, shard: job.shard?.index,
           residents: [], query: { settlements: 0, candidateResidents: 0, evaluatedResidents: 0, returnedResidents: 0 },
