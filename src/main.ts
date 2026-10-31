@@ -9,7 +9,6 @@ import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./s
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "./readiness-presentation.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
-import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
 import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
@@ -1298,20 +1297,22 @@ function openGameInfoAt(x: number, z: number) {
   return false;
 }
 function inspectCell(screenX: number, screenY: number) {
-  const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
-  const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
+  const lens = camera.camera!;
+  // Only visible world geometry inside this exact camera's current clip
+  // range is eligible for inspection. An uncapped 600 km march unnecessarily
+  // rechecked thousands of authoritative slope probes over unseen terrain.
+  const maxRayDistance = Math.min(600000, lens.farClip);
+  const origin = lens.screenToWorld(screenX, screenY, 0);
+  const far = lens.screenToWorld(screenX, screenY, maxRayDistance);
   const direction = far.clone().sub(origin).normalize();
   let before = 0,
     hit = -1;
-  // March using only canonical physical render-height channels; full slope and
-  // collision validation is needed once, at the selected point below.
-  // Repeating five authoritative grade probes at every ray step stalled
-  // close-up cliff inspection without changing the hit elevation.
+  // March to the first surface crossing, then solve the coordinate height field.
   const marchStep = Math.max(8, view.halfHeight / 40);
-  for (let distance = 0; distance <= 600000; distance += marchStep) {
+  for (let distance = 0; distance <= maxRayDistance; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceRenderChannelsAt(source.x, source.z)))) {
+    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
       hit = distance;
       break;
     }
@@ -1322,7 +1323,7 @@ function inspectCell(screenX: number, screenY: number) {
     const middle = (before + hit) / 2,
       point = origin.clone().add(direction.clone().mulScalar(middle)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceRenderChannelsAt(source.x, source.z)))) before = middle;
+    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
