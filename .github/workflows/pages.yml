@@ -57,13 +57,13 @@ jobs:
           # S006's original 4/4 WebGL2/WebGPU real resident capture uses a
           # headed Chromium compositor; headless #550 clicks timed out despite
           # a CPU-visible resident. Reuse that proven *real* GUI/GPU path.
-          # The original settled S003 slope captured no fresh pixels because
-          # headed X11/Mesa stalled. Use the existing headless WebGL2 browser
-          # path for this terrain-only scene; all real screenshot checks remain.
+          # Recheck the exact previously failed S003 cliff on the deployed
+          # continuous-rock shader. The original inspector must match final
+          # walkability AND traversal before a real WebGL2 PNG is accepted.
           xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 14m bash -c '
             failed=0
             for profile in fullhd-portrait fullhd-landscape; do
-              python tools/screenshot_tool.py http://127.0.0.1:4174/ --initial-ready-only --out "test-results/wp550-webgl2/s003-hero-close-slope-context" --scenario s003-hero-close-slope-context --profile "$profile" --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --initial-ready-only --out "test-results/wp550-webgl2/s003-hero-close-cliff-context" --scenario s003-hero-close-cliff-context --profile "$profile" --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
             done
             exit "$failed"
           '

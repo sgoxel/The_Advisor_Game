@@ -70,7 +70,7 @@ POINT_INSPECTION = (
     "eval:window.composed=window.advisorWorld.surface.finalAtSource(window.picked.x,window.picked.z);"
     "eval:window.visibleElevation=window.composed.deckHeight??(window.composed.water.kind==='none'?window.composed.groundHeight:window.composed.water.level);"
     "eval:Math.abs(parseFloat(document.getElementById('cell-height').textContent)-window.visibleElevation)<0.065||Promise.reject(new Error('Point elevation differs from visible final surface'));"
-    "eval:document.getElementById('cell-walkable').textContent===(window.composed.walkable?'Yes':'No')||Promise.reject(new Error('Point walkability differs from final surface'));"
+    "eval:document.getElementById('cell-walkable').textContent===((window.composed.walkable?'Yes':'No')+' · '+({bridge:'bridge deck',road:'graded road',difficult:'difficult ground',open:'open ground',blocked:'blocked'}[window.composed.traversal]))||Promise.reject(new Error('Point walkability or traversal differs from final surface'));"
     "eval:document.getElementById('cell-biome').textContent===window.composed.material||Promise.reject(new Error('Point material differs from final surface'));"
 )
 
