@@ -8,6 +8,7 @@ export function residentGpuHitAllows(
   actorMeshes: readonly object[], renderedSelection: readonly object[],
   exactPixelSelection: readonly object[] = [],
   worldWithoutResidentsDepth: number | null = null,
+  opaqueWorldAtPixel = false,
 ): boolean {
   if (!Number.isFinite(actorViewDepth) || actorViewDepth >= 0 ||
       !actorMeshes.length || !renderedSelection.some(mesh => actorMeshes.includes(mesh)))
@@ -19,6 +20,10 @@ export function residentGpuHitAllows(
       (!Number.isFinite(worldWithoutResidentsDepth) ||
        worldWithoutResidentsDepth >= 0 ||
        worldWithoutResidentsDepth > actorViewDepth + 0.035)) return false;
+  // The world-only ID is real geometry from the same GPU pass. A roof or
+  // wall ID with no readable depth is unknown occlusion, not empty sky.
+  // Do not apply this conservative fallback to background terrain.
+  if (worldWithoutResidentsDepth === null && opaqueWorldAtPixel) return false;
   // A missing depth sample is not proof of empty sky. The original real
   // WebGL2 wall click reproduced a null-depth hole even while an opaque wall
   // had an ID at that exact pixel. Accept sky padding only when there is
