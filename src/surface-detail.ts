@@ -272,7 +272,11 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   vec3 sdL = normalize(sdSunDir);
   vec3 sdNb = normalize(sdN - sdGrad);
   float sdDay = smoothstep(-0.05, 0.25, sdL.y);
-  sdShade = clamp(1.0 + 1.3 * (dot(sdNb, sdL) - dot(sdN, sdL)) * sdDay, 0.55, 1.45);
+  // Physical slope faces catch daylight before micro-bump shading. A flat
+  // patch has dot(sdN, sdL) == sdL.y, so existing level roads and fields
+  // keep their original colour. No height exaggeration or collision offset.
+  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+    1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
   float sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);
@@ -492,7 +496,8 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdL = normalize(uniform.sdSunDir);
   let sdNb = normalize(sdN - sdGrad);
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
-  sdShade = clamp(1.0 + 1.3 * (dot(sdNb, sdL) - dot(sdN, sdL)) * sdDay, 0.55, 1.45);
+  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+    1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);
   let sdSnow = step(5.5, sdKind) * step(sdKind, 6.5);
