@@ -9,6 +9,7 @@ import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./s
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "./readiness-presentation.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
+import { finalSurfaceRenderChannelsAt } from "./world-core.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
 import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
@@ -1302,12 +1303,12 @@ function inspectCell(screenX: number, screenY: number) {
   const direction = far.clone().sub(origin).normalize();
   let before = 0,
     hit = -1;
-  // March to the first surface crossing, then solve the coordinate height field.
+  // March using only canonical physical render-height channels; full slope and\n  // collision validation is needed once, at the selected point below.\n  // Repeating five authoritative grade probes at every ray step stalled\n  // close-up cliff inspection without changing the hit elevation.
   const marchStep = Math.max(8, view.halfHeight / 40);
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
+    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceRenderChannelsAt(source.x, source.z)))) {
       hit = distance;
       break;
     }
@@ -1318,7 +1319,7 @@ function inspectCell(screenX: number, screenY: number) {
     const middle = (before + hit) / 2,
       point = origin.clone().add(direction.clone().mulScalar(middle)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) before = middle;
+    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceRenderChannelsAt(source.x, source.z)))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
