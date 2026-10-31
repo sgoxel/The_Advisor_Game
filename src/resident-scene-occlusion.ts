@@ -3,6 +3,14 @@
  * single-touch geometry intersection, never Simulation movement/collision. */
 export type Point3 = Readonly<{ x: number; y: number; z: number }>;
 
+/** Negative camera depths: the grounded feet can be farther from the eye
+ * than the projected painted tap. Structural occlusion must test the full
+ * physically occupied resident depth, not stop in transparent sprite padding.
+ * Render-only; this never moves the resident or changes Simulation truth. */
+export function residentOcclusionReachDepth(paintedTapDepth: number, groundedFootDepth: number): number {
+  return Math.min(paintedTapDepth, groundedFootDepth);
+}
+
 export function structuralMeshBlocksSegment(
   start: Point3, end: Point3,
   positions: readonly number[], indices: readonly number[],
