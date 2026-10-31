@@ -1460,9 +1460,19 @@ function setupControls() {
         // A resident behind an opaque 3D wall is not actually selectable,
         // even when its projected 44px touch target overlaps that wall.
         void verifyResidentAtTap(resident, x, y).then(visible => {
+          if (new URLSearchParams(location.search).has("resident-route-probes"))
+            (window as Window & { __wp353PickResult?: unknown }).__wp353PickResult = {
+              visible, generation, currentGeneration: residentPickGeneration,
+              popupBefore: npcPopupCode(), popupHiddenBefore: document.getElementById("npc-popup")?.hidden,
+            };
           if (generation !== residentPickGeneration) return;
           if (visible) showNpcPopup(resident, simulation.tick);
           else { hideNpcPopup(); inspectCell(x - canvas.getBoundingClientRect().left, y - canvas.getBoundingClientRect().top); }
+          if (new URLSearchParams(location.search).has("resident-route-probes"))
+            (window as Window & { __wp353PickResult?: unknown }).__wp353PickResult = {
+              visible, generation, currentGeneration: residentPickGeneration,
+              popupAfter: npcPopupCode(), popupHiddenAfter: document.getElementById("npc-popup")?.hidden,
+            };
         });
       } else { hideNpcPopup(); inspectCell(event.clientX - canvas.getBoundingClientRect().left, event.clientY - canvas.getBoundingClientRect().top); }
     }
@@ -2116,6 +2126,11 @@ async function start() {
     // depth as well; on a genuinely visible head pixel no roof is in the ray.
     const feetDepth = lens.viewMatrix.transformPoint(feet, eyePoint).z;
     const occlusionReachDepth = residentOcclusionReachDepth(actorDepth, feetDepth);
+    // Exact structural obstruction is synchronous and authoritative: a queued
+    // asynchronous GPU readback must never defer rejecting an opaque wall tap.
+    // This only checks the real triangles on an actual user selection.
+    if (solidWorldBlocksTap(clientX - rect.left, clientY - rect.top, occlusionReachDepth, lens))
+      return Promise.resolve(false);
     const scenePose = () =>
       `${view.x}/${view.z}/${view.halfHeight}/${view.yaw}/${projectionTransition}/${bridgeInspectionAngle}`;
     const poseAtTap = scenePose(), modelHeight = feet.distance(headWorld);
@@ -2125,11 +2140,8 @@ async function start() {
           actor.getPosition().distance(feet) > modelHeight * .5 ||
           lens !== camera.camera) return false;
       try {
-        // The normal scene renders its actual triangle geometry with depth
-        // testing. Use it directly for exact structural occlusion before any
-        // potentially missing GPU picker samples. This is not an actor hitbox.
-        if (solidWorldBlocksTap(clientX - rect.left, clientY - rect.top, occlusionReachDepth, lens))
-          return false;
+        // The synchronous real-structure occlusion gate already ran on the
+        // original tap; only surviving candidates need asynchronous GPU work.
         // Half-resolution ID/depth targets stay bounded and are created only
         // on a real user interaction, not during rendering or worker streaming.
         const width = Math.max(1, Math.floor(rect.width * .5)),
