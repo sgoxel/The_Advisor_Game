@@ -118,6 +118,12 @@ jobs:
             if [ "${SCENE}" = site ]; then
               STEPS="$STEPS;click:#rotate;click:#rotate;settle;shot:real-site-arrival-hero-turned-90;click:#rotate;click:#rotate;settle;shot:real-site-arrival-hero-turned-180"
             fi
+            # Original selected SEED resident stays at the SAME Fantasy tick.
+            # Frame the actual dry-bank/deck join, not only a 1m feet crop or
+            # a top-down view whose bridge approaches are too small to inspect.
+            if [ "${SCENE}" = outboundbank ] || [ "${SCENE}" = returnbank ]; then
+              STEPS="$STEPS;eval:window.advisorWorld.setHalfHeight(4);settle;shot:${CAPTURE_CAPTION}-landfall-3quarter"
+            fi
             if [ "${SCENE}" = home ] && [ "${CAPTURE_REFUSAL}" = false ]; then
               STEPS="$STEPS;click:#npc-popup [data-go^='home:'];settle;shot:home-door-arrival-actual-front-wall"
             fi
