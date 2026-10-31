@@ -565,6 +565,25 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
     "one fictitious later event makes the entire saved ledger refuse atomically");
   assert.strictEqual(advised.preparedSiteVisitFor(chosenCode), originalEvent,
     "failed import preserves the previously accepted original resident object");
+  // An actual accepted actor may outlive a slow routine-worker snapshot. The
+  // source traveller at present Fantasy Time, not that older query tick,
+  // must own the rendered road position and ongoing metre-paced walk.
+  assert.equal(advised.acceptedSiteVisitCount, 1);
+  const oldRoutine = residentAt(place!, Number(chosenCode.split("/").at(-1)), decidedTick),
+    liveTick = decidedTick + 3 * TIME_SCALE;
+  advised.advance(liveTick);
+  const liveTraveller = advised.projectedResidentByCode(chosenCode);
+  assert.ok(liveTraveller);
+  const camera = { x: liveTraveller!.x, z: liveTraveller!.z, radius: 32, limit: 8 },
+    projected = advised.projectResidentView([oldRoutine], liveTick, camera),
+    oldProjection = advised.projectResidentView([oldRoutine], decidedTick, camera);
+  assert.equal(projected.length, 1);
+  assert.equal(projected[0].code, chosenCode);
+  assert.ok(Math.hypot(projected[0].x - liveTraveller!.x, projected[0].z - liveTraveller!.z) < 1e-8,
+    "slow worker cannot pin the real traveller to an old road station");
+  assert.ok(oldProjection.length === 1 &&
+    Math.hypot(oldProjection[0].x - liveTraveller!.x, oldProjection[0].z - liveTraveller!.z) > 1e-8,
+    "the old snapshot's Fantasy Time would display a stale foot position");
   const destinationTick = decidedTick + 30*86400;
   selected!.advance(destinationTick);
   const arrived = selected!.projectedResidentByCode(chosenCode);

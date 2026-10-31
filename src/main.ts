@@ -2388,11 +2388,15 @@ async function start() {
       const snapshot = recentSnapshot ?? (original && stationaryResidents.length
         ? { ...original, residents: stationaryResidents, tick: simulation.tick, partial: true }
         : undefined);
-      // The terrain worker returns immutable routine facts. Reconcile any
-      // independently accepted visit here with the main Simulation event
-      // before selection, inspector or pooled sprite allocation. No copies.
+      // A resident's accepted journey belongs to main Simulation Fantasy Time,
+      // NOT the last routine-worker query timestamp. A slow worker may return a
+      // snapshot from earlier in the walk: project the same original actor at
+      // current authoritative tick instead of drawing stale road/door positions.
+      // Ordinary routine residents keep their unchanged worker-owned snapshot.
+      const acceptedSiteVisits = simulation.acceptedSiteVisitCount > 0;
       const projectedResidents = snapshot
-        ? simulation.projectResidentView(snapshot.residents, snapshot.tick, snapshot)
+        ? simulation.projectResidentView(snapshot.residents,
+            acceptedSiteVisits ? simulation.tick : snapshot.tick, snapshot)
         : [];
       const inspectedCode = npcPopupCode();
       const existingSelected = inspectedCode
@@ -2403,7 +2407,7 @@ async function start() {
       // simply because its old finite result is no longer the desired key.
       // Never retain stale time/remote scenery; no actor is invented.
       const snapshotRevision = snapshot
-        ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}` : "";
+        ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}/${acceptedSiteVisits ? simulation.tick : ""}` : "";
       const selectedFromSnapshot = inspectedCode && snapshot
         ? projectedResidents.find(resident => resident.code === inspectedCode) : undefined;
       const authoritativeSelected = inspectedCode && snapshot &&
@@ -2507,7 +2511,13 @@ async function start() {
             // source lengths overstate east-west travel at high latitude: keep
             // canonical physical segment lengths, with seam-safe display points.
             const { points, lengths, total } = residentWalkingPolyline(walk);
-            actorMotion.set(actors[i], { points, lengths, total, startTick: snapshot?.tick ?? simulation.tick });
+            // The accepted traveller's walkAhead starts at this main
+            // Simulation tick. Routine worker routes still start at their
+            // original snapshot tick; neither may gain extra path distance.
+            const startTick = acceptedSiteVisits &&
+              simulation.preparedSiteVisitFor(visible[i].code)
+              ? simulation.tick : snapshot?.tick ?? simulation.tick;
+            actorMotion.set(actors[i], { points, lengths, total, startTick });
           } else actorMotion.delete(actors[i]);
           positionActor(actors[i], visible[i].x, visible[i].z);
         }
