@@ -1,10 +1,10 @@
 import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, lonLatToSource } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -44,6 +44,23 @@ test("S009 field route preflight skips only an actually illegal directed field c
         ...(useTo && (!useFrom || fromLegal) ? ["in"] : []),
       ], "a failed first connector prevents unnecessary second validation");
     }
+});
+
+test("WP #550 visible resident walking respects canonical metres at high latitude and seam", () => {
+  const lat = Math.PI / 3;
+  const a = lonLatToSource(0, lat), b = lonLatToSource(.001, lat),
+    c = lonLatToSource(.001, lat - .001);
+  const physical = residentWalkingPolyline([a, b, c]);
+  assert.equal(physical.lengths.length, 3);
+  assert.ok(Math.abs(physical.lengths[1] / (physical.total - physical.lengths[1]) - .5) < .02,
+    "east-west source pixels cannot be used as physical walk metres at 60 degrees latitude");
+  const seam = residentWalkingPolyline([
+    lonLatToSource(Math.PI - .0001, 0), lonLatToSource(-Math.PI + .0001, 0),
+  ]);
+  assert.ok(Math.abs(seam.points[1].x - seam.points[0].x) < 20,
+    "the visible SEED resident crosses the longitude seam without teleporting");
+  assert.ok(seam.total > 0 && seam.total < 300,
+    "the original physical route stays short across the canonical wrap");
 });
 
 test("S009 resident cold index builds only the shard while retaining all original SEED candidates and order", () => {
