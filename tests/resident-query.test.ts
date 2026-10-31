@@ -2,7 +2,7 @@ import test from "node:test";
 import { residentFootRingGeometry } from "../src/resident-foot-ring.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
-import { structuralMeshBlocksSegment } from "../src/resident-scene-occlusion.ts";
+import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
@@ -917,6 +917,13 @@ test("S010 exact structural ray refuses a real wall before an illustrated reside
     "world geometry behind a foreground resident never rejects its selection");
   assert.equal(structuralMeshBlocksSegment({x:0,y:0,z:-1}, {x:0,y:0,z:2}, wall, triangles), true,
     "two-sided structural geometry blocks from either side without culling");
+});
+
+test("S010 structural occlusion reaches grounded feet beyond an estimated painted tap depth", () => {
+  assert.equal(residentOcclusionReachDepth(-15, -23), -23,
+    "a transparent lower cutout cannot truncate the roof ray before real feet");
+  assert.equal(residentOcclusionReachDepth(-23, -15), -23,
+    "a closer grounded foot must not shorten a legitimate painted tap ray");
 });
 
 test("S010 opaque world walls prevent picking an illustrated resident behind their depth", () => {
