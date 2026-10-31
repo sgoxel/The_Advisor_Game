@@ -86,6 +86,12 @@ float sdNoise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(sdHash(i), sdHash(i + vec2(1.0, 0.0)), u.x), mix(sdHash(i + vec2(0.0, 1.0)), sdHash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
+// 3D world-metre rock noise: no per-triangle tangent/UV seam on steep faces.
+float sdNoise3(vec3 p) {
+  float z = floor(p.z); float f = fract(p.z); float t = f * f * (3.0 - 2.0 * f);
+  vec2 offset = vec2(17.31, 29.77);
+  return mix(sdNoise(p.xy + offset * z), sdNoise(p.xy + offset * (z + 1.0)), t);
+}
 vec2 sdCells(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); float d1 = 8.0; float d2 = 8.0; float id = 0.0;
   for (int y = -1; y <= 1; y++) {
@@ -100,6 +106,14 @@ vec2 sdCells(vec2 p) {
 }
 float sdVis(float size, float fp) { return smoothstep(1.5, 4.0, size / fp); }
 float sdGroove(float edge, float width, float fp) { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
+vec4 sdRock3D(vec3 p, float fp) {
+  float broad = sdNoise3(p * 0.28), grain = sdNoise3(p * 1.7);
+  float vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
+  float visible = sdVis(2.5, fp);
+  float tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
+  return vec4(vec3((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
+    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+}
 vec4 sdBlocks(vec2 uv, vec2 size, float joint, float fp, float toneAmp) {
   vec2 b = uv / size; float row = floor(b.y); b.x += 0.5 * (row - 2.0 * floor(row * 0.5));
   vec2 cell = floor(b); vec2 f = fract(b); vec2 e = min(f, 1.0 - f) * size;
@@ -249,18 +263,18 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   ${mode === "terrain" ? "if (sdN.y < 0.0) { sdN = -sdN; }" : ""}
   float sdNy = abs(sdN.y);
   vec2 sdT = vec2(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
-  // Horizontal texture coordinates stretched metres of rock cells into
-  // vertical columns on the original S003 cliff. Keep flat ground unchanged;
-  // smoothly project the SAME metre-scale detail onto tangent/height as the
-  // physical terrain face steepens. Render-only: no vertex/SEED change.
+  // Terrain keeps stable XZ texture for nonrock ground; rock alone receives
+  // world-metre 3D noise, so neighboring cliff triangles cannot rotate its UV.
   vec2 sdWallUv = vec2(dot(sdP.xz, sdT), sdNy > 0.2 ? sdP.y / max(length(sdN.xz), 0.2) : sdP.y);
-  vec2 sdUv = ${mode === "terrain"
-    ? "mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"
-    : "sdNy > 0.975 ? sdP.xz : sdWallUv"};
+  vec2 sdUv = ${mode === "terrain" ? "sdP.xz" : "sdNy > 0.975 ? sdP.xz : sdWallUv"};
   vec3 sdC = pow(max(vVertexColor.rgb, vec3(0.0)), vec3(1.0 / 2.2));
   float sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
   vec4 sdPat = vec4(1.0, 1.0, 1.0, 0.0);
-  if (sdFp < 0.45 && sdKind > 0.5 && sdStrength > 0.0) { sdPat = sdPattern(sdKind, sdUv, sdFp); }
+  if (sdFp < 0.45 && sdKind > 0.5 && sdStrength > 0.0) {
+    ${mode === "terrain"
+      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
+      : "sdPat = sdPattern(sdKind, sdUv, sdFp);"}
+  }
   float sdFade = (1.0 - smoothstep(0.2, 0.45, sdFp)) * sdStrength;
   sdMul = mix(vec3(1.0), sdPat.rgb, sdFade);
   float sdH = sdPat.a * sdFade;
@@ -317,6 +331,12 @@ fn sdNoise(p: vec2f) -> f32 {
   let i = floor(p); let f = fract(p); let u = f * f * (3.0 - 2.0 * f);
   return mix(mix(sdHash(i), sdHash(i + vec2f(1.0, 0.0)), u.x), mix(sdHash(i + vec2f(0.0, 1.0)), sdHash(i + vec2f(1.0, 1.0)), u.x), u.y);
 }
+// Same continuous 3D metre-space noise as GLSL.
+fn sdNoise3(p: vec3f) -> f32 {
+  let z = floor(p.z); let f = fract(p.z); let t = f * f * (3.0 - 2.0 * f);
+  let offset = vec2f(17.31, 29.77);
+  return mix(sdNoise(p.xy + offset * z), sdNoise(p.xy + offset * (z + 1.0)), t);
+}
 fn sdCells(p: vec2f) -> vec2f {
   let i = floor(p); let f = fract(p); var d1 = 8.0; var d2 = 8.0; var id = 0.0;
   for (var y: i32 = -1; y <= 1; y++) {
@@ -331,6 +351,14 @@ fn sdCells(p: vec2f) -> vec2f {
 }
 fn sdVis(size: f32, fp: f32) -> f32 { return smoothstep(1.5, 4.0, size / fp); }
 fn sdGroove(edge: f32, width: f32, fp: f32) -> f32 { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
+fn sdRock3D(p: vec3f, fp: f32) -> vec4f {
+  let broad = sdNoise3(p * 0.28); let grain = sdNoise3(p * 1.7);
+  let vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
+  let visible = sdVis(2.5, fp);
+  let tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
+  return vec4f(vec3f((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
+    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+}
 fn sdBlocks(uv: vec2f, size: vec2f, joint: f32, fp: f32, toneAmp: f32) -> vec4f {
   var b = uv / size; let row = floor(b.y); b.x = b.x + 0.5 * (row - 2.0 * floor(row * 0.5));
   let cell = floor(b); let f = fract(b); let e = min(f, 1.0 - f) * size;
@@ -481,17 +509,18 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdNy = abs(sdN.y);
   var sdT = vec2f(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
   let sdWallV = select(sdP.y, sdP.y / max(length(sdN.xz), 0.2), sdNy > 0.2);
-  // Match GLSL: steep canonical faces use tangent/vertical metres, not a
-  // stretched horizontal rock-cell UV. Smooth interpolation avoids a normal
-  // threshold seam without changing physical terrain or actor contacts.
+  // Physical rock pattern uses continuous 3D position; other terrain retains
+  // stable XZ mapping, buildings/props retain their previous wall projection.
   let sdWallUv = vec2f(dot(sdP.xz, sdT), sdWallV);
-  let sdUv = ${mode === "terrain"
-    ? "mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"
-    : "select(sdWallUv, sdP.xz, sdNy > 0.975)"};
+  let sdUv = ${mode === "terrain" ? "sdP.xz" : "select(sdWallUv, sdP.xz, sdNy > 0.975)"};
   let sdC = pow(max(vVertexColor.rgb, vec3f(0.0)), vec3f(1.0 / 2.2));
   let sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
   var sdPat = vec4f(1.0, 1.0, 1.0, 0.0);
-  if (sdFp < 0.45 && sdKind > 0.5 && uniform.sdStrength > 0.0) { sdPat = sdPattern(sdKind, sdUv, sdFp); }
+  if (sdFp < 0.45 && sdKind > 0.5 && uniform.sdStrength > 0.0) {
+    ${mode === "terrain"
+      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
+      : "sdPat = sdPattern(sdKind, sdUv, sdFp);"}
+  }
   let sdFade = (1.0 - smoothstep(0.2, 0.45, sdFp)) * uniform.sdStrength;
   sdMul = mix(vec3f(1.0), sdPat.rgb, sdFade);
   let sdH = sdPat.a * sdFade;
