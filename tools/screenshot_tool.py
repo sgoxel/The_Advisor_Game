@@ -171,14 +171,16 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
         "eval:(window.composed.walkable&&window.composed.traversal==='difficult')||Promise.reject(new Error('Canonical steep slope must remain difficult and walkable'));"
-        "click:#relief-view;settle;shot:legal-steep-relief"
+        "click:#relief-view;settle;shot:legal-steep-relief;"
+        "eval:window.advisorWorld.setHalfHeight(8);settle;shot:legal-steep-relief-context"
     ),
     "s003-hero-close-cliff": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
         "eval:window.composed.walkable===false||Promise.reject(new Error('Canonical cliff must be blocked'));"
-        "click:#relief-view;settle;shot:blocked-cliff-relief"
+        "click:#relief-view;settle;shot:blocked-cliff-relief;"
+        "eval:window.advisorWorld.setHalfHeight(8);settle;shot:blocked-cliff-relief-context"
     ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
