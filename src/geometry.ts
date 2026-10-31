@@ -1340,10 +1340,31 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
       gradedStrip(roadWidth, .018, .093, roadTint);
     }
   } else if (feature.kind === "street-joint") {
-    // Flat 12-sided caps at a bend (source units, same tops/colours as the street) so segments meet without wedge gaps.
     const roadWidth = Math.max(metresToSource(2.8), feature.footprintWidth ?? width);
-    if (feature.pavementWidth) disc(frameOf(structures, yaw), 0, .05, 0, roadWidth / 2 + feature.pavementWidth, 12, PAVEMENT);
-    disc(frameOf(structures, yaw), 0, .093, 0, roadWidth / 2, 12, color(119, 99, 68));
+    const roadTint = color(119, 99, 68);
+    if (!close) {
+      // Preserve the original inexpensive overview caps.
+      if (feature.pavementWidth) disc(frameOf(structures, yaw), 0, .05, 0, roadWidth / 2 + feature.pavementWidth, 12, PAVEMENT);
+      disc(frameOf(structures, yaw), 0, .093, 0, roadWidth / 2, 12, roadTint);
+    } else {
+      // A flat junction disc could hover above or cut into graded road strips.
+      // Reuse the same canonical final surface as their shared road edges,
+      // without altering any SEED intersection or Simulation route.
+      const c = Math.cos(yaw), s = Math.sin(yaw), sectors = 12;
+      const gradedCap = (radius: number, offset: number, tint: RGB) => {
+        const at = (px: number, pz: number): Point =>
+          [px, finalSurfaceAt(feature.x + px, feature.z + pz).surfaceHeight - feature.y + offset, pz];
+        const centre = at(0, 0);
+        const rim = Array.from({length: sectors}, (_, i) => {
+          const angle = i * Math.PI * 2 / sectors, lx = Math.cos(angle) * radius, lz = Math.sin(angle) * radius;
+          return at(lx * c + lz * s, -lx * s + lz * c);
+        });
+        for (let i = 0; i < sectors; i++)
+          structures.triangle(centre, rim[(i + 1) % sectors], rim[i], tint);
+      };
+      if (feature.pavementWidth) gradedCap(roadWidth / 2 + feature.pavementWidth, .05, PAVEMENT);
+      gradedCap(roadWidth / 2, .093, roadTint);
+    }
   } else if (feature.kind === "service") {
     addServiceGeometry(structures, detail, feature.service, x, y, z, width, depth, yaw, close);
     if (close && feature.service === "market") addBazaar(frameOf(closeDetail, yaw), width, depth, variant);

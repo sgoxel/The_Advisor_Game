@@ -541,3 +541,31 @@ test('WP #550: real graded streets and their pavements follow the composed final
   assert.ok(overview.indices.length < close.indices.length,
     'distant street still uses the existing inexpensive mesh');
 });
+
+test('WP #550: Hero/Close street junction caps share the canonical road and pavement grade', () => {
+  const centre = {x: -24190.289130830573, z: 28768.45437654417},
+    y = finalSurfaceAt(centre.x, centre.z).surfaceHeight,
+    joint = {...centre, y, kind: 'street-joint', code: 'REAL-S003-GRADED-JUNCTION',
+      yawRad: .4, footprintWidth: metresToSource(4),
+      pavementWidth: metresToSource(1.8), variant: 0};
+  const close = buildPropForTest(joint, 8).structures;
+  assert.ok(close.indices.length > 0, 'junction preserves both visible road and lower pavement');
+  finite(close);
+  const offsets = new Set<number>();
+  for (let i = 0; i < close.positions.length; i += 3) {
+    const px = centre.x + close.positions[i], pz = centre.z + close.positions[i + 2],
+      offset = close.positions[i + 1] - (finalSurfaceAt(px, pz).surfaceHeight - y);
+    const expected = [.05, .093].find(v => Math.abs(v - offset) < .002);
+    assert.notEqual(expected, undefined,
+      `junction vertex ${i / 3} is detached from the actual composed grade: ${offset}m`);
+    offsets.add(expected!);
+  }
+  assert.deepEqual([...offsets].sort((a,b) => a-b), [.05, .093],
+    'road cap and pavement cap retain their original vertical separation');
+  for (let i=1; i<close.normals.length; i+=3)
+    assert.ok(close.normals[i] > 0, 'all graded cap triangles face outward and upward');
+  assert.deepEqual(close, buildPropForTest(joint, 8).structures,
+    'identical SEED and geometry produce identical junction elevations');
+  assert.ok(buildPropForTest(joint, 16).structures.indices.length > 0,
+    'overview retains the old inexpensive bend cap');
+});
