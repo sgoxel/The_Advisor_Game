@@ -160,21 +160,22 @@ SCENARIOS: dict[str, str] = {
         "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__wp550SelectedCode&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
         "until:window.advisorWorld.state.settled;"
         "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
-        "shot:selected-foot-surface"
+        "shot:selected-foot-surface;"
+        "click:#npc-popup [data-go^=home];settle;shot:owned-home-front-relief"
     ),
     "s003-hero-close-slope": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
         "eval:(window.composed.walkable&&window.composed.traversal==='difficult')||Promise.reject(new Error('Canonical steep slope must remain difficult and walkable'));"
-        "shot:legal-steep-close"
+        "click:#relief-view;settle;shot:legal-steep-relief"
     ),
     "s003-hero-close-cliff": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
         "eval:window.composed.walkable===false||Promise.reject(new Error('Canonical cliff must be blocked'));"
-        "shot:blocked-cliff-close"
+        "click:#relief-view;settle;shot:blocked-cliff-relief"
     ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
