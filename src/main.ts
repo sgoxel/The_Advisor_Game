@@ -1528,7 +1528,7 @@ function setupControls() {
     // Keep the exact inspected door labelled when the portrait character
     // inspector closes to reveal its actual front-wall geometry.
     focusedOwnedDoorPin = facing === undefined ? undefined : {
-      x: view.x, z: view.z,
+      x: view.x, z: view.z, yaw: view.yaw,
       y: finalSurfaceAt(view.x, view.z).surfaceHeight + 0.12,
       homeEntrance: document.getElementById("npc-home-entrance")?.textContent?.trim() ?? "",
     };
@@ -2605,7 +2605,8 @@ async function start() {
     // Keep one screen-space marker attached to the actual enabled 3D-world actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
-    const pinnedDoor = ownedDoorPinAtFocus(focusedOwnedDoorPin, view.x, view.z, inspectedCode);
+    const pinnedDoor = ownedDoorPinAtFocus(focusedOwnedDoorPin, view.x, view.z,
+      inspectedCode, view.yaw, bridgeInspectionAngle);
     if (focusedOwnedDoorPin && !pinnedDoor) focusedOwnedDoorPin = undefined;
     // A cached door belongs only to its original selected SEED resident.
     // Switching inspectors while the new actor is offscreen must never expose
