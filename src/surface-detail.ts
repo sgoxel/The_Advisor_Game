@@ -108,11 +108,12 @@ float sdVis(float size, float fp) { return smoothstep(1.5, 4.0, size / fp); }
 float sdGroove(float edge, float width, float fp) { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
 vec4 sdRock3D(vec3 p, float fp) {
   float broad = sdNoise3(p * 0.28), grain = sdNoise3(p * 1.7);
-  float vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
   float visible = sdVis(2.5, fp);
-  float tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
-  return vec4(vec3((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
-    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+  // Smooth, world-anchored rock grain without dark closed noise contours:
+  // those repeated cells read as a tile grid in the original Close cliff.
+  float tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
+  return vec4(vec3(1.0 + tone),
+    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
 }
 vec4 sdBlocks(vec2 uv, vec2 size, float joint, float fp, float toneAmp) {
   vec2 b = uv / size; float row = floor(b.y); b.x += 0.5 * (row - 2.0 * floor(row * 0.5));
@@ -359,11 +360,10 @@ fn sdVis(size: f32, fp: f32) -> f32 { return smoothstep(1.5, 4.0, size / fp); }
 fn sdGroove(edge: f32, width: f32, fp: f32) -> f32 { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
 fn sdRock3D(p: vec3f, fp: f32) -> vec4f {
   let broad = sdNoise3(p * 0.28); let grain = sdNoise3(p * 1.7);
-  let vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
   let visible = sdVis(2.5, fp);
-  let tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
-  return vec4f(vec3f((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
-    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+  let tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
+  return vec4f(vec3f(1.0 + tone),
+    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
 }
 fn sdBlocks(uv: vec2f, size: vec2f, joint: f32, fp: f32, toneAmp: f32) -> vec4f {
   var b = uv / size; let row = floor(b.y); b.x = b.x + 0.5 * (row - 2.0 * floor(row * 0.5));
