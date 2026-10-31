@@ -47,24 +47,24 @@ test("terrain colours from the climate palette get their own ground patterns", (
   assert.equal(terrainSurfaceKind(P.grassland, flat, true), K.road, "roads win");
 });
 
-test("WP #550 rock surface reveals physical cliff slope beneath a larger coherent cell pattern", () => {
-  const chunks = surfaceDetailChunks("terrain");
-  // Same metre-scaled rock cells on WebGL2/GLSL and WebGPU/WGSL.
-  assert.ok(chunks.glslDeclaration.includes("sdCells(uv * 0.30); float edge = c.x / 0.30;"));
-  assert.ok(chunks.wgslDeclaration.includes("sdCells(uv * 0.30); let edge = c.x / 0.30;"));
-});
-
-test("S003 real cliff rock texture projects height on steep faces without stretching cells", () => {
+test("WP #550 rock detail stays in continuous 3D metre space across tessellated cliffs", () => {
   const terrain = surfaceDetailChunks("terrain");
+  for (const declaration of [terrain.glslDeclaration, terrain.wgslDeclaration]) {
+    assert.ok(declaration.includes("sdNoise3(") && declaration.includes("sdRock3D("),
+      "same 3D metre-noise rock functions exist on WebGL2 and WebGPU");
+    assert.ok(declaration.includes("p.xy + offset * z"),
+      "3D rock lattice is fixed to physical world position, not per-face orientation");
+  }
   for (const code of [terrain.glslMainStart, terrain.wgslMainStart]) {
-    assert.ok(code.includes("sdWallUv") &&
-      code.includes("mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"),
-      "both WebGL2 and WebGPU terrain rock patterns blend from flat XZ to face-tangent/height metres");
+    assert.ok(code.includes("sdUv = sdP.xz;") && code.includes("sdPat = sdRock3D(sdP, sdFp)"),
+      "only canonical rock samples continuous 3D; other terrain retains XZ UVs");
+    assert.ok(!code.includes("mix(sdP.xz, sdWallUv"),
+      "triangle-dependent UV interpolation must not split rock cells into shard seams");
   }
   const lit = surfaceDetailChunks("lit");
   for (const code of [lit.glslMainStart, lit.wgslMainStart])
-    assert.ok(!code.includes("smoothstep(0.35, 0.78, sdNy)"),
-      "existing building and prop material orientations must not change");
+    assert.ok(!code.includes("sdPat = sdRock3D"),
+      "unchanged building, roof, prop and optional GLB materials keep their existing patterns");
 });
 
 test("both shader languages carry the same detail pipeline, and only materials that ask for it", () => {
