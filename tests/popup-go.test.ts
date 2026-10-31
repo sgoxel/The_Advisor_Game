@@ -10,7 +10,7 @@ import { lonLatToSource, sourceToLonLat } from "../src/planet.ts";
 
 // npc-popup pulls in browser-only modules that read document.baseURI at load time.
 (globalThis as { document?: unknown }).document ??= { baseURI: "http://localhost/" };
-const { resolveGoTarget, popupFocusHalfHeight, popupOwnedHomeFacing, HOME_ENTRANCE_FOCUS_HALF_HEIGHT, RESIDENT_OBSERVE_HALF_HEIGHT, residentObservationPoint } = await import("../src/npc-popup.ts");
+const { resolveGoTarget, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, HOME_ENTRANCE_FOCUS_HALF_HEIGHT, RESIDENT_OBSERVE_HALF_HEIGHT, residentObservationPoint } = await import("../src/npc-popup.ts");
 
 test("settlement card place links resolve to their positions only when clicked", () => {
   const home = villages[0], other = places.find((place) => place.id !== home.id)!;
@@ -74,6 +74,23 @@ test("owned-door inspection stays at readable building zoom and preserves ordina
     "portrait keeps the already-inspected connected home view");
   assert.equal(popupFocusHalfHeight("home:0:37", 14), 14,
     "a future larger canonical Hero setting is never tightened by this fix");
+});
+
+
+test("a real owned-door marker survives camera-only popup dismissal, not navigation or a new NPC", () => {
+  const place = villages[0], door = resolvedSettlementHomeDoorFor(place, 37);
+  assert.ok(door, "fixture has a physically resolved home entrance");
+  const pin = { ...door, y: 32, homeEntrance: "original-SEED-home-door" };
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, ""), pin,
+    "closing the obstructing popup retains the original doorway marker at unchanged focus");
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "other-NPC"), undefined,
+    "another selected resident must not inherit the previous home marker");
+  assert.equal(ownedDoorPinAtFocus(pin, door.x + .5, door.z, ""), undefined,
+    "panning away must clear the stale home marker");
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z + .5, ""), undefined,
+    "moving north also clears the stale home marker");
+  assert.equal(ownedDoorPinAtFocus(undefined, door.x, door.z, ""), undefined,
+    "camera alone cannot invent an owner or doorway");
 });
 
 test("true-scale resident observation uses the real canonical position and cannot invent a missing actor", () => {
