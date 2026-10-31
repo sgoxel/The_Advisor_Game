@@ -771,7 +771,7 @@ test("actual SEED village resident can join the fixed legal five-road wet-bridge
     previous = residentTransportJourneyAt(reverse!, beforeTick - 1),
     following = residentTransportJourneyAt(reverse!, beforeTick + 1),
     deck = finalSurfaceAt(returning.x, returning.z),
-    physicalStep = (a: typeof returning, b: typeof returning) =>
+    physicalStep = (a: { x: number; z: number }, b: { x: number; z: number }) =>
       greatCircleDistance(sourceToLonLat(a.x, a.z), sourceToLonLat(b.x, b.z));
   assert.equal(returning.residentCode, chosen!.code,
     "reverse crossing stays with the original actor, not a recreated bridge marker");
