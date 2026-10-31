@@ -3089,7 +3089,12 @@ async function start() {
             if (solidWorldBlocksTap(point.x, point.y,
                 residentOcclusionReachDepth(midDepth, footDepth), lens)) continue;
           }
-          return { code: resident.code, homeEntrance: resident.homeEntrance,
+          // Refocus photographic proof on the REAL current resident foot,
+          // never on ground behind a painted midpoint along the camera ray.
+          const source = actorSources.get(actor);
+          if (!source) continue;
+          return { code: resident.code, source: { x: source.x, z: source.z },
+            homeEntrance: resident.homeEntrance,
             workplace: resident.workplace, task: resident.task, route: resident.route,
             clientX, clientY, tick: simulation.tick, meshCount };
         }
