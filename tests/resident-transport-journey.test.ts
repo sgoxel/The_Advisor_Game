@@ -632,7 +632,38 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
   const home = await selected!.considerAdvisorHomeReturn(chosenCode);
   assert.equal(typeof home.started, "boolean");
   let ownedDoorPoint: { x: number; z: number } | undefined;
+  let returnBridgePoint: { x: number; z: number } | undefined,
+    returnBridgeTick: number | undefined;
   if (home.started) {
+    // A graph-only reversed itinerary is not an actor crossing. Project the
+    // actual Simulation-approved return at the original SEED wet deck.
+    const returning = selected!.preparedHomeReturnFor(chosenCode);
+    assert.ok(returning, "an accepted home choice needs a validated return event");
+    const stations = returning!.journey.stations,
+      bridgeStation = stations.reduce((best, point, index) =>
+        Math.hypot(point.x - ownedBridge!.x, point.z - ownedBridge!.z) <
+        Math.hypot(stations[best].x - ownedBridge!.x, stations[best].z - ownedBridge!.z)
+          ? index : best, 0),
+      crossingMetres = returning!.journey.cumulativeMetres[bridgeStation];
+    let before = destinationTick, after = destinationTick + 30*86400;
+    while (before < after) {
+      const middle = Math.floor((before + after) / 2);
+      if (residentTransportJourneyAt(returning!.journey, middle).distanceM < crossingMetres)
+        before = middle + 1;
+      else after = middle;
+    }
+    const step = residentTransportJourneyAt(returning!.journey, before),
+      deck = finalSurfaceAt(step.x, step.z);
+    assert.equal(step.residentCode, chosenCode);
+    assert.ok(step.progress > 0 && step.progress < 1 &&
+      Math.hypot(step.x - ownedBridge!.x, step.z - ownedBridge!.z) < 2,
+      "returning resident's Fantasy Time feet must reach the original bridge");
+    assert.equal(deck.water.kind, "river", "reverse witness must stand over real river water");
+    assert.equal(deck.traversal, "bridge");
+    assert.ok(deck.walkable && deck.deckOwnerIds.includes(ownedBridge!.roadCode),
+      "the same canonical road owns the returning resident's deck");
+    returnBridgePoint = { x: step.x, z: step.z };
+    returnBridgeTick = before;
     const next = destinationTick + 30*86400;
     selected!.advance(next);
     const atHome = selected!.projectedResidentByCode(chosenCode);
@@ -661,7 +692,8 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       fixedMs = (tick: number) => REAL_EPOCH_MS +
         Math.round((tick + 0.5) * 1000 / TIME_SCALE),
       door = selected!.residentByCode(chosenCode)!.homeEntrance;
-    for (const tick of [lowTick, destinationTick, destinationTick + 30*86400])
+    for (const tick of [lowTick, destinationTick, destinationTick + 30*86400,
+      ...(returnBridgeTick === undefined ? [] : [returnBridgeTick])])
       assert.equal(Math.floor((fixedMs(tick) - REAL_EPOCH_MS) * TIME_SCALE / 1000), tick,
         "captured browser time must project the actual canonical SEED event tick");
     mkdirSync(dirname(file), { recursive: true });
@@ -672,6 +704,8 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       bridge: { x: bridgePoint.x, z: bridgePoint.z },
       ownedDoorPoint,
       bridgeFixedMs: fixedMs(lowTick),
+      returnBridge: returnBridgePoint ?? null,
+      returnBridgeFixedMs: returnBridgeTick === undefined ? null : fixedMs(returnBridgeTick),
       siteFixedMs: fixedMs(destinationTick),
       homeFixedMs: fixedMs(destinationTick + 30*86400),
       homeStarted: home.started, homeMessage: home.message,
