@@ -111,11 +111,15 @@ export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewpo
 /** Keep the exact clicked SEED-owned doorway labelled only while that camera
  * focus is still held. Pure zoom and explicit view tilt preserve the label;
  * panning away or inspecting another resident clears this camera-only state. */
-export type OwnedDoorViewPin = { x: number; z: number; y: number; homeEntrance: string };
+export type OwnedDoorViewPin = { x: number; z: number; y: number; yaw: number; homeEntrance: string };
 export function ownedDoorPinAtFocus(
   pin: OwnedDoorViewPin | undefined, x: number, z: number, inspectedCode: string,
+  yaw: number, reliefEnabled: boolean,
 ): OwnedDoorViewPin | undefined {
-  return !inspectedCode && pin?.x === x && pin.z === z ? pin : undefined;
+  // A rotated/top-down angle can hide the door behind its real roof. Do not
+  // paint a screen-space tag through an opaque house in that changed view.
+  return !inspectedCode && reliefEnabled && pin?.yaw === yaw &&
+    pin.x === x && pin.z === z ? pin : undefined;
 }
 
 /** Camera-facing-only view of the real front wall; never rotates a resident. */
