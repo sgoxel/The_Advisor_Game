@@ -133,6 +133,25 @@ SCENARIOS: dict[str, str] = {
         "select:#map-scale=0.5;settle;shot:inhabited-close;"
         "select:#map-scale=0.2;settle;shot:inhabited-hero"
     ),
+    # A genuine selected resident in the original PlayCanvas viewport, not
+    # a count of enabled actors or a synthetic foot marker. Reuse the S006
+    # proven real-canvas pick/focus controls, then save contact alongside PNG.
+    "s003-hero-close-resident": (
+        "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);"
+        "eval:window.advisorWorld.setHalfHeight(18);"
+        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());"
+        "eval:window.__wp550Ground=window.advisorWorld.navigation.surfaceAtScreen(window.__s006Resident.clientX,window.__s006Resident.clientY);"
+        "eval:window.__wp550Ground||Promise.reject(new Error('No canonical ground beneath picked resident'));"
+        "eval:window.advisorWorld.navigation.setFocus(window.__wp550Ground.lon,window.__wp550Ground.lat);"
+        "eval:window.advisorWorld.setHalfHeight(10);"
+        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());"
+        "tap:resident;visible:#npc-popup:not([hidden]);"
+        "click:#npc-popup [data-go^=\"resident:\"];"
+        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
+        "until:window.advisorWorld.state.settled;"
+        "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
+        "shot:selected-foot-surface"
+    ),
     "s003-hero-close-slope": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
@@ -346,6 +365,8 @@ STATE_JS = """() => {
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
     performance: state.performance ?? null, coverage: state.coverage ?? null,
     visibleMeshes: state.visibleMeshes ?? null, visibleGeometryTriangles: state.visibleGeometryTriangles ?? null, residentPresentation: state.residentPresentation ?? null,
+    // Read-only same-frame measured render-foot / authoritative surface pair.
+    residentFootContact: world?.residentFootRingEvidence?.() ?? null,
     continuity: world && world.continuity ? world.continuity.telemetry() : null,
     transportInspection: transport ? {
       digest: transport.digest, selected: transport.selection,
