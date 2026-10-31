@@ -1303,7 +1303,10 @@ function inspectCell(screenX: number, screenY: number) {
   const direction = far.clone().sub(origin).normalize();
   let before = 0,
     hit = -1;
-  // March using only canonical physical render-height channels; full slope and\n  // collision validation is needed once, at the selected point below.\n  // Repeating five authoritative grade probes at every ray step stalled\n  // close-up cliff inspection without changing the hit elevation.
+  // March using only canonical physical render-height channels; full slope and
+  // collision validation is needed once, at the selected point below.
+  // Repeating five authoritative grade probes at every ray step stalled
+  // close-up cliff inspection without changing the hit elevation.
   const marchStep = Math.max(8, view.halfHeight / 40);
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
