@@ -130,6 +130,20 @@ test("long accepted journey stops for overnight Fantasy Time instead of teleport
     "same resident is stationary through overnight rest");
   const later = residentTransportJourneyAt(scaled, atNight + 12 * 3600);
   assert.ok(later.progress > overnight.progress, "walking resumes after legal local dawn");
+
+  // An autonomous return or visit may be approved at night. The first tick
+  // must honestly report resting with unchanged real SEED feet, not "walking"
+  // while the bounded Fantasy Time schedule forbids movement.
+  const nightDeparture = tickAtLocalTime(2, 23 * 3600, scaled.originLongitude);
+  const waiting = { ...scaled, departedTick: nightDeparture };
+  const first = residentTransportJourneyAt(waiting, nightDeparture),
+    next = residentTransportJourneyAt(waiting, nightDeparture + 1);
+  assert.equal(first.status, "resting", "no phantom first-second bridge movement at 23:00");
+  assert.equal(first.progress, 0);
+  assert.equal(next.status, "resting");
+  assert.deepEqual({ x: first.x, z: first.z }, { x: next.x, z: next.z },
+    "approved overnight trip stays at the original legal starting feet until daylight");
+  assert.equal(residentTransportJourneyAt(waiting, nightDeparture - 1).status, "not-departed");
 });
 
 test("already-arrived actor can prepare and traverse a freshly validated reverse five-road trip", () => {
