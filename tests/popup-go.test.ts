@@ -80,17 +80,21 @@ test("owned-door inspection stays at readable building zoom and preserves ordina
 test("a real owned-door marker survives camera-only popup dismissal, not navigation or a new NPC", () => {
   const place = villages[0], door = resolvedSettlementHomeDoorFor(place, 37);
   assert.ok(door, "fixture has a physically resolved home entrance");
-  const pin = { ...door, y: 32, homeEntrance: "original-SEED-home-door" };
-  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, ""), pin,
+  const pin = { ...door, y: 32, yaw: -.22, homeEntrance: "original-SEED-home-door" };
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "", pin.yaw, true), pin,
     "closing the obstructing popup retains the original doorway marker at unchanged focus");
-  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "other-NPC"), undefined,
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "other-NPC", pin.yaw, true), undefined,
     "another selected resident must not inherit the previous home marker");
-  assert.equal(ownedDoorPinAtFocus(pin, door.x + .5, door.z, ""), undefined,
+  assert.equal(ownedDoorPinAtFocus(pin, door.x + .5, door.z, "", pin.yaw, true), undefined,
     "panning away must clear the stale home marker");
-  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z + .5, ""), undefined,
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z + .5, "", pin.yaw, true), undefined,
     "moving north also clears the stale home marker");
-  assert.equal(ownedDoorPinAtFocus(undefined, door.x, door.z, ""), undefined,
+  assert.equal(ownedDoorPinAtFocus(undefined, door.x, door.z, "", pin.yaw, true), undefined,
     "camera alone cannot invent an owner or doorway");
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "", pin.yaw + Math.PI, true), undefined,
+    "rotating behind the real roof must not draw a false door label");
+  assert.equal(ownedDoorPinAtFocus(pin, door.x, door.z, "", pin.yaw, false), undefined,
+    "returning to the overhead view must not draw the door marker through the roof");
 });
 
 test("true-scale resident observation uses the real canonical position and cannot invent a missing actor", () => {
