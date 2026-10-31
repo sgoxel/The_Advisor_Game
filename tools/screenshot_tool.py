@@ -142,7 +142,7 @@ SCENARIOS: dict[str, str] = {
         "until:window.advisorWorld.residentEvidencePick(true);"
         # First prove the chosen actor survives the real GPU-depth / structural
         # screen hit; then actually click that same pixel in Chromium.
-        "eval:(async()=>{const r=await window.advisorWorld.verifiedResidentEvidencePick();if(!r)throw new Error('No GPU-confirmed resident tap in the current real view');window.__s006Resident=r;window.__wp550SelectedCode=r.code})()"
+        "eval:window.advisorWorld.verifiedResidentEvidencePick().then(r=>r?(window.__s006Resident=r,window.__wp550SelectedCode=r.code):Promise.reject(new Error('No GPU-confirmed resident tap in the current real view')))"
         "tap:resident-verified;visible:#npc-popup:not([hidden]) #npc-seed-code;"
         # The real tap must inspect that exact original 2D resident. The
         # old follow-on popup button intermittently remained covered/absent
