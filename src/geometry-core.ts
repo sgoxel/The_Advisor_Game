@@ -382,7 +382,10 @@ export function terrainTint(
  * terrain LOD transitions. The 4-source-unit grid prevents a tiny zoom
  * change from remapping forest stands onto huge interpolated polygons. */
 export function detailTerrainResolution(tileSize: number): number {
-  return Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16);
+  // Fractional cell counts on sub-two-unit Hero tiles emitted a full
+  // two-unit quad beyond the tile boundary. Keep at least one exact tile
+  // cell so the mesh never overlaps neighbouring SEED-owned ground.
+  return Math.max(1, Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16));
 }
 
 /** A close-view dry cell needs its already canonical centre height if a
