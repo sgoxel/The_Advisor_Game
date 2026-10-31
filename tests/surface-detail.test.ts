@@ -54,6 +54,19 @@ test("WP #550 rock surface reveals physical cliff slope beneath a larger coheren
   assert.ok(chunks.wgslDeclaration.includes("sdCells(uv * 0.30); let edge = c.x / 0.30;"));
 });
 
+test("S003 real cliff rock texture projects height on steep faces without stretching cells", () => {
+  const terrain = surfaceDetailChunks("terrain");
+  for (const code of [terrain.glslMainStart, terrain.wgslMainStart]) {
+    assert.ok(code.includes("sdWallUv") &&
+      code.includes("mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"),
+      "both WebGL2 and WebGPU terrain rock patterns blend from flat XZ to face-tangent/height metres");
+  }
+  const lit = surfaceDetailChunks("lit");
+  for (const code of [lit.glslMainStart, lit.wgslMainStart])
+    assert.ok(!code.includes("smoothstep(0.35, 0.78, sdNy)"),
+      "existing building and prop material orientations must not change");
+});
+
 test("both shader languages carry the same detail pipeline, and only materials that ask for it", () => {
   for (const mode of ["terrain", "lit"] as const) {
     const sd = surfaceDetailChunks(mode);

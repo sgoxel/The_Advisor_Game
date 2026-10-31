@@ -249,7 +249,14 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   ${mode === "terrain" ? "if (sdN.y < 0.0) { sdN = -sdN; }" : ""}
   float sdNy = abs(sdN.y);
   vec2 sdT = vec2(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
-  vec2 sdUv = sdNy > 0.975 || ${mode === "terrain" ? "true" : "false"} ? sdP.xz : vec2(dot(sdP.xz, sdT), sdNy > 0.2 ? sdP.y / max(length(sdN.xz), 0.2) : sdP.y);
+  // Horizontal texture coordinates stretched metres of rock cells into
+  // vertical columns on the original S003 cliff. Keep flat ground unchanged;
+  // smoothly project the SAME metre-scale detail onto tangent/height as the
+  // physical terrain face steepens. Render-only: no vertex/SEED change.
+  vec2 sdWallUv = vec2(dot(sdP.xz, sdT), sdNy > 0.2 ? sdP.y / max(length(sdN.xz), 0.2) : sdP.y);
+  vec2 sdUv = ${mode === "terrain"
+    ? "mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"
+    : "sdNy > 0.975 ? sdP.xz : sdWallUv"};
   vec3 sdC = pow(max(vVertexColor.rgb, vec3(0.0)), vec3(1.0 / 2.2));
   float sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
   vec4 sdPat = vec4(1.0, 1.0, 1.0, 0.0);
@@ -474,7 +481,13 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdNy = abs(sdN.y);
   var sdT = vec2f(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
   let sdWallV = select(sdP.y, sdP.y / max(length(sdN.xz), 0.2), sdNy > 0.2);
-  let sdUv = select(vec2f(dot(sdP.xz, sdT), sdWallV), sdP.xz, sdNy > 0.975 || ${mode === "terrain" ? "true" : "false"});
+  // Match GLSL: steep canonical faces use tangent/vertical metres, not a
+  // stretched horizontal rock-cell UV. Smooth interpolation avoids a normal
+  // threshold seam without changing physical terrain or actor contacts.
+  let sdWallUv = vec2f(dot(sdP.xz, sdT), sdWallV);
+  let sdUv = ${mode === "terrain"
+    ? "mix(sdP.xz, sdWallUv, 1.0 - smoothstep(0.35, 0.78, sdNy))"
+    : "select(sdWallUv, sdP.xz, sdNy > 0.975)"};
   let sdC = pow(max(vVertexColor.rgb, vec3f(0.0)), vec3f(1.0 / 2.2));
   let sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
   var sdPat = vec4f(1.0, 1.0, 1.0, 0.0);
