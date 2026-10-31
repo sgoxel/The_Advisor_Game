@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -2397,7 +2397,14 @@ async function start() {
       const authoritativeSelected = inspectedCode && snapshot &&
         snapshotRevision !== lastResidentSnapshot && !selectedFromSnapshot
         ? simulation.projectedResidentByCode(inspectedCode) : undefined;
-      const selected = selectedFromSnapshot ?? authoritativeSelected ?? knownSelected;
+      // On camera-only refocus, a worker can be rebuilding the current view
+      // for longer than the old two-second grace period. Re-read the SAME
+      // selected resident from Simulation instead of holding old snapshot
+      // coordinates or clearing their legal visible feet.
+      const currentSelected = inspectedCode && existingSelected &&
+        residentMode.actors && query && !snapshot
+        ? simulation.projectedResidentByCode(inspectedCode) : undefined;
+      const selected = selectedFromSnapshot ?? authoritativeSelected ?? currentSelected ?? knownSelected;
       const selectionNearby = residentMode.actors &&
         selectedResidentVisibleInView(selected, query);
       // A legally staffed gate is part of the living world, not a dependent
@@ -2415,12 +2422,18 @@ async function start() {
         }
       }
       const dutyGuardRevision = `${query?.key ?? ""}/${dutyGuards.map(guard => guard.code).join(",")}`;
-      const holdSelected = !dutyGuards.length && !snapshot && selectionNearby &&
-        simulation.tick >= actorSnapshotTick &&
-        simulation.tick - actorSnapshotTick <= TIME_SCALE * 2;
-      if (holdSelected) {
-        // Keep exactly the real selected actor during a short snapshot handoff.
-        // Other stale actors never become visible occupants of the new view.
+      const holdSelected = !dutyGuards.length && !snapshot &&
+        selectedResidentCurrentCarryover(
+          existingSelected ? actorResidents.get(existingSelected)?.code : undefined,
+          currentSelected, query);
+      if (holdSelected && existingSelected && currentSelected) {
+        // No stale 2-second snapshot and no camera-created actor. Every
+        // handoff frame uses the current Simulation resident and final surface
+        // at their actual legal feet, while unrelated old actors stay hidden.
+        actorResidents.set(existingSelected, currentSelected);
+        actorSources.set(existingSelected, { x: currentSelected.x, z: currentSelected.z });
+        actorMotion.delete(existingSelected);
+        positionActor(existingSelected, currentSelected.x, currentSelected.z);
         for (const actor of actors) if (actor !== existingSelected) {
           actor.enabled = false;
           actorResidents.delete(actor);
