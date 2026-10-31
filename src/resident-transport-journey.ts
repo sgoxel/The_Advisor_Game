@@ -411,7 +411,9 @@ export function residentTransportJourneyAt(
     z = a.z + (b.z - a.z) * ratio,
     status = tick < journey.departedTick ? "not-departed" :
       progress >= 1 ? "arrived" :
-      tick > journey.departedTick &&
+      // The accepted departure instant itself may be inside the overnight
+      // rest window. A zero-distance actor is not "walking" just because
+      // this is the first Fantasy Time tick of the approved journey.
       walkingSecondsAt(tick, journey.originLongitude) ===
       walkingSecondsAt(tick - 1, journey.originLongitude) ? "resting" : "walking";
   return { residentCode: journey.residentCode, x, z, status, progress, distanceM: travelled };
