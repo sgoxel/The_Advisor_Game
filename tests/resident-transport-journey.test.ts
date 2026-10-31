@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REAL_EPOCH_MS, TIME_SCALE, localWeekday, tickAtLocalTime } from "../src/clock.ts";
-import { sourceToLonLat } from "../src/planet.ts";
+import { greatCircleDistance, sourceToLonLat } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { transportBridgeByCode } from "../src/transport-network.ts";
@@ -10,6 +10,7 @@ import { residentAt, residentLocalTransportApproach, residentLocalTransportSegme
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
 import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, appendResidentReturnToOwnedDoor, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
+import { finalSurfaceAt } from "../src/world-core.ts";
 import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
 import { siteVisitCorridors } from "../src/site-visit-advice.ts";
 import type { TransportNetwork } from "../src/transport-network.ts";
@@ -751,4 +752,45 @@ test("actual SEED village resident can join the fixed legal five-road wet-bridge
   assert.ok(Math.abs(reverse!.stations.at(-1)!.x - chosen!.x) < 1e-6);
   assert.ok(Math.abs(reverse!.stations.at(-1)!.z - chosen!.z) < 1e-6,
     "real SEED resident returns along valid gate street to the actual departure, not an invented home door");
+  // A valid reversed graph alone is not a returning resident. Project the
+  // SAME original SEED actor at the real MAIN-19 deck using fantasy seconds,
+  // then check the physical top under the moving feet on both sides of that tick.
+  const bridgeStation = reverse!.stations.reduce((best, point, i) =>
+    Math.hypot(point.x - ownedBridge!.x, point.z - ownedBridge!.z) <
+      Math.hypot(reverse!.stations[best].x - ownedBridge!.x, reverse!.stations[best].z - ownedBridge!.z)
+      ? i : best, 0);
+  const bridgeDistance = reverse!.cumulativeMetres[bridgeStation];
+  let beforeTick = later, afterTick = later + 30 * 86400;
+  while (beforeTick < afterTick) {
+    const middle = Math.floor((beforeTick + afterTick) / 2);
+    if (residentTransportJourneyAt(reverse!, middle).distanceM < bridgeDistance)
+      beforeTick = middle + 1;
+    else afterTick = middle;
+  }
+  const returning = residentTransportJourneyAt(reverse!, beforeTick),
+    previous = residentTransportJourneyAt(reverse!, beforeTick - 1),
+    following = residentTransportJourneyAt(reverse!, beforeTick + 1),
+    deck = finalSurfaceAt(returning.x, returning.z),
+    physicalStep = (a: typeof returning, b: typeof returning) =>
+      greatCircleDistance(sourceToLonLat(a.x, a.z), sourceToLonLat(b.x, b.z));
+  assert.equal(returning.residentCode, chosen!.code,
+    "reverse crossing stays with the original actor, not a recreated bridge marker");
+  assert.ok(physicalStep(returning, ownedBridge!) < ownedBridge!.spanM / 2,
+    "actual reverse footsteps reach the SAME recorded bridge, not a nearby road");
+  assert.equal(deck.water.kind, "river", "reverse crossing must physically pass over wet water");
+  assert.equal(deck.traversal, "bridge");
+  assert.equal(deck.surfaceHeight, deck.deckHeight,
+    "returning actor stands on the real composed bridge top");
+  assert.ok(deck.walkable && deck.deckOwnerIds.includes(bridgeRoad!.code),
+    "wet crossing is owned by the identical lawful SEED bridge road");
+  for (const [a, b] of [[previous, returning], [returning, following]]) {
+    assert.ok(b.distanceM >= a.distanceM &&
+      physicalStep(a, b) <= b.distanceM - a.distanceM + .1,
+      "one fantasy second cannot teleport the same actor across a missing bank");
+  }
+  const returned = residentTransportJourneyAt(reverse!, later + 30 * 86400);
+  assert.equal(returned.status, "arrived", "return actually finishes on the original street");
+  assert.equal(returned.residentCode, chosen!.code);
+  assert.ok(physicalStep(returned, chosen!) < .01,
+    "full reverse travel ends at the original real resident's departure feet");
 });
