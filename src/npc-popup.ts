@@ -186,9 +186,16 @@ function install() {
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
     if (target) {
       goTo!(target.x, target.z, go!.dataset.go ?? "");
-      if (go?.dataset.go?.startsWith("home:") || go?.dataset.go?.startsWith("resident:")) {
-        // Map inspection should reveal the real entrance, not leave the long
-        // optional SEED-ID ledger covering it. The IDs remain in the DOM.
+      if (go?.dataset.go?.startsWith("home:")) {
+        // On a phone the inspector covers the screen centre where the actual
+        // owned doorway is framed. Reveal the real facade after the camera-only
+        // jump; hiding this panel neither moves the resident nor changes the
+        // Simulation selection, SEED-owned door or roof depth.
+        // Existing close behavior returns keyboard focus to the world canvas.
+        hideNpcPopup();
+      } else if (go?.dataset.go?.startsWith("resident:")) {
+        // Resident observation retains its inspector, but not the expanded
+        // technical ledger over the selected real-world sprite.
         const technical = root?.querySelector<HTMLDetailsElement>(".npc-technical");
         if (technical) technical.open = false;
         if (root) root.scrollTop = 0;
