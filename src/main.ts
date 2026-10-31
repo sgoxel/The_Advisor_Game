@@ -1309,7 +1309,7 @@ function inspectCell(screenX: number, screenY: number) {
     hit = -1;
   // March to the first surface crossing, then solve the coordinate height field.
   const marchStep = Math.max(8, view.halfHeight / 40);
-  for (let distance = 0; distance <= maxRayDistance; distance += marchStep) {
+  for (let distance = 0; ; distance = Math.min(maxRayDistance, distance + marchStep)) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
     if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
@@ -1317,6 +1317,7 @@ function inspectCell(screenX: number, screenY: number) {
       break;
     }
     before = distance;
+    if (distance >= maxRayDistance) break;
   }
   if (hit < 0) return;
   for (let i = 0; i < 18; i++) {
