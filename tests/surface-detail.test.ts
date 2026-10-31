@@ -54,6 +54,11 @@ test("WP #550 rock detail stays in continuous 3D metre space across tessellated 
       "same 3D metre-noise rock functions exist on WebGL2 and WebGPU");
     assert.ok(declaration.includes("p.xy + offset * z"),
       "3D rock lattice is fixed to physical world position, not per-face orientation");
+    const rock = declaration.slice(declaration.indexOf("sdRock3D("), declaration.indexOf("sdBlocks("));
+    assert.ok(!rock.includes("vein =") && !rock.includes("0.075 * vein"),
+      "rock must not draw repeating closed noise-contour lines across the real cliff");
+    assert.ok(rock.includes("0.20 * visible") && rock.includes("0.12 * sdVis(0.4, fp)"),
+      "WebGL2 and WebGPU retain the same continuous gentle metre-scale rock grain");
   }
   for (const code of [terrain.glslMainStart, terrain.wgslMainStart]) {
     assert.ok(code.includes("sdUv = sdP.xz;") && code.includes("sdPat = sdRock3D(sdP, sdFp)"),
