@@ -161,7 +161,10 @@ SCENARIOS: dict[str, str] = {
         "until:window.advisorWorld.state.settled;"
         "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
         "shot:selected-foot-surface;"
-        "click:#npc-popup [data-go^=home];settle;shot:owned-home-front-relief"
+        "click:#npc-popup [data-go^=home];settle;"
+        "visible:#selected-home-door-marker:not([hidden]);"
+        "eval:document.getElementById(\'selected-home-door-marker\')?.dataset.homeEntrance===document.getElementById(\'npc-home-entrance\')?.textContent?.trim()||Promise.reject(new Error(\'Viewed owned doorway lost the original SEED entrance identity\'));"
+        "shot:owned-home-front-relief"
     ),
     "s003-hero-close-slope": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
