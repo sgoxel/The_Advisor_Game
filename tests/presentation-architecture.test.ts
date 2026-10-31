@@ -6,7 +6,7 @@ import {
   SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible,
   POLITICAL_BORDER_MAX_SCALE_DENOMINATOR, POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
 } from '../src/political-presentation.ts';
-import { roadRepresentationAtScale, forestBodiesVisibleAtScale, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
+import { roadRepresentationAtScale, forestBodiesVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
 import { closeLightingEnabled } from '../src/street-lighting.ts';
 
 const docUrl = new URL('../docs/PRESENTATION_ARCHITECTURE.md', import.meta.url);
@@ -60,6 +60,10 @@ test('gate values stated in the presentation doc match the source constants', ()
   assert.equal(roadRepresentationAtScale(101), 'hidden');
   assert.equal(forestBodiesVisibleAtScale(0.5), true);
   assert.equal(forestBodiesVisibleAtScale(1), false);
+  assert.equal(reliefSceneryVisible(true, false), true, 'ordinary view retains original tree meshes');
+  assert.equal(reliefSceneryVisible(true, true), false, 'explicit relief reveals actual terrain without foreground scenery');
+  assert.equal(reliefSceneryVisible(false, false), false, 'inspection never invents hidden LOD trees');
+  assert.equal(reliefSceneryVisible(false, true), false);
   assert.ok(LOD_BLEND_SECONDS > 0, 'LOD_BLEND_SECONDS must be positive');
 
   assert.equal(closeLightingEnabled(1), true);

@@ -59,7 +59,7 @@ import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
-import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
+import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -901,8 +901,8 @@ function uploadGeometry(
 }
 function tileLayerVisible(name:string):boolean {
   if (name === "terrain") return true;
-  if (name === "nature") return layers.nature && forestBodiesVisible;
-  if (name === "streetTrees") return layers.nature && layers.structures && settlementDetailVisible && smallDetailsVisible && forestBodiesVisible;
+  if (name === "nature") return layers.nature && reliefSceneryVisible(forestBodiesVisible, bridgeInspectionAngle);
+  if (name === "streetTrees") return layers.nature && layers.structures && settlementDetailVisible && smallDetailsVisible && reliefSceneryVisible(forestBodiesVisible, bridgeInspectionAngle);
   if (name === "detail") return layers.structures && layers.nature && settlementDetailVisible && smallDetailsVisible;
   // Physical close-up objects remain present regardless of the lighting tier.
   if (name === "closeDetail")
@@ -1405,9 +1405,13 @@ function setTerrainReliefView(enabled: boolean, updateNow = true) {
   const control = document.getElementById("relief-view");
   if (control) {
     control.setAttribute("aria-pressed", String(enabled));
-    control.title = enabled ? "Return to the normal map angle" :
-      "Inspect genuine cliff and valley relief from a lower angle";
+    control.title = enabled ? "Restore normal map angle and scenery" :
+      "Inspect canonical cliff and valley relief without foreground trees";
   }
+  // Presentation only: keep the same generated tree/rock meshes cached, but
+  // let the explicit terrain-inspection camera see actual cliffs and valleys.
+  // Returning to the map restores scenery instantly; no world state is rewritten.
+  setLayers();
   if (updateNow) updateCamera();
 }
 

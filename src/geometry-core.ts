@@ -641,7 +641,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
           nature.cone(x, y + 1.2, z, r, h * 0.78, color(39 + (v % 10), 76 + (v % 13), 58), 6);
           nature.cone(x, y + h * 0.4, z, r * 0.76, h * 0.58, color(49 + (v % 9), 88 + (v % 12), 62), 6);
           if (t.size <= 32)
-            detail.cone(x, y + h * 0.68, z, r * 0.42, h * 0.34, color(65, 103, 69), 6);
+            nature.cone(x, y + h * 0.68, z, r * 0.42, h * 0.34, color(65, 103, 69), 6);
         } else if (family === "temperate-deciduous-mixed") {
           nature.box(x, y - 0.1, z, 0.78, h * 0.58, 0.78, timber);
           nature.cone(x, y + h * 0.34, z, r * 1.2, h * 0.46, color(65 + (v % 15), 111 + (v % 17), 62), 8);
