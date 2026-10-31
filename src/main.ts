@@ -2168,7 +2168,7 @@ async function start() {
         // tap into an accepted character selection. Skip that costly pass,
         // keeping the same conservative rejection and opaque-world rules.
         const selectedActorMeshes = drawableResidentMeshes(actor);
-        if (!painted.some(mesh => selectedActorMeshes.includes(mesh))) return false;
+        if (!painted.some(mesh => mesh instanceof pc.MeshInstance && selectedActorMeshes.includes(mesh))) return false;
         // The first picker can give the nearby resident's transparent quad
         // the winning ID even at a wall-covered touch pixel. Render a second
         // on-demand pass with only the resident mesh IDs suppressed, so the
