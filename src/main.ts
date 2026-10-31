@@ -1977,6 +1977,12 @@ async function start() {
   footRingMaterial.useSkybox = false;
   footRingMaterial.depthTest = true;
   footRingMaterial.depthWrite = false;
+  // The ring must draw AFTER opaque ground rather than disappearing beneath
+  // later terrain draws: depth-write disabled alone does not move an opaque
+  // MeshInstance into the transparent forward pass. Keep full opacity and
+  // actual scene-depth occlusion by roofs, walls and cliff faces.
+  footRingMaterial.blendType = pc.BLEND_NORMAL;
+  footRingMaterial.opacity = 1;
   footRingMaterial.cull = pc.CULLFACE_NONE;
   footRingMaterial.update();
   // The original real selected-foot screenshots proved the ordinary
