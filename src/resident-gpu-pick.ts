@@ -24,6 +24,12 @@ export function residentGpuHitAllows(
   // wall ID with no readable depth is unknown occlusion, not empty sky.
   // Do not apply this conservative fallback to background terrain.
   if (worldWithoutResidentsDepth === null && opaqueWorldAtPixel) return false;
+  // On opaque world geometry, a non-resident exact-pixel ID takes precedence
+  // over the broad 44px accessibility hit area. A projected guard body may
+  // be near the tap but behind a solid roof, even when its estimated depth
+  // is nearer than the separately rendered world picker point.
+  if (opaqueWorldAtPixel && exactPixelSelection.length > 0 &&
+      !exactPixelSelection.some(mesh => actorMeshes.includes(mesh))) return false;
   // A missing depth sample is not proof of empty sky. The original real
   // WebGL2 wall click reproduced a null-depth hole even while an opaque wall
   // had an ID at that exact pixel. Accept sky padding only when there is
