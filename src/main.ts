@@ -303,7 +303,7 @@ function residentRequestForView(tick: number, limit: number, actors: boolean): R
   if (!place) return;
   const bounds = viewBounds(view), lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
     viewportRadius = Math.hypot(view.halfHeight * view.aspect,
-      view.halfHeight / Math.sin(cameraElevationForHalfHeight(view.halfHeight))) / lonScale * 1.1,
+      view.halfHeight / Math.sin(view.elevationAngle ?? cameraElevationForHalfHeight(view.halfHeight))) / lonScale * 1.1,
     previous = residentSearchWindow,
     displacement = previous ? Math.hypot(wrapSourceX(view.x - previous.x), view.z - previous.z) : Infinity;
   if (!previous || previous.placeCode !== place.code || previous.actors !== actors ||
@@ -1388,6 +1388,22 @@ function inspectCell(screenX: number, screenY: number) {
     /* A click past the finite realm boundary has no logical cell. */
   }
 }
+/** An explicit viewpoint change exposes real SEED relief; zoom stays fixed.
+ * The same camera angle is supplied to tile bounds and resident queries so
+ * the extra visible valley/crest is actually streamed, not an empty border. */
+function setTerrainReliefView(enabled: boolean) {
+  bridgeInspectionAngle = enabled;
+  view.elevationAngle = enabled ? Math.PI / 6 : undefined;
+  residentSearchWindow = undefined;
+  const control = document.getElementById("relief-view");
+  if (control) {
+    control.setAttribute("aria-pressed", String(enabled));
+    control.title = enabled ? "Return to the normal map angle" :
+      "Inspect genuine cliff and valley relief from a lower angle";
+  }
+  updateCamera();
+}
+
 function setupControls() {
   $<HTMLSelectElement>("map-scale").replaceChildren(
     ...SCALE_LADDER.map((value) => {
@@ -1411,6 +1427,7 @@ function setupControls() {
     view.yaw = 0;
     updateCamera();
   };
+  $("relief-view").onclick = () => setTerrainReliefView(!bridgeInspectionAngle);
   const pointers = new Map<number, { x: number; y: number }>();
   let startX = 0,
     startY = 0,
@@ -3016,8 +3033,7 @@ async function start() {
         navigate(view.x, view.z, height);
       },
       setBridgeInspectionAngle(enabled: boolean) {
-        bridgeInspectionAngle = enabled;
-        updateCamera();
+        setTerrainReliefView(enabled);
       },
       navigation: {
         surfaceAtScreen,
