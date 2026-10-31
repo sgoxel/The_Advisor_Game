@@ -57,14 +57,16 @@ jobs:
           # S006's original 4/4 WebGL2/WebGPU real resident capture uses a
           # headed Chromium compositor; headless #550 clicks timed out despite
           # a CPU-visible resident. Reuse that proven *real* GUI/GPU path.
-          # Preserve last known true-resident/door/close PNGs; only missing
-          # cliff/slope context needs retry. Each short original scenario starts
-          # its own Chromium GPU process to isolate the observed compositor
-          # failure between scenes; no simulated pixels or relaxed settle gate.
+          # Original #826 produced both real WebGL2 cliff contexts (landscape
+          # and portrait), but its 14-minute shared capture cap expired during
+          # the next scene's slope terrain settlement. Preserve those accepted
+          # *captures* and focus the same bounded true-frame process on the
+          # missing slope only; each orientation gets its own fresh compositor.
+          # No stale screenshot is accepted and no SEED/world state is mocked.
           xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 14m bash -c '
             failed=0
-            for scene in s003-hero-close-cliff-context s003-hero-close-slope-context; do
-              python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --initial-ready-only --out "test-results/wp550-webgl2/$scene" --scenario "$scene" --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
+            for profile in fullhd-portrait fullhd-landscape; do
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --initial-ready-only --out "test-results/wp550-webgl2/s003-hero-close-slope-context" --scenario s003-hero-close-slope-context --profile "$profile" --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
             done
             exit "$failed"
           '
