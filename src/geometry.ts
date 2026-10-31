@@ -1387,7 +1387,41 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     }
     if (tileSize <= 32) for (const lz of [-depth * .5, depth * .5]) { const rail = offsetLocal(x, z, yaw, 0, lz); detail.boxYaw(rail.x, y + .9, rail.z, width, .12, .12, yaw, color(92, 68, 45)); }
   } else if (feature.kind === "path") {
-    structures.boxYaw(x, y + .015, z, width || 1.25, .06, feature.length || depth || 3, yaw, color(137, 116, 79));
+    const w = width || 1.25, length = feature.length || depth || 3, gravel = color(137, 116, 79);
+    if (!close) structures.boxYaw(x, y + .015, z, w, .06, length, yaw, gravel);
+    else {
+      // The old single slab kept its centre elevation at both the door and
+      // street. On a legal grade its ends floated or cut into final terrain.
+      // Sample the same composed surface as resident feet, at bounded 2 m
+      // stations; this changes only close-view presentation, never routes.
+      const segments = Math.max(1, Math.min(24, Math.ceil(length / metresToSource(2)))),
+        c = Math.cos(yaw), s = Math.sin(yaw),
+        metric = sourceUnitsPerMetreAt(feature.z),
+        eastScale = metric.x / metric.z;
+      // House-door bearings are physical ENU directions: compensate east
+      // source-map longitude scale before sampling true canonical stations.
+      // Each station resolves only two SEED samples, shared by its two
+      // neighbouring segments and both the top and side faces.
+      const stations = Array.from({length: segments + 1}, (_, edge) => {
+        const sample = (side: number) => {
+          const lx = side * w / 2, lz = (edge / segments - .5) * length,
+            px = (lx * c + lz * s) * eastScale, pz = -lx * s + lz * c,
+            ground = finalSurfaceAt(feature.x + px, feature.z + pz).surfaceHeight - feature.y;
+          return {top: [px, ground + .08, pz] as Point,
+            base: [px, ground + .015, pz] as Point};
+        };
+        return {left: sample(-1), right: sample(1)};
+      });
+      for (let i = 0; i < segments; i++) {
+        const a = stations[i], b = stations[i + 1];
+        structures.quad(a.left.top, b.left.top, b.right.top, a.right.top, gravel);
+        structures.quad(a.left.base, b.left.base, b.left.top, a.left.top, gravel);
+        structures.quad(a.right.top, b.right.top, b.right.base, a.right.base, gravel);
+      }
+      const first = stations[0], last = stations[segments];
+      structures.quad(first.left.base, first.left.top, first.right.top, first.right.base, gravel);
+      structures.quad(last.right.base, last.right.top, last.left.top, last.left.base, gravel);
+    }
   } else if (feature.kind === "roadside-tree") {
     const h = 6.2 + (variant % 5) * .65, radius = 2 + ((variant >>> 3) % 6) * .18;
     layers.streetTrees.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
