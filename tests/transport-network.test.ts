@@ -24,7 +24,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircl
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
-import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt, finalSurfaceRenderChannelsAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -312,6 +312,20 @@ test("S005 real SEED bridge deck and graded roadbed meet on both dry banks", () 
       "rendered top and collision elevation must use that same deck");
     assert.ok(surface.contributingModifierIds.includes(witness.roadCode) && surface.walkable,
       "the original SEED road must own the walkable landing");
+  }
+});
+
+test("Hero/Close ray-height sampling matches full SEED surface on real cliff, slope and bridge", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  for (const p of [bridge,
+    { x: -24190.289130830573, z: 28768.45437654417 },
+    { x: -26817.80086086045, z: 27316.75066655874 }]) {
+    const fast = finalSurfaceRenderChannelsAt(p.x, p.z), authoritative = finalSurfaceAt(p.x, p.z);
+    assert.equal(fast.groundHeight, authoritative.groundHeight);
+    assert.equal(fast.deckHeight, authoritative.deckHeight,
+      "cheap inspection height must never drop a legal bridge deck");
+    assert.deepEqual(fast.water, authoritative.water);
+    assert.equal(fast.groundMaterial, authoritative.groundMaterial);
   }
 });
 
