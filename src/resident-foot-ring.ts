@@ -4,7 +4,11 @@ import { elevationToRenderY } from "./render-frame.ts";
  * Radii and elevation are in canonical metres, NOT source/render units.
  * Every vertex lies 22 cm above the selected actor's real foot anchor.
  * Triangles are presentation only: no collider, resident or source position. */
-export function residentFootRingGeometry(segments = 24, innerRadius = 0.32, outerRadius = 0.38) {
+// The earlier narrow 32-38 cm ring was mostly buried behind the actual
+// illustrated boots in original WebGL2 landscape/portrait Hero screenshots.
+// A wider physical halo remains one depth-tested mesh outside the feet, not
+// a screen-space selection proxy or an adjustment to ground contact.
+export function residentFootRingGeometry(segments = 32, innerRadius = 0.48, outerRadius = 0.60) {
   const positions: number[] = [], normals: number[] = [], indices: number[] = [];
   const footClearance = elevationToRenderY(0.22);
   for (let i = 0; i < segments; i++) {
