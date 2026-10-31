@@ -1391,7 +1391,7 @@ function inspectCell(screenX: number, screenY: number) {
 /** An explicit viewpoint change exposes real SEED relief; zoom stays fixed.
  * The same camera angle is supplied to tile bounds and resident queries so
  * the extra visible valley/crest is actually streamed, not an empty border. */
-function setTerrainReliefView(enabled: boolean) {
+function setTerrainReliefView(enabled: boolean, updateNow = true) {
   bridgeInspectionAngle = enabled;
   view.elevationAngle = enabled ? Math.PI / 6 : undefined;
   residentSearchWindow = undefined;
@@ -1401,7 +1401,7 @@ function setTerrainReliefView(enabled: boolean) {
     control.title = enabled ? "Return to the normal map angle" :
       "Inspect genuine cliff and valley relief from a lower angle";
   }
-  updateCamera();
+  if (updateNow) updateCamera();
 }
 
 function setupControls() {
@@ -1514,7 +1514,14 @@ function setupControls() {
     // Camera-only owned-home inspection faces its SEED-resolved front door;
     // unchanged Simulation, resident position, route, home ID, and collision.
     const facing = popupOwnedHomeFacing(ref);
-    if (facing !== undefined) view.yaw = facing;
+    if (facing !== undefined) {
+      view.yaw = facing;
+      // An explicit "Show entrance" action should actually show the real
+      // owned front wall from the street, rather than inspect the roof from
+      // above. Keep the actor and SEED doorway fixed; make one camera update
+      // after both pose and focus change, not two streaming requests.
+      setTerrainReliefView(true, false);
+    }
     navigate(x, z, popupFocusHalfHeight(ref, HERO_HALF_HEIGHT, innerHeight));
   });
   $("home").onclick = () => {
