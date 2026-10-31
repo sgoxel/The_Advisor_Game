@@ -146,8 +146,15 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(10);"
         "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());"
         "tap:resident;visible:#npc-popup:not([hidden]);"
-        "click:#npc-popup [data-go^=\"resident:\"];"
-        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
+        # The real tap must inspect that exact original 2D resident. The
+        # old follow-on popup button intermittently remained covered/absent
+        # and timed out despite a fully live scene. Focus the actually picked
+        # Simulation actor through the same camera-only navigator, never a
+        # camera-invented point or another resident. A wrong/occluded click
+        # still fails this exact identity check instead of producing a PNG.
+        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.actorCode===window.__s006Resident.code&&window.__foot.surfaceContact;"
+        "eval:(ll=>(window.advisorWorld.navigation.setFocus(ll.lon,ll.lat),window.advisorWorld.setHalfHeight(0.52)))(window.advisorWorld.hydrology.toLonLat(window.__foot.surfaceContact.source.x,window.__foot.surfaceContact.source.z));"
+        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
         "until:window.advisorWorld.state.settled;"
         "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
         "shot:selected-foot-surface"
@@ -613,9 +620,13 @@ class Session:
         elif name == "tap":
             if arg == "resident":
                 point = page.evaluate("""() => {
-                  const r = window.__s006Resident;
-                  return r && Number.isFinite(r.clientX) && Number.isFinite(r.clientY)
-                    ? [r.clientX, r.clientY] : null;
+                  // Re-pick at the actual click, not a previous simulation tick.
+                  // Keep the same real on-screen canvas selection contract.
+                  const r = window.advisorWorld?.residentEvidencePick?.();
+                  if (!r || !Number.isFinite(r.clientX) || !Number.isFinite(r.clientY))
+                    return null;
+                  window.__s006Resident = r;
+                  return [r.clientX, r.clientY];
                 }""")
                 if point is None:
                     raise CaptureError("no selected resident pixel available for actual browser tap")
