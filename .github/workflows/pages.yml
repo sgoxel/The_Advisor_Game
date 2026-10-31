@@ -57,16 +57,19 @@ jobs:
           # S006's original 4/4 WebGL2/WebGPU real resident capture uses a
           # headed Chromium compositor; headless #550 clicks timed out despite
           # a CPU-visible resident. Reuse that proven *real* GUI/GPU path.
-          # Same seeded blocked cliff AFTER the GLSL/WGSL steep-face texture
-          # fix, compared against original #826 pre-fix context PNGs. Existing
-          # capture uses physical cliff inspector and true PlayCanvas pixels;
-          # each orientation starts a fresh Chromium GPU context.
-          # The earlier slope-only artifact remains separate and reusable as
-          # pre-fix evidence. Retain existing bounded 14m cap.
+          # Previous headed Mesa/X11 real slope capture (#828) reached
+          # ready=true, settled=true, pending=0 but the compositor's freshness
+          # marker never painted and Page.screenshot timed out on BOTH original
+          # viewports. The terrain-only inspector has no NPC GPU-pick dependency,
+          # unlike the resident proof that correctly stays on headed Chromium.
+          # Use this existing screenshot tool's headless WebGL2 SwiftShader
+          # path to bypass the reproduced stale headed X11 compositor. Retain
+          # exact original slope SEED and selected real inspector, all native
+          # pixel/freshness checks, fresh browser per orientation and 14m cap.
           xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 14m bash -c '
             failed=0
             for profile in fullhd-portrait fullhd-landscape; do
-              python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --initial-ready-only --out "test-results/wp550-webgl2/s003-hero-close-cliff-context" --scenario s003-hero-close-cliff-context --profile "$profile" --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --initial-ready-only --out "test-results/wp550-webgl2/s003-hero-close-slope-context" --scenario s003-hero-close-slope-context --profile "$profile" --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180 || failed=1
             done
             exit "$failed"
           '
