@@ -296,7 +296,13 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   // Physical slope faces catch daylight before micro-bump shading. A flat
   // patch has dot(sdN, sdL) == sdL.y, so existing level roads and fields
   // keep their original colour. No height exaggeration or collision offset.
-  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+  // Continuous 3D rock grain is already world-space; the actual Close cliff
+  // screenshot's heavy polygon outlines come from per-face sun contrast.
+  // Attenuate ONLY steep rock facets, retaining geometric shading elsewhere.
+  float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+    (1.0 - step(0.5, abs(sdKind - 3.0)));
+  float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
@@ -538,7 +544,10 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdL = normalize(uniform.sdSunDir);
   let sdNb = normalize(sdN - sdGrad);
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
-  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+  let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+    (1.0 - step(0.5, abs(sdKind - 3.0)));
+  let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);
