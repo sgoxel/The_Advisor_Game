@@ -3026,6 +3026,24 @@ async function start() {
             !!selectedFootRing.render?.enabled &&
             ringMeshes.some(mesh => mesh.visible),
           grounded: !!actor && selectedFootRing.getLocalPosition().equals(actor.getLocalPosition()),
+          // Compare the *actual* rendered actor foot to the same SEED-owned
+          // composed ground/deck used by movement, not only to its marker ring.
+          // Read-only evidence: neither picking nor this probe moves a resident.
+          surfaceContact: (() => {
+            const source = actor ? actorSources.get(actor) : undefined;
+            if (!actor || !source) return null;
+            const surface = finalSurfaceAt(source.x, source.z);
+            const expected = renderFrame.sourceToRender(source.x, source.z, surface.surfaceHeight);
+            const actual = actor.getLocalPosition();
+            return {
+              source: { ...source }, surfaceHeight: surface.surfaceHeight,
+              groundHeight: surface.groundHeight, deckHeight: surface.deckHeight,
+              traversal: surface.traversal, walkable: surface.walkable,
+              actualRenderY: actual.y, expectedRenderY: expected.y,
+              gapM: Math.hypot(actual.x - expected.x, actual.y - expected.y, actual.z - expected.z) *
+                CANONICAL_METRES_PER_SOURCE_UNIT,
+            };
+          })(),
           depthTest: footRingMaterial.depthTest,
           depthWrite: footRingMaterial.depthWrite,
           meshCount: ringMeshes.length,
