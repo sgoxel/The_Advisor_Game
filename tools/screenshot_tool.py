@@ -138,17 +138,12 @@ SCENARIOS: dict[str, str] = {
     # proven real-canvas pick/focus controls, then save contact alongside PNG.
     "s003-hero-close-resident": (
         "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);"
-        "eval:window.advisorWorld.setHalfHeight(18);"
-        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true));"
-        # Focus the same actual Simulation-resident's grounded foot, not
-        # an unrelated ground hit behind their screen-projected torso.
-        "eval:window.__wp550SelectedCode=window.__s006Resident.code;"
-        "eval:window.__wp550SelectedSource=window.__s006Resident.source;"
-        "eval:window.__wp550SelectedSource||Promise.reject(new Error('Selected resident has no real foot source'));"
-        "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.hydrology.toLonLat(window.__wp550SelectedSource.x,window.__wp550SelectedSource.z));"
         "eval:window.advisorWorld.setHalfHeight(10);"
-        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true))&&window.__s006Resident.code===window.__wp550SelectedCode;"
-        "tap:resident-feet;visible:#npc-popup:not([hidden]);"
+        "until:window.advisorWorld.residentEvidencePick(true);"
+        # First prove the chosen actor survives the real GPU-depth / structural
+        # screen hit; then actually click that same pixel in Chromium.
+        "eval:window.advisorWorld.verifiedResidentEvidencePick().then(r=>r?(window.__s006Resident=r,window.__wp550SelectedCode=r.code):Promise.reject(new Error('No GPU-confirmed resident tap in the current real view')))"
+        "tap:resident-verified;visible:#npc-popup:not([hidden]) #npc-seed-code;"
         # The real tap must inspect that exact original 2D resident. The
         # old follow-on popup button intermittently remained covered/absent
         # and timed out despite a fully live scene. Focus the actually picked
@@ -621,16 +616,18 @@ class Session:
             page.mouse.move(*parse_point(end, self.viewport), steps=12)
             page.mouse.up()
         elif name == "tap":
-            if arg in ("resident", "resident-feet"):
-                point = page.evaluate("""unobscuredFeet => {
-                  // Re-pick the same real canvas actor at click time. Only the
-                  // WP #550 feet witness requests the actual roof/foot-ray veto.
-                  const r = window.advisorWorld?.residentEvidencePick?.(unobscuredFeet);
+            if arg in ("resident", "resident-feet", "resident-verified"):
+                point = page.evaluate("""mode => {
+                  // WP #550 uses the GPU-confirmed resident's ORIGINAL pixel,
+                  // not a new CPU-only candidate that might hit a roof.
+                  const r = mode === 'resident-verified'
+                    ? window.__s006Resident
+                    : window.advisorWorld?.residentEvidencePick?.(mode === 'resident-feet');
                   if (!r || !Number.isFinite(r.clientX) || !Number.isFinite(r.clientY))
                     return null;
                   window.__s006Resident = r;
                   return [r.clientX, r.clientY];
-                }""", arg=(arg == "resident-feet"))
+                }""", arg=arg)
                 if point is None:
                     raise CaptureError("no selected resident pixel available for actual browser tap")
                 x, y = point

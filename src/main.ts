@@ -3063,12 +3063,13 @@ async function start() {
         };
       },
       /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
-      residentEvidencePick(requireUnobscuredFeet = false) {
+      residentEvidencePick(requireUnobscuredFeet = false, skipCodes: readonly string[] = []) {
         const rect = canvas.getBoundingClientRect(), point = new pc.Vec3(),
           paintedHead = new pc.Vec3(), midpoint = new pc.Vec3();
         for (const actor of actors) {
           const resident = actorResidents.get(actor);
-          if (!actor.enabled || !resident || !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
+          if (!actor.enabled || !resident || skipCodes.includes(resident.code) ||
+              !hasResidentMesh(actor) || !residentInFrontOfCamera(actor)) continue;
           const meshCount = drawableResidentMeshes(actor).length;
           characterVisuals.headPoint(actor, paintedHead);
           midpoint.lerp(actor.getPosition(), paintedHead, .5);
@@ -3097,6 +3098,24 @@ async function start() {
             homeEntrance: resident.homeEntrance,
             workplace: resident.workplace, task: resident.task, route: resident.route,
             clientX, clientY, tick: simulation.tick, meshCount };
+        }
+        return null;
+      },
+      /** On-demand proof that a genuine canvas actor passes the SAME GPU depth
+       * and opaque-surface validation as an actual player tap. CPU proximity
+       * alone is never sufficient. Selection and Simulation are untouched. */
+      async verifiedResidentEvidencePick() {
+        if (!verifyResidentAtTap) return null;
+        const rejected: string[] = [];
+        for (let i = 0; i < actors.length; i++) {
+          const pick = this.residentEvidencePick(true, rejected);
+          if (!pick) return null;
+          const actor = actors.find(candidate => candidate.enabled &&
+            actorResidents.get(candidate)?.code === pick.code);
+          const resident = actor && actorResidents.get(actor);
+          if (resident && await verifyResidentAtTap(resident, pick.clientX, pick.clientY))
+            return pick;
+          rejected.push(pick.code);
         }
         return null;
       },
