@@ -62,6 +62,12 @@ test("both shader languages carry the same detail pipeline, and only materials t
       assert.ok(main.indexOf("sdFp < 0.45") > main.search(/d(Fdx|pdx)\(sdP\)/), "screen derivatives of position are taken before the branch");
       assert.equal(main.includes("sdKindTerrain("), mode === "terrain");
       assert.equal(main.includes("sdShade ="), mode === "terrain", "terrain shades its relief from the sun; lit materials bend the normal");
+      if (mode === "terrain") {
+        // Physical polygon normals must influence both WebGL2 and WebGPU
+        // terrain emission, without adding a fake height or changing flat land.
+        assert.ok(main.includes("dot(sdN, sdL) - sdL.y"), "broad relief responds to actual surface slope");
+        assert.ok(main.includes("dot(sdNb, sdL) - dot(sdN, sdL)"), "micro detail remains additive");
+      }
       assert.equal(main.includes("sdGlint ="), mode === "terrain", "terrain adds its own sun glints (water, mud, snow)");
       assert.ok(main.includes("sdGloss = mix(") && main.includes("sdSpec = mix("), "per-pixel shine");
     }
