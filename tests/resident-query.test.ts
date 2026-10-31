@@ -925,6 +925,10 @@ test("S010 opaque world walls prevent picking an illustrated resident behind the
     "a missing first depth sample still cannot select through the actual opaque wall");
   assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh], [ownMesh], -21), true,
     "the same resident stays selectable when the world surface is genuinely behind it");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh, wallMesh], [wallMesh], -21, true), false,
+    "an opaque wall owning the exact tap overrides a nearby 44px actor candidate even when the wall depth is farther");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh, wallMesh], [ownMesh], -21, true), true,
+    "a visible actor ID at the exact tap remains pickable when a wall is behind it");
   assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [ownMesh], null, true), false,
     "opaque world-only roof ID rejects a resident even when GPU depth readback has a hole");
   assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [ownMesh], null, false), true,
