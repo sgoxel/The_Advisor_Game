@@ -1704,7 +1704,7 @@ test("S005 first unsafe bridge interval identifies exact grade station without c
 test("S005 bridge approval needs a real owned deck touching both dry banks", () => {
   const code = "SEED/BRIDGE/OWNER";
   const land = {
-    water: { kind: "none" }, surfaceHeight: 11, deckHeight: 11,
+    water: { kind: "none" }, surfaceHeight: 11, groundHeight: 11, deckHeight: 11,
     walkable: true, traversal: "bridge", deckOwnerIds: [code],
     contributingModifierIds: [code],
   } as FinalSurface;
@@ -1717,6 +1717,8 @@ test("S005 bridge approval needs a real owned deck touching both dry banks", () 
     { ...land, water: { kind: "river" } },
     { ...land, deckHeight: 10 },
     { ...land, surfaceHeight: 12 },
+    { ...land, groundHeight: 10.8 },
+    { ...land, groundHeight: 11.2 },
     { ...land, walkable: false },
   ] as FinalSurface[]) {
     assert.equal(selectedRoadDryLandingDeckWalkable(gap, code), false,
