@@ -2434,6 +2434,63 @@ test("one real Greyfield worker crosses its SEED gate and wet bridge to work and
     "real workday crosses an occupied bridge and legal gates; either physical removal rejects it");
 });
 
+test("original Hero/Close selected artisan walks the real street back to the owned workshop door", () => {
+  // Same original resident /RESIDENT/40 selected in actual S003 WebGL2 pixels,
+  // never a synthetic actor or camera-owned coordinate.
+  const place = villages[0], index = 40, seed = residentFoundationAt(place, index),
+    door = resolvedSettlementHomeDoorFor(place, index), lon = place.canonicalPosition.lon;
+  assert.equal(seed.role, "artisan");
+  assert.equal(seed.workplace, seed.homeBuilding + "/WORKSHOP");
+  assert.ok(door && seed.homeEntrance.endsWith("/ENTRANCE"));
+  const date = tickAtLocalTime(WORKDAY, 12 * HOUR, lon),
+    plan = dailyPlan({
+      code: seed.code, role: seed.role, ageGroup: seed.ageGroup, guardShift: seed.guardShift,
+    }, seed.traits, localDayIndex(date, lon), localWeekday(date, lon)),
+    returnIndex = plan.findIndex((a, i) => i > 0 &&
+      a.kind === "work" && a.anchor === "work" &&
+      plan[i - 1].kind === "errand" && plan[i - 1].anchor === "market");
+  assert.ok(returnIndex > 0, "this actual artisan must have its original market-to-workshop return");
+  const legStart = plan[returnIndex].start,
+    legEnd = plan[returnIndex + 1]?.start ?? 24 * HOUR,
+    tick = (elapsed: number) => tickAtLocalTime(WORKDAY, legStart + elapsed, lon);
+  let walkedWindows = 0, roadMetres = 0, arrived = false;
+  for (let elapsed = 0; elapsed < legEnd - legStart; elapsed += 24) {
+    const state = residentAt(place, index, tick(elapsed));
+    assert.equal(state.code, seed.code, "resident identity may not change across timed route");
+    assert.ok(state.grounded && !state.route.startsWith("BLOCKED:"),
+      "original resident must remain grounded on an actually legal route");
+    if (state.activity !== "commute") {
+      assert.ok(state.indoors && state.activity === "work" &&
+        state.route === seed.workplace,
+        "a return cannot finish somewhere other than the original owned workshop");
+      assert.ok(greatCircleDistance(state.position, sourceToLonLat(door.x, door.z)) < .05,
+        "the arrived original actor must stand at its actual rendered owned door");
+      arrived = true;
+      break;
+    }
+    walkedWindows++;
+    assert.ok(state.walkAhead && state.walkAhead.length >= 2 &&
+      state.travelDistanceM && state.travelDistanceM > 0,
+      "real in-flight resident must expose physically continuous walk-ahead positions");
+    for (let i = 1; i < state.walkAhead.length; i++) {
+      const from = state.walkAhead[i - 1], to = state.walkAhead[i],
+        length = greatCircleDistance(sourceToLonLat(from.x, from.z), sourceToLonLat(to.x, to.z)),
+        steps = Math.max(1, Math.ceil(length));
+      for (let step = 0; step <= steps; step++) {
+        const fraction = step / steps,
+          x = from.x + wrapSourceX(to.x - from.x) * fraction,
+          z = from.z + (to.z - from.z) * fraction,
+          surface = finalSurfaceAt(x, z);
+        assert.ok(residentWalkableSurface(surface),
+          "every actual in-flight resident metre must obey SEED final-surface legal footing");
+        if (surface.traversal === "road") roadMetres++;
+      }
+    }
+  }
+  assert.ok(walkedWindows > 0 && roadMetres > 0 && arrived,
+    "the same screenshot resident must traverse original legal streets and reach its owned front-wall doorway");
+});
+
 test("outlying woodland workers use real habitat and remain queryable away from town", async () => {
   const { climateSampleAt } = await import("../src/climate.ts"), place = villages[0], simulation = new LazySimulation(), tick = tickAtLocalTime(WORKDAY, 15 * HOUR, place.canonicalPosition.lon);
   simulation.setFocus(place); simulation.advance(tick);
