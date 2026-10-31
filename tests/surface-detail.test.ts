@@ -47,6 +47,13 @@ test("terrain colours from the climate palette get their own ground patterns", (
   assert.equal(terrainSurfaceKind(P.grassland, flat, true), K.road, "roads win");
 });
 
+test("WP #550 rock surface reveals physical cliff slope beneath a larger coherent cell pattern", () => {
+  const chunks = surfaceDetailChunks("terrain");
+  // Same metre-scaled rock cells on WebGL2/GLSL and WebGPU/WGSL.
+  assert.ok(chunks.glslDeclaration.includes("sdCells(uv * 0.30); float edge = c.x / 0.30;"));
+  assert.ok(chunks.wgslDeclaration.includes("sdCells(uv * 0.30); let edge = c.x / 0.30;"));
+});
+
 test("both shader languages carry the same detail pipeline, and only materials that ask for it", () => {
   for (const mode of ["terrain", "lit"] as const) {
     const sd = surfaceDetailChunks(mode);

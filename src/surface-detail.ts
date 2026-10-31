@@ -123,7 +123,7 @@ vec4 sdPattern(float kind, vec2 uv, float fp) {
     float tone = (blotch - 0.5) * 0.25 * sdVis(1.6, fp) + (grain - 0.5) * 0.16 * sdVis(0.2, fp);
     return vec4(vec3(1.0 + tone) * mix(vec3(1.0), vec3(1.16, 1.13, 1.1), pebble), grain * 0.01 + pebble * 0.02);
   } else if (kind < 3.5) {
-    vec2 c = sdCells(uv * 0.8); float edge = c.x / 0.8; float grain = sdNoise(uv * 3.0);
+    vec2 c = sdCells(uv * 0.30); float edge = c.x / 0.30; float grain = sdNoise(uv * 3.0);
     float crack = sdGroove(edge, 0.025, fp) * sdVis(0.6, fp);
     float tone = (c.y - 0.5) * 0.2 * sdVis(1.2, fp) + (grain - 0.5) * 0.2 * sdVis(0.3, fp);
     return vec4(vec3((1.0 + tone) * (1.0 - 0.20 * crack)), -crack * 0.012 + grain * 0.02 + smoothstep(0.0, 0.3, edge) * 0.03);
@@ -347,7 +347,7 @@ fn sdPattern(kind: f32, uv: vec2f, fp: f32) -> vec4f {
     let tone = (blotch - 0.5) * 0.25 * sdVis(1.6, fp) + (grain - 0.5) * 0.16 * sdVis(0.2, fp);
     return vec4f(vec3f(1.0 + tone) * mix(vec3f(1.0), vec3f(1.16, 1.13, 1.1), pebble), grain * 0.01 + pebble * 0.02);
   } else if (kind < 3.5) {
-    let c = sdCells(uv * 0.8); let edge = c.x / 0.8; let grain = sdNoise(uv * 3.0);
+    let c = sdCells(uv * 0.30); let edge = c.x / 0.30; let grain = sdNoise(uv * 3.0);
     let crack = sdGroove(edge, 0.025, fp) * sdVis(0.6, fp);
     let tone = (c.y - 0.5) * 0.2 * sdVis(1.2, fp) + (grain - 0.5) * 0.2 * sdVis(0.3, fp);
     return vec4f(vec3f((1.0 + tone) * (1.0 - 0.20 * crack)), -crack * 0.012 + grain * 0.02 + smoothstep(0.0, 0.3, edge) * 0.03);
