@@ -3173,6 +3173,10 @@ export class LazySimulation {
     }
   }
 
+  /** Accepted, Simulation-validated travel requires current Fantasy Time projection
+   * even when a routine worker snapshot arrives late. No route or actor is created. */
+  get acceptedSiteVisitCount() { return this.siteVisitJournal?.count ?? 0; }
+
   /** Read-only validated departure event; not yet an applied worker-visible trip. */
   preparedSiteVisitFor(residentCode: string) {
     return this.siteVisitJournal?.eventFor(residentCode);
