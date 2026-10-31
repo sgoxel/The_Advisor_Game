@@ -642,7 +642,10 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
     for (let i = wetIndex - 1; i >= 0; i--) {
       const station = journey.stations[i], ground = finalSurfaceAt(station.x, station.z);
       if (ground.water.kind !== "none" || !ground.walkable ||
-          (ground.traversal !== "road" && ground.traversal !== "bridge")) continue;
+          (ground.traversal !== "road" && ground.traversal !== "bridge") ||
+          // A dry road near the correct river is not proof of THIS SEED bridge
+          // unless its existing crossing road actually owns the final surface.
+          !ground.contributingModifierIds.includes(ownedBridge!.roadCode)) continue;
       const targetMetres = journey.cumulativeMetres[i];
       let low = startTick, high = endTick;
       while (low < high) {
@@ -654,7 +657,8 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       const actor = residentTransportJourneyAt(journey, low),
         actual = finalSurfaceAt(actor.x, actor.z);
       if (actor.residentCode === chosenCode && actual.water.kind === "none" &&
-          actual.walkable && (actual.traversal === "road" || actual.traversal === "bridge"))
+          actual.walkable && actual.contributingModifierIds.includes(ownedBridge!.roadCode) &&
+          (actual.traversal === "road" || actual.traversal === "bridge"))
         return { point: { x: actor.x, z: actor.z }, tick: low };
     }
     assert.fail("the original resident never stands on the dry graded bridge approach");
