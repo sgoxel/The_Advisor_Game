@@ -23,7 +23,7 @@ import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
-import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, selectedRoadDryLandingDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
@@ -1701,6 +1701,30 @@ test("S005 first unsafe bridge interval identifies exact grade station without c
     "repeated static grade evidence is deterministic and independent of map/renderer");
 });
 
+test("S005 bridge approval needs a real owned deck touching both dry banks", () => {
+  const code = "SEED/BRIDGE/OWNER";
+  const land = {
+    water: { kind: "none" }, surfaceHeight: 11, deckHeight: 11,
+    walkable: true, traversal: "bridge", deckOwnerIds: [code],
+    contributingModifierIds: [code],
+  } as FinalSurface;
+  assert.equal(selectedRoadDryLandingDeckWalkable(land, code), true,
+    "physically owned deck continues across the dry-bank surface");
+  for (const gap of [
+    { ...land, deckHeight: null, traversal: "road" },
+    { ...land, deckOwnerIds: [] },
+    { ...land, contributingModifierIds: [] },
+    { ...land, water: { kind: "river" } },
+    { ...land, deckHeight: 10 },
+    { ...land, surfaceHeight: 12 },
+    { ...land, walkable: false },
+  ] as FinalSurface[]) {
+    assert.equal(selectedRoadDryLandingDeckWalkable(gap, code), false,
+      "a nearby dry road or another owner's deck must not certify a connected landing");
+  }
+  assert.equal(selectedRoadDryLandingDeckWalkable(land, "SEED/OTHER/ROAD"), false);
+});
+
 test("S005 selected bridge deck requires both recorded owner and contributing modifier", () => {
   const edgeCode = "SEED/SELECTED/ROAD", otherCode = "SEED/FOREIGN/ROAD",
     owned = {
@@ -2513,7 +2537,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     span = transportBridgeSpanAt(bridge!, crossing!);
   const sampledPass = sampledBridgeCrossingPass(center.centerDeckWalkable, span),
     sampledLegal = center.centerDeckWalkable && span.matchingCrossing &&
-      span.deckStationsWalkable && span.bankStationsWalkable &&
+      span.deckStationsWalkable && span.dryLandingDeckContact && span.bankStationsWalkable &&
       span.approachStationsWalkable && span.approachGradeWithinLimit &&
       span.routeStationsWalkable && span.routeGradeWithinLimit &&
       span.routeStationsTopLegal && span.approachStationsTopLegal;
@@ -2522,7 +2546,7 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
   if (!sampledPass) {
     assert.ok(!span.routeStationsTopLegal || !span.approachStationsTopLegal ||
       !span.routeGradeWithinLimit || !span.approachGradeWithinLimit ||
-      !center.centerDeckWalkable || !span.deckStationsWalkable ||
+      !center.centerDeckWalkable || !span.deckStationsWalkable || !span.dryLandingDeckContact ||
       !span.bankStationsWalkable || !span.routeStationsWalkable,
       "unsafe sampled bridge must retain an identifiable failed physical-surface gate");
     if (!span.routeStationsTopLegal) assert.ok(span.routeFirstUnsafeCause,
