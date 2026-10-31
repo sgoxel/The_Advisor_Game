@@ -3182,6 +3182,12 @@ export class LazySimulation {
     return this.siteVisitJournal?.eventFor(residentCode);
   }
 
+  /** Read-only homeward decision: only Simulation can admit a legal return.
+   * Inspecting this immutable evidence cannot command or relocate an actor. */
+  preparedHomeReturnFor(residentCode: string) {
+    return this.siteVisitJournal?.returnFor(residentCode);
+  }
+
   /** Diagnostic compatibility façade. It materializes one analytical sample only on read. */
   get residents() {
     const result = new Map<string, Resident[]>();
