@@ -884,7 +884,7 @@ class Session:
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"
         path = Path(self.args.out) / file
-        resident_proof = suffix in ("resident-canonical-details", "owned-home-entrance")
+        resident_proof = suffix in ("resident-canonical-details", "owned-home-entrance", "selected-foot-surface")
         if resident_proof:
             # A transient `until:state.settled` can precede more terrain uploads.
             # Both the actual resident and owned doorway must be captured only
