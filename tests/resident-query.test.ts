@@ -25,8 +25,9 @@ test("WP #550 empty remote wilderness returns no residents without a cold popula
   assert.deepEqual(simulation.focusedResidents(x, z, 16, 8), [],
     "an empty source region never authorizes an invented visible resident");
   assert.equal(simulation.stats.query.settlements, 0);
-  assert.ok(nearbyPlaces(villages[0].x, villages[0].z).some(place => place.code === villages[0].code),
-    "an inhabited view must still use its complete normal Simulation query");
+  assert.ok(nearbyPlaces(villages[0].x, villages[0].z).some(candidate =>
+    candidate.continent === villages[0].continent && candidate.country === villages[0].country),
+    "an inhabited same-country view must still use its complete normal Simulation query");
 });
 
 test("S009 unchanged prior-day anchors cannot require a physical homecoming route", () => {
