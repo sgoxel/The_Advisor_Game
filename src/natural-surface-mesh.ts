@@ -106,6 +106,22 @@ type Sample = {
   surface: ReturnType<typeof finalSurfaceRenderChannelsAt>;
 };
 
+/** Retain actual composed dry relief even without a registered landform at the
+ * cell centre. This is a rendering decision on canonical sampled heights:
+ * wet banks keep their separately cut water-surface geometry and no SEED
+ * height, walkability, or collision result is changed. */
+export function dryCellReliefMidpointNeeded(
+  a: Pick<Sample, "wet" | "y">,
+  b: Pick<Sample, "wet" | "y">,
+  c: Pick<Sample, "wet" | "y">,
+  d: Pick<Sample, "wet" | "y">,
+  middle: Pick<Sample, "wet" | "y">,
+): boolean {
+  return a.wet === "none" && b.wet === "none" && c.wet === "none" &&
+    d.wet === "none" && middle.wet === "none" &&
+    dryReliefMidpointNeeded(a.y, b.y, c.y, d.y, middle.y);
+}
+
 /** Preserve the original wilderness water classification without evaluating
  * dry elevation/slope for a point that has no local water-changing landform.
  * Every actual landform still executes the original full canonical path.
@@ -546,7 +562,7 @@ export function rebuildNaturalSurface(
       throw new RangeError("Natural mesh leaf cap exceeded");
 
     const centreNeeded = river || major || materialBoundary || middle.wet !== a.wet ||
-      (formation !== undefined && dryReliefMidpointNeeded(a.y, b.y, c.y, d.y, middle.y));
+      dryCellReliefMidpointNeeded(a, b, c, d, middle);
     if (centreNeeded) {
       triangle(a, b, middle);
       triangle(b, c, middle);
