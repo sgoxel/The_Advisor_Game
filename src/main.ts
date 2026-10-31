@@ -1979,14 +1979,15 @@ async function start() {
   footRingMaterial.depthWrite = false;
   footRingMaterial.cull = pc.CULLFACE_NONE;
   footRingMaterial.update();
-  // The ring is an indication of an ALREADY verified resident, not a world
-  // obstacle or a pick target. Keep its true scene depth, but never let its
-  // visible pixels steal the real resident's GPU ID/depth click.
-  const footRingInstance = new pc.MeshInstance(footRingMesh, footRingMaterial);
-  footRingInstance.pick = false;
+  // The original real selected-foot screenshots proved the ordinary
+  // depth-tested MeshInstance was visible and actual GPU resident taps worked.
+  // Turning off MeshInstance.pick made that gold halo disappear from the
+  // ORIGINAL PR #802 WebGL2 landscape and portrait screenshots despite
+  // read-only state reporting its mesh as present. Preserve scene rendering;
+  // never treat a read-only mesh-visible flag as proof of visible pixels.
   const selectedFootRing = new pc.Entity("Selected resident · depth-tested ground ring");
   selectedFootRing.addComponent("render", {
-    meshInstances: [footRingInstance],
+    meshInstances: [new pc.MeshInstance(footRingMesh, footRingMaterial)],
     castShadows: false, receiveShadows: false,
   });
   flatRoot.addChild(selectedFootRing);
