@@ -3063,7 +3063,7 @@ async function start() {
         };
       },
       /** On-demand proof that an onscreen, clickable actor maps to its canonical Simulation resident. */
-      residentEvidencePick() {
+      residentEvidencePick(requireUnobscuredFeet = false) {
         const rect = canvas.getBoundingClientRect(), point = new pc.Vec3(),
           paintedHead = new pc.Vec3(), midpoint = new pc.Vec3();
         for (const actor of actors) {
@@ -3077,6 +3077,18 @@ async function start() {
           if (point.x < 12 || point.y < 12 || point.x > rect.width - 12 || point.y > rect.height - 12) continue;
           if (document.elementFromPoint(clientX, clientY) !== canvas) continue;
           if (pickResidentAt?.(clientX, clientY)?.code !== resident.code) continue;
+          if (requireUnobscuredFeet) {
+            // WP #550's real resident-foot screenshot must select a canvas
+            // pixel that survives the same opaque-structure ray veto as the
+            // actual pointer handler. A CPU 44px candidate behind a roof is
+            // not a real clickable resident (original capture #791 failed).
+            // Normal S006 resident inspection retains its existing behavior.
+            const lens = camera.camera!;
+            const midDepth = lens.viewMatrix.transformPoint(midpoint, new pc.Vec3()).z;
+            const footDepth = lens.viewMatrix.transformPoint(actor.getPosition(), new pc.Vec3()).z;
+            if (solidWorldBlocksTap(point.x, point.y,
+                residentOcclusionReachDepth(midDepth, footDepth), lens)) continue;
+          }
           return { code: resident.code, homeEntrance: resident.homeEntrance,
             workplace: resident.workplace, task: resident.task, route: resident.route,
             clientX, clientY, tick: simulation.tick, meshCount };
