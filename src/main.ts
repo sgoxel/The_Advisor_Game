@@ -2544,7 +2544,10 @@ async function start() {
           x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
-        characterVisuals.move(actor, .8, b.x-a.x, b.z-a.z);
+        // 3D model orientation also uses the true local east/south bearing:
+        // one source longitude unit is cos(latitude) physical units eastward.
+        characterVisuals.move(actor, .8,
+          (b.x - a.x) * Math.cos(sourceToLonLat(x, z).lat), b.z - a.z);
       }
     }
     // All true on-world 2D illustrated residents face the current camera;
