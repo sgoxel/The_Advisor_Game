@@ -1395,13 +1395,17 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
       // Sample the same composed surface as resident feet, at bounded 2 m
       // stations; this changes only close-view presentation, never routes.
       const segments = Math.max(1, Math.min(24, Math.ceil(length / metresToSource(2)))),
-        c = Math.cos(yaw), s = Math.sin(yaw);
+        c = Math.cos(yaw), s = Math.sin(yaw),
+        metric = sourceUnitsPerMetreAt(feature.z),
+        eastScale = metric.x / metric.z;
+      // House-door bearings are physical ENU directions: compensate east
+      // source-map longitude scale before sampling true canonical stations.
       // Each station resolves only two SEED samples, shared by its two
       // neighbouring segments and both the top and side faces.
       const stations = Array.from({length: segments + 1}, (_, edge) => {
         const sample = (side: number) => {
           const lx = side * w / 2, lz = (edge / segments - .5) * length,
-            px = lx * c + lz * s, pz = -lx * s + lz * c,
+            px = (lx * c + lz * s) * eastScale, pz = -lx * s + lz * c,
             ground = finalSurfaceAt(feature.x + px, feature.z + pz).surfaceHeight - feature.y;
           return {top: [px, ground + .08, pz] as Point,
             base: [px, ground + .015, pz] as Point};
