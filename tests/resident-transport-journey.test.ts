@@ -8,7 +8,7 @@ import { transportBridgeByCode } from "../src/transport-network.ts";
 import { createTransportWalkingIndex, transportWalkingRouteViaRequiredEdge } from "../src/transport-walking-route.ts";
 import { residentAt, residentLocalTransportApproach, residentLocalTransportSegmentLegal } from "../src/simulation.ts";
 import { planTransportRouteCorridorByLeg } from "../src/transport-route-corridor.ts";
-import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, appendResidentReturnToOwnedDoor, residentTransportJourneyAt } from "../src/resident-transport-journey.ts";
+import { prepareResidentTransportJourney, prepareResidentTransportJourneyWithApproach, prepareResidentTransportReturnJourney, appendResidentReturnToOwnedDoor, residentTransportJourneyAt, type ValidatedResidentJourney } from "../src/resident-transport-journey.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { ResidentSiteVisitJournal, residentChoosesSiteVisit } from "../src/resident-transport-events.ts";
@@ -629,11 +629,43 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
   const bridgePoint = residentTransportJourneyAt(accepted!.journey, lowTick);
   assert.ok(Math.hypot(bridgePoint.x - ownedBridge!.x, bridgePoint.z - ownedBridge!.z) < 2,
     "the actual site traveller's screenshot tick must coincide with the existing wet deck");
+  // Source-only proof of a REAL moving actor on the dry graded approach to
+  // this exact wet bridge, at the original event's real Fantasy Time. Both
+  // approved directions use the same routine; no witness position is injected.
+  const dryApproachWitness = (journey: ValidatedResidentJourney, startTick: number, endTick: number) => {
+    const wetIndex = journey.stations.findIndex(point => {
+      const surface = finalSurfaceAt(point.x, point.z);
+      return surface.water.kind === "river" && surface.traversal === "bridge" &&
+        surface.deckOwnerIds.includes(ownedBridge!.roadCode);
+    });
+    assert.ok(wetIndex > 0, "the original wet bridge has an earlier dry approach station");
+    for (let i = wetIndex - 1; i >= 0; i--) {
+      const station = journey.stations[i], ground = finalSurfaceAt(station.x, station.z);
+      if (ground.water.kind !== "none" || !ground.walkable ||
+          (ground.traversal !== "road" && ground.traversal !== "bridge")) continue;
+      const targetMetres = journey.cumulativeMetres[i];
+      let low = startTick, high = endTick;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        if (residentTransportJourneyAt(journey, middle).distanceM < targetMetres)
+          low = middle + 1;
+        else high = middle;
+      }
+      const actor = residentTransportJourneyAt(journey, low),
+        actual = finalSurfaceAt(actor.x, actor.z);
+      if (actor.residentCode === chosenCode && actual.water.kind === "none" &&
+          actual.walkable && (actual.traversal === "road" || actual.traversal === "bridge"))
+        return { point: { x: actor.x, z: actor.z }, tick: low };
+    }
+    assert.fail("the original resident never stands on the dry graded bridge approach");
+  };
+  const outboundBank = dryApproachWitness(accepted!.journey, decidedTick, destinationTick);
   const home = await selected!.considerAdvisorHomeReturn(chosenCode);
   assert.equal(typeof home.started, "boolean");
   let ownedDoorPoint: { x: number; z: number } | undefined;
   let returnBridgePoint: { x: number; z: number } | undefined,
-    returnBridgeTick: number | undefined;
+    returnBridgeTick: number | undefined,
+    returnBank: { point: { x: number; z: number }; tick: number } | undefined;
   if (home.started) {
     // A graph-only reversed itinerary is not an actor crossing. Project the
     // actual Simulation-approved return at the original SEED wet deck.
@@ -664,6 +696,7 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       "the same canonical road owns the returning resident's deck");
     returnBridgePoint = { x: step.x, z: step.z };
     returnBridgeTick = before;
+    returnBank = dryApproachWitness(returning!.journey, destinationTick, destinationTick + 30*86400);
     const next = destinationTick + 30*86400;
     selected!.advance(next);
     const atHome = selected!.projectedResidentByCode(chosenCode);
@@ -692,8 +725,9 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       fixedMs = (tick: number) => REAL_EPOCH_MS +
         Math.round((tick + 0.5) * 1000 / TIME_SCALE),
       door = selected!.residentByCode(chosenCode)!.homeEntrance;
-    for (const tick of [lowTick, destinationTick, destinationTick + 30*86400,
-      ...(returnBridgeTick === undefined ? [] : [returnBridgeTick])])
+    for (const tick of [lowTick, outboundBank.tick, destinationTick, destinationTick + 30*86400,
+      ...(returnBridgeTick === undefined ? [] : [returnBridgeTick]),
+      ...(returnBank ? [returnBank.tick] : [])])
       assert.equal(Math.floor((fixedMs(tick) - REAL_EPOCH_MS) * TIME_SCALE / 1000), tick,
         "captured browser time must project the actual canonical SEED event tick");
     mkdirSync(dirname(file), { recursive: true });
@@ -702,6 +736,10 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
       originCode, siteCode, bridgeCode,
       site: { x: arrived!.x, z: arrived!.z },
       bridge: { x: bridgePoint.x, z: bridgePoint.z },
+      outboundBank: outboundBank.point,
+      outboundBankFixedMs: fixedMs(outboundBank.tick),
+      returnBank: returnBank?.point ?? null,
+      returnBankFixedMs: returnBank ? fixedMs(returnBank.tick) : null,
       ownedDoorPoint,
       bridgeFixedMs: fixedMs(lowTick),
       returnBridge: returnBridgePoint ?? null,
