@@ -7,10 +7,18 @@ export function residentGpuHitAllows(
   actorViewDepth: number, nearestViewDepth: number | null,
   actorMeshes: readonly object[], renderedSelection: readonly object[],
   exactPixelSelection: readonly object[] = [],
+  worldWithoutResidentsDepth: number | null = null,
 ): boolean {
   if (!Number.isFinite(actorViewDepth) || actorViewDepth >= 0 ||
       !actorMeshes.length || !renderedSelection.some(mesh => actorMeshes.includes(mesh)))
     return false;
+  // Resident quads can win the ordinary pick pass where their lower body
+  // is visually covered by a solid roof. The second real GPU pass excludes
+  // only resident IDs: a nearer opaque world surface always rejects the tap.
+  if (worldWithoutResidentsDepth !== null &&
+      (!Number.isFinite(worldWithoutResidentsDepth) ||
+       worldWithoutResidentsDepth >= 0 ||
+       worldWithoutResidentsDepth > actorViewDepth + 0.035)) return false;
   // A missing depth sample is not proof of empty sky. The original real
   // WebGL2 wall click reproduced a null-depth hole even while an opaque wall
   // had an ID at that exact pixel. Accept sky padding only when there is

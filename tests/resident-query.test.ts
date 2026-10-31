@@ -919,6 +919,12 @@ test("S010 opaque world walls prevent picking an illustrated resident behind the
     "a null depth sample must not excuse an opaque wall ID at the exact clicked pixel");
   assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [ownMesh]), true,
     "a pixel on the real resident remains valid if depth readback is unavailable");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh], [ownMesh], -7), false,
+    "world-only GPU pass exposes a real foreground roof hidden by the resident's own quad ID");
+  assert.equal(residentGpuHitAllows(-15, null, [ownMesh], [ownMesh], [], -7), false,
+    "a missing first depth sample still cannot select through the actual opaque wall");
+  assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [ownMesh], [ownMesh], -21), true,
+    "the same resident stays selectable when the world surface is genuinely behind it");
   assert.equal(residentGpuHitAllows(-15, -20, [ownMesh], [terrainMesh]), false,
     "no original painted resident pixel means no invisible proxy selection");
   assert.equal(residentGpuHitAllows(-15, -20, [], [ownMesh]), false);
