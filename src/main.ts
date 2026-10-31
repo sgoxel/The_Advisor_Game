@@ -2059,9 +2059,11 @@ async function start() {
           const inverse = meshInstance.node.getWorldTransform().clone().invert();
           const localStart = inverse.transformPoint(start, new pc.Vec3());
           const localEnd = inverse.transformPoint(end, new pc.Vec3());
+          const mesh = meshInstance.mesh;
+          if (!mesh) continue;
           const positions: number[] = [], indices: number[] = [];
-          meshInstance.mesh.getPositions(positions);
-          meshInstance.mesh.getIndices(indices);
+          mesh.getPositions(positions);
+          mesh.getIndices(indices);
           if (structuralMeshBlocksSegment(localStart, localEnd, positions, indices)) return true;
         }
       }
