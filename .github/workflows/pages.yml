@@ -50,10 +50,14 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
+          # This bounded capture visits profiles outermost. A late landscape
+          # terrain wait previously exhausted the time cap before any portrait
+          # frame was attempted; prioritize original portrait resident/cliff
+          # proof while retaining the same scenes, checks and time cap.
           # S006's original 4/4 WebGL2/WebGPU real resident capture uses a
           # headed Chromium compositor; headless #550 clicks timed out despite
           # a CPU-visible resident. Reuse that proven *real* GUI/GPU path.
-          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --initial-ready-only --out test-results/wp550-webgl2 --scenario s003-hero-close-resident,s003-hero-close-village,s003-hero-close-slope,s003-hero-close-cliff --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180
+          xvfb-run -a -s '-screen 0 2560x2560x24' timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --headed --initial-ready-only --out test-results/wp550-webgl2 --scenario s003-hero-close-resident,s003-hero-close-cliff,s003-hero-close-slope,s003-hero-close-village --profile fullhd-portrait,fullhd-landscape --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180
       - name: Archive original WP #550 screenshots and failure diagnostics
         if: always() && github.event_name == 'pull_request' && startsWith(github.head_ref, 'agent1-wp550-')
         uses: actions/upload-artifact@v4
