@@ -226,6 +226,15 @@ h2 {
   padding: 0;
   border-color: #d8b97933;
 }
+.map-controls #relief-view {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.map-controls #relief-view[aria-pressed="true"] {
+  color: var(--gold);
+  border-color: var(--gold);
+}
 .compass {
   height: 63px;
   display: flex;
