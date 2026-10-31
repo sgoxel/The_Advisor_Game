@@ -140,11 +140,14 @@ SCENARIOS: dict[str, str] = {
         "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);"
         "eval:window.advisorWorld.setHalfHeight(18);"
         "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true));"
-        "eval:window.__wp550Ground=window.advisorWorld.navigation.surfaceAtScreen(window.__s006Resident.clientX,window.__s006Resident.clientY);"
-        "eval:window.__wp550Ground||Promise.reject(new Error('No canonical ground beneath picked resident'));"
-        "eval:window.advisorWorld.navigation.setFocus(window.__wp550Ground.lon,window.__wp550Ground.lat);"
+        # Focus the same actual Simulation-resident's grounded foot, not
+        # an unrelated ground hit behind their screen-projected torso.
+        "eval:window.__wp550SelectedCode=window.__s006Resident.code;"
+        "eval:window.__wp550SelectedSource=window.__s006Resident.source;"
+        "eval:window.__wp550SelectedSource||Promise.reject(new Error('Selected resident has no real foot source'));"
+        "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.hydrology.toLonLat(window.__wp550SelectedSource.x,window.__wp550SelectedSource.z));"
         "eval:window.advisorWorld.setHalfHeight(10);"
-        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true));"
+        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true))&&window.__s006Resident.code===window.__wp550SelectedCode;"
         "tap:resident-feet;visible:#npc-popup:not([hidden]);"
         # The real tap must inspect that exact original 2D resident. The
         # old follow-on popup button intermittently remained covered/absent
@@ -152,9 +155,9 @@ SCENARIOS: dict[str, str] = {
         # Simulation actor through the same camera-only navigator, never a
         # camera-invented point or another resident. A wrong/occluded click
         # still fails this exact identity check instead of producing a PNG.
-        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.actorCode===window.__s006Resident.code&&window.__foot.surfaceContact;"
+        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__wp550SelectedCode&&window.__foot.actorCode===window.__wp550SelectedCode&&window.__foot.surfaceContact;"
         "eval:(ll=>(window.advisorWorld.navigation.setFocus(ll.lon,ll.lat),window.advisorWorld.setHalfHeight(0.52)))(window.advisorWorld.hydrology.toLonLat(window.__foot.surfaceContact.source.x,window.__foot.surfaceContact.source.z));"
-        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
+        "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__wp550SelectedCode&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
         "until:window.advisorWorld.state.settled;"
         "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
         "shot:selected-foot-surface"
