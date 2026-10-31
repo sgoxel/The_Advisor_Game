@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -2544,10 +2544,10 @@ async function start() {
           x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
-        // 3D model orientation also uses the true local east/south bearing:
-        // one source longitude unit is cos(latitude) physical units eastward.
-        characterVisuals.move(actor, .8,
-          (b.x - a.x) * Math.cos(sourceToLonLat(x, z).lat), b.z - a.z);
+        // The optional 3D character faces the same physical local bearing
+        // used for canonical travel, not a distorted map-space diagonal.
+        const direction = residentWalkingHeadingDelta(a, b);
+        characterVisuals.move(actor, .8, direction.east, direction.south);
       }
     }
     // All true on-world 2D illustrated residents face the current camera;
