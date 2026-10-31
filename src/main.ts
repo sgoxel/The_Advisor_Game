@@ -2571,7 +2571,10 @@ async function start() {
     if (inspectedActor) {
       const foot = inspectedActor.getPosition();
       // Ground indicator uses the rendered actor root, never an invented scheduled location.
-      selectedResidentGround.set(foot.x, foot.y + .02, foot.z);
+      // The rendered actor origin is physical feet. A source/render-unit offset here
+      // used to lift the selected-foot marker by ~30 cm, not the intended 2 cm.
+      // Keep UI anchoring in canonical metres like the depth-tested ring itself.
+      selectedResidentGround.set(foot.x, foot.y + elevationToRenderY(0.02), foot.z);
       camera.camera!.worldToScreen(selectedResidentGround, selectedResidentGroundScreen);
       const gx = Math.round(selectedResidentGroundScreen.x), gy = Math.round(selectedResidentGroundScreen.y);
       // This painted ring uses the same Simulation actor transform and scene

@@ -16,6 +16,14 @@ test("S010 resident hitbox and selected label use the painted cutout world trans
     "selected labels follow the same displayed model");
 });
 
+test("WP #550 selected resident foot marker uses physical metres, never source units", () => {
+  const source = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
+  assert.match(source, /selectedResidentGround\.set\(foot\.x, foot\.y \+ elevationToRenderY\(0\.02\), foot\.z\)/,
+    "the real actor's marker is two centimetres above its grounded feet");
+  assert.doesNotMatch(source, /selectedResidentGround\.set\(foot\.x, foot\.y \+ \.02, foot\.z\)/,
+    "a raw render-unit offset makes the selected marker about fifteen times too high");
+});
+
 test("authored 2D NPC colors survive rendering without extra tone mapping or diffuse darkening", () => {
   // The material lives in a browser-only scene initializer. Keep this focused
   // source contract paired with real WebGL2/WebGPU screenshot acceptance.
