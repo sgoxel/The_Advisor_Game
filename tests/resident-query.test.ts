@@ -4,7 +4,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, lonLatToSource } from "../src/planet.
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -52,6 +52,11 @@ test("WP #550 visible resident walking respects canonical metres at high latitud
     c = lonLatToSource(.001, lat - .001);
   const physical = residentWalkingPolyline([a, b, c]);
   assert.equal(physical.lengths.length, 3);
+  const east = residentWalkingHeadingDelta(a, b);
+  const south = residentWalkingHeadingDelta(b, c);
+  assert.ok(Math.abs(east.east / south.south - .5) < .02,
+    "the optional 3D resident faces physical east/south, not stretched flat-map diagonals");
+
   assert.ok(Math.abs(physical.lengths[1] / (physical.total - physical.lengths[1]) - .5) < .02,
     "east-west source pixels cannot be used as physical walk metres at 60 degrees latitude");
   const seam = residentWalkingPolyline([
