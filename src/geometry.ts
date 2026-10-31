@@ -1396,25 +1396,27 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
       // stations; this changes only close-view presentation, never routes.
       const segments = Math.max(1, Math.min(24, Math.ceil(length / metresToSource(2)))),
         c = Math.cos(yaw), s = Math.sin(yaw);
-      const station = (edge: number, side: number, top: boolean): Point => {
-        const lx = side * w / 2, lz = (edge / segments - .5) * length,
-          localX = lx * c + lz * s, localZ = -lx * s + lz * c,
-          surface = finalSurfaceAt(feature.x + localX, feature.z + localZ);
-        return [localX, surface.surfaceHeight - feature.y + (top ? .08 : .015), localZ];
-      };
+      // Each station resolves only two SEED samples, shared by its two
+      // neighbouring segments and both the top and side faces.
+      const stations = Array.from({length: segments + 1}, (_, edge) => {
+        const sample = (side: number) => {
+          const lx = side * w / 2, lz = (edge / segments - .5) * length,
+            px = lx * c + lz * s, pz = -lx * s + lz * c,
+            ground = finalSurfaceAt(feature.x + px, feature.z + pz).surfaceHeight - feature.y;
+          return {top: [px, ground + .08, pz] as Point,
+            base: [px, ground + .015, pz] as Point};
+        };
+        return {left: sample(-1), right: sample(1)};
+      });
       for (let i = 0; i < segments; i++) {
-        const a = station(i, -1, true), b = station(i, 1, true),
-          c0 = station(i + 1, 1, true), d = station(i + 1, -1, true);
-        structures.quad(a, d, c0, b, gravel);
-        for (const side of [-1, 1]) {
-          const start = station(i, side, false), end = station(i + 1, side, false);
-          structures.quad(start, end, station(i + 1, side, true), station(i, side, true), gravel);
-        }
-        if (i === 0) structures.quad(station(0, -1, false), station(0, -1, true),
-          station(0, 1, true), station(0, 1, false), gravel);
-        if (i === segments - 1) structures.quad(station(segments, 1, false), station(segments, 1, true),
-          station(segments, -1, true), station(segments, -1, false), gravel);
+        const a = stations[i], b = stations[i + 1];
+        structures.quad(a.left.top, b.left.top, b.right.top, a.right.top, gravel);
+        structures.quad(a.left.base, b.left.base, b.left.top, a.left.top, gravel);
+        structures.quad(a.right.top, b.right.top, b.right.base, a.right.base, gravel);
       }
+      const first = stations[0], last = stations[segments];
+      structures.quad(first.left.base, first.left.top, first.right.top, first.right.base, gravel);
+      structures.quad(last.right.base, last.right.top, last.left.top, last.left.base, gravel);
     }
   } else if (feature.kind === "roadside-tree") {
     const h = 6.2 + (variant % 5) * .65, radius = 2 + ((variant >>> 3) % 6) * .18;
