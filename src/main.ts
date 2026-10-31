@@ -123,7 +123,7 @@ import {
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
 import { residentGpuHitAllows } from "./resident-gpu-pick.ts";
-import { structuralMeshBlocksSegment } from "./resident-scene-occlusion.ts";
+import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "./resident-scene-occlusion.ts";
 import { BoundedTimingSamples, ResidentQueryPhaseSamples, TileWorkerPhaseSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
@@ -2092,6 +2092,11 @@ async function start() {
     if (fraction === null) return Promise.resolve(false);
     tapped.lerp(feet, headWorld, fraction);
     const actorDepth = lens.viewMatrix.transformPoint(tapped, eyePoint).z;
+    // The projected tap plane can sit in front of a wall whose solid roof
+    // hides the character's physical feet. Trace to the farther real foot
+    // depth as well; on a genuinely visible head pixel no roof is in the ray.
+    const feetDepth = lens.viewMatrix.transformPoint(feet, eyePoint).z;
+    const occlusionReachDepth = residentOcclusionReachDepth(actorDepth, feetDepth);
     const scenePose = () =>
       `${view.x}/${view.z}/${view.halfHeight}/${view.yaw}/${projectionTransition}/${bridgeInspectionAngle}`;
     const poseAtTap = scenePose(), modelHeight = feet.distance(headWorld);
@@ -2104,7 +2109,7 @@ async function start() {
         // The normal scene renders its actual triangle geometry with depth
         // testing. Use it directly for exact structural occlusion before any
         // potentially missing GPU picker samples. This is not an actor hitbox.
-        if (solidWorldBlocksTap(clientX - rect.left, clientY - rect.top, actorDepth, lens))
+        if (solidWorldBlocksTap(clientX - rect.left, clientY - rect.top, occlusionReachDepth, lens))
           return false;
         // Half-resolution ID/depth targets stay bounded and are created only
         // on a real user interaction, not during rendering or worker streaming.
