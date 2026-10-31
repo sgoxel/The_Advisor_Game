@@ -382,7 +382,19 @@ export function terrainTint(
  * terrain LOD transitions. The 4-source-unit grid prevents a tiny zoom
  * change from remapping forest stands onto huge interpolated polygons. */
 export function detailTerrainResolution(tileSize: number): number {
-  return Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16);
+  // Fractional cell counts on sub-two-unit Hero tiles emitted a full
+  // two-unit quad beyond the tile boundary. Keep at least one exact tile
+  // cell so the mesh never overlaps neighbouring SEED-owned ground.
+  return Math.max(1, Math.min(tileSize / 2, tileSize === 256 ? 64 : tileSize === 128 ? 32 : 16));
+}
+
+/** A close-view dry cell needs its already canonical centre height if a
+ * corner-only quad would visibly bridge a ridge or a valley. Wet banks are
+ * owned by the separate natural-surface shoreline builder. */
+export function closeDryReliefMidpointNeeded(
+  a: number, b: number, c: number, d: number, middle: number, allDry: boolean,
+): boolean {
+  return allDry && Math.abs(middle - (a + b + c + d) / 4) > 0.05;
 }
 
 export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrain?:boolean} = {}): TileGeometry {
@@ -453,17 +465,30 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean;skipBaseTerrai
         b = point(ax, az + step),
         c = point(ax + step, az + step),
         d = point(ax + step, az);
-      if (options.terrainOnly || Math.max(a[1], b[1], c[1], d[1]) > 0)
-        terrain.quadGradient(
-          a,
-          b,
-          c,
-          d,
-          tintAt(a),
-          tintAt(b),
-          tintAt(c),
-          tintAt(d),
-        );
+      if (options.terrainOnly || Math.max(a[1], b[1], c[1], d[1]) > 0) {
+        // At actual Hero/Close scale, an otherwise feature-free dry tile may
+        // still contain canonical cliff/valley curvature. Its normal base grid
+        // is used when natural-surface replacement correctly returns unchanged.
+        // Keep the same four corners, but retain the composed centre when a
+        // flat diagonal would visibly cross through the real final surface.
+        const allDry = !options.terrainOnly && t.size <= 8 &&
+          [a, b, c, d].every(p =>
+            gridSamples.get(`${p[0]}/${p[2]}`)!.surface.water.kind === "none"),
+          middle = allDry ? point(ax + step / 2, az + step / 2) : undefined,
+          centreNeeded = middle !== undefined &&
+            closeDryReliefMidpointNeeded(
+              a[1], b[1], c[1], d[1], middle[1],
+              gridSamples.get(`${middle[0]}/${middle[2]}`)!.surface.water.kind === "none",
+            );
+        const ca = tintAt(a), cb = tintAt(b), cc = tintAt(c), cd = tintAt(d);
+        if (centreNeeded && middle) {
+          const cm = tintAt(middle);
+          terrain.triangleGradient(a, b, middle, ca, cb, cm);
+          terrain.triangleGradient(b, c, middle, cb, cc, cm);
+          terrain.triangleGradient(c, d, middle, cc, cd, cm);
+          terrain.triangleGradient(d, a, middle, cd, ca, cm);
+        } else terrain.quadGradient(a, b, c, d, ca, cb, cc, cd);
+      }
       if (z === 0 && !options.terrainOnly)
         terrain.quad(
           a,

@@ -10,6 +10,7 @@ import {
   dryCellReliefMidpointNeeded,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
+import { closeDryReliefMidpointNeeded, detailTerrainResolution } from "../src/geometry-core.ts";
 import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "../src/planet.ts";
@@ -301,6 +302,31 @@ test("WP #550 preserves canonical dry cliff and valley height curvature without 
 // A terrain midpoint must not be thrown away just because all its corners
 // share the same material and are dry. This catches a genuine height ridge or
 // bowl without introducing any presentation-only vertical exaggeration.
+test("dry landform midpoint close terrain stays within its own tiny tile", () => {
+  for (const size of [0.25, 0.5, 1, 2, 4, 8]) {
+    const cells = detailTerrainResolution(size);
+    assert.ok(Number.isInteger(cells) && cells >= 1,
+      `tile size ${size} must have a whole positive cell count`);
+    assert.equal(Math.ceil(cells) * (size / cells), size,
+      `tile size ${size} must not render a quad outside its SEED tile`);
+  }
+  assert.equal(detailTerrainResolution(128), 32,
+    "existing mid-level terrain budgets are unchanged");
+  assert.equal(detailTerrainResolution(256), 64,
+    "existing LOD pigment-grid continuity is unchanged");
+});
+
+test("dry landform midpoint close fallback retains real dry curvature but never caps wet banks", () => {
+  assert.equal(closeDryReliefMidpointNeeded(10, 10, 10, 10, 18, true), true,
+    "a canonical close-view ridge must not be flattened when adaptive replacement is absent");
+  assert.equal(closeDryReliefMidpointNeeded(10, 10, 10, 10, -4, true), true,
+    "a canonical valley floor must be a rendered vertex, not an interpolated diagonal");
+  assert.equal(closeDryReliefMidpointNeeded(10, 14, 18, 14, 14, true), false,
+    "planar graded slopes must retain their original cheap grid");
+  assert.equal(closeDryReliefMidpointNeeded(10, 10, 10, 10, 18, false), false,
+    "wet/shore cells must remain under their own shoreline replacement");
+});
+
 test("dry landform midpoint retains nonplanar canonical heights", () => {
   assert.equal(dryReliefMidpointNeeded(10, 10, 10, 10, 24), true,
     "a SEED-owned hill peak must survive an otherwise flat dry quad");
