@@ -8,7 +8,7 @@ import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./polit
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "./readiness-presentation.ts";
-import {elevationToRenderY, visibleSurfaceElevation, tiltedGroundPickDistance} from "./render-frame.ts";
+import {elevationToRenderY, visibleSurfaceElevation, tiltedGroundPickDistance, firstComposedSurfaceRayHitDistance} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
 import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
@@ -1327,28 +1327,14 @@ function inspectCell(screenX: number, screenY: number) {
   const origin = lens.screenToWorld(screenX, screenY, 0);
   const far = lens.screenToWorld(screenX, screenY, maxRayDistance);
   const direction = far.clone().sub(origin).normalize();
-  let before = 0,
-    hit = -1;
-  // March to the first surface crossing, then solve the coordinate height field.
-  const marchStep = Math.max(8, view.halfHeight / 40);
-  for (let distance = 0; ; distance = Math.min(maxRayDistance, distance + marchStep)) {
-    const point = origin.clone().add(direction.clone().mulScalar(distance));
-    const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
-      hit = distance;
-      break;
-    }
-    before = distance;
-    if (distance >= maxRayDistance) break;
-  }
-  if (hit < 0) return;
-  for (let i = 0; i < 18; i++) {
-    const middle = (before + hit) / 2,
-      point = origin.clone().add(direction.clone().mulScalar(middle)),
+  // Click the FIRST composed 3D face, not whichever ground cell survives an
+  // 8-unit ray jump past a narrow, genuinely non-walkable cliff.
+  const hit = firstComposedSurfaceRayHitDistance(maxRayDistance, distance => {
+    const point = origin.clone().add(direction.clone().mulScalar(distance)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) before = middle;
-    else hit = middle;
-  }
+    return point.y - elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)));
+  });
+  if (hit === null) return;
   const point = origin.add(direction.mulScalar(hit));
   {
     const ground = renderFrame.renderToSource(point.x, point.z);
