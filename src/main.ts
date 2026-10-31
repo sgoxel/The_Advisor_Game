@@ -2121,9 +2121,15 @@ async function start() {
           // readback is empty. Only solid 3D structure/detail layers veto
           // that missing-depth case; terrain behind a visible resident does not.
           const worldPixel = await residentDepthPicker.getSelectionAsync(px, py, 1, 1);
-          opaqueWorldAtPixel = worldPixel.some(mesh => mesh instanceof pc.MeshInstance &&
+          // An exact solid roof/wall ID in the first pass also owns the
+          // clicked pixel even when its depth reads behind the projected
+          // padded resident body. The 44px candidate is not a see-through
+          // permission; empty ground pixels retain accessible padding.
+          const isOpaqueStructure = (mesh: object) => mesh instanceof pc.MeshInstance &&
             (mesh.node?.name === "structures" || mesh.node?.name === "detail" ||
-             mesh.node?.name === "closeDetail"));
+             mesh.node?.name === "closeDetail");
+          opaqueWorldAtPixel = worldPixel.some(isOpaqueStructure) ||
+            exactPixel.some(isOpaqueStructure);
         } finally {
           for (const { mesh, pick } of hiddenFromPicker) mesh.pick = pick;
         }
