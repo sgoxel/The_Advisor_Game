@@ -153,7 +153,7 @@ SCENARIOS: dict[str, str] = {
         # camera-invented point or another resident. A wrong/occluded click
         # still fails this exact identity check instead of producing a PNG.
         "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.actorCode===window.__s006Resident.code&&window.__foot.surfaceContact;"
-        "eval:(()=>{const src=window.__foot.surfaceContact.source;const ll=window.advisorWorld.hydrology.toLonLat(src.x,src.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(0.52)})();"
+        "eval:(ll=>(window.advisorWorld.navigation.setFocus(ll.lon,ll.lat),window.advisorWorld.setHalfHeight(0.52)))(window.advisorWorld.hydrology.toLonLat(window.__foot.surfaceContact.source.x,window.__foot.surfaceContact.source.z));"
         "until:(window.__foot=window.advisorWorld.residentFootRingEvidence())&&window.__foot.code===window.__s006Resident.code&&window.__foot.shown&&window.__foot.grounded&&window.__foot.surfaceContact&&Number.isFinite(window.__foot.surfaceContact.gapM);"
         "until:window.advisorWorld.state.settled;"
         "eval:window.advisorWorld.state.view.halfHeight<=0.76||Promise.reject(new Error('Selected original resident is not at true Hero/Close scale'));"
