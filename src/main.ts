@@ -2101,6 +2101,7 @@ async function start() {
         // This changes picker eligibility, never scene visibility or truth.
         const hiddenFromPicker: { mesh: pc.MeshInstance; pick: boolean }[] = [];
         let worldOnly: pc.Vec3 | null = null;
+        let opaqueWorldAtPixel = false;
         try {
           for (const candidate of actors) {
             if (!candidate.enabled) continue;
@@ -2116,6 +2117,13 @@ async function start() {
           // finish synchronously. The normal scene draw is not controlled by
           // MeshInstance.pick, and the finally block restores every flag.
           worldOnly = await residentDepthPicker.getWorldPointAsync(px, py);
+          // A real roof can have a valid pick ID even where the GPU depth
+          // readback is empty. Only solid 3D structure/detail layers veto
+          // that missing-depth case; terrain behind a visible resident does not.
+          const worldPixel = await residentDepthPicker.getSelectionAsync(px, py, 1, 1);
+          opaqueWorldAtPixel = worldPixel.some(mesh => mesh instanceof pc.MeshInstance &&
+            (mesh.node?.name === "structures" || mesh.node?.name === "detail" ||
+             mesh.node?.name === "closeDetail"));
         } finally {
           for (const { mesh, pick } of hiddenFromPicker) mesh.pick = pick;
         }
@@ -2128,7 +2136,7 @@ async function start() {
         const worldDepth = worldOnly
           ? lens.viewMatrix.transformPoint(worldOnly, eyePoint).z : null;
         return residentGpuHitAllows(actorDepth, foregroundDepth,
-          drawableResidentMeshes(actor), painted, exactPixel, worldDepth);
+          drawableResidentMeshes(actor), painted, exactPixel, worldDepth, opaqueWorldAtPixel);
       } catch {
         // A lost/unsupported picker never makes a hidden character selectable;
         // the live renderer can recover and recreate these disposable buffers.
