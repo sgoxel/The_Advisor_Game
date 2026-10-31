@@ -2467,7 +2467,11 @@ async function start() {
               visible.push(watch);
           }
         }
-        if (snapshot && selectionNearby && selected &&
+        // A camera-only worker handoff can have real on-duty guards even
+        // when the full population snapshot is temporarily unavailable.
+        // Keep the selected civilian as well, but ONLY from its current
+        // Simulation projection; never reuse stale worker/camera positions.
+        if ((snapshot || currentSelected) && selectionNearby && selected &&
             !visible.some(resident => resident.code === selected.code)) visible.push(selected);
         for (let i = 0; i < visible.length; i++) {
           if (!actors[i]) {
