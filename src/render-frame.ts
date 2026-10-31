@@ -21,6 +21,38 @@ export const visibleSurfaceElevation = (surface: Pick<FinalSurface, "deckHeight"
   surface.deckHeight ?? (surface.water.kind === "none" ? surface.groundHeight :
     surface.water.level ?? surface.groundHeight);
 
+/** The first actual composed-surface ray hit, including a narrow cliff lip.
+ * A fixed 8-render-unit stride jumped more than a kilometre at character scale
+ * and could skip the entire original steep SEED face. Advance by the current
+ * ray-to-final-surface clearance instead; near a face, probes become metre-scale.
+ * This is only a click-time hit query: no camera, world or Simulation mutation. */
+export function firstComposedSurfaceRayHitDistance(
+  farDistance: number, clearanceAt: (distance: number) => number,
+): number | null {
+  if (!Number.isFinite(farDistance) || farDistance <= 0) return null;
+  let before = 0, distance = 0;
+  for (;;) {
+    const clearance = clearanceAt(distance);
+    if (!Number.isFinite(clearance)) return null;
+    if (clearance <= 0) {
+      let hit = distance;
+      for (let i = 0; i < 18; i++) {
+        const midpoint = (before + hit) / 2, middleClearance = clearanceAt(midpoint);
+        if (!Number.isFinite(middleClearance)) return null;
+        if (middleClearance > 0) before = midpoint;
+        else hit = midpoint;
+      }
+      return hit;
+    }
+    if (distance >= farDistance) return null;
+    before = distance;
+    // The canonical cliff's thin, high wall needs a much shorter final
+    // stride than a flat camera-depth clip. Far from the ground stays coarse;
+    // close to actual visible top, steps approach physical metres.
+    distance = Math.min(farDistance, distance + Math.max(0.02, Math.min(8, clearance / 8)));
+  }
+}
+
 /** Detailed GPU coordinates must remain inside this canonical-metre envelope. */
 export const GPU_LOCAL_LIMIT_M = 8_192;
 /** Move the presentation origin before the focus drifts far enough to lose precision. */
