@@ -1,5 +1,5 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -2503,14 +2503,11 @@ async function start() {
           // Walkers glide along the legal street path over the next real second (the simulation's walk window).
           const walk = visible[i].walkAhead;
           if (visible[i].activity === "commute" && walk && walk.length >= 2) {
-            // Unwrapped across the date line: x follows the shortest wrapped step from the previous point.
-            const points = [{ x: walk[0].x, z: walk[0].z }], lengths = [0];
-            for (let k = 1; k < walk.length; k++) {
-              const dx = wrapSourceX(walk[k].x - walk[k - 1].x), dz = walk[k].z - walk[k - 1].z;
-              points.push({ x: points[k - 1].x + dx, z: walk[k].z });
-              lengths.push(lengths[k - 1] + Math.hypot(dx, dz));
-            }
-            actorMotion.set(actors[i], { points, lengths, total: lengths[lengths.length - 1], startTick: snapshot?.tick ?? simulation.tick });
+            // The Simulation walk window is metrically paced. Flat equirectangular
+            // source lengths overstate east-west travel at high latitude: keep
+            // canonical physical segment lengths, with seam-safe display points.
+            const { points, lengths, total } = residentWalkingPolyline(walk);
+            actorMotion.set(actors[i], { points, lengths, total, startTick: snapshot?.tick ?? simulation.tick });
           } else actorMotion.delete(actors[i]);
           positionActor(actors[i], visible[i].x, visible[i].z);
         }
@@ -2547,7 +2544,10 @@ async function start() {
           x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f;
         actorSources.set(actor, { x, z });
         positionActor(actor, x, z);
-        characterVisuals.move(actor, .8, b.x-a.x, b.z-a.z);
+        // The optional 3D character faces the same physical local bearing
+        // used for canonical travel, not a distorted map-space diagonal.
+        const direction = residentWalkingHeadingDelta(a, b);
+        characterVisuals.move(actor, .8, direction.east, direction.south);
       }
     }
     // All true on-world 2D illustrated residents face the current camera;

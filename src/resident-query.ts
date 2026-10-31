@@ -1,5 +1,5 @@
 import { compareText } from "./compare-text.ts";
-import { wrapSourceX } from "./planet.ts";
+import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import type { Resident, QueryStats } from "./simulation.ts";
 
 /** Camera frame rate must never advance a SEED actor ahead of Simulation time.
@@ -11,6 +11,40 @@ export function residentMotionFraction(
   if (!Number.isFinite(currentTick) || !Number.isFinite(sourceTick) ||
       !Number.isFinite(ticksPerRealSecond) || ticksPerRealSecond <= 0) return 0;
   return Math.max(0, Math.min(1, (currentTick - sourceTick) / ticksPerRealSecond));
+}
+
+/** A Simulation-validated walk is measured in canonical metres. The
+ * equirectangular renderer must not use its horizontal source distances
+ * for animation pacing: east-west metres shrink with latitude. The path
+ * coordinates are purely visual and may unwrap across the date line; they
+ * never revise SEED facts or legal route samples. */
+export function residentWalkingPolyline(path: readonly { x: number; z: number }[]) {
+  const points: { x: number; z: number }[] = [], lengths: number[] = [];
+  let total = 0;
+  for (let i = 0; i < path.length; i++) {
+    const point = path[i];
+    if (i) {
+      const previous = path[i - 1];
+      total += greatCircleDistance(
+        sourceToLonLat(previous.x, previous.z), sourceToLonLat(point.x, point.z));
+    }
+    lengths.push(total);
+    points.push({ x: i ? points[i - 1].x + wrapSourceX(point.x - path[i - 1].x) : point.x, z: point.z });
+  }
+  return { points, lengths, total };
+}
+
+/** Convert a canonical walking segment into a local horizontal bearing.
+ * Longitude source units stretch with latitude; this changes only 3D visual
+ * facing, never the deterministic SEED path or Simulation walking result. */
+export function residentWalkingHeadingDelta(
+  a: { x: number; z: number }, b: { x: number; z: number },
+) {
+  const lat = sourceToLonLat(a.x, (a.z + b.z) / 2).lat;
+  return {
+    east: wrapSourceX(b.x - a.x) * Math.cos(lat),
+    south: b.z - a.z,
+  };
 }
 
 export type ResidentQuery = { key: string; placeCode: string; x: number; z: number; radius: number; limit: number; tick: number; actors?: boolean };
