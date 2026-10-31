@@ -60,6 +60,8 @@ test("WP #550 rock detail stays in continuous 3D metre space across tessellated 
       "only canonical rock samples continuous 3D; other terrain retains XZ UVs");
     assert.ok(!code.includes("mix(sdP.xz, sdWallUv"),
       "triangle-dependent UV interpolation must not split rock cells into shard seams");
+    assert.ok(code.includes("sdCliffFacets") && code.includes("mix(0.55, 0.32, sdCliffFacets)"),
+      "both shader backends soften steep rock-face facet contrast while preserving broad nonrock sunlight");
   }
   const lit = surfaceDetailChunks("lit");
   for (const code of [lit.glslMainStart, lit.wgslMainStart])
