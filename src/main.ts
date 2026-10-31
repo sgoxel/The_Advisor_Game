@@ -123,6 +123,7 @@ import {
 } from "./streaming.ts";
 import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution.ts";
 import { residentGpuHitAllows } from "./resident-gpu-pick.ts";
+import { structuralMeshBlocksSegment } from "./resident-scene-occlusion.ts";
 import { BoundedTimingSamples, ResidentQueryPhaseSamples, TileWorkerPhaseSamples } from "./streaming-metrics.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
@@ -2036,6 +2037,37 @@ async function start() {
   // The CPU body projection is the responsive 44px candidate filter only.
   // The final 3D hit must also survive the real scene's depth buffer.
   // Reuse one on-demand GPU picker; no per-frame picking or actor truth changes.
+  // An actual roof triangle, not merely an alpha-masked cutout picker ID,
+  // owns a tap on an opaque foreground surface. Intersect only enabled,
+  // camera-ray-overlapping structural meshes on user input; no per-frame work.
+  const solidWorldBlocksTap = (cx: number, cy: number, actorDepth: number, lens: pc.CameraComponent) => {
+    const start = lens.screenToWorld(cx, cy, lens.nearClip);
+    const far = lens.screenToWorld(cx, cy, lens.farClip);
+    const viewStart = lens.viewMatrix.transformPoint(start, new pc.Vec3()).z;
+    const viewFar = lens.viewMatrix.transformPoint(far, new pc.Vec3()).z;
+    const fraction = (actorDepth - viewStart) / (viewFar - viewStart);
+    if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) return false;
+    const end = new pc.Vec3().lerp(start, far, fraction);
+    const ray = new pc.Ray(start, far.clone().sub(start).normalize());
+    for (const entry of tileCache.values()) {
+      if (!entry.entity.enabled) continue;
+      for (const child of entry.entity.children as pc.Entity[]) {
+        if (!child.enabled || (child.name !== "structures" && child.name !== "detail" &&
+            child.name !== "closeDetail")) continue;
+        for (const meshInstance of child.render?.meshInstances ?? []) {
+          if (!meshInstance.aabb.intersectsRay(ray)) continue;
+          const inverse = meshInstance.node.getWorldTransform().clone().invert();
+          const localStart = inverse.transformPoint(start, new pc.Vec3());
+          const localEnd = inverse.transformPoint(end, new pc.Vec3());
+          const positions: number[] = [], indices: number[] = [];
+          meshInstance.mesh.getPositions(positions);
+          meshInstance.mesh.getIndices(indices);
+          if (structuralMeshBlocksSegment(localStart, localEnd, positions, indices)) return true;
+        }
+      }
+    }
+    return false;
+  };
   let residentDepthPicker: pc.Picker | undefined;
   let pickerLossRevision = -1, pickerWidth = 0, pickerHeight = 0;
   let pendingResidentPick: Promise<void> = Promise.resolve();
@@ -2067,6 +2099,11 @@ async function start() {
           actor.getPosition().distance(feet) > modelHeight * .5 ||
           lens !== camera.camera) return false;
       try {
+        // The normal scene renders its actual triangle geometry with depth
+        // testing. Use it directly for exact structural occlusion before any
+        // potentially missing GPU picker samples. This is not an actor hitbox.
+        if (solidWorldBlocksTap(clientX - rect.left, clientY - rect.top, actorDepth, lens))
+          return false;
         // Half-resolution ID/depth targets stay bounded and are created only
         // on a real user interaction, not during rendering or worker streaming.
         const width = Math.max(1, Math.floor(rect.width * .5)),
