@@ -1979,9 +1979,14 @@ async function start() {
   footRingMaterial.depthWrite = false;
   footRingMaterial.cull = pc.CULLFACE_NONE;
   footRingMaterial.update();
+  // The ring is an indication of an ALREADY verified resident, not a world
+  // obstacle or a pick target. Keep its true scene depth, but never let its
+  // visible pixels steal the real resident's GPU ID/depth click.
+  const footRingInstance = new pc.MeshInstance(footRingMesh, footRingMaterial);
+  footRingInstance.pick = false;
   const selectedFootRing = new pc.Entity("Selected resident · depth-tested ground ring");
   selectedFootRing.addComponent("render", {
-    meshInstances: [new pc.MeshInstance(footRingMesh, footRingMaterial)],
+    meshInstances: [footRingInstance],
     castShadows: false, receiveShadows: false,
   });
   flatRoot.addChild(selectedFootRing);
