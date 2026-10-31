@@ -136,12 +136,16 @@ SCENARIOS: dict[str, str] = {
     "s003-hero-close-slope": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
-        "select:#map-scale=0.5;settle;shot:legal-steep-close"
+        "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
+        "eval:(window.composed.walkable&&window.composed.traversal==='difficult')||Promise.reject(new Error('Canonical steep slope must remain difficult and walkable'));"
+        "shot:legal-steep-close"
     ),
     "s003-hero-close-cliff": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
-        "select:#map-scale=0.5;settle;shot:blocked-cliff-close"
+        "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
+        "eval:window.composed.walkable===false||Promise.reject(new Error('Canonical cliff must be blocked'));"
+        "shot:blocked-cliff-close"
     ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
