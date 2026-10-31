@@ -2046,7 +2046,17 @@ async function start() {
     const viewStart = lens.viewMatrix.transformPoint(start, new pc.Vec3()).z;
     const viewFar = lens.viewMatrix.transformPoint(far, new pc.Vec3()).z;
     const fraction = (actorDepth - viewStart) / (viewFar - viewStart);
-    if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) return false;
+    // Real screenshot_tool.py probe data only, never a picking decision or
+    // per-frame analysis. Distinguish missed mesh, ray and depth cutoff.
+    const probe = new URLSearchParams(location.search).has("resident-route-probes");
+    const diagnostic = { tap: [cx, cy], actorDepth, viewStart, viewFar, fraction,
+      structuralMeshes: 0, broadPhaseHits: 0, triangleCount: 0,
+      fullRayIntersections: 0, beforeActorIntersections: 0 };
+    const finish = (blocked: boolean) => {
+      if (probe) (window as Window & { __wp353Ray?: unknown }).__wp353Ray = { ...diagnostic, blocked };
+      return blocked;
+    };
+    if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) return finish(false);
     const end = new pc.Vec3().lerp(start, far, fraction);
     const ray = new pc.Ray(start, far.clone().sub(start).normalize());
     for (const entry of tileCache.values()) {
@@ -2055,7 +2065,9 @@ async function start() {
         if (!child.enabled || (child.name !== "structures" && child.name !== "detail" &&
             child.name !== "closeDetail")) continue;
         for (const meshInstance of child.render?.meshInstances ?? []) {
+          diagnostic.structuralMeshes++;
           if (!meshInstance.aabb.intersectsRay(ray)) continue;
+          diagnostic.broadPhaseHits++;
           const inverse = meshInstance.node.getWorldTransform().clone().invert();
           const localStart = inverse.transformPoint(start, new pc.Vec3());
           const localEnd = inverse.transformPoint(end, new pc.Vec3());
@@ -2064,11 +2076,18 @@ async function start() {
           const positions: number[] = [], indices: number[] = [];
           mesh.getPositions(positions);
           mesh.getIndices(indices);
-          if (structuralMeshBlocksSegment(localStart, localEnd, positions, indices)) return true;
+          diagnostic.triangleCount += indices.length / 3;
+          if (probe && structuralMeshBlocksSegment(
+            localStart, inverse.transformPoint(far, new pc.Vec3()), positions, indices))
+            diagnostic.fullRayIntersections++;
+          if (structuralMeshBlocksSegment(localStart, localEnd, positions, indices)) {
+            diagnostic.beforeActorIntersections++;
+            return finish(true);
+          }
         }
       }
     }
-    return false;
+    return finish(false);
   };
   let residentDepthPicker: pc.Picker | undefined;
   let pickerLossRevision = -1, pickerWidth = 0, pickerHeight = 0;
