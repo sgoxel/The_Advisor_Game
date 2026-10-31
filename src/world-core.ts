@@ -648,7 +648,7 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
  * Never use this query for collision, picking, routing or Simulation.
  * Full finalSurfaceAt remains authoritative; do not cache partial verdicts. */
 export function finalSurfaceRenderChannelsAt(x: number, z: number):
-  Pick<FinalSurface, "groundHeight" | "groundMaterial" | "water" | "vegetationDensityScale"> {
+  Pick<FinalSurface, "groundHeight" | "deckHeight" | "groundMaterial" | "water" | "vegetationDensityScale"> {
   return finalSurfaceCache.get(surfaceCacheKey(x, z)) ?? composePointAt(x, z).final;
 }
 
