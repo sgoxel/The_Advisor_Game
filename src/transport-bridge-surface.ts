@@ -41,12 +41,13 @@ export function selectedRoadBridgeDeckWalkable(
  * A walkable bank by itself cannot certify that the bridge actually touches it. */
 export function selectedRoadDryLandingDeckWalkable(
   surface: Pick<ReturnType<typeof finalSurfaceAt>,
-    "surfaceHeight" | "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
+    "surfaceHeight" | "groundHeight" | "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
   roadCode: string,
 ): boolean {
   return surface.water.kind === "none" && Number.isFinite(surface.surfaceHeight) &&
     surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
-    surface.surfaceHeight === surface.deckHeight && surface.walkable &&
+    surface.surfaceHeight === surface.deckHeight &&
+    surface.groundHeight === surface.deckHeight && surface.walkable &&
     surface.traversal === "bridge" && surface.deckOwnerIds.includes(roadCode) &&
     surface.contributingModifierIds.includes(roadCode);
 }
