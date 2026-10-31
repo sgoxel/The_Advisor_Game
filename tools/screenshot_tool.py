@@ -182,6 +182,25 @@ SCENARIOS: dict[str, str] = {
         "click:#relief-view;settle;shot:blocked-cliff-relief;"
         "eval:window.advisorWorld.setHalfHeight(8);settle;shot:blocked-cliff-relief-context"
     ),
+    # Targeted WP #550 visual retry: one exact real terrain location and ONE
+    # authentic settled context PNG per fresh Chromium process. This prevents
+    # the reproduced zero-CDP-frame / stale-X11 readback after the prior shot
+    # from consuming the entire bounded original landscape capture. Original
+    # selected resident, door and close-up PNGs remain preserved separately.
+    "s003-hero-close-cliff-context": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(8);settle;" + POINT_INSPECTION +
+        "eval:window.composed.walkable===false||Promise.reject(new Error('Original cliff must remain blocked'));"
+        "click:#relief-view;settle;shot:blocked-cliff-relief-context"
+    ),
+    "s003-hero-close-slope-context": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(8);settle;" + POINT_INSPECTION +
+        "eval:(window.composed.walkable&&window.composed.traversal==='difficult')||Promise.reject(new Error('Original difficult slope must remain walkable'));"
+        "click:#relief-view;settle;shot:legal-steep-relief-context"
+    ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
