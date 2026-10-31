@@ -50,7 +50,7 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp550-webgl2 --scenario s003-hero-close-village,s003-hero-close-slope,s003-hero-close-cliff,s003-hero-close-resident --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --timeout 180
+          timeout --signal=TERM --kill-after=10s 14m python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp550-webgl2 --scenario s003-hero-close-resident,s003-hero-close-village,s003-hero-close-slope,s003-hero-close-cliff --profile fullhd-landscape,fullhd-portrait --renderer webgl2 --fixed-time-ms 1792874335750 --timeout 180
       - name: Archive original WP #550 screenshots and failure diagnostics
         if: always() && github.event_name == 'pull_request' && startsWith(github.head_ref, 'agent1-wp550-')
         uses: actions/upload-artifact@v4
