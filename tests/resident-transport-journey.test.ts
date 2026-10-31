@@ -574,7 +574,7 @@ test("a real independently deciding SEED resident reaches a legal bridge site an
   advised.advance(liveTick);
   const liveTraveller = advised.projectedResidentByCode(chosenCode);
   assert.ok(liveTraveller);
-  const camera = { x: liveTraveller!.x, z: liveTraveller!.z, radius: 1, limit: 8 },
+  const camera = { x: liveTraveller!.x, z: liveTraveller!.z, radius: 32, limit: 8 },
     projected = advised.projectResidentView([oldRoutine], liveTick, camera),
     oldProjection = advised.projectResidentView([oldRoutine], decidedTick, camera);
   assert.equal(projected.length, 1);
