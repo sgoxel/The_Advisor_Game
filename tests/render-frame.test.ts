@@ -10,6 +10,7 @@ import {
   convertTileGeometryToEnu,
   visibleSurfaceElevation,
   tiltedGroundPickDistance,
+  firstComposedSurfaceRayHitDistance,
 } from "../src/render-frame.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -305,4 +306,23 @@ test("explicit tilted camera picks a real graded final surface without moving SE
     () => 300), initial, "out-of-ray ground never teleports picking");
   assert.equal(tiltedGroundPickDistance(initial, 500, 0, rayYAt,
     () => 20), initial, "an unsupported camera ray retains the original pick");
+});
+
+test("WP #550 Hero/Close ground inspection hits the first real narrow cliff face", () => {
+  // The old 8-render-unit march visits 0, 8 and 16, missing the actual
+  // high rock at 9.98–10.06; it therefore selects hidden ground behind it.
+  const narrowCliffGap = (distance: number) =>
+    .12 - distance * .001 - (distance >= 9.98 && distance <= 10.06 ? .16 : 0);
+  assert.ok([0, 8, 16].every(distance => narrowCliffGap(distance) > 0),
+    "regression fixture actually misses the rendered cliff under the old coarse stride");
+  const hit = firstComposedSurfaceRayHitDistance(16, narrowCliffGap);
+  assert.ok(hit !== null && hit >= 9.97 && hit <= 10.06,
+    `Hero/Close must select the first physical cliff lip, not scenery behind it: ${hit}`);
+  const level = firstComposedSurfaceRayHitDistance(300, distance => 20 - distance * .2);
+  assert.ok(level !== null && Math.abs(level - 100) < .002,
+    "ordinary graded ground retains the actual height-field intersection");
+  assert.equal(firstComposedSurfaceRayHitDistance(12, () => .2), null,
+    "ray with no visible ground must not select an invented point");
+  assert.equal(firstComposedSurfaceRayHitDistance(12, () => NaN), null,
+    "invalid authoritative height cannot become a picked cliff");
 });
