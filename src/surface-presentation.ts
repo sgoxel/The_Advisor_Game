@@ -20,6 +20,9 @@ export function installLitSurfaceDetail(material: pc.StandardMaterial) {
 export const LOD_BLEND_SECONDS = 0.24;
 export const roadVisibleAtScale = (denominator:number) => denominator <= 100;
 export const forestBodiesVisibleAtScale = (denominator:number) => denominator < 1;
+/** The explicit 3D terrain inspection hides occluding scenery, never canonical
+ * height, tree identity, mesh cache, traversability, residents or buildings. */
+export const reliefSceneryVisible = (ordinaryVisible: boolean, inspectingRelief: boolean) => ordinaryVisible && !inspectingRelief;
 export const roadRepresentationAtScale = (denominator:number):'ground'|'cartographic'|'hidden' => denominator<50?'ground':denominator<=100?'cartographic':'hidden';
 export const SURFACE_PRESENTATION = Object.freeze({
   vertexColorGamma: true,
