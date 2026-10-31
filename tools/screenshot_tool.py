@@ -143,7 +143,12 @@ SCENARIOS: dict[str, str] = {
         # First prove the chosen actor survives the real GPU-depth / structural
         # screen hit; then actually click that same pixel in Chromium.
         "eval:window.advisorWorld.verifiedResidentEvidencePick().then(r=>r?(window.__s006Resident=r,window.__wp550SelectedCode=r.code):Promise.reject(new Error('No GPU-confirmed resident tap in the current real view')));"
-        "tap:resident-verified;visible:#npc-popup:not([hidden]) #npc-seed-code;"
+        "tap:resident-verified;visible:#npc-popup:not([hidden]);"
+        # The exact resident SEED code lives in a collapsed <details> region
+        # by default. It remains in the DOM but is intentionally not visible;
+        # requiring its CSS visibility falsely times out after a successful
+        # real click. Verify the open popup AND exact hidden technical ID.
+        "eval:document.querySelector('#npc-popup #npc-seed-code')?.textContent?.trim()===window.__wp550SelectedCode||Promise.reject(new Error('Actual NPC popup identity does not match GPU-tapped resident'));"
         # The real tap must inspect that exact original 2D resident. The
         # old follow-on popup button intermittently remained covered/absent
         # and timed out despite a fully live scene. Focus the actually picked
