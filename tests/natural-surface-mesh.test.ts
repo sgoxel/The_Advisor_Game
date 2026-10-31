@@ -7,6 +7,7 @@ import {
   sparseNaturalWildernessWaterKindAt,
   firstRoadWithinReach,
   dryReliefMidpointNeeded,
+  dryCellReliefMidpointNeeded,
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes, naturalWaterKindAt } from "../src/hydrology.ts";
@@ -279,6 +280,22 @@ test("bridge-bank second road scan skips only exact wider-search negatives", () 
       checked++;
     }
   assert.equal(checked, 72);
+});
+
+
+test("WP #550 preserves canonical dry cliff and valley height curvature without a landform tag", () => {
+  const dry = (y: number) => ({ wet: "none", y });
+  const wet = (y: number) => ({ wet: "river", y });
+  assert.equal(dryCellReliefMidpointNeeded(dry(10), dry(10), dry(10), dry(10), dry(24)), true,
+    "a real dry hill must not be flattened merely because formationAt misses the midpoint");
+  assert.equal(dryCellReliefMidpointNeeded(dry(10), dry(10), dry(10), dry(10), dry(-3)), true,
+    "the actual dry valley floor must have a rendered top vertex");
+  assert.equal(dryCellReliefMidpointNeeded(dry(10), dry(14), dry(18), dry(14), dry(14)), false,
+    "planar dry slopes should keep their existing light mesh");
+  assert.equal(dryCellReliefMidpointNeeded(dry(10), wet(10), dry(10), dry(10), dry(24)), false,
+    "a mixed bank continues to use its separately canonical shoreline cut");
+  assert.equal(dryCellReliefMidpointNeeded(dry(10), dry(10), dry(10), dry(10), wet(24)), false,
+    "never add a dry-land cap over true water at the middle");
 });
 
 // A terrain midpoint must not be thrown away just because all its corners
