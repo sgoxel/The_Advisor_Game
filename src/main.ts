@@ -449,12 +449,17 @@ function rebaseRenderFrame(force = false) {
   return changed;
 }
 
+/** The exposed canonical ground, deck or water is shared by camera and overlay anchors. */
+function localVisibleSurfaceHeight(x: number, z: number): number {
+  return Math.max(0, visibleSurfaceElevation(finalSurfaceAt(x, z)));
+}
+
 function flatWorldPoint(x: number, z: number, y: number): pc.Vec3 {
   const point = renderFrame.sourceToRender(x, z, y);
   if (projectionTransition <= 0.001)
     return new pc.Vec3(point.x, point.y, point.z);
   const focus = renderFrame.sourceToRender(view.x, view.z),
-    focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
+    focusY = elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z));
   return new pc.Vec3(
     point.x - focus.x,
     PLANET_RADIUS + point.y - focusY,
@@ -489,7 +494,7 @@ function surfaceAtScreen(x: number, y: number): LonLat | undefined {
   const yPlane =
     projectionTransition > 0.001
       ? PLANET_RADIUS
-      : elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
+      : elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z));
   const distance = (yPlane - origin.y) / direction.y;
   if (!Number.isFinite(distance) || distance < 0) return undefined;
   const point = origin.add(direction.mulScalar(distance)),
@@ -682,7 +687,7 @@ function applyPresentation() {
     fullGlobe = projectionTransition >= 0.999,
     // The actual rendered ground/bridge/settlement pad owns camera elevation;
     // raw noise height can clip the entire authoritative 3D close-up.
-    targetY = elevationToRenderY(Math.max(0, visibleSurfaceElevation(finalSurfaceAt(view.x, view.z)))),
+    targetY = elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z)),
     focusRender = renderFrame.sourceToRender(view.x, view.z);
   globeShown = fullGlobe;
   document.body.classList.toggle("globe-mode", fullGlobe);
@@ -2734,7 +2739,7 @@ async function start() {
       const placeHeight = Math.max(0, heightAt(place.x, place.z)) + 2,
         localPoint = renderFrame.sourceToRender(place.x, place.z, placeHeight);
       if (projectionTransition > 0.001) {
-        const focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
+        const focusY = elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z));
         flatLabelPoint.set(
           localPoint.x - focusRender.x,
           PLANET_RADIUS + localPoint.y - focusY,
@@ -2895,7 +2900,7 @@ async function start() {
     updateNavigationHud();
     // Selected travel route: projected from canonical points, blended like the labels.
     const projectOverlay: RouteProjector = (point) => {
-      point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
+      point.height ??= localVisibleSurfaceHeight(point.x, point.z) + 3;
       const local = renderFrame.sourceToRender(point.x, point.z, point.height);
       if (projectionTransition <= 0.001) {
         const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, local.y, local.z));
@@ -2903,7 +2908,7 @@ async function start() {
       }
       // Handoff/globe: same flat-to-globe blend the place labels use.
       const focusRender = renderFrame.sourceToRender(view.x, view.z),
-        focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
+        focusY = elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z));
       flatLabelPoint.set(
         local.x - focusRender.x,
         PLANET_RADIUS + local.y - focusY,
@@ -2937,8 +2942,8 @@ async function start() {
           const a = corners[i],
             b = corners[(i + 1) % 4];
           app.drawLine(
-            flatWorldPoint(a[0], a[1], Math.max(0, heightAt(a[0], a[1])) + 0.8),
-            flatWorldPoint(b[0], b[1], Math.max(0, heightAt(b[0], b[1])) + 0.8),
+            flatWorldPoint(a[0], a[1], localVisibleSurfaceHeight(a[0], a[1]) + 0.8),
+            flatWorldPoint(b[0], b[1], localVisibleSurfaceHeight(b[0], b[1]) + 0.8),
             new pc.Color(0.91, 0.77, 0.42),
             true,
           );
