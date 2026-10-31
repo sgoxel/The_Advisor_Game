@@ -8,7 +8,7 @@ import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./polit
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import { terrainProgressText, terrainLoadingMessage, residentFactSuffix, terrainDetailLabel, initialWorldReady } from "./readiness-presentation.ts";
-import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
+import {elevationToRenderY, visibleSurfaceElevation, tiltedGroundPickDistance} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
 import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
@@ -495,8 +495,23 @@ function surfaceAtScreen(x: number, y: number): LonLat | undefined {
     projectionTransition > 0.001
       ? PLANET_RADIUS
       : elevationToRenderY(localVisibleSurfaceHeight(view.x, view.z));
-  const distance = (yPlane - origin.y) / direction.y;
-  if (!Number.isFinite(distance) || distance < 0) return undefined;
+  const planeDistance = (yPlane - origin.y) / direction.y;
+  if (!Number.isFinite(planeDistance) || planeDistance < 0) return undefined;
+  // The flat-plane pointer drifts away from the visibly graded street/riverbank
+  // when the player explicitly tilts the 3D camera. Refine on the same legal
+  // composed final surface; steep/unwalkable cliffs keep the safe plane pick.
+  const distance = bridgeInspectionAngle && projectionTransition <= 0.001
+    ? tiltedGroundPickDistance(planeDistance, lens.farClip, direction.y,
+        t => origin.y + t * direction.y,
+        t => {
+          const source = renderFrame.renderToSource(
+            origin.x + t * direction.x, origin.z + t * direction.z);
+          const surface = finalSurfaceAt(source.x, source.z);
+          return surface.walkable
+            ? elevationToRenderY(Math.max(0, visibleSurfaceElevation(surface)))
+            : NaN;
+        })
+    : planeDistance;
   const point = origin.add(direction.mulScalar(distance)),
     focus = renderFrame.sourceToRender(view.x, view.z),
     localX = point.x + (projectionTransition > 0.001 ? focus.x : 0),
