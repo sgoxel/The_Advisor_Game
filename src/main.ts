@@ -1297,14 +1297,19 @@ function openGameInfoAt(x: number, z: number) {
   return false;
 }
 function inspectCell(screenX: number, screenY: number) {
-  const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
-  const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
+  const lens = camera.camera!;
+  // Only visible world geometry inside this exact camera's current clip
+  // range is eligible for inspection. An uncapped 600 km march unnecessarily
+  // rechecked thousands of authoritative slope probes over unseen terrain.
+  const maxRayDistance = Math.min(600000, lens.farClip);
+  const origin = lens.screenToWorld(screenX, screenY, 0);
+  const far = lens.screenToWorld(screenX, screenY, maxRayDistance);
   const direction = far.clone().sub(origin).normalize();
   let before = 0,
     hit = -1;
   // March to the first surface crossing, then solve the coordinate height field.
   const marchStep = Math.max(8, view.halfHeight / 40);
-  for (let distance = 0; distance <= 600000; distance += marchStep) {
+  for (let distance = 0; ; distance = Math.min(maxRayDistance, distance + marchStep)) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
     if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
@@ -1312,6 +1317,7 @@ function inspectCell(screenX: number, screenY: number) {
       break;
     }
     before = distance;
+    if (distance >= maxRayDistance) break;
   }
   if (hit < 0) return;
   for (let i = 0; i < 18; i++) {
