@@ -2100,6 +2100,7 @@ async function start() {
         // actual opaque world surface competes without the character.
         // This changes picker eligibility, never scene visibility or truth.
         const hiddenFromPicker: { mesh: pc.MeshInstance; pick: boolean }[] = [];
+        let worldOnly: pc.Vec3 | null = null;
         try {
           for (const candidate of actors) {
             if (!candidate.enabled) continue;
@@ -2109,10 +2110,15 @@ async function start() {
             }
           }
           residentDepthPicker.prepare(lens, app.scene);
+          // WebGPU can finish this pick/readback asynchronously after prepare.
+          // Keep resident IDs excluded until its actual world-only sample is
+          // obtained, not merely until the pass was submitted; WebGL2 may
+          // finish synchronously. The normal scene draw is not controlled by
+          // MeshInstance.pick, and the finally block restores every flag.
+          worldOnly = await residentDepthPicker.getWorldPointAsync(px, py);
         } finally {
           for (const { mesh, pick } of hiddenFromPicker) mesh.pick = pick;
         }
-        const worldOnly = await residentDepthPicker.getWorldPointAsync(px, py);
         if (generation !== residentPickGeneration || scenePose() !== poseAtTap ||
             !actor.enabled || actorResidents.get(actor)?.code !== resident.code ||
             actor.getPosition().distance(feet) > modelHeight * .5 ||
