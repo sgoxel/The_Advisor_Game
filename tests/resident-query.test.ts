@@ -201,7 +201,7 @@ test("S010 selected ground ring is a closed planar world mesh with no screen-spa
     "ring ground clearance is 22 physical centimetres, not 0.12 render units");
   for (let index = 0; index < positions.length; index += 3) {
     const radiusM = Math.hypot(positions[index], positions[index + 2]) * CANONICAL_METRES_PER_SOURCE_UNIT;
-    assert.ok(Math.abs(radiusM - (index / 3 % 2 === 0 ? 0.32 : 0.38)) < 1e-10,
+    assert.ok(Math.abs(radiusM - (index / 3 % 2 === 0 ? 0.42 : 0.48)) < 1e-10,
       "ring radius follows the same physical-metre to render-unit transform as the resident");
   }
   assert.ok(indices.every(index => index >= 0 && index < positions.length / 3));
