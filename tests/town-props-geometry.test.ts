@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPropForTest, squareProgramFor} from '../src/geometry.ts';
 import {assetVariants} from '../src/asset-meshes.ts';
-import {metresToSource} from '../src/physical-scale.ts';
+import {metresToSource, sourceUnitsPerMetreAt} from '../src/physical-scale.ts';
 import {finalSurfaceAt} from '../src/world.ts';
 
 type Geo = ReturnType<typeof buildPropForTest>['closeDetail'];
@@ -494,6 +494,17 @@ test('WP #550: Hero/Close access path follows actual composed terrain at each re
   const path = buildPropForTest(feature, 8).structures;
   assert.ok(path.positions.length > 0, 'real access path produces a close-range 3D mesh');
   finite(path);
+  // The doorway's yaw is in physical east/north metres, not equal-width
+  // source longitude/latitude units. Test an actual non-equatorial fixture.
+  const ratio = sourceUnitsPerMetreAt(centre.z).x / sourceUnitsPerMetreAt(centre.z).z,
+    halfLength = feature.length / 2, halfWidth = feature.footprintWidth / 2,
+    cornerX = (-halfWidth * Math.cos(feature.yawRad) - halfLength * Math.sin(feature.yawRad)) * ratio,
+    cornerZ = halfWidth * Math.sin(feature.yawRad) - halfLength * Math.cos(feature.yawRad);
+  assert.ok(ratio > 1.01, 'high-latitude path fixture must exercise east metric');
+  assert.ok(Array.from({length: path.positions.length / 3}, (_, i) => i).some(i =>
+    Math.abs(path.positions[i * 3] - cornerX) < .002 &&
+    Math.abs(path.positions[i * 3 + 2] - cornerZ) < .002),
+    'doorway path corner must use latitude-correct physical bearing');
   for (let i = 0; i < path.positions.length; i += 3) {
     const x = centre.x + path.positions[i], z = centre.z + path.positions[i + 2],
       offset = path.positions[i + 1] - (finalSurfaceAt(x, z).surfaceHeight - y);
