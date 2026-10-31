@@ -139,13 +139,13 @@ SCENARIOS: dict[str, str] = {
     "s003-hero-close-resident": (
         "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);"
         "eval:window.advisorWorld.setHalfHeight(18);"
-        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());"
+        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true));"
         "eval:window.__wp550Ground=window.advisorWorld.navigation.surfaceAtScreen(window.__s006Resident.clientX,window.__s006Resident.clientY);"
         "eval:window.__wp550Ground||Promise.reject(new Error('No canonical ground beneath picked resident'));"
         "eval:window.advisorWorld.navigation.setFocus(window.__wp550Ground.lon,window.__wp550Ground.lat);"
         "eval:window.advisorWorld.setHalfHeight(10);"
-        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick());"
-        "tap:resident;visible:#npc-popup:not([hidden]);"
+        "until:(window.__s006Resident=window.advisorWorld.residentEvidencePick(true));"
+        "tap:resident-feet;visible:#npc-popup:not([hidden]);"
         # The real tap must inspect that exact original 2D resident. The
         # old follow-on popup button intermittently remained covered/absent
         # and timed out despite a fully live scene. Focus the actually picked
@@ -618,16 +618,16 @@ class Session:
             page.mouse.move(*parse_point(end, self.viewport), steps=12)
             page.mouse.up()
         elif name == "tap":
-            if arg == "resident":
-                point = page.evaluate("""() => {
-                  // Re-pick at the actual click, not a previous simulation tick.
-                  // Keep the same real on-screen canvas selection contract.
-                  const r = window.advisorWorld?.residentEvidencePick?.();
+            if arg in ("resident", "resident-feet"):
+                point = page.evaluate("""unobscuredFeet => {
+                  // Re-pick the same real canvas actor at click time. Only the
+                  // WP #550 feet witness requests the actual roof/foot-ray veto.
+                  const r = window.advisorWorld?.residentEvidencePick?.(unobscuredFeet);
                   if (!r || !Number.isFinite(r.clientX) || !Number.isFinite(r.clientY))
                     return null;
                   window.__s006Resident = r;
                   return [r.clientX, r.clientY];
-                }""")
+                }""", arg=(arg == "resident-feet"))
                 if point is None:
                     raise CaptureError("no selected resident pixel available for actual browser tap")
                 x, y = point
