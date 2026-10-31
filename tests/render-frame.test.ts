@@ -325,4 +325,10 @@ test("WP #550 Hero/Close ground inspection hits the first real narrow cliff face
     "ray with no visible ground must not select an invented point");
   assert.equal(firstComposedSurfaceRayHitDistance(12, () => NaN), null,
     "invalid authoritative height cannot become a picked cliff");
+  assert.equal(firstComposedSurfaceRayHitDistance(12, () => { throw Error("unsupported planet cell"); }), null,
+    "a failed canonical point query must not escape the canvas click or invent terrain");
+  assert.equal(firstComposedSurfaceRayHitDistance(12, distance => {
+    if (distance > 0.15) throw Error("missing cliff refinement sample");
+    return 0.2 - distance;
+  }), null, "refinement failure must reject the entire hit instead of selecting a false cliff face");
 });

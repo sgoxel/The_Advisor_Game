@@ -32,12 +32,20 @@ export function firstComposedSurfaceRayHitDistance(
   if (!Number.isFinite(farDistance) || farDistance <= 0) return null;
   let before = 0, distance = 0;
   for (;;) {
-    const clearance = clearanceAt(distance);
+    // At the pole or a missing canonical cell, a query can fail instead of
+    // returning a height. A canvas click must fail closed, not throw through
+    // the pointer handler and leave a stale or invented selected point.
+    let clearance: number;
+    try { clearance = clearanceAt(distance); }
+    catch { return null; }
     if (!Number.isFinite(clearance)) return null;
     if (clearance <= 0) {
       let hit = distance;
       for (let i = 0; i < 18; i++) {
-        const midpoint = (before + hit) / 2, middleClearance = clearanceAt(midpoint);
+        const midpoint = (before + hit) / 2;
+        let middleClearance: number;
+        try { middleClearance = clearanceAt(midpoint); }
+        catch { return null; }
         if (!Number.isFinite(middleClearance)) return null;
         if (middleClearance > 0) before = midpoint;
         else hit = midpoint;
