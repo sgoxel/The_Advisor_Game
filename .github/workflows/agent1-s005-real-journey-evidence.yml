@@ -66,7 +66,11 @@ jobs:
           # Fantasy time cannot be represented by a synthetic animation frame.
           # Each new browser reconstructs the saved IDs at its fixed Fantasy
           # time and revalidates all route stations, streets, decks and grades.
-          for SCENE in bridge site home; do
+          SCENES="bridge site home"
+          if python -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["homeStarted"] else 1)' "$S005_VISUAL_WITNESS"; then
+            SCENES="bridge site returnbridge home"
+          fi
+          for SCENE in $SCENES; do
             eval "$(python - "$S005_VISUAL_WITNESS" "$SCENE" <<'PY'
           import base64,json,shlex,sys
           w=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -77,6 +81,9 @@ jobs:
               saved=w['homeHistory'] if success else w['outboundHistory']
               fixed=w['homeFixedMs'] if success else w['siteFixedMs']
               caption='home-door-arrival' if success else 'truthful-return-refusal'
+          elif scene=='returnbridge':
+              point=w['returnBridge']; saved=w['homeHistory']
+              fixed=w['returnBridgeFixedMs']; caption='real-owned-return-bridge'
           else:
               point=w[scene]; saved=w['outboundHistory']
               fixed=w[scene+'FixedMs']
