@@ -108,11 +108,12 @@ float sdVis(float size, float fp) { return smoothstep(1.5, 4.0, size / fp); }
 float sdGroove(float edge, float width, float fp) { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
 vec4 sdRock3D(vec3 p, float fp) {
   float broad = sdNoise3(p * 0.28), grain = sdNoise3(p * 1.7);
-  float vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
   float visible = sdVis(2.5, fp);
-  float tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
-  return vec4(vec3((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
-    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+  // Smooth, world-anchored rock grain without dark closed noise contours:
+  // those repeated cells read as a tile grid in the original Close cliff.
+  float tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
+  return vec4(vec3(1.0 + tone),
+    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
 }
 vec4 sdBlocks(vec2 uv, vec2 size, float joint, float fp, float toneAmp) {
   vec2 b = uv / size; float row = floor(b.y); b.x += 0.5 * (row - 2.0 * floor(row * 0.5));
@@ -296,7 +297,13 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   // Physical slope faces catch daylight before micro-bump shading. A flat
   // patch has dot(sdN, sdL) == sdL.y, so existing level roads and fields
   // keep their original colour. No height exaggeration or collision offset.
-  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+  // Continuous 3D rock grain is already world-space; the actual Close cliff
+  // screenshot's heavy polygon outlines come from per-face sun contrast.
+  // Attenuate ONLY steep rock facets, retaining geometric shading elsewhere.
+  float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+    (1.0 - step(0.5, abs(sdKind - 3.0)));
+  float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
@@ -353,11 +360,10 @@ fn sdVis(size: f32, fp: f32) -> f32 { return smoothstep(1.5, 4.0, size / fp); }
 fn sdGroove(edge: f32, width: f32, fp: f32) -> f32 { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
 fn sdRock3D(p: vec3f, fp: f32) -> vec4f {
   let broad = sdNoise3(p * 0.28); let grain = sdNoise3(p * 1.7);
-  let vein = 1.0 - smoothstep(0.045, 0.21, abs(broad - 0.5));
   let visible = sdVis(2.5, fp);
-  let tone = (broad - 0.5) * 0.30 * visible + (grain - 0.5) * 0.14 * sdVis(0.4, fp);
-  return vec4f(vec3f((1.0 + tone) * (1.0 - 0.075 * vein * visible)),
-    (broad - 0.5) * 0.018 + (grain - 0.5) * 0.010);
+  let tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
+  return vec4f(vec3f(1.0 + tone),
+    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
 }
 fn sdBlocks(uv: vec2f, size: vec2f, joint: f32, fp: f32, toneAmp: f32) -> vec4f {
   var b = uv / size; let row = floor(b.y); b.x = b.x + 0.5 * (row - 2.0 * floor(row * 0.5));
@@ -538,7 +544,10 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdL = normalize(uniform.sdSunDir);
   let sdNb = normalize(sdN - sdGrad);
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
-  sdShade = clamp(1.0 + (0.55 * (dot(sdN, sdL) - sdL.y) +
+  let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+    (1.0 - step(0.5, abs(sdKind - 3.0)));
+  let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);
