@@ -54,7 +54,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S009-003-001 — Enforce combined app-owned CPU+GPU ≤1 GB including workers, assets and targets; restore lost GPU in-session
 - WP-S009-004-001 — Audit deployed README Advisor→decision→Simulation→visible consequence, browser and phone UX
 - WP-S009-005-001 — Prove wheel/pinch/scale pure zoom, globe↔local focus/angle continuity and truthful terrain/resident readiness
-- WP-S009-006-001 — Persist verified SEED/version-keyed terrain/geography foundations; measure real browser-restart reuse
+- WP-S009-006-001 — Persist verified SEED/version-keyed terrain/geography foundations; measure real browser-restart reuse — DEPLOYED INCREMENT PENDING / ACCEPTANCE IN PROGRESS (settlements foundation persisted and verified; terrain tiles not yet persisted)
 
 ## STAGE S010 — Hero-Zoom Advisor Gameplay, Same-World Interiors, Campaign Persistence & Living Fauna
 

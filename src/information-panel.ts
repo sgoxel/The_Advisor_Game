@@ -1,3 +1,5 @@
+// Side-effect module: registers the map information panel toggle.
+export {};
 const panel = document.getElementById("region-panel"), toggle = document.getElementById("toggle-region-panel");
 toggle?.addEventListener("click", () => {
   if (!panel || !toggle) return;

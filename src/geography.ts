@@ -25,6 +25,7 @@ import {
 import { travelMetrics } from "./travel.ts";
 import { defineContinuityCorridor } from "./continuity-corridor.ts";
 import { freshwaterAccessAt, naturalSurfaceAt, SETTLEMENT_WATER_RESERVE_SOURCE, freshwaterSegmentsAround, freshwaterHabitatCandidate, drainageCoarseSegments } from "./hydrology.ts";
+import { queueSettlementFoundationSave, settlementFoundationKey, takeHydratedSettlements } from "./foundation-cache.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -389,6 +390,33 @@ function settlementEnvelopeFits(
 }
 
 // Coarse, immutable population candidates. No tile/building data is prepared here.
+type MacroPopulationSummary = {
+  version: string;
+  countries: {
+    countryCode: string; areaKm2: number; productiveKm2: number; cityTarget: number; villageTarget: number;
+    cities: number; villages: number; candidateCount: number;
+  }[];
+  candidateCount: number;
+};
+
+export let cities: Place[];
+export let villages: Place[];
+export let macroPopulationSummary: MacroPopulationSummary;
+const cityParents = new Map<string, string>();
+/**
+ * A previously persisted, digest-verified settlement foundation is reused when
+ * present (WP-S009-006-001). Anything missing, stale, corrupt or evicted falls
+ * through to the unchanged deterministic generator below.
+ */
+const hydratedSettlements = takeHydratedSettlements();
+if (hydratedSettlements) {
+  // Hydrated objects are never mutated downstream; they are the same plain
+  // records the generator produces, keyed by the same SEED and versions.
+  cities = hydratedSettlements.cities as Place[];
+  villages = hydratedSettlements.villages as Place[];
+  for (const [child, parent] of hydratedSettlements.cityParents) cityParents.set(child, parent);
+  macroPopulationSummary = hydratedSettlements.summary as MacroPopulationSummary;
+} else {
 type PopulationCandidate = {
   position: CanonicalPosition; productivity: number; habitat: number; interior: number;
   fresh: boolean; dryException: boolean; cityLegal?: boolean; villageLegal?: boolean;
@@ -448,8 +476,7 @@ function siteLegal(candidate:PopulationCandidate,country:Country,kind:Place["kin
   const key=kind==="city"?"cityLegal":"villageLegal";
   return candidate[key]??(candidate[key]=locallyDrySettlementSite(candidate.position,kind==="city"?90:95)&&settlementEnvelopeFits(candidate.position,country,kind));
 }
-const cityParents=new Map<string,string>();
-export const cities:Place[]=(()=>{
+cities=(()=>{
   const result:Place[]=[],usedNames=new Set<string>();
   for(const profile of populationProfiles.values()){
     const {country}=profile,local:Place[]=[];
@@ -481,7 +508,7 @@ export const cities:Place[]=(()=>{
   }
   return result;
 })();
-export const villages:Place[]=(()=>{
+villages=(()=>{
   const result:Place[]=[],usedNames=new Set<string>(["alderwick",...cities.map(c=>c.name.toLowerCase())]),childCounts=new Map<string,number>();
   for(const profile of populationProfiles.values()){
     const {country}=profile,local:Place[]=[],countryCities=cities.filter(c=>c.continent===country.continent&&c.country===country.id);
@@ -509,15 +536,22 @@ export const villages:Place[]=(()=>{
   }
   return result;
 })();
-export const places=[...cities,...villages];
-export const macroPopulationSummary={version:MACRO_SETTLEMENT_VERSION,
+macroPopulationSummary={version:MACRO_SETTLEMENT_VERSION,
   countries:[...populationProfiles.values()].map(p=>({countryCode:p.country.code,areaKm2:p.areaKm2,productiveKm2:p.productiveKm2,cityTarget:p.cityTarget,villageTarget:p.villageTarget,
     cities:cities.filter(c=>c.continent===p.country.continent&&c.country===p.country.id).length,
     villages:villages.filter(v=>v.continent===p.country.continent&&v.country===p.country.id).length,candidateCount:p.candidates.length})),
   candidateCount:[...populationProfiles.values()].reduce((n,p)=>n+p.candidates.length,0)};
 // Candidate eligibility is disposable generation scratch, never resident scenery.
 populationProfiles.clear();countryWaterSegments.clear();
-const placeById=new Map(places.map(p=>[p.id,p]));
+// Persist the freshly generated immutable foundation for the next browser opening.
+// Background only: this never delays the first frame and never becomes authority.
+queueSettlementFoundationSave(settlementFoundationKey(WORLD_SEED, WORLD_FOUNDATION_VERSION), currentSettlementFoundation());
+}
+/** The exact immutable settlement foundation that is persisted and rehydrated. */
+export function currentSettlementFoundation() {
+  return { cities, villages, cityParents: [...cityParents] as [string, string][], summary: macroPopulationSummary };
+}
+export const places=[...cities,...villages];const placeById=new Map(places.map(p=>[p.id,p]));
 // Rural neighbours trade directly where a dry owned corridor is available;
 // the city backbone still guarantees a connected coarse graph per country.
 const villageTradeEdges:[Place,Place][]=[],tradeKeys=new Set<string>();
