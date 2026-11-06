@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Hero/Close physical 3D: first-hit cliffs, canonical mesh/feet parity, legal graded street→owned door
+- WP-S003-004-001 — Hero/Close physical 3D: first-hit cliffs, canonical mesh/feet parity, legal graded street→owned door — 2026-11-06: rock contour shader fix + portrait inspector gutter + Close-stop cliff capture shipped; relief-view Close camera dips under terrain (open)
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
