@@ -21,6 +21,7 @@ import {
   type SettlementFoundationPayload,
 } from "./foundation-cache.ts";
 import { COARSE_GEOGRAPHY_VERSION, WORLD_SEED } from "./config.ts";
+import { mountBuildBadge } from "./build-info.ts";
 
 /** Hydration must never delay startup noticeably; a slow disk simply regenerates. */
 const HYDRATION_TIMEOUT_MS = 1500;
@@ -53,6 +54,7 @@ async function hydrateSettlementFoundation(): Promise<SettlementFoundationPayloa
 }
 
 async function start(): Promise<void> {
+  mountBuildBadge();
   const restored = await hydrateSettlementFoundation();
   provideHydratedSettlements(restored);
   if (restored) {
