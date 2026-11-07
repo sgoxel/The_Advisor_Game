@@ -19,7 +19,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localDayIndex, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
-import { hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { anchorNames, hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -60,6 +60,7 @@ import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
+import { AdvisorPanel } from "./advisor-panel.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -3472,8 +3473,72 @@ async function start() {
       },
     },
   });
+  mountAdvisorPanel();
   app.start();
 }
+
+/**
+ * Advisor dialogue (WP-S010-007-002). The panel reads a read-only snapshot of the
+ * inspected protagonist; every sentence it can produce comes from these facts or
+ * is an explicit refusal. Nothing here writes Simulation state.
+ */
+function mountAdvisorPanel() {
+  const root = document.getElementById("advisor-panel");
+  if (!root) return;
+  /** Nearest real grounded resident actor; deterministic by current distance. */
+  const nearestAdvisorResident = () => {
+    let best: Resident | undefined, bestDistance = Infinity;
+    for (const [actor, resident] of actorResidents) {
+      if (!actor.enabled || !resident.grounded) continue;
+      const distance = Math.hypot(resident.x - view.x, resident.z - view.z);
+      if (distance < bestDistance) { bestDistance = distance; best = resident; }
+    }
+    return best;
+  };
+  const knownPlaces = () => villages.concat(cities).map((place) => ({ id: place.id, name: place.name }));
+  const knownPeople = () => {
+    const seen = new Set<string>(), people: { id: string; name: string }[] = [];
+    for (const resident of actorResidents.values()) {
+      if (seen.has(resident.code)) continue;
+      seen.add(resident.code);
+      people.push({ id: resident.code, name: resident.name });
+    }
+    return people;
+  };
+  const panel = new AdvisorPanel(root, {
+    seed: () => Math.floor(simulation.tick / 24),
+    readFacts: () => {
+      // Prefer the inspected resident; otherwise advise the nearest real
+      // grounded resident in view. Both are authoritative Simulation residents.
+      const code = npcPopupCode();
+      const resident = (code ? simulation.projectedResidentByCode(code) : undefined) ?? nearestAdvisorResident();
+      if (!resident || !resident.grounded) return undefined;
+      const lon = resident.position.lon, second = localSecondOfDay(simulation.tick, lon);
+      const place = villages.concat(cities).find((candidate) => candidate.id === resident.settlement);
+      // Human-readable anchors only: raw SEED codes must never reach the player.
+      const anchors = anchorNames(resident);
+      const readableTask = (value: string) => (/^ADVISOR-/.test(value) || value.includes("/") ? "" : value);
+      return {
+        name: resident.name,
+        role: String(resident.role),
+        settlement: anchors.settlement ?? place?.name ?? "the settlement",
+        homeName: anchors.home || "my house",
+        workName: anchors.work || "my workplace",
+        task: readableTask(resident.task ?? "") || readableTask(resident.route ?? "") || "",
+        activity: String(resident.activity).replace(/-/g, " "),
+        indoors: resident.indoors,
+        mood: String(resident.mood),
+        clockLabel: clockLabel(second),
+        daylightPhase: daylightAt(second).phase,
+        travelling: resident.travelProgress !== undefined,
+        knownPlaces: knownPlaces(),
+        knownPeople: knownPeople(),
+      };
+    },
+  });
+  (window as unknown as { advisorDialogue?: AdvisorPanel }).advisorDialogue = panel;
+}
+
 function showRendererActions() {
   const actions = document.createElement("div");
   actions.className = "renderer-actions";

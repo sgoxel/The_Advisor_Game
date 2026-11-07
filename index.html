@@ -184,6 +184,24 @@
         <span id="scale-text">50 m</span>
       </div>
     </footer>
+    <aside class="panel advisor-panel" id="advisor-panel" data-expanded="true" aria-label="Advisor conversation">
+      <div class="advisor-head">
+        <div>
+          <div class="eyebrow">YOUR ADVISOR VOICE</div>
+          <h2>Speak with the protagonist</h2>
+        </div>
+        <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="true" aria-controls="advisor-log">Hide Advisor</button>
+      </div>
+      <p class="hint advisor-hint">You advise; the character decides. Advice is never a command.</p>
+      <div class="advisor-log" id="advisor-log" data-advisor-log role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation so far"></div>
+      <div class="advisor-suggestions" data-advisor-suggestions aria-label="Example questions"></div>
+      <form class="advisor-form" data-advisor-form autocomplete="off">
+        <label class="sr-only" for="advisor-input">Message to the protagonist</label>
+        <input id="advisor-input" data-advisor-input type="text" name="message" maxlength="280" placeholder="Ask or advise…" enterkeyhint="send" />
+        <button type="submit">Send</button>
+      </form>
+      <p class="advisor-status" data-advisor-status role="status" aria-live="polite" data-state="idle">idle</p>
+    </aside>
     <div class="telemetry">
       <span id="backend">Connecting renderer</span><b>·</b
       ><span id="tile-status">Preparing terrain</span>

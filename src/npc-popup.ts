@@ -57,7 +57,7 @@ function placeOf(resident: Resident) {
   return places.find((place) => place.id === resident.settlement);
 }
 /** Proper names of the settlement's public buildings for routine anchors. */
-function anchorNames(resident: Resident) {
+export function anchorNames(resident: Resident) {
   const place = placeOf(resident);
   if (!place) return {} as Record<string, string>;
   const plan = settlementExteriorFor(place), find = (kind: string, service?: string) => plan.plots.find((plot) => plot.kind === kind && (!service || plot.service === service)),
