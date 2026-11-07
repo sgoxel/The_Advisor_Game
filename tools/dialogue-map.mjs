@@ -17,7 +17,7 @@ import { SENTENCE_LIBRARY } from "../src/sentence-library.ts";
 import { FOLLOWUPS } from "../src/dialogue-followups.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outFile = `${here}/../docs/dialogue-map.html`;
+const outFile = `${here}/../public/dialogue-map.html`;
 
 const esc = (v) =>
   String(v).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

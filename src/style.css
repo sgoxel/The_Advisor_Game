@@ -1825,4 +1825,14 @@ body.globe-mode .build-badge {
 .advisor-followup:hover { background: #3a3020; }
 @media (max-width: 700px) {
   .advisor-followup { min-height: 44px; }
+}.dialogue-map-link { color: #cfe0cf; }
+.dialogue-map-link:hover { color: #f2e7c6; }
+@media (max-width: 900px) {
+  .dialogue-map-link { font-size: 9px; padding: 8px 11px; }
+}
+@media (max-width: 700px) {
+  .dialogue-map-link { font-size: 8px; padding: 7px 9px; }
+}
+@media (max-width: 520px) {
+  .dialogue-map-link { display: none; }
 }

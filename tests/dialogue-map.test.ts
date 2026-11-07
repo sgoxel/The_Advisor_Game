@@ -11,11 +11,11 @@ import { TOPICS } from "../src/dialogue-topics.ts";
 import { SENTENCE_LIBRARY } from "../src/sentence-library.ts";
 import { FOLLOWUPS } from "../src/dialogue-followups.ts";
 
-const pageUrl = new URL("../docs/dialogue-map.html", import.meta.url);
+const pageUrl = new URL("../public/dialogue-map.html", import.meta.url);
 const generatorUrl = new URL("../tools/dialogue-map.mjs", import.meta.url);
 
 test("the dialogue map page and its generator exist", () => {
-  assert.ok(existsSync(pageUrl), "docs/dialogue-map.html is missing (run: npm run dialogue-map)");
+  assert.ok(existsSync(pageUrl), "public/dialogue-map.html is missing (run: npm run dialogue-map)");
   assert.ok(existsSync(generatorUrl), "tools/dialogue-map.mjs is missing");
 });
 
