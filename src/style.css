@@ -1753,3 +1753,50 @@ body.globe-mode .build-badge {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
+/* Assigned protagonist (owner request): the player picks any resident. */
+.protagonist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 11px;
+  color: #f2e7c6;
+  background: #2a2118d9;
+  border: 1px solid #d9b87455;
+  border-radius: 30px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.protagonist-chip[hidden] { display: none; }
+.protagonist-chip-label {
+  font-size: 8px;
+  letter-spacing: .14em;
+  color: #d9b874;
+}
+.protagonist-chip:hover { background: #3a2d1ff2; border-color: #d9b87499; }
+.protagonist-chip:focus-visible { outline: 2px solid #d9b874; outline-offset: 2px; }
+.advisor-subject {
+  margin: 3px 0 0;
+  font-size: 10px;
+  letter-spacing: .05em;
+  color: #d9b874;
+}
+.npc-protagonist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.npc-protagonist-badge {
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: #e8d9a8;
+  background: #d9b87422;
+  border: 1px solid #d9b87455;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+@media (max-width: 900px) {
+  .protagonist-chip { font-size: 10px; padding: 7px 10px; }
+  .protagonist-chip-label { display: none; }
+}
+@media (max-width: 520px) {
+  .protagonist-chip { font-size: 9px; padding: 6px 8px; max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
+}

@@ -19,7 +19,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localDayIndex, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
-import { anchorNames, hideNpcPopup, npcPopupCode, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -61,6 +61,7 @@ import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { AdvisorPanel } from "./advisor-panel.ts";
+import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -3478,6 +3479,36 @@ async function start() {
 }
 
 /**
+ * Header chip naming the assigned protagonist (owner request). Clicking it
+ * focuses that resident at Hero scale. Camera only: nobody is moved.
+ */
+function mountProtagonistBar() {
+  const chip = document.getElementById("protagonist-chip") as HTMLButtonElement | null;
+  const name = document.getElementById("protagonist-name");
+  let onFocus: (() => boolean) | undefined;
+  const update = (resident: { name: string; role: string; settlement: string } | undefined) => {
+    if (!chip || !name) return;
+    if (!resident) {
+      chip.hidden = true;
+      chip.removeAttribute("data-name");
+      name.textContent = "";
+      return;
+    }
+    chip.hidden = false;
+    chip.dataset.name = resident.name;
+    name.textContent = resident.name;
+    chip.title = `Your protagonist: ${resident.name} — ${resident.role.replace(/-/g, " ")} of ${resident.settlement}. Click to focus at Hero scale.`;
+    chip.setAttribute("aria-label", `Focus your protagonist ${resident.name} at Hero scale`);
+  };
+  if (chip) {
+    chip.addEventListener("click", () => {
+      if (onFocus && !onFocus()) chip.blur();
+    });
+  }
+  return { update, onFocus: (callback: () => boolean) => { onFocus = callback; } };
+}
+
+/**
  * Advisor dialogue (WP-S010-007-002). The panel reads a read-only snapshot of the
  * inspected protagonist; every sentence it can produce comes from these facts or
  * is an explicit refusal. Nothing here writes Simulation state.
@@ -3508,16 +3539,32 @@ function mountAdvisorPanel() {
   const panel = new AdvisorPanel(root, {
     seed: () => Math.floor(simulation.tick / 24),
     readFacts: () => {
-      // Prefer the inspected resident; otherwise advise the nearest real
-      // grounded resident in view. Both are authoritative Simulation residents.
-      const code = npcPopupCode();
-      const resident = (code ? simulation.projectedResidentByCode(code) : undefined) ?? nearestAdvisorResident();
+      // The player advises their assigned protagonist. Until one is chosen, fall
+      // back to the inspected resident, then the nearest real grounded resident.
+      const assigned = getProtagonistCode();
+      const resident =
+        (assigned ? simulation.residentByCode(assigned) : undefined) ??
+        (npcPopupCode() ? simulation.projectedResidentByCode(npcPopupCode()) : undefined) ??
+        nearestAdvisorResident();
       if (!resident || !resident.grounded) return undefined;
       const lon = resident.position.lon, second = localSecondOfDay(simulation.tick, lon);
       const place = villages.concat(cities).find((candidate) => candidate.id === resident.settlement);
       // Human-readable anchors only: raw SEED codes must never reach the player.
       const anchors = anchorNames(resident);
       const readableTask = (value: string) => (/^ADVISOR-/.test(value) || value.includes("/") ? "" : value);
+  /** Turns a raw activity key into a human phrase the character can say. */
+  const readableActivity = (value: string) => {
+    const key = value.replace(/[_-]/g, " ").trim();
+    const phrases: Record<string, string> = {
+      work: "at my work", working: "at my work", travel: "on the road", walking: "on the road",
+      home: "at home", rest: "resting", idle: "taking a moment", sleep: "resting",
+      eat: "eating", meal: "eating", social: "talking with neighbours", guard: "on guard duty",
+      duty: "on guard duty", shop: "at the market", market: "at the market", pray: "at prayer",
+      errand: "running an errand", errands: "running errands", craft: "at my craft",
+      field: "in the fields", farm: "in the fields", drink: "at the tavern", visit: "visiting",
+    };
+    return phrases[key] ?? key;
+  };
       return {
         name: resident.name,
         role: String(resident.role),
@@ -3525,9 +3572,9 @@ function mountAdvisorPanel() {
         homeName: anchors.home || "my house",
         workName: anchors.work || "my workplace",
         task: readableTask(resident.task ?? "") || readableTask(resident.route ?? "") || "",
-        activity: String(resident.activity).replace(/-/g, " "),
+        activity: readableActivity(String(resident.activity)),
         indoors: resident.indoors,
-        mood: String(resident.mood),
+        mood: resident.mood.label,
         clockLabel: clockLabel(second),
         daylightPhase: daylightAt(second).phase,
         travelling: resident.travelProgress !== undefined,
@@ -3537,6 +3584,60 @@ function mountAdvisorPanel() {
     },
   });
   (window as unknown as { advisorDialogue?: AdvisorPanel }).advisorDialogue = panel;
+  // Player-facing protagonist control. `assign` validates against the real world
+  // before storing, so an unknown code can never become the advised identity.
+  (window as unknown as {
+    advisorProtagonist?: {
+      current: () => string | undefined;
+      assign: (code: string) => boolean;
+      clear: () => void;
+      focus: () => boolean;
+      name: () => string | undefined;
+    };
+  }).advisorProtagonist = {
+    current: () => getProtagonistCode(),
+    assign: (code: string) => {
+      const resident = simulation.residentByCode(code);
+      if (!resident) return false;
+      return setProtagonistCode(code, "user");
+    },
+    clear: () => setProtagonistCode(undefined, "clear"),
+    focus: () => focusProtagonist(),
+    name: () => {
+      const code = getProtagonistCode();
+      return code ? simulation.residentByCode(code)?.name : undefined;
+    },
+  };
+
+  /** Camera-only focus on the assigned protagonist at Hero scale. */
+  const focusProtagonist = () => {
+    const code = getProtagonistCode();
+    if (!code) return false;
+    const resident = simulation.residentByCode(code);
+    if (!resident || !resident.grounded) return false;
+    const point = residentObservationPoint(resident);
+    if (!point) return false;
+    navigate(point.x, point.z, HERO_HALF_HEIGHT);
+    return true;
+  };
+  (window as unknown as { advisorFocusProtagonist?: () => boolean }).advisorFocusProtagonist = focusProtagonist;
+
+  const bar = mountProtagonistBar();
+  const refreshBar = () => {
+    const code = getProtagonistCode();
+    const resident = code ? simulation.residentByCode(code) : undefined;
+    bar.update(resident ? { name: resident.name, role: String(resident.role), settlement: anchorNames(resident).settlement ?? "" } : undefined);
+    // Keep the conversation header naming the person being advised.
+    panel.setSubject(resident?.name);
+  };
+  subscribeProtagonist((_code, reason) => {
+    refreshBar();
+    // An explicit player assignment also shows that resident at Hero scale.
+    if (reason === "user") focusProtagonist();
+  });
+  restoreProtagonist(code => Boolean(simulation.residentByCode(code)));
+  refreshBar();
+  bar.onFocus(focusProtagonist);
 }
 
 function showRendererActions() {

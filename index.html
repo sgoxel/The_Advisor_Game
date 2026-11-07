@@ -28,6 +28,10 @@
         <h1>Atlas of the realm</h1>
       </div>
       <span class="live"><i></i> WORLD EXPLORER</span>
+      <button id="protagonist-chip" class="protagonist-chip" type="button" hidden>
+        <span class="protagonist-chip-label">PROTAGONIST</span>
+        <span id="protagonist-name">—</span>
+      </button>
       <a id="build-badge" class="build-badge" href="https://github.com/sgoxel/The_Advisor_Game/commits" target="_blank" rel="noopener noreferrer" hidden>release</a>
       <div class="world-clock">
         <span class="eyebrow">REALM TIME · 24×</span
@@ -189,6 +193,7 @@
         <div>
           <div class="eyebrow">YOUR ADVISOR VOICE</div>
           <h2>Speak with the protagonist</h2>
+          <p class="advisor-subject" data-advisor-subject>No protagonist chosen</p>
         </div>
         <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="true" aria-controls="advisor-log">Hide Advisor</button>
       </div>

@@ -77,6 +77,13 @@ export class AdvisorPanel {
     if (expanded) this.input.focus({ preventScroll: true });
   }
 
+  /** Updates the panel heading to name the person being advised. */
+  setSubject(name: string | undefined): void {
+    const target = this.root.querySelector<HTMLElement>("[data-advisor-subject]");
+    if (!target) return;
+    target.textContent = name ? `Advising ${name}` : "No protagonist chosen";
+  }
+
   /** Handles one player message; safe to call from tests. */
   send(raw: string): DialogueReply | undefined {
     const message = raw.trim();

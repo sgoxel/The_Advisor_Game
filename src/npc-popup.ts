@@ -18,6 +18,7 @@ import { activityAt, dailyPlan, type Activity } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
 import { settlementExteriorFor } from "./settlement-exterior.ts";
 import { populationOf, readableResidentRoute, type Resident } from "./simulation.ts";
+import { getProtagonistCode, setProtagonistCode } from "./protagonist.ts";
 
 const ABILITY_LABELS: [keyof Resident["traits"]["abilities"], string][] = [
   ["strength", "Strength"], ["dexterity", "Dexterity"], ["constitution", "Constitution"],
@@ -175,6 +176,19 @@ function install() {
   root.hidden = true;
   root.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
+    // Player assigns this resident as the protagonist (owner request). The choice
+    // is a player preference; it never moves, renames or re-creates anyone.
+    if ((event.target as HTMLElement).closest("[data-set-protagonist]") && currentKind === "npc" && currentCode) {
+      const code = currentCode;
+      if (setProtagonistCode(code, "user") && lastResident) showNpcPopup(lastResident, lastPopupTick);
+      return;
+    }
+    // Re-focus the assigned protagonist at Hero scale without moving them.
+    if ((event.target as HTMLElement).closest("[data-focus-protagonist]") && currentKind === "npc" && currentCode) {
+      const point = currentNpcPoint;
+      if (point) goTo?.(point.x, point.z, `resident:${point.code.split("/RESIDENT/")[0]}:${point.code.split("/RESIDENT/")[1]}`);
+      return;
+    }
     const advice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-advice-site]");
     if (advice && currentKind === "npc" && currentCode && siteVisitAdvisor && !advicePendingCode) {
       const code = currentCode;
@@ -227,6 +241,8 @@ function install() {
   });
 }
 
+let lastResident: Resident | undefined;
+let lastPopupTick = 0;
 export function npcPopupCode() {
   return root && !root.hidden && currentKind === "npc" ? currentCode : "";
 }
@@ -251,6 +267,18 @@ export function hideNpcPopup() {
 }
 
 /** Open (or refresh) the popup for a resident at a simulation tick. */
+/**
+ * The protagonist row of a resident card. Extracted so the action markup is
+ * testable without a browser. The buttons carry no world authority: one stores a
+ * player preference, the other only moves the camera.
+ */
+export function protagonistRow(isProtagonist: boolean): string {
+  return isProtagonist
+    ? `<span class="npc-protagonist-badge" role="status">Your protagonist · you advise them</span>
+       <button type="button" class="info-go" data-focus-protagonist>Focus at Hero scale</button>`
+    : `<button type="button" class="info-go" data-set-protagonist>Make this resident your protagonist</button>`;
+}
+
 export function showNpcPopup(resident: Resident, tick: number) {
   install();
   if (!root) return;
@@ -268,6 +296,9 @@ export function showNpcPopup(resident: Resident, tick: number) {
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
+  lastResident = resident;
+  lastPopupTick = tick;
+  const isProtagonist = getProtagonistCode() === resident.code;
   const observation = residentObservationPoint(resident);
   currentNpcPoint = observation ? { code: resident.code, ...observation } : undefined;
   const t = resident.traits, names = anchorNames(resident), lon = placeOf(resident)?.canonicalPosition.lon ?? 0, second = localSecondOfDay(tick, lon), day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon),
@@ -288,6 +319,9 @@ export function showNpcPopup(resident: Resident, tick: number) {
     </div>
     <div class="npc-now">
       <div><span class="npc-label">Now</span><b id="npc-current-task">${escape(resident.task)}</b> <span class="npc-muted">· ${resident.indoors ? "indoors" : "outdoors"}</span></div>
+      <div class="npc-protagonist">
+        ${protagonistRow(isProtagonist)}
+      </div>
       ${observation ? `<div class="npc-observe">${goRow("Observe resident at true scale · camera only", `resident:${resident.settlement}:${resident.index}`, "physical resident")}</div>` : ""}
       <div class="npc-observe">
         <button type="button" class="info-go" data-advice-site
