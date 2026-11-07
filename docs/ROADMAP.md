@@ -75,7 +75,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-006-001 — Measure actual Galaxy A55 default-Chrome FPS, input p95, memory, thermals and GPU recovery
 
 - WP-S010-007-001 — Research deterministic local-first Sentence Library, bounded LLM commands & autonomy — COMPLETED and REVIEWED at 2026-11-07
-- WP-S010-007-002 — Ship accessible local-first offline Advisor dialogue, bounded LLM commands and autonomous refusal
+- WP-S010-007-002 — Ship accessible local-first offline Advisor dialogue, bounded LLM commands and autonomous refusal — COMPLETED and REVIEWED at 2026-11-07
 - WP-S010-007-003 — Expand lawful site-visit advice to autonomous accept/refuse→Simulation→persistent visible consequence
 - WP-S010-008-001 — Research accepted campaign-time/SEED authority and deterministic offline replay
 - WP-S010-008-002 — Create/resume player-SEED campaigns with real creation-time fantasy clock and persistent protagonist
