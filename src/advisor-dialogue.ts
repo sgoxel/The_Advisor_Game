@@ -23,6 +23,8 @@ import {
   answerTopic,
   bandOf,
   canonicalQuestion,
+  fillPlaceholders,
+  matchesWhen,
   moodBandOf,
   roleGroupOf,
   temperBandOf,
@@ -32,6 +34,7 @@ import {
   type TopicAnswer,
   type TopicId,
 } from "./dialogue-topics.ts";
+import { FOLLOWUP_BY_ID, type FollowUpId } from "./dialogue-followups.ts";
 
 export type DialogueState = "answered" | "proposed" | "refused" | "ambiguous" | "unknown" | "pending";
 
@@ -154,20 +157,65 @@ export function contextFromFacts(facts: AdvisorFacts): DialogueContextFacts {
   };
 }
 
-/** Builds the "next questions" chips for one answer. */
-export function followUpPrompts(answer: TopicAnswer): readonly FollowUpPrompt[] {
+/**
+ * Builds the "next questions" chips for one answer.
+ *
+ * The chips must not read like a form. Rather than always offering a bare
+ * "Why?", this picks a varied set of conversational moves that suit the current
+ * mood and the topic just answered, uses natural phrasings, and never offers the
+ * same phrase twice in a row. `asked` lets a chain avoid repeating itself.
+ */
+export function followUpPrompts(
+  answer: TopicAnswer,
+  context?: DialogueContextFacts,
+  asked: ReadonlySet<string> = new Set(),
+  limit = 4,
+): readonly FollowUpPrompt[] {
   const prompts: FollowUpPrompt[] = [];
-  if (answer.cause) prompts.push({ label: "Why?", message: "why" });
-  for (const topic of answer.followUps) {
-    if (prompts.length >= 4) break;
-    const question = canonicalQuestion(topic);
-    if (prompts.some((prompt) => prompt.message === question)) continue;
-    prompts.push({ label: question, message: question });
+  const seen = new Set<string>([...asked].map((entry) => entry.toLowerCase()));
+
+  // Which moves make sense for this answer, in a stable priority order.
+  const moves: FollowUpId[] = [];
+  if (answer.cause) moves.push("reason");
+  moves.push("detail");
+  const badMood = context ? context.mood === "miserable" || context.mood === "grumpy" : false;
+  if (badMood) moves.push("help", "feelings");
+  else moves.push("feelings", "help");
+  moves.push("need", "others", "duration", "past", "blame", "consequence");
+
+  for (const move of moves) {
+    if (prompts.length >= limit) break;
+    const def = FOLLOWUP_BY_ID.get(move);
+    if (!def) continue;
+    // Skip a move the player has already used, so a chain keeps moving forward
+    // instead of asking "what do you need" three turns running.
+    // A move is exhausted once any of its phrasings has been seen, so offered
+    // chips never circle back to a question the player already answered.
+    if (def.asks.some((ask) => seen.has(ask.toLowerCase()))) continue;
+    // Rotate which phrasing is shown as the conversation advances, so the same
+    // move does not read identically every turn. Skipped phrasings stay
+    // available; only questions actually asked are excluded.
+    const rotation = asked.size;
+    const ordered = def.asks.map((_, index) => def.asks[(rotation + index) % def.asks.length]);
+    const phrasing = ordered.find((ask) => !seen.has(ask.toLowerCase()));
+    if (!phrasing) continue;
+    seen.add(phrasing.toLowerCase());
+    prompts.push({ label: phrasing.charAt(0).toUpperCase() + phrasing.slice(1), message: phrasing });
   }
+
+  // No topic-fill fallback: the ten moves carry ~80 distinct phrasings, so a
+  // chain never has to re-offer a question it already asked.
   return prompts;
 }
 
-function topicReply(answer: TopicAnswer, facts: AdvisorFacts, confidence: number, intent: IntentId): DialogueReply {
+function topicReply(
+  answer: TopicAnswer,
+  facts: AdvisorFacts,
+  confidence: number,
+  intent: IntentId,
+  context: DialogueContextFacts,
+  asked: ReadonlySet<string>,
+): DialogueReply {
   return {
     state: "answered",
     text: answer.text,
@@ -175,7 +223,7 @@ function topicReply(answer: TopicAnswer, facts: AdvisorFacts, confidence: number
     confidence,
     libraryVersion: SENTENCE_LIBRARY_VERSION,
     topic: answer.topic,
-    followUps: followUpPrompts(answer),
+    followUps: followUpPrompts(answer, context, asked),
   };
 }
 
@@ -311,49 +359,51 @@ function handleInteraction(candidate: Candidate, facts: AdvisorFacts): DialogueR
 const ANSWER_ONLY = "I have not told you anything yet — ask me something first, and then I can explain.";
 
 /** Resolves a follow-up intent against the answer the player just heard. */
-function handleFollowUp(intent: IntentId, last: TopicAnswer | undefined, facts: AdvisorFacts, context: DialogueContextFacts): DialogueReply {
+function handleFollowUp(intent: IntentId, last: TopicAnswer | undefined, facts: AdvisorFacts, context: DialogueContextFacts, asked: ReadonlySet<string>): DialogueReply {
   if (!last) {
     return { state: "unknown", text: ANSWER_ONLY, intent, libraryVersion: SENTENCE_LIBRARY_VERSION };
   }
-  if (intent === "followup.why") {
-    if (last.cause) {
-      return {
-        state: "answered",
-        text: last.cause,
-        intent,
-        libraryVersion: SENTENCE_LIBRARY_VERSION,
-        topic: last.topic,
-        followUps: last.followUps
-          .slice(0, 3)
-          .map((topic) => ({ label: canonicalQuestion(topic), message: canonicalQuestion(topic) })),
-      };
-    }
+  const id = intent.replace("followup.", "") as FollowUpId;
+  // "why?" prefers the precision of the cause that produced this exact answer.
+  if (id === "reason" && last.cause) {
     return {
       state: "answered",
-      text: "I could not put it into words. Some things are simply the way they are.",
+      text: last.cause,
       intent,
       libraryVersion: SENTENCE_LIBRARY_VERSION,
       topic: last.topic,
+      followUps: followUpPrompts(last, context, asked),
     };
   }
-  // "more"/"plan"/"who"/"when"/"how" continue along the topic's own follow-ups.
-  const target: TopicId | undefined =
-    intent === "followup.more" ? last.followUps[0]
-      : intent === "followup.plan" ? "plans"
-        : intent === "followup.who" ? "friends"
-          : intent === "followup.when" ? "plans"
-            : intent === "followup.how" ? "work"
-              : undefined;
-  const next = target ? answerTopic(target, context, facts.name) : undefined;
-  if (!next) {
+  const def = FOLLOWUP_BY_ID.get(id);
+  if (!def) {
     return { state: "unknown", text: "I am not sure what to add to that.", intent, libraryVersion: SENTENCE_LIBRARY_VERSION };
   }
-  return topicReply(next, facts, 0.9, intent);
+  const variant = def.variants.find((candidate) => matchesWhen(candidate.when, context)) ?? def.variants[def.variants.length - 1];
+  const answer: TopicAnswer = {
+    topic: last.topic,
+    text: fillPlaceholders(variant.text, context, facts.name),
+    cause: variant.cause ? fillPlaceholders(variant.cause, context, facts.name) : undefined,
+    tags: variant.tags ?? [],
+    followUps: last.followUps,
+  };
+  return {
+    state: "answered",
+    text: answer.text,
+    intent,
+    libraryVersion: SENTENCE_LIBRARY_VERSION,
+    topic: answer.topic,
+    followUps: followUpPrompts(answer, context, asked),
+  };
 }
 
-type ConversationContext = { last: TopicAnswer | undefined };
+type ConversationContext = { last: TopicAnswer | undefined; asked: Set<string> };
 
 function replyFor(message: string, facts: AdvisorFacts, seed: number, state: ConversationContext): DialogueReply {
+  // Only questions the player actually asked are "used". Merely seeing a chip
+  // does not consume it, so the remaining options stay available next turn.
+  const asked: ReadonlySet<string> = state.asked;
+  const consumeOffered = (reply: DialogueReply): DialogueReply => reply;
   if (facts.unavailableReason) {
     return {
       state: "pending",
@@ -382,13 +432,16 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
   }
 
   const candidate = interpretation.top;
+  // Record the question before any chips are computed, so a move the player just
+  // used is never offered straight back to them.
+  state.asked.add(normalizeMessage(message));
   const context = contextFromFacts(facts);
   const base = { intent: candidate.intent, confidence: candidate.confidence, libraryVersion: SENTENCE_LIBRARY_VERSION } as const;
   const seedShift = seed + candidate.entryId.length;
 
   // Bare follow-ups first: they only mean something in context.
   if (candidate.intent.startsWith("followup.")) {
-    const reply = handleFollowUp(candidate.intent, state.last, facts, context);
+    const reply = consumeOffered(handleFollowUp(candidate.intent, state.last, facts, context, asked));
     if (reply.topic) state.last = answerTopic(reply.topic, context, facts.name) ?? state.last;
     return reply;
   }
@@ -399,7 +452,7 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
     const answer = answerTopic(topicId ?? "feeling", context, facts.name);
     if (answer) {
       state.last = answer;
-      return topicReply(answer, facts, candidate.confidence, "query.topic");
+      return consumeOffered(topicReply(answer, facts, candidate.confidence, "query.topic", context, asked));
     }
   }
 
@@ -420,17 +473,17 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
       return { state: "answered", text: scheduleAnswer(facts), ...base };
     case "query.mood": {
       const answer = answerTopic("feeling", context, facts.name);
-      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      if (answer) { state.last = answer; return consumeOffered(topicReply(answer, facts, candidate.confidence, candidate.intent, context, asked)); }
       return { state: "answered", text: `I am ${facts.mood}.`, ...base };
     }
     case "query.home": {
       const answer = answerTopic("home", context, facts.name);
-      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      if (answer) { state.last = answer; return consumeOffered(topicReply(answer, facts, candidate.confidence, candidate.intent, context, asked)); }
       return { state: "answered", text: `My house is ${facts.homeName}, here in ${facts.settlement}.`, ...base };
     }
     case "query.work": {
       const answer = answerTopic("work", context, facts.name);
-      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      if (answer) { state.last = answer; return consumeOffered(topicReply(answer, facts, candidate.confidence, candidate.intent, context, asked)); }
       return { state: "answered", text: `I am ${facts.role.toLowerCase()}. My work is at ${facts.workName}.`, ...base };
     }
     case "query.world.time":
@@ -453,7 +506,7 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
  * truthfully report that nothing has been asked. Kept for existing callers.
  */
 export function respond(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
-  return replyFor(message, facts, seed, { last: undefined });
+  return replyFor(message, facts, seed, { last: undefined, asked: new Set() });
 }
 
 /**
@@ -461,7 +514,7 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
  * how "how do you feel" → "miserable" → "why?" → cause chains work.
  */
 export class Conversation {
-  private state: ConversationContext = { last: undefined };
+  private state: ConversationContext = { last: undefined, asked: new Set() };
   private turns = 0;
 
   ask(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
@@ -476,7 +529,7 @@ export class Conversation {
   }
 
   reset(): void {
-    this.state = { last: undefined };
+    this.state = { last: undefined, asked: new Set() };
     this.turns = 0;
   }
 }

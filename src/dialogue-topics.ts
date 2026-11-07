@@ -148,7 +148,8 @@ export function temperBandOf(value: number): TemperBand {
   return value < 0.34 ? "even" : value < 0.67 ? "hot" : "hot";
 }
 
-function matches(when: When | undefined, facts: DialogueContextFacts): boolean {
+/** Exported so follow-up answers reuse the exact same condition semantics. */
+export function matchesWhen(when: When | undefined, facts: DialogueContextFacts): boolean {
   if (!when) return true;
   for (const key of Object.keys(when) as (keyof When)[]) {
     const expected = when[key];
@@ -187,7 +188,7 @@ export function answerTopic(
 ): TopicAnswer | undefined {
   const def = definitions.find((entry) => entry.id === topic);
   if (!def) return undefined;
-  const variant = def.variants.find((candidate) => matches(candidate.when, facts)) ?? def.variants[def.variants.length - 1];
+  const variant = def.variants.find((candidate) => matchesWhen(candidate.when, facts)) ?? def.variants[def.variants.length - 1];
   if (!variant) return undefined;
   return {
     topic,

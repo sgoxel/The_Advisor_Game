@@ -9,6 +9,7 @@
 
 /** Bump on any content or rule change; participates in reproducibility checks. */
 import { TOPICS, type TopicId } from "./dialogue-topics.ts";
+import { FOLLOWUP_ASKS, type FollowUpId } from "./dialogue-followups.ts";
 export const SENTENCE_LIBRARY_VERSION = "library-v2";
 /** Bump when an intent's meaning or parameter contract changes. */
 export const INTENT_VERSION = "intent-v1";
@@ -26,12 +27,7 @@ export type IntentId =
   | "query.world.place"
   | "query.world.time"
   | "query.topic"
-  | "followup.why"
-  | "followup.more"
-  | "followup.plan"
-  | "followup.who"
-  | "followup.when"
-  | "followup.how"
+  | `followup.${FollowUpId}`
   | "advice.travel_to_place"
   | "advice.rest"
   | "advice.generic"
@@ -75,25 +71,16 @@ export type SentenceEntry = {
  * Follow-up questions. These are only meaningful with a conversation context;
  * without one they resolve to a truthful "asked nothing yet" reply.
  */
-const FOLLOW_UP_ENTRIES: readonly SentenceEntry[] = Object.freeze([
-  { id: "followup.why", intent: "followup.why", kind: "exact", match: "why", priority: 30, confidence: 0.98 },
-  { id: "followup.why2", intent: "followup.why", kind: "exact", match: "why is that", priority: 30, confidence: 0.97 },
-  { id: "followup.why3", intent: "followup.why", kind: "exact", match: "why so", priority: 28, confidence: 0.95 },
-  { id: "followup.why4", intent: "followup.why", kind: "phrase", match: "what makes you say that", priority: 29, confidence: 0.95 },
-  { id: "followup.why5", intent: "followup.why", kind: "phrase", match: "why do you feel that way", priority: 29, confidence: 0.96 },
-  { id: "followup.more", intent: "followup.more", kind: "phrase", match: "tell me more", priority: 28, confidence: 0.97 },
-  { id: "followup.more2", intent: "followup.more", kind: "phrase", match: "go on", priority: 27, confidence: 0.95 },
-  { id: "followup.more3", intent: "followup.more", kind: "exact", match: "and", priority: 12, confidence: 0.88 },
-  { id: "followup.more4", intent: "followup.more", kind: "phrase", match: "explain that", priority: 27, confidence: 0.95 },
-  { id: "followup.plan", intent: "followup.plan", kind: "phrase", match: "what will you do about it", priority: 29, confidence: 0.96 },
-  { id: "followup.plan2", intent: "followup.plan", kind: "phrase", match: "what happens next", priority: 28, confidence: 0.94 },
-  { id: "followup.who", intent: "followup.who", kind: "phrase", match: "who is that", priority: 27, confidence: 0.94 },
-  { id: "followup.who2", intent: "followup.who", kind: "phrase", match: "who did that", priority: 27, confidence: 0.94 },
-  { id: "followup.when", intent: "followup.when", kind: "phrase", match: "when did that happen", priority: 27, confidence: 0.94 },
-  { id: "followup.when2", intent: "followup.when", kind: "exact", match: "since when", priority: 26, confidence: 0.92 },
-  { id: "followup.how", intent: "followup.how", kind: "phrase", match: "how do you know", priority: 27, confidence: 0.94 },
-  { id: "followup.how2", intent: "followup.how", kind: "phrase", match: "how so", priority: 26, confidence: 0.93 },
-]);
+const FOLLOW_UP_ENTRIES: readonly SentenceEntry[] = Object.freeze(
+  FOLLOWUP_ASKS.map(({ id, ask }, index) => ({
+    id: `followup.${id}.${index}`,
+    intent: `followup.${id}` as IntentId,
+    kind: "normalized" as const,
+    match: ask,
+    priority: 26 + Math.min(6, Math.floor(ask.length / 9)),
+    confidence: 0.95,
+  })),
+);
 
 /**
  * Expands every topic's reviewed questions into library entries. Keeping this

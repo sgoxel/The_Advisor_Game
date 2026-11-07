@@ -204,13 +204,43 @@ test("a chain continues from the answer just heard: feeling -> why", () => {
   const first = conversation.ask("how do you feel", facts());
   assert.equal(first.state, "answered");
   assert.match(first.text, /Miserable/i);
-  assert.ok(first.followUps?.some((prompt) => prompt.message === "why"), "no Why? follow-up offered");
+  // The chips must offer a reason move, but phrased like a person talking.
+  assert.ok(
+    first.followUps?.some((prompt) => /why|how come|makes you say/i.test(prompt.message)),
+    "no reason follow-up offered",
+  );
+  assert.ok(first.followUps!.length >= 3, "too few follow-up options offered");
 
   const second = conversation.ask("why", facts());
   assert.equal(second.state, "answered");
   assert.notEqual(second.text, first.text);
   assert.match(second.text, /Because/i);
   assert.equal(conversation.lastTopic, "feeling");
+});
+
+test("follow-up chips are varied and never re-offer a question already asked", () => {
+  const conversation = new Conversation();
+  const askedLabels = new Set<string>();
+  const offered = new Set<string>();
+  let reply = conversation.ask("how do you feel", facts());
+  for (let turn = 0; turn < 4; turn++) {
+    const chips = reply.followUps ?? [];
+    assert.ok(chips.length >= 2, `turn ${turn} offered only ${chips.length} chips`);
+    // No duplicates within one turn.
+    const labels = chips.map((chip) => chip.label.toLowerCase());
+    assert.equal(new Set(labels).size, labels.length, `turn ${turn} repeated a chip`);
+    // Never offer a question the player has already asked.
+    for (const label of labels) {
+      assert.ok(!askedLabels.has(label), `turn ${turn} re-offered already-asked "${label}"`);
+      offered.add(label);
+    }
+    const chosen = chips[0];
+    askedLabels.add(chosen.label.toLowerCase());
+    reply = conversation.ask(chosen.message, facts());
+  }
+  // Across the chain the vocabulary must be genuinely varied.
+  assert.ok(offered.size >= 8, `expected a varied vocabulary, saw ${offered.size} labels`);
+  assert.ok(offered.has("why so") || [...offered].some((label) => label.includes("why")), "no reason move offered");
 });
 
 test("'why?' without any prior answer is honest, not invented", () => {
@@ -229,12 +259,15 @@ test("the chain changes when the game state changes", () => {
   assert.notEqual(happyWhy.text, sadWhy.text);
 });
 
-test("'tell me more' continues along the topic's own follow-ups", () => {
+test("'tell me more' gives a state-dependent detail answer about the same subject", () => {
   const conversation = new Conversation();
   conversation.ask("how do you feel", facts());
   const more = conversation.ask("tell me more", facts());
   assert.equal(more.state, "answered");
-  assert.equal(more.topic, "work", "feeling follows up to work");
+  // "Tell me more" elaborates on the answer just heard rather than jumping topic.
+  assert.equal(more.topic, "feeling");
+  assert.ok(more.text.length > 0);
+  assert.ok(more.followUps?.length, "the chain must keep offering next questions");
 });
 
 test("a multi-step chain stays coherent and deterministic", () => {
