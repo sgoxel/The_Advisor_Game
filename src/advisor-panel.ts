@@ -5,7 +5,7 @@
  * pipeline and renders the result. It cannot write world state: every reply
  * either answers from facts, asks a clarification, or reports a refusal.
  */
-import { ADVISOR_DIALOGUE_VERSION, respond, type AdvisorFacts, type DialogueReply } from "./advisor-dialogue.ts";
+import { ADVISOR_DIALOGUE_VERSION, Conversation, type AdvisorFacts, type DialogueReply, type FollowUpPrompt } from "./advisor-dialogue.ts";
 import { SENTENCE_LIBRARY_VERSION } from "./sentence-library.ts";
 
 export type AdvisorPanelOptions = {
@@ -31,6 +31,7 @@ export class AdvisorPanel {
   private readonly status: HTMLElement;
   private readonly toggle: HTMLButtonElement;
   private sendCount = 0;
+  private readonly conversation = new Conversation();
 
   constructor(root: HTMLElement, options: AdvisorPanelOptions) {
     this.options = options;
@@ -98,12 +99,50 @@ export class AdvisorPanel {
     this.sendCount += 1;
 
     this.appendPlayer(message);
-    const reply = respond(message, facts, seed);
+    // The conversation object is what makes "why?" follow-ups possible.
+    const reply = this.conversation.ask(message, facts, seed);
     this.appendReply(reply);
     this.setStatus(reply.state);
+    this.renderFollowUps(reply.followUps);
     this.input.value = "";
     this.input.focus({ preventScroll: true });
     return reply;
+  }
+
+  /** Restarts the conversation, dropping the remembered answer. */
+  resetConversation(): void {
+    this.conversation.reset();
+    this.log.replaceChildren();
+    this.renderSuggestions();
+    this.clearFollowUps();
+    this.appendNotice(`Offline Advisor ready · ${SENTENCE_LIBRARY_VERSION}`);
+  }
+
+  private renderFollowUps(prompts: readonly FollowUpPrompt[] | undefined): void {
+    this.clearFollowUps();
+    const host = this.root.querySelector<HTMLElement>("[data-advisor-followups]");
+    if (!host || !prompts?.length) return;
+    host.hidden = false;
+    const label = document.createElement("span");
+    label.className = "advisor-followup-label";
+    label.textContent = "Ask next";
+    host.append(label);
+    for (const prompt of prompts.slice(0, 4)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "advisor-suggestion advisor-followup";
+      button.textContent = prompt.label;
+      button.dataset.advisorFollowup = prompt.message;
+      button.addEventListener("click", () => this.send(prompt.message));
+      host.append(button);
+    }
+  }
+
+  private clearFollowUps(): void {
+    const host = this.root.querySelector<HTMLElement>("[data-advisor-followups]");
+    if (!host) return;
+    host.replaceChildren();
+    host.hidden = true;
   }
 
   private renderSuggestions(): void {

@@ -1800,3 +1800,29 @@ body.globe-mode .build-badge {
 @media (max-width: 520px) {
   .protagonist-chip { font-size: 9px; padding: 6px 8px; max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
 }
+/* Contextual follow-up questions: the visible shape of the dialogue tree. */
+.advisor-followups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding-top: 2px;
+  border-top: 1px solid #ffffff14;
+}
+.advisor-followups[hidden] { display: none; }
+.advisor-followup-label {
+  font-size: 8px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #9fb3a0;
+  flex: 0 0 100%;
+}
+.advisor-followup {
+  border-color: #d9b87444;
+  color: #efe4c4;
+  background: #2a2318;
+}
+.advisor-followup:hover { background: #3a3020; }
+@media (max-width: 700px) {
+  .advisor-followup { min-height: 44px; }
+}

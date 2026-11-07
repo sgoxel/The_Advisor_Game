@@ -8,7 +8,8 @@
  */
 
 /** Bump on any content or rule change; participates in reproducibility checks. */
-export const SENTENCE_LIBRARY_VERSION = "library-v1";
+import { TOPICS, type TopicId } from "./dialogue-topics.ts";
+export const SENTENCE_LIBRARY_VERSION = "library-v2";
 /** Bump when an intent's meaning or parameter contract changes. */
 export const INTENT_VERSION = "intent-v1";
 
@@ -24,6 +25,13 @@ export type IntentId =
   | "query.work"
   | "query.world.place"
   | "query.world.time"
+  | "query.topic"
+  | "followup.why"
+  | "followup.more"
+  | "followup.plan"
+  | "followup.who"
+  | "followup.when"
+  | "followup.how"
   | "advice.travel_to_place"
   | "advice.rest"
   | "advice.generic"
@@ -47,6 +55,8 @@ export type SentenceEntry = {
   /** Normalized literal text or phrase; matched against normalized input. */
   readonly match: string;
   readonly slots?: readonly SlotKind[];
+  /** Set for `query.topic` entries: which dialogue topic the question reaches. */
+  readonly topic?: TopicId;
   /** Higher wins when matches overlap; ties break by match length, then id. */
   readonly priority: number;
   /** Base confidence 0..1 for a clean match. */
@@ -56,6 +66,57 @@ export type SentenceEntry = {
   /** Optional local reply direction; never a world statement. */
   readonly reply?: string;
 };
+
+/* ------------------------------------------------------------------ */
+/* Topic questions (100+ reviewed phrasings across the topic tree)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Follow-up questions. These are only meaningful with a conversation context;
+ * without one they resolve to a truthful "asked nothing yet" reply.
+ */
+const FOLLOW_UP_ENTRIES: readonly SentenceEntry[] = Object.freeze([
+  { id: "followup.why", intent: "followup.why", kind: "exact", match: "why", priority: 30, confidence: 0.98 },
+  { id: "followup.why2", intent: "followup.why", kind: "exact", match: "why is that", priority: 30, confidence: 0.97 },
+  { id: "followup.why3", intent: "followup.why", kind: "exact", match: "why so", priority: 28, confidence: 0.95 },
+  { id: "followup.why4", intent: "followup.why", kind: "phrase", match: "what makes you say that", priority: 29, confidence: 0.95 },
+  { id: "followup.why5", intent: "followup.why", kind: "phrase", match: "why do you feel that way", priority: 29, confidence: 0.96 },
+  { id: "followup.more", intent: "followup.more", kind: "phrase", match: "tell me more", priority: 28, confidence: 0.97 },
+  { id: "followup.more2", intent: "followup.more", kind: "phrase", match: "go on", priority: 27, confidence: 0.95 },
+  { id: "followup.more3", intent: "followup.more", kind: "exact", match: "and", priority: 12, confidence: 0.88 },
+  { id: "followup.more4", intent: "followup.more", kind: "phrase", match: "explain that", priority: 27, confidence: 0.95 },
+  { id: "followup.plan", intent: "followup.plan", kind: "phrase", match: "what will you do about it", priority: 29, confidence: 0.96 },
+  { id: "followup.plan2", intent: "followup.plan", kind: "phrase", match: "what happens next", priority: 28, confidence: 0.94 },
+  { id: "followup.who", intent: "followup.who", kind: "phrase", match: "who is that", priority: 27, confidence: 0.94 },
+  { id: "followup.who2", intent: "followup.who", kind: "phrase", match: "who did that", priority: 27, confidence: 0.94 },
+  { id: "followup.when", intent: "followup.when", kind: "phrase", match: "when did that happen", priority: 27, confidence: 0.94 },
+  { id: "followup.when2", intent: "followup.when", kind: "exact", match: "since when", priority: 26, confidence: 0.92 },
+  { id: "followup.how", intent: "followup.how", kind: "phrase", match: "how do you know", priority: 27, confidence: 0.94 },
+  { id: "followup.how2", intent: "followup.how", kind: "phrase", match: "how so", priority: 26, confidence: 0.93 },
+]);
+
+/**
+ * Expands every topic's reviewed questions into library entries. Keeping this
+ * generated-but-explicit means the question count and topic coverage stay in
+ * step with `dialogue-topics.ts` instead of drifting apart.
+ */
+const TOPIC_ENTRIES: readonly SentenceEntry[] = Object.freeze(
+  TOPICS.flatMap((topic) =>
+    topic.asks.map((ask, index) => ({
+      id: `topic.${topic.id}.${index}`,
+      intent: "query.topic" as const,
+      kind: "normalized" as const,
+      match: ask,
+      topic: topic.id,
+      // Longer, more specific questions win ties against short generic ones.
+      priority: 20 + Math.min(9, Math.floor(ask.length / 8)),
+      confidence: 0.94,
+    })),
+  ),
+);
+
+/** Question phrasings already owned by a topic; the older entries yield to them. */
+const TOPIC_MATCHES: ReadonlySet<string> = new Set(TOPICS.flatMap((topic) => topic.asks));
 
 /* ------------------------------------------------------------------ */
 /* Normalization                                                       */
@@ -128,7 +189,7 @@ function allowedDistance(token: string): number {
  * The shipped library. Kept small and hand-written on purpose: every entry is a
  * reviewed, testable meaning. Slot patterns use `{person}` / `{place}` / `{topic}`.
  */
-export const SENTENCE_LIBRARY: readonly SentenceEntry[] = Object.freeze([
+const BASE_ENTRIES: readonly SentenceEntry[] = Object.freeze([
   // --- meta ---
   { id: "greet.hello", intent: "greet", kind: "exact", match: "hello", priority: 10, confidence: 0.99, reply: "greet" },
   { id: "greet.hi", intent: "greet", kind: "exact", match: "hi", priority: 10, confidence: 0.98, reply: "greet" },
@@ -178,6 +239,17 @@ export const SENTENCE_LIBRARY: readonly SentenceEntry[] = Object.freeze([
   { id: "talk.person", intent: "interaction.talk_to_person", kind: "phrase", match: "talk to {person}", priority: 20, confidence: 0.94, slots: ["person"] },
   { id: "talk.person2", intent: "interaction.talk_to_person", kind: "phrase", match: "speak with {person}", priority: 20, confidence: 0.94, slots: ["person"] },
   { id: "talk.person3", intent: "interaction.talk_to_person", kind: "phrase", match: "ask {person}", priority: 18, confidence: 0.9, slots: ["person"] },
+]);
+
+/**
+ * The shipped library: hand-written meta/advice/question entries plus every
+ * topic question and follow-up. Base entries whose exact phrasing is now owned
+ * by a topic are dropped so a phrase can never resolve two different ways.
+ */
+export const SENTENCE_LIBRARY: readonly SentenceEntry[] = Object.freeze([
+  ...BASE_ENTRIES.filter((entry) => !TOPIC_MATCHES.has(entry.match)),
+  ...TOPIC_ENTRIES,
+  ...FOLLOW_UP_ENTRIES,
 ]);
 
 /* ------------------------------------------------------------------ */

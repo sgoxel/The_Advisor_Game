@@ -1,11 +1,14 @@
 /**
- * Advisor dialogue pipeline (WP-S010-007-002).
+ * Advisor dialogue pipeline (WP-S010-007-002, extended for dialogue trees).
  *
  * Pure by design: it takes an interpretation plus a read-only snapshot of the
- * protagonist and world facts and returns a reply with an explicit state. It
- * never mutates the Simulation, never invents a fact and never claims an action
- * happened. Anything that would change the world is returned as a *proposal*
- * that the character may refuse.
+ * protagonist and returns a reply with an explicit state. It never mutates the
+ * Simulation, never invents a fact and never claims an action happened.
+ *
+ * Chains: `Conversation` remembers the answer it just gave, so a bare "why?"
+ * is answered from that answer's own cause, and "tell me more" continues along
+ * the topic's declared follow-ups. A stateless `respond()` still works and
+ * honestly reports that nothing has been asked yet.
  */
 import {
   interpret,
@@ -16,6 +19,19 @@ import {
   type IntentId,
   type Interpretation,
 } from "./sentence-library.ts";
+import {
+  answerTopic,
+  bandOf,
+  canonicalQuestion,
+  moodBandOf,
+  roleGroupOf,
+  temperBandOf,
+  timeBandOf,
+  TOPICS,
+  type DialogueContextFacts,
+  type TopicAnswer,
+  type TopicId,
+} from "./dialogue-topics.ts";
 
 export type DialogueState = "answered" | "proposed" | "refused" | "ambiguous" | "unknown" | "pending";
 
@@ -30,6 +46,8 @@ export type AdvisorFacts = {
   readonly activity: string;
   readonly indoors: boolean;
   readonly mood: string;
+  /** Mood value in -1..1 from the canonical Mood record; used to band the answer. */
+  readonly moodValue?: number;
   /** Already-formatted local clock label, e.g. "14:20". */
   readonly clockLabel: string;
   readonly daylightPhase: string;
@@ -41,7 +59,25 @@ export type AdvisorFacts = {
   readonly knownPeople: readonly { readonly id: string; readonly name: string }[];
   /** Set when the protagonist has no grounded position; all claims are withheld. */
   readonly unavailableReason?: string;
+
+  /* Optional enrichment. Absent values fall back to neutral bands. */
+  readonly hour?: number;
+  readonly region?: string;
+  readonly placeKind?: "village" | "city" | "wilds";
+  readonly ageGroup?: string;
+  readonly activityKey?: string;
+  readonly guardShift?: 0 | 1;
+  readonly personality?: {
+    readonly diligence: number;
+    readonly sociability: number;
+    readonly piety: number;
+    readonly temper: number;
+    readonly curiosity: number;
+  };
 };
+
+/** A suggested next question, so chains are discoverable and accessible. */
+export type FollowUpPrompt = { readonly label: string; readonly message: string };
 
 export type DialogueReply = {
   readonly state: DialogueState;
@@ -50,11 +86,15 @@ export type DialogueReply = {
   readonly intent?: IntentId;
   readonly confidence?: number;
   readonly libraryVersion: string;
+  /** Topic answered, when the question reached the topic tree. */
+  readonly topic?: TopicId;
+  /** Contextual next questions for this exact answer. */
+  readonly followUps?: readonly FollowUpPrompt[];
   /** Present only for proposals the character refused; never an executed action. */
   readonly proposal?: { readonly intent: IntentId; readonly targetId?: string; readonly targetName?: string };
 };
 
-export const ADVISOR_DIALOGUE_VERSION = "dialogue-v1";
+export const ADVISOR_DIALOGUE_VERSION = "dialogue-v2";
 
 const pick = <T,>(items: readonly T[], seed: number): T => items[Math.abs(seed) % items.length];
 
@@ -75,6 +115,68 @@ function resolveKnown<T extends { id: string; name: string }>(
     known.find((item) => normalizeMessage(item.name).includes(wanted)) ??
     known.find((item) => wanted.includes(normalizeMessage(item.name)))
   );
+}
+
+/** Parses "HH:MM" so a missing `hour` still bands the day correctly. */
+function hourOf(facts: AdvisorFacts): number {
+  if (typeof facts.hour === "number" && Number.isFinite(facts.hour)) return facts.hour;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(facts.clockLabel.trim());
+  if (!match) return 12;
+  return Number(match[1]) + Number(match[2]) / 60;
+}
+
+const NEUTRAL = 0.5;
+
+/** Converts the loose fact bag into the normalized bands the topic tree uses. */
+export function contextFromFacts(facts: AdvisorFacts): DialogueContextFacts {
+  const personality = facts.personality;
+  return {
+    mood: moodBandOf(facts.mood, facts.moodValue ?? 0),
+    moodValue: facts.moodValue ?? 0,
+    time: timeBandOf(hourOf(facts)),
+    role: roleGroupOf(facts.role),
+    place: facts.placeKind ?? "village",
+    indoors: facts.indoors,
+    travelling: facts.travelling,
+    sociability: bandOf(personality?.sociability ?? NEUTRAL),
+    temper: temperBandOf(personality?.temper ?? NEUTRAL),
+    diligence: bandOf(personality?.diligence ?? NEUTRAL),
+    piety: bandOf(personality?.piety ?? NEUTRAL),
+    curiosity: bandOf(personality?.curiosity ?? NEUTRAL),
+    region: facts.region ?? "these lands",
+    settlement: facts.settlement,
+    homeName: facts.homeName,
+    workName: facts.workName,
+    activity: facts.activity,
+    activityKey: facts.activityKey ?? facts.activity,
+    ageGroup: facts.ageGroup ?? "adult",
+    guardShift: facts.guardShift,
+  };
+}
+
+/** Builds the "next questions" chips for one answer. */
+export function followUpPrompts(answer: TopicAnswer): readonly FollowUpPrompt[] {
+  const prompts: FollowUpPrompt[] = [];
+  if (answer.cause) prompts.push({ label: "Why?", message: "why" });
+  for (const topic of answer.followUps) {
+    if (prompts.length >= 4) break;
+    const question = canonicalQuestion(topic);
+    if (prompts.some((prompt) => prompt.message === question)) continue;
+    prompts.push({ label: question, message: question });
+  }
+  return prompts;
+}
+
+function topicReply(answer: TopicAnswer, facts: AdvisorFacts, confidence: number, intent: IntentId): DialogueReply {
+  return {
+    state: "answered",
+    text: answer.text,
+    intent,
+    confidence,
+    libraryVersion: SENTENCE_LIBRARY_VERSION,
+    topic: answer.topic,
+    followUps: followUpPrompts(answer),
+  };
 }
 
 function statusAnswer(facts: AdvisorFacts, seed: number): string {
@@ -99,25 +201,6 @@ function locationAnswer(facts: AdvisorFacts): string {
 
 function scheduleAnswer(facts: AdvisorFacts): string {
   return `After this I go back to ${facts.homeName}. The day ends at ${facts.clockLabel}.`;
-}
-
-function moodAnswer(facts: AdvisorFacts): string {
-  const mood = facts.mood;
-  return pick(
-    [
-      `I am ${mood}. The work keeps me busy.`,
-      `Honestly? ${mood.charAt(0).toUpperCase()}${mood.slice(1)}.`,
-    ],
-    mood.length,
-  );
-}
-
-function homeAnswer(facts: AdvisorFacts): string {
-  return `My house is ${facts.homeName}, here in ${facts.settlement}.`;
-}
-
-function workAnswer(facts: AdvisorFacts): string {
-  return `I am ${facts.role.toLowerCase()}. My work is at ${facts.workName}.`;
 }
 
 function timeAnswer(facts: AdvisorFacts): string {
@@ -225,11 +308,52 @@ function handleInteraction(candidate: Candidate, facts: AdvisorFacts): DialogueR
   );
 }
 
-/**
- * Interprets one player message and produces a truthful reply.
- * `seed` only varies wording; it never changes which intent matched.
- */
-export function respond(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
+const ANSWER_ONLY = "I have not told you anything yet — ask me something first, and then I can explain.";
+
+/** Resolves a follow-up intent against the answer the player just heard. */
+function handleFollowUp(intent: IntentId, last: TopicAnswer | undefined, facts: AdvisorFacts, context: DialogueContextFacts): DialogueReply {
+  if (!last) {
+    return { state: "unknown", text: ANSWER_ONLY, intent, libraryVersion: SENTENCE_LIBRARY_VERSION };
+  }
+  if (intent === "followup.why") {
+    if (last.cause) {
+      return {
+        state: "answered",
+        text: last.cause,
+        intent,
+        libraryVersion: SENTENCE_LIBRARY_VERSION,
+        topic: last.topic,
+        followUps: last.followUps
+          .slice(0, 3)
+          .map((topic) => ({ label: canonicalQuestion(topic), message: canonicalQuestion(topic) })),
+      };
+    }
+    return {
+      state: "answered",
+      text: "I could not put it into words. Some things are simply the way they are.",
+      intent,
+      libraryVersion: SENTENCE_LIBRARY_VERSION,
+      topic: last.topic,
+    };
+  }
+  // "more"/"plan"/"who"/"when"/"how" continue along the topic's own follow-ups.
+  const target: TopicId | undefined =
+    intent === "followup.more" ? last.followUps[0]
+      : intent === "followup.plan" ? "plans"
+        : intent === "followup.who" ? "friends"
+          : intent === "followup.when" ? "plans"
+            : intent === "followup.how" ? "work"
+              : undefined;
+  const next = target ? answerTopic(target, context, facts.name) : undefined;
+  if (!next) {
+    return { state: "unknown", text: "I am not sure what to add to that.", intent, libraryVersion: SENTENCE_LIBRARY_VERSION };
+  }
+  return topicReply(next, facts, 0.9, intent);
+}
+
+type ConversationContext = { last: TopicAnswer | undefined };
+
+function replyFor(message: string, facts: AdvisorFacts, seed: number, state: ConversationContext): DialogueReply {
   if (facts.unavailableReason) {
     return {
       state: "pending",
@@ -242,7 +366,7 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
   if (interpretation.kind === "unknown") {
     return {
       state: "unknown",
-      text: `I did not follow that. Try asking what I am doing, where I live, or where a place is.`,
+      text: `I did not follow that. Ask me how I am, about my work, or where a place is.`,
       libraryVersion: SENTENCE_LIBRARY_VERSION,
     };
   }
@@ -258,8 +382,26 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
   }
 
   const candidate = interpretation.top;
+  const context = contextFromFacts(facts);
   const base = { intent: candidate.intent, confidence: candidate.confidence, libraryVersion: SENTENCE_LIBRARY_VERSION } as const;
   const seedShift = seed + candidate.entryId.length;
+
+  // Bare follow-ups first: they only mean something in context.
+  if (candidate.intent.startsWith("followup.")) {
+    const reply = handleFollowUp(candidate.intent, state.last, facts, context);
+    if (reply.topic) state.last = answerTopic(reply.topic, context, facts.name) ?? state.last;
+    return reply;
+  }
+
+  // Topic questions come from the expanded 191-question tree.
+  const topicId = TOPICS.find((topic) => topic.asks.includes(normalizeMessage(message)))?.id;
+  if (candidate.intent === "query.topic" || (!candidate.intent.startsWith("followup.") && topicId)) {
+    const answer = answerTopic(topicId ?? "feeling", context, facts.name);
+    if (answer) {
+      state.last = answer;
+      return topicReply(answer, facts, candidate.confidence, "query.topic");
+    }
+  }
 
   switch (candidate.intent) {
     case "greet":
@@ -269,19 +411,28 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
     case "farewell":
       return { state: "answered", text: `Safe roads, Advisor.`, ...base };
     case "meta.smalltalk":
-      return { state: "answered", text: `${moodAnswer(facts)}`, ...base };
+      return { state: "answered", text: pick([`Tolerable. The work keeps me busy.`, `Well enough, thank you.`], seedShift), ...base };
     case "query.status":
       return { state: "answered", text: statusAnswer(facts, seedShift), ...base };
     case "query.location":
       return { state: "answered", text: locationAnswer(facts), ...base };
     case "query.schedule":
       return { state: "answered", text: scheduleAnswer(facts), ...base };
-    case "query.mood":
-      return { state: "answered", text: moodAnswer(facts), ...base };
-    case "query.home":
-      return { state: "answered", text: homeAnswer(facts), ...base };
-    case "query.work":
-      return { state: "answered", text: workAnswer(facts), ...base };
+    case "query.mood": {
+      const answer = answerTopic("feeling", context, facts.name);
+      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      return { state: "answered", text: `I am ${facts.mood}.`, ...base };
+    }
+    case "query.home": {
+      const answer = answerTopic("home", context, facts.name);
+      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      return { state: "answered", text: `My house is ${facts.homeName}, here in ${facts.settlement}.`, ...base };
+    }
+    case "query.work": {
+      const answer = answerTopic("work", context, facts.name);
+      if (answer) { state.last = answer; return topicReply(answer, facts, candidate.confidence, candidate.intent); }
+      return { state: "answered", text: `I am ${facts.role.toLowerCase()}. My work is at ${facts.workName}.`, ...base };
+    }
     case "query.world.time":
       return { state: "answered", text: timeAnswer(facts), ...base };
     case "query.world.place":
@@ -297,6 +448,39 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
   }
 }
 
+/**
+ * Stateless convenience wrapper: no conversation memory, so follow-up questions
+ * truthfully report that nothing has been asked. Kept for existing callers.
+ */
+export function respond(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
+  return replyFor(message, facts, seed, { last: undefined });
+}
+
+/**
+ * A conversation with memory. Each `ask` may use the previous answer, which is
+ * how "how do you feel" → "miserable" → "why?" → cause chains work.
+ */
+export class Conversation {
+  private state: ConversationContext = { last: undefined };
+  private turns = 0;
+
+  ask(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
+    const reply = replyFor(message, facts, seed + this.turns, this.state);
+    this.turns += 1;
+    return reply;
+  }
+
+  /** The topic of the last answer, for UI/tests. */
+  get lastTopic(): TopicId | undefined {
+    return this.state.last?.topic;
+  }
+
+  reset(): void {
+    this.state = { last: undefined };
+    this.turns = 0;
+  }
+}
+
 /** True when this reply represents a proposal the character weighed. */
 export function isProposal(reply: DialogueReply): boolean {
   return reply.state === "proposed" || (reply.state === "refused" && reply.proposal !== undefined);
@@ -304,8 +488,6 @@ export function isProposal(reply: DialogueReply): boolean {
 
 /** Every intent that reached the pipeline is either a query or a bounded proposal. */
 export function replyMayHaveMutatedWorld(reply: DialogueReply): false {
-  // By construction the dialogue layer cannot write world state. Kept as an
-  // explicit, testable statement of that invariant.
   void reply;
   return false;
 }

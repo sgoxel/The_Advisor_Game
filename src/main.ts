@@ -53,6 +53,7 @@ import {
   roads,
   macroPopulationSummary,
   roadJunctions, roadConnections, roadNetworkTelemetry,
+  type Place,
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
@@ -3479,6 +3480,15 @@ async function start() {
 }
 
 /**
+ * Human-readable realm name for a settlement, for region-aware answers.
+ * Returns the canonical country name, never an invented one.
+ */
+function countryOf(place: Place | undefined): string {
+  if (!place) return "";
+  return countries.find((country) => country.id === place.country)?.name ?? "";
+}
+
+/**
  * Header chip naming the assigned protagonist (owner request). Clicking it
  * focuses that resident at Hero scale. Camera only: nobody is moved.
  */
@@ -3573,13 +3583,22 @@ function mountAdvisorPanel() {
         workName: anchors.work || "my workplace",
         task: readableTask(resident.task ?? "") || readableTask(resident.route ?? "") || "",
         activity: readableActivity(String(resident.activity)),
+        activityKey: String(resident.activity),
         indoors: resident.indoors,
         mood: resident.mood.label,
+        moodValue: resident.mood.value,
         clockLabel: clockLabel(second),
         daylightPhase: daylightAt(second).phase,
         travelling: resident.travelProgress !== undefined,
         knownPlaces: knownPlaces(),
         knownPeople: knownPeople(),
+        // Enrichment for the topic tree: all of it comes from canonical state.
+        hour: second / 3600,
+        region: countryOf(place),
+        placeKind: place?.kind === "city" ? "city" : "village",
+        ageGroup: resident.ageGroup,
+        guardShift: resident.guardShift,
+        personality: resident.traits.personality,
       };
     },
   });
