@@ -81,7 +81,7 @@ export const FOLLOWUPS: readonly FollowUpDef[] = Object.freeze([
   {
     id: "help",
     asks: [
-      "what would help", "can i help", "what do you need", "how can i help you",
+      "what would help", "can i help", "how can i help you",
       "is there anything i can do", "what would make it better", "do you want help",
       "shall i do something", "what would you have me do",
     ],
@@ -166,7 +166,7 @@ export const FOLLOWUPS: readonly FollowUpDef[] = Object.freeze([
   {
     id: "need",
     asks: [
-      "what do you need most", "what matters most to you", "what would you ask for",
+      "what do you need", "what do you need most", "what matters most to you", "what would you ask for",
       "if you could have one thing", "what is the one thing you lack",
       "what do you want more than anything",
     ],

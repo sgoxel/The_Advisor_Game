@@ -435,9 +435,16 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
   const day = facts.day ?? character?.updatedDay ?? 0;
 
   // What this exchange should record, when it is a real answer.
-  const tag = reply.topic ?? (reply.intent ? String(reply.intent).replace("followup.", "") : undefined);
+  // A follow-up move is credited as its own exchange, not as the topic it
+  // elaborated on. Otherwise "why?", "what do you need" and "who else knows"
+  // would all be recorded as the same subject and never build anything.
+  const moveId = reply.intent && String(reply.intent).startsWith("followup.")
+    ? String(reply.intent).replace("followup.", "")
+    : undefined;
+  const tag = moveId ?? reply.topic ?? (reply.intent ? String(reply.intent) : undefined);
+  // Store the readable name for a saved intent; never a raw SEED id in prose.
   const intent = reply.proposal
-    ? { kind: String(reply.proposal.intent), target: reply.proposal.targetId ?? reply.proposal.targetName ?? "" }
+    ? { kind: String(reply.proposal.intent), target: reply.proposal.targetName ?? reply.proposal.targetId ?? "" }
     : undefined;
   const exchange = tag && (reply.state === "answered" || reply.state === "refused")
     ? { tag, day, refused: reply.state === "refused", intent }
