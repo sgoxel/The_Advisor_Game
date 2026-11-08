@@ -63,6 +63,7 @@ import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAcces
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { AdvisorPanel } from "./advisor-panel.ts";
 import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
+import { loadCharacter, saveCharacter } from "./character-state.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -3515,7 +3516,14 @@ function mountProtagonistBar() {
       if (onFocus && !onFocus()) chip.blur();
     });
   }
-  return { update, onFocus: (callback: () => boolean) => { onFocus = callback; } };
+  return {
+    update,
+    updateRelationship: (state: { trust: number } | undefined) => {
+      if (!chip || !state) return;
+      chip.dataset.trust = String(Math.round(state.trust));
+    },
+    onFocus: (callback: () => boolean) => { onFocus = callback; },
+  };
 }
 
 /**
@@ -3599,7 +3607,15 @@ function mountAdvisorPanel() {
         ageGroup: resident.ageGroup,
         guardShift: resident.guardShift,
         personality: resident.traits.personality,
+        characterCode: resident.code,
+        day: localDayIndex(simulation.tick, lon),
+        character: loadCharacter(resident.code, localDayIndex(simulation.tick, lon)),
       };
+    },
+    onRelationshipChange: (state, outcome) => {
+      // Saved immediately by the panel; refresh the header so a trust change is
+      // visible outside the conversation panel too.
+      bar.updateRelationship?.(state);
     },
   });
   (window as unknown as { advisorDialogue?: AdvisorPanel }).advisorDialogue = panel;
@@ -3648,6 +3664,10 @@ function mountAdvisorPanel() {
     bar.update(resident ? { name: resident.name, role: String(resident.role), settlement: anchorNames(resident).settlement ?? "" } : undefined);
     // Keep the conversation header naming the person being advised.
     panel.setSubject(resident?.name);
+    // Restore the saved relationship strip too, so a reload shows the same
+    // trust and mood the player left behind.
+    panel.refreshRelationship();
+    if (resident) bar.updateRelationship?.(loadCharacter(resident.code, localDayIndex(simulation.tick, resident.position.lon)));
   };
   subscribeProtagonist((_code, reason) => {
     refreshBar();

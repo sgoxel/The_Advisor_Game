@@ -1836,3 +1836,28 @@ body.globe-mode .build-badge {
 @media (max-width: 520px) {
   .dialogue-map-link { display: none; }
 }
+/* Advisor↔protagonist relationship: trust, mood shift and status.
+   Everything here is campaign state produced by conversation, saved per character. */
+.advisor-relationship {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 5px 0 0;
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.advisor-relationship[hidden] { display: none; }
+.rel-trust,
+.rel-mood,
+.rel-status {
+  border: 1px solid #ffffff1f;
+  border-radius: 4px;
+  padding: 2px 7px;
+  color: #c3d1bc;
+  white-space: nowrap;
+}
+.rel-trust b { color: var(--gold, #d9b874); font-family: ui-monospace, monospace; }
+.rel-status { color: #e0c08f; border-color: #d9b87455; background: #d9b87414; }
+.rel-delta { font-size: 9px; color: #8fae7f; white-space: nowrap; }

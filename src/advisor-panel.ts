@@ -7,12 +7,23 @@
  */
 import { ADVISOR_DIALOGUE_VERSION, Conversation, type AdvisorFacts, type DialogueReply, type FollowUpPrompt } from "./advisor-dialogue.ts";
 import { SENTENCE_LIBRARY_VERSION } from "./sentence-library.ts";
+import {
+  applyExchange,
+  loadCharacter,
+  saveCharacter,
+  statusOf,
+  trustLabel,
+  type CharacterState,
+  type ExchangeOutcome,
+} from "./character-state.ts";
 
 export type AdvisorPanelOptions = {
   /** Supplies a read-only snapshot; returning undefined means "not ready". */
   readonly readFacts: () => AdvisorFacts | undefined;
   /** Monotonic seed for wording variation only; never affects matching. */
   readonly seed?: () => number;
+  /** Notified after a relationship change is saved, so the host can react. */
+  readonly onRelationshipChange?: (state: CharacterState, outcome: ExchangeOutcome) => void;
 };
 
 const SUGGESTIONS: readonly string[] = [
@@ -60,6 +71,7 @@ export class AdvisorPanel {
       });
     }
     this.renderSuggestions();
+    this.refreshRelationship();
     this.setExpanded(true);
     this.appendNotice(`Offline Advisor ready · ${SENTENCE_LIBRARY_VERSION}`);
     void ADVISOR_DIALOGUE_VERSION;
@@ -104,9 +116,60 @@ export class AdvisorPanel {
     this.appendReply(reply);
     this.setStatus(reply.state);
     this.renderFollowUps(reply.followUps);
+    // Record the relationship change and save it against this character, so the
+    // protagonist keeps their history across reloads.
+    if (reply.exchange && facts.characterCode) {
+      const before = loadCharacter(facts.characterCode, reply.exchange.day);
+      const outcome = applyExchange(before, {
+        tag: reply.exchange.tag,
+        day: reply.exchange.day,
+        moodBand: before.moodDelta > 0.1 ? "cheerful" : before.moodDelta < -0.1 ? "miserable" : "calm",
+        refused: reply.exchange.refused,
+        intent: reply.exchange.intent,
+      });
+      saveCharacter(outcome.state);
+      this.renderRelationship(outcome.state, outcome);
+      if (this.options.onRelationshipChange) {
+        this.options.onRelationshipChange(outcome.state, outcome);
+      }
+    }
     this.input.value = "";
     this.input.focus({ preventScroll: true });
     return reply;
+  }
+
+  /** Refreshes the relationship strip without asking a question it cannot answer. */
+  refreshRelationship(): void {
+    const facts = this.options.readFacts();
+    if (!facts?.characterCode) {
+      this.renderRelationship(undefined);
+      return;
+    }
+    this.renderRelationship(loadCharacter(facts.characterCode, facts.day ?? 0));
+  }
+
+  private renderRelationship(state: CharacterState | undefined, outcome?: ExchangeOutcome): void {
+    const host = this.root.querySelector<HTMLElement>("[data-advisor-relationship]");
+    if (!host) return;
+    if (!state) {
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    const mood = state.moodDelta === 0 ? "steady"
+      : state.moodDelta > 0 ? `lighter (+${state.moodDelta.toFixed(2)})`
+        : `heavier (${state.moodDelta.toFixed(2)})`;
+    const status = statusOf(state);
+    const delta = outcome && !outcome.repeated
+      ? outcome.trustDelta === 0 ? ""
+        : outcome.trustDelta > 0 ? ` · +${outcome.trustDelta.toFixed(1)} trust`
+          : ` · ${outcome.trustDelta.toFixed(1)} trust`
+      : outcome?.repeated ? " · already asked today" : "";
+    host.innerHTML =
+      `<span class="rel-trust" title="Advisor trust, 0-100">${trustLabel(state.trust)} <b>${Math.round(state.trust)}</b></span>` +
+      `<span class="rel-mood" title="How conversation has shaded their mood">${mood}</span>` +
+      (status ? `<span class="rel-status">${status}</span>` : "") +
+      (delta ? `<span class="rel-delta">${delta}</span>` : "");
   }
 
   /** Restarts the conversation, dropping the remembered answer. */

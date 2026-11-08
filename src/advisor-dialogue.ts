@@ -35,6 +35,7 @@ import {
   type TopicId,
 } from "./dialogue-topics.ts";
 import { FOLLOWUP_BY_ID, type FollowUpId } from "./dialogue-followups.ts";
+import { effectiveMoodValue, type CharacterState } from "./character-state.ts";
 
 export type DialogueState = "answered" | "proposed" | "refused" | "ambiguous" | "unknown" | "pending";
 
@@ -70,6 +71,11 @@ export type AdvisorFacts = {
   readonly ageGroup?: string;
   readonly activityKey?: string;
   readonly guardShift?: 0 | 1;
+  readonly day?: number;
+  /** Canonical code of the character being advised, so the caller can save state. */
+  readonly characterCode?: string;
+  /** Saved campaign relationship for this character (trust, mood offset, memory). */
+  readonly character?: CharacterState;
   readonly personality?: {
     readonly diligence: number;
     readonly sociability: number;
@@ -95,6 +101,19 @@ export type DialogueReply = {
   readonly followUps?: readonly FollowUpPrompt[];
   /** Present only for proposals the character refused; never an executed action. */
   readonly proposal?: { readonly intent: IntentId; readonly targetId?: string; readonly targetName?: string };
+  /**
+   * What this exchange should record. The caller applies it via
+   * `applyExchange` and saves; the dialogue layer itself stays pure.
+   */
+  readonly exchange?: {
+    readonly tag: string;
+    readonly day: number;
+    readonly refused?: boolean;
+    readonly intent?: { readonly kind: string; readonly target: string };
+  };
+  /** Relationship context at the time of the answer, for the panel. */
+  readonly trust?: number;
+  readonly status?: string;
 };
 
 export const ADVISOR_DIALOGUE_VERSION = "dialogue-v2";
@@ -133,9 +152,13 @@ const NEUTRAL = 0.5;
 /** Converts the loose fact bag into the normalized bands the topic tree uses. */
 export function contextFromFacts(facts: AdvisorFacts): DialogueContextFacts {
   const personality = facts.personality;
+  // Campaign mood offset from conversation shades the SEED baseline; the base
+  // itself stays a pure function of seed + fantasy time.
+  const baseMood = facts.moodValue ?? 0;
+  const moodValue = effectiveMoodValue(baseMood, facts.character?.moodDelta ?? 0);
   return {
-    mood: moodBandOf(facts.mood, facts.moodValue ?? 0),
-    moodValue: facts.moodValue ?? 0,
+    mood: moodBandOf(facts.mood, moodValue),
+    moodValue,
     time: timeBandOf(hourOf(facts)),
     role: roleGroupOf(facts.role),
     place: facts.placeKind ?? "village",
@@ -397,9 +420,58 @@ function handleFollowUp(intent: IntentId, last: TopicAnswer | undefined, facts: 
   };
 }
 
-type ConversationContext = { last: TopicAnswer | undefined; asked: Set<string> };
+type ConversationContext = { last: TopicAnswer | undefined; asked: Set<string>; opened: boolean };
 
+/**
+ * Adds the relationship layer to an otherwise complete reply: what to record,
+ * plus the small ways a long acquaintance or a cold one changes the wording.
+ * It never invents a fact, and never alters trust itself — the caller applies
+ * and saves the recorded exchange.
+ */
 function replyFor(message: string, facts: AdvisorFacts, seed: number, state: ConversationContext): DialogueReply {
+  const reply = computeReply(message, facts, seed, state);
+  const character = facts.character;
+  const trust = character?.trust ?? 50;
+  const day = facts.day ?? character?.updatedDay ?? 0;
+
+  // What this exchange should record, when it is a real answer.
+  const tag = reply.topic ?? (reply.intent ? String(reply.intent).replace("followup.", "") : undefined);
+  const intent = reply.proposal
+    ? { kind: String(reply.proposal.intent), target: reply.proposal.targetId ?? reply.proposal.targetName ?? "" }
+    : undefined;
+  const exchange = tag && (reply.state === "answered" || reply.state === "refused")
+    ? { tag, day, refused: reply.state === "refused", intent }
+    : undefined;
+
+  if (!exchange) return { ...reply, trust };
+
+  // A character remembers that you asked this before, and says so occasionally.
+  const recalled = character?.memories.some((memory) => memory.tag === exchange.tag && memory.day < day);
+  // Relationship shapes the opening only once per conversation, so it reads as
+  // the mood of the moment rather than a catchphrase.
+  const opener = reply.state !== "answered" || state.opened
+    ? ""
+    : trust >= 70 ? "You have been a good friend to me, so I will speak plainly. "
+      : trust <= 25 ? "I will answer, though I owe you no more than that. "
+        : "";
+  const recall = recalled && reply.state === "answered" && !opener ? "You have asked me this before, and my answer has not changed. " : "";
+
+  state.opened = true;
+  // A recorded intent is a promise the player made: the character refers to it
+  // when talking about plans, so advice leaves a visible, saved trace.
+  const savedIntent = character?.intents.at(-1);
+  const intentNote = reply.state === "answered" && reply.topic === "plans" && savedIntent && savedIntent.target
+    ? ` And I still have ${savedIntent.target} in mind, since you raised it.`
+    : "";
+  return {
+    ...reply,
+    text: `${opener}${recall}${reply.text}${intentNote}`,
+    exchange,
+    trust,
+  };
+}
+
+function computeReply(message: string, facts: AdvisorFacts, seed: number, state: ConversationContext): DialogueReply {
   // Only questions the player actually asked are "used". Merely seeing a chip
   // does not consume it, so the remaining options stay available next turn.
   const asked: ReadonlySet<string> = state.asked;
@@ -506,7 +578,7 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
  * truthfully report that nothing has been asked. Kept for existing callers.
  */
 export function respond(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
-  return replyFor(message, facts, seed, { last: undefined, asked: new Set() });
+  return replyFor(message, facts, seed, { last: undefined, asked: new Set(), opened: false });
 }
 
 /**
@@ -514,7 +586,7 @@ export function respond(message: string, facts: AdvisorFacts, seed = 0): Dialogu
  * how "how do you feel" → "miserable" → "why?" → cause chains work.
  */
 export class Conversation {
-  private state: ConversationContext = { last: undefined, asked: new Set() };
+  private state: ConversationContext = { last: undefined, asked: new Set(), opened: false };
   private turns = 0;
 
   ask(message: string, facts: AdvisorFacts, seed = 0): DialogueReply {
@@ -529,7 +601,7 @@ export class Conversation {
   }
 
   reset(): void {
-    this.state = { last: undefined, asked: new Set() };
+    this.state = { last: undefined, asked: new Set(), opened: false };
     this.turns = 0;
   }
 }
