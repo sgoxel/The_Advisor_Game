@@ -18,7 +18,7 @@ import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
-import { clockLabel, localDayIndex, localSecondOfDay, timeZoneOffsetHours } from "./clock.ts";
+import { clockLabel, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
 import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -63,7 +63,8 @@ import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAcces
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { AdvisorPanel } from "./advisor-panel.ts";
 import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
-import { adviceVerdict, loadCharacter, saveCharacter } from "./character-state.ts";
+import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
+import { dailyPlan } from "./routines.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -3053,6 +3054,30 @@ async function start() {
       capturePresentation,
       cellAt,
       cellSeed,
+      /**
+       * Read-only evidence hook: the evening anchors the REAL day planner will
+       * use for this resident, including any Advisor preference. It resolves the
+       * same plan the Simulation walks, and moves nobody.
+       */
+      eveningPlanFor(code: string) {
+        const foundation = simulation.residentIdentityByCode?.(code);
+        if (!foundation) return null;
+        const place = places.find((entry) => entry.code === code.replace(/\/RESIDENT\/\d+$/, ""));
+        if (!place) return null;
+        const lon = place.canonicalPosition.lon;
+        const day = localDayIndex(simulation.tick, lon);
+        const weekday = localWeekday(simulation.tick, lon);
+        const subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift };
+        const plan = dailyPlan(subject, foundation.traits, day, weekday, false, eveningAdviceFor(code));
+        const advice = eveningAdviceFor(code);
+        return {
+          advice: advice?.destination ?? null,
+          day,
+          evening: plan
+            .filter((entry) => entry.start >= 17 * 3600 && entry.start < 24 * 3600)
+            .map((entry) => ({ at: entry.start / 3600, kind: entry.kind, anchor: entry.anchor })),
+        };
+      },
       lightingEvidenceAtSource(x:number,z:number) { return featuresFor(tileForPosition(x,z,15)).filter(f => f.kind === "street-lamp"); },
       buildingEvidenceAtSource(x: number, z: number) {
         return featuresFor(tileForPosition(x, z, 9)).filter(feature => feature.widthM !== undefined).map(feature => ({

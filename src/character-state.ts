@@ -55,6 +55,19 @@ export type CharacterMemory = {
   readonly moodDelta: number;
 };
 
+export type EveningDestination = "inn" | "market" | "home";
+
+/**
+ * A standing preference the Advisor persuaded the character to adopt: where to
+ * spend the evening after work. It changes ONE anchor in the day plan, never the
+ * routine structure, and the character may still decline it (see adviceVerdict).
+ */
+export type EveningPlan = {
+  readonly destination: EveningDestination;
+  /** Fantasy day the advice was given, kept for transparency. */
+  readonly day: number;
+};
+
 export type CharacterIntent = {
   /** "travel" | "rest" | "talk" — what the Advisor suggested. */
   readonly kind: string;
@@ -73,6 +86,8 @@ export type CharacterState = {
   readonly creditedDay: number;
   readonly creditedTags: readonly string[];
   readonly intents: readonly CharacterIntent[];
+  /** Saved post-duty destination the Advisor influenced, if any. */
+  readonly evening?: EveningPlan;
   readonly updatedDay: number;
 };
 
@@ -111,6 +126,12 @@ export function validateCharacterState(value: unknown, code?: string): boolean {
   }
   if (!Array.isArray(state.intents) || state.intents.length > 12) return false;
   if (!Array.isArray(state.creditedTags)) return false;
+  if (state.evening !== undefined) {
+    const evening = state.evening as Partial<EveningPlan> | null;
+    if (!evening || typeof evening !== "object") return false;
+    if (evening.destination !== "inn" && evening.destination !== "market" && evening.destination !== "home") return false;
+    if (typeof evening.day !== "number" || !Number.isFinite(evening.day)) return false;
+  }
   return true;
 }
 
@@ -358,6 +379,7 @@ export function characterStore(): CharacterStore {
 /** Test/embedding hook. */
 export function setCharacterStore(store: CharacterStore | undefined): void {
   activeStore = store;
+  stateCache.clear();
 }
 
 /** Loads a character's saved state, or a neutral one when none is saved. */
@@ -369,6 +391,7 @@ export function loadCharacter(code: string, day = 0): CharacterState {
 /** Persists a character's state. */
 export function saveCharacter(state: CharacterState): void {
   characterStore().write(state);
+  stateCache.set(state.code, state);
 }
 
 /* ------------------------------------------------------------------ */
@@ -400,4 +423,45 @@ export function adviceVerdict(state: CharacterState): AdviceVerdict {
 /** How much trust is still missing before this character would consider advice. */
 export function trustShortfall(state: CharacterState): number {
   return Math.max(0, Math.ceil(ADVICE_TRUST_FLOOR - state.trust));
+}
+/* ------------------------------------------------------------------ */
+/* Cached reads                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The day planner asks for a resident's evening preference often, so an
+ * in-memory cache keeps that O(1) instead of hitting localStorage per query.
+ * It is populated on read/write and never bypasses validation on load.
+ */
+const stateCache = new Map<string, CharacterState>();
+
+/** Shorthand the Simulation uses: the saved destination, or undefined. */
+export function eveningAdviceFor(code: string): { destination: EveningDestination } | undefined {
+  let cached = stateCache.get(code);
+  if (!cached) {
+    // Go through the active store so a memory store (tests, storage-disabled
+    // play) behaves exactly like localStorage.
+    const stored = characterStore().read(code);
+    if (!stored) return undefined;
+    cached = stored;
+    stateCache.set(code, cached);
+  }
+  const destination = cached.evening?.destination;
+  return destination ? { destination } : undefined;
+}
+
+/** Drops a cached entry, so the next read comes from storage. */
+export function forgetCachedCharacter(code: string): void {
+  stateCache.delete(code);
+}
+
+/** Records a post-duty destination the character agreed to adopt. */
+export function setEveningPlan(state: CharacterState, destination: EveningDestination, day: number): CharacterState {
+  return { ...state, evening: { destination, day } };
+}
+
+/** Clears the preference, returning the character to their seeded choice. */
+export function clearEveningPlan(state: CharacterState): CharacterState {
+  const { evening: _dropped, ...rest } = state;
+  return rest as CharacterState;
 }

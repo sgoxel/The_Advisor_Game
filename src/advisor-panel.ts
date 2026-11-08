@@ -11,6 +11,7 @@ import {
   applyExchange,
   loadCharacter,
   saveCharacter,
+  setEveningPlan,
   statusOf,
   trustLabel,
   type CharacterState,
@@ -144,12 +145,44 @@ export class AdvisorPanel {
     }
     this.input.value = "";
     this.input.focus({ preventScroll: true });
-    // A character may agree to weigh advice. Only the Simulation decides whether
-    // the world allows it, and its answer is reported verbatim.
-    if (reply.state === "proposed" && reply.proposal && this.options.onAdviceAccepted && facts.characterCode) {
-      void this.resolveAdvice(reply.proposal, facts);
+    // A character may agree to weigh advice. An evening preference changes their
+    // own plan and needs no journey; everything else goes to the Simulation.
+    if (reply.state === "proposed" && reply.proposal && facts.characterCode) {
+      if (isEveningIntent(reply.proposal.intent)) {
+        this.saveEveningPreference(reply.proposal.intent, reply.proposal.targetName, facts);
+      } else if (this.options.onAdviceAccepted) {
+        void this.resolveAdvice(reply.proposal, facts);
+      }
     }
     return reply;
+  }
+
+  /** Persists an accepted "where to go after duty" preference. */
+  private saveEveningPreference(intent: string, _targetName: string | undefined, facts: AdvisorFacts): void {
+    if (!facts.characterCode) return;
+    const destination =
+      intent === "advice.evening_inn" ? "inn" as const
+        : intent === "advice.evening_market" ? "market" as const
+          : intent === "advice.evening_home" ? "home" as const
+            : undefined;
+    if (!destination) return;
+    const day = facts.day ?? 0;
+    const saved = setEveningPlan(loadCharacter(facts.characterCode, day), destination, day);
+    saveCharacter(saved);
+    this.renderRelationship(saved);
+    const line = document.createElement("p");
+    line.className = "advisor-line advisor-line-hero advisor-state-answered";
+    const who = document.createElement("span");
+    who.className = "advisor-who";
+    who.textContent = "Advisor";
+    const body = document.createElement("span");
+    body.textContent = `Saved: after duty, ${destination === "home" ? "straight home" : `the ${destination}`}.`;
+    const state = document.createElement("span");
+    state.className = "advisor-state";
+    state.textContent = "planned";
+    line.append(who, body, state);
+    this.log.append(line);
+    this.scrollLog();
   }
 
   /** Asks the Simulation to carry out an accepted proposal, then reports truthfully. */
@@ -338,4 +371,9 @@ export function stateLabel(state: DialogueReply["state"]): string {
     case "pending": return "pending";
     default: return String(state);
   }
+}/** True when this intent is a post-duty destination preference. */
+function isEveningIntent(intent: string): boolean {
+  return intent === "advice.evening_inn" || intent === "advice.evening_market" || intent === "advice.evening_home";
 }
+
+

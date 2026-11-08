@@ -118,7 +118,17 @@ const minutes = (code: string, salt: string, span: number) => Math.floor(unit(`$
  * consecutive days join without jumps. Variation comes from role, age, weekday,
  * personality and the day's mood; the same inputs always give the same plan.
  */
-export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, "personality">, day: number, weekday: number, standingOnly = false): Activity[] {
+/**
+ * A post-duty destination the Advisor persuaded the character to adopt. It
+ * replaces only the "where do I go after work" anchor; it never changes work
+ * hours, never removes sleep and never rewrites the plan structure.
+ */
+export type EveningAdvice = { readonly destination: "inn" | "market" | "home" };
+
+export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, "personality">, day: number, weekday: number, standingOnly = false, eveningInput?: EveningAdvice): Activity[] {
+  // Standing ranks are a seeded roster view. A player preference must never
+  // reorder who stands where, so ignore it there.
+  const evening = standingOnly ? undefined : eveningInput;
   const { code, role, ageGroup } = subject, p = traits.personality,
     // Standing-slot ranks depend only on kind, anchor and indoor status.
     // Do not compute the many seeded *clock minute* rolls for a roster query.
@@ -152,9 +162,26 @@ export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, 
       add("breakfast", "home", 5 * HOUR + d("BREAKFAST", 10), "Breakfast at home", true);
       add("commute", "work", 5.5 * HOUR, "Walking to the gate", false);
       add("guard", "work", 6 * HOUR, "Guard duty", false);
-      add("commute", eveningMood > 0 && p.sociability > .45 ? "inn" : "home", 18 * HOUR, "Leaving the gate", false);
-      add("dinner", eveningMood > 0 && p.sociability > .45 ? "inn" : "home", 18.5 * HOUR, "Dinner", true);
-      add("commute", "home", 20.5 * HOUR + d("HOMEWARD", 40), "Walking home", false);
+      // Off duty at 18:00. The Advisor may have persuaded them where to go next.
+      if (evening && evening.destination === "market") {
+        add("commute", "market", 18 * HOUR, "Leaving the gate for the market", false);
+        add("errand", "market", 18.15 * HOUR, "Browsing the market before closing", false);
+        add("commute", "home", 19 * HOUR, "Walking home", false);
+        add("dinner", "home", 19.4 * HOUR, "Dinner", true);
+      } else if (evening && evening.destination === "inn") {
+        add("commute", "inn", 18 * HOUR, "Leaving the gate for the inn", false);
+        add("dinner", "inn", 18.5 * HOUR, "Dinner", true);
+        add("socialise", "inn", 19.4 * HOUR, "Talking at the inn", true);
+        add("commute", "home", 20.3 * HOUR, "Walking home", false);
+      } else if (evening && evening.destination === "home") {
+        add("commute", "home", 18 * HOUR, "Leaving the gate", false);
+        add("dinner", "home", 18.5 * HOUR, "Dinner", true);
+        add("commute", "home", 20.5 * HOUR + d("HOMEWARD", 40), "Walking home", false);
+      } else {
+        add("commute", eveningMood > 0 && p.sociability > .45 ? "inn" : "home", 18 * HOUR, "Leaving the gate", false);
+        add("dinner", eveningMood > 0 && p.sociability > .45 ? "inn" : "home", 18.5 * HOUR, "Dinner", true);
+        add("commute", "home", 20.5 * HOUR + d("HOMEWARD", 40), "Walking home", false);
+      }
       add("sleep", "home", 21.5 * HOUR + d("SLEEP", 50), "Sleeping", true);
     }
     return standingOnly ? plan : plan.sort((a, b) => a.start - b.start);
@@ -209,14 +236,32 @@ export function dailyPlan(subject: RoutineSubject, traits: Pick<ResidentTraits, 
   }
 
   // Evening: dinner at the inn when sociable and in good spirits, otherwise at home; sleep at home.
+  // The Advisor may override the destination (inn / market / home) after duty.
   if (role !== "innkeeper") {
-    const inn = (p.sociability * .6 + eveningMood * .5 + (restDay ? .2 : 0) + unit(`${code}/INN/${day}`) * .3) > .62,
+    const seededInn = (p.sociability * .6 + eveningMood * .5 + (restDay ? .2 : 0) + unit(`${code}/INN/${day}`) * .3) > .62,
       dinner = Math.max(dayEnd + 15 * MINUTE, 18 * HOUR + d("DINNER", 40));
-    add("commute", inn ? "inn" : "home", dayEnd, inn ? "Walking to the inn" : "Walking home", false);
-    add("dinner", inn ? "inn" : "home", dinner, inn ? "Dinner at the inn" : "Cooking dinner at home", true);
-    if (inn) {
+
+    if (evening && evening.destination === "market") {
+      // Market first, then home to eat: the errand replaces the inn trip only.
+      add("commute", "market", dayEnd, "Walking to the market", false);
+      add("errand", "market", dayEnd + 12 * MINUTE, "Browsing the market before closing", false);
+      add("commute", "home", Math.max(dayEnd + 45 * MINUTE, 18.9 * HOUR), "Walking home", false);
+      add("dinner", "home", dinner + 45 * MINUTE, "Cooking dinner at home", true);
+    } else if (evening && evening.destination === "inn") {
+      add("commute", "inn", dayEnd, "Walking to the inn", false);
+      add("dinner", "inn", dinner, "Dinner at the inn", true);
       add("socialise", "inn", dinner + 50 * MINUTE, eveningMood > .3 ? "Drinking and laughing at the inn" : "Talking at the inn", true);
       add("commute", "home", 21 * HOUR + p.sociability * 1.2 * HOUR + d("INNHOME", 20), "Walking home", false);
+    } else if (evening && evening.destination === "home") {
+      add("commute", "home", dayEnd, "Walking home", false);
+      add("dinner", "home", dinner, "Cooking dinner at home", true);
+    } else {
+      add("commute", seededInn ? "inn" : "home", dayEnd, seededInn ? "Walking to the inn" : "Walking home", false);
+      add("dinner", seededInn ? "inn" : "home", dinner, seededInn ? "Dinner at the inn" : "Cooking dinner at home", true);
+      if (seededInn) {
+        add("socialise", "inn", dinner + 50 * MINUTE, eveningMood > .3 ? "Drinking and laughing at the inn" : "Talking at the inn", true);
+        add("commute", "home", 21 * HOUR + p.sociability * 1.2 * HOUR + d("INNHOME", 20), "Walking home", false);
+      }
     }
   } else {
     add("commute", "home", 22.5 * HOUR, "Closing the inn and walking home", false);

@@ -7,6 +7,7 @@ import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { digest, finalSurfaceAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import { settlementExteriorFor, settlementHomeAnchorFor, GUARD_POST_BUILDING_WIDTH_M } from "./settlement-exterior.ts";
+import { eveningAdviceFor } from "./character-state.ts";
 import { activityAt, dailyPlan, dailyStandingActivities, moodAt, personalityFor, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday, TIME_SCALE } from "./clock.ts";
 import { familyName, personName } from "./names.ts";
@@ -2000,7 +2001,9 @@ export function provablyLateWithStandingBounds(
 function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number, phases?: ResidentEvaluationPhases): ScheduledResidentState {
   const lon = place.canonicalPosition.lon, day = localDayIndex(tick, lon), weekday = localWeekday(tick, lon), second = daySecond(tick, place),
     subject = { code: foundation.code, role: foundation.role, ageGroup: foundation.ageGroup, guardShift: foundation.guardShift },
-    plan = dailyPlan(subject, foundation.traits, day, weekday),
+    // A saved Advisor preference for the evening destination changes only that
+    // anchor; the rest of the day stays the canonical seeded plan.
+    plan = dailyPlan(subject, foundation.traits, day, weekday, false, eveningAdviceFor(foundation.code)),
     { activity, index } = activityAt(plan, second),
     end = plan[index + 1]?.start ?? 24 * HOUR,
     activityProgress = Math.max(0, Math.min(1, (second - activity.start) / Math.max(1, end - activity.start))),

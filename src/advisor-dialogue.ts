@@ -364,6 +364,42 @@ function handleAdvice(candidate: Candidate, facts: AdvisorFacts): DialogueReply 
       proposal: { intent: candidate.intent, targetId: place.id, targetName: place.name },
     };
   }
+  // Evening destination: where to go after duty instead of straight home.
+  const eveningIntent = EVENING_INTENTS[candidate.intent as keyof typeof EVENING_INTENTS];
+  if (eveningIntent) {
+    const state = facts.character;
+    const verdict = state ? adviceVerdict(state) : "refuse";
+    const where = eveningIntent === "inn" ? "the inn" : eveningIntent === "market" ? "the market" : "home";
+    if (verdict === "refuse") {
+      const missing = state ? trustShortfall(state) : 10;
+      return {
+        state: "refused",
+        text: `${where.charAt(0).toUpperCase()}${where.slice(1)} after my shift? I do not know you well enough to change my evening.${missing > 0 ? ` (${missing} more trust would help.)` : ""}`,
+        intent: candidate.intent,
+        libraryVersion: SENTENCE_LIBRARY_VERSION,
+        proposal: { intent: candidate.intent, targetName: where },
+      };
+    }
+    if (facts.travelling) {
+      return {
+        state: "refused",
+        text: `I am on the road — settle this with me when I am back.`,
+        intent: candidate.intent,
+        libraryVersion: SENTENCE_LIBRARY_VERSION,
+        proposal: { intent: candidate.intent, targetName: where },
+      };
+    }
+    return {
+      state: "proposed",
+      text: verdict === "accept"
+        ? `Aye — ${where} it is, once my shift ends. You have not led me wrong yet.`
+        : `${where.charAt(0).toUpperCase()}${where.slice(1)} after duty? You have been straight with me, so I will try it.`,
+      intent: candidate.intent,
+      libraryVersion: SENTENCE_LIBRARY_VERSION,
+      proposal: { intent: candidate.intent, targetName: where },
+    };
+  }
+
   if (candidate.intent === "advice.rest") {
     return refuseProposal(
       candidate.intent,
@@ -399,6 +435,13 @@ function handleInteraction(candidate: Candidate, facts: AdvisorFacts): DialogueR
     person.id,
   );
 }
+
+/** Intent to the evening destination it proposes. */
+const EVENING_INTENTS: Readonly<Record<string, "inn" | "market" | "home">> = {
+  "advice.evening_inn": "inn",
+  "advice.evening_market": "market",
+  "advice.evening_home": "home",
+};
 
 const ANSWER_ONLY = "I have not told you anything yet — ask me something first, and then I can explain.";
 
@@ -593,6 +636,9 @@ function computeReply(message: string, facts: AdvisorFacts, seed: number, state:
     case "query.world.place":
       return { ...placeAnswer(facts, candidate.slots?.place ?? ""), intent: candidate.intent, confidence: candidate.confidence };
     case "advice.travel_to_place":
+    case "advice.evening_inn":
+    case "advice.evening_market":
+    case "advice.evening_home":
     case "advice.rest":
     case "advice.generic":
       return handleAdvice(candidate, facts);

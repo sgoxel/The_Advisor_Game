@@ -29,6 +29,9 @@ export type IntentId =
   | "query.topic"
   | `followup.${FollowUpId}`
   | "advice.travel_to_place"
+  | "advice.evening_inn"
+  | "advice.evening_market"
+  | "advice.evening_home"
   | "advice.rest"
   | "advice.generic"
   | "interaction.talk_to_person"
@@ -37,6 +40,9 @@ export type IntentId =
 /** Only these intent classes may ever become a command proposal. */
 export const COMMAND_INTENTS: ReadonlySet<IntentId> = new Set<IntentId>([
   "advice.travel_to_place",
+  "advice.evening_inn",
+  "advice.evening_market",
+  "advice.evening_home",
   "advice.rest",
   "advice.generic",
   "interaction.talk_to_person",
@@ -218,6 +224,18 @@ const BASE_ENTRIES: readonly SentenceEntry[] = Object.freeze([
   { id: "advice.travel", intent: "advice.travel_to_place", kind: "phrase", match: "travel to {place}", priority: 22, confidence: 0.95, slots: ["place"] },
   { id: "advice.visit", intent: "advice.travel_to_place", kind: "phrase", match: "visit {place}", priority: 21, confidence: 0.94, slots: ["place"] },
   { id: "advice.head", intent: "advice.travel_to_place", kind: "phrase", match: "head to {place}", priority: 21, confidence: 0.94, slots: ["place"] },
+  { id: "advice.evening_inn.1", intent: "advice.evening_inn", kind: "normalized", match: "go to the inn after work", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_inn.2", intent: "advice.evening_inn", kind: "normalized", match: "go to the inn after your shift", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_inn.3", intent: "advice.evening_inn", kind: "normalized", match: "go to the tavern after work", priority: 27, confidence: 0.95 },
+  { id: "advice.evening_inn.4", intent: "advice.evening_inn", kind: "normalized", match: "have a drink at the inn after work", priority: 27, confidence: 0.95 },
+  { id: "advice.evening_inn.5", intent: "advice.evening_inn", kind: "normalized", match: "spend the evening at the inn", priority: 26, confidence: 0.95 },
+  { id: "advice.evening_market.1", intent: "advice.evening_market", kind: "normalized", match: "go to the market after work", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_market.2", intent: "advice.evening_market", kind: "normalized", match: "go to the market after your shift", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_market.3", intent: "advice.evening_market", kind: "normalized", match: "visit the market after work", priority: 26, confidence: 0.95 },
+  { id: "advice.evening_market.4", intent: "advice.evening_market", kind: "normalized", match: "walk through the market on your way home", priority: 26, confidence: 0.94 },
+  { id: "advice.evening_home.1", intent: "advice.evening_home", kind: "normalized", match: "go straight home after work", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_home.2", intent: "advice.evening_home", kind: "normalized", match: "go home after your shift", priority: 27, confidence: 0.96 },
+  { id: "advice.evening_home.3", intent: "advice.evening_home", kind: "normalized", match: "go home right after duty", priority: 26, confidence: 0.95 },
   { id: "advice.rest", intent: "advice.rest", kind: "phrase", match: "you should rest", priority: 20, confidence: 0.92 },
   { id: "advice.rest2", intent: "advice.rest", kind: "exact", match: "rest", priority: 12, confidence: 0.9 },
   { id: "advice.generic", intent: "advice.generic", kind: "phrase", match: "you should {topic}", priority: 12, confidence: 0.88, slots: ["topic"] },
