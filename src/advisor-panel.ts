@@ -24,6 +24,15 @@ export type AdvisorPanelOptions = {
   readonly seed?: () => number;
   /** Notified after a relationship change is saved, so the host can react. */
   readonly onRelationshipChange?: (state: CharacterState, outcome: ExchangeOutcome) => void;
+  /**
+   * Runs a character-accepted proposal through the Simulation. The dialogue
+   * layer never mutates the world itself: it only reports that the character
+   * agreed to weigh the advice. Returning undefined means "no executor".
+   */
+  readonly onAdviceAccepted?: (
+    proposal: { readonly intent: string; readonly targetId?: string; readonly targetName?: string },
+    facts: AdvisorFacts,
+  ) => Promise<{ readonly started: boolean; readonly message: string }>;
 };
 
 const SUGGESTIONS: readonly string[] = [
@@ -135,7 +144,41 @@ export class AdvisorPanel {
     }
     this.input.value = "";
     this.input.focus({ preventScroll: true });
+    // A character may agree to weigh advice. Only the Simulation decides whether
+    // the world allows it, and its answer is reported verbatim.
+    if (reply.state === "proposed" && reply.proposal && this.options.onAdviceAccepted && facts.characterCode) {
+      void this.resolveAdvice(reply.proposal, facts);
+    }
     return reply;
+  }
+
+  /** Asks the Simulation to carry out an accepted proposal, then reports truthfully. */
+  private async resolveAdvice(
+    proposal: { readonly intent: string; readonly targetId?: string; readonly targetName?: string },
+    facts: AdvisorFacts,
+  ): Promise<void> {
+    const executor = this.options.onAdviceAccepted;
+    if (!executor) return;
+    let result: { readonly started: boolean; readonly message: string };
+    try {
+      result = await executor(proposal, facts);
+    } catch {
+      result = { started: false, message: "The attempt could not be completed." };
+    }
+    const line = document.createElement("p");
+    line.className = `advisor-line advisor-line-hero advisor-state-${result.started ? "answered" : "refused"}`;
+    const who = document.createElement("span");
+    who.className = "advisor-who";
+    who.textContent = "Advisor";
+    const body = document.createElement("span");
+    body.textContent = result.message;
+    const state = document.createElement("span");
+    state.className = "advisor-state";
+    state.textContent = result.started ? "acting" : "declined";
+    line.append(who, body, state);
+    this.log.append(line);
+    this.scrollLog();
+    this.setStatus(result.started ? "answered" : "refused");
   }
 
   /** Refreshes the relationship strip without asking a question it cannot answer. */

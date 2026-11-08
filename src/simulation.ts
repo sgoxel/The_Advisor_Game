@@ -3014,7 +3014,14 @@ export class LazySimulation {
    * tryBeginSelfDirectedSiteVisit has independently checked the actor, local
    * gate, full surface, grades and bridge. No background population sweep.
    */
-  async considerAdvisorSiteVisit(residentCode: string): Promise<{
+  async considerAdvisorSiteVisit(residentCode: string, options: {
+    /**
+     * Set only when the Advisor has earned enough trust that the character will
+     * set their work aside for one excursion. It never rewrites the routine:
+     * the visit is a single journaled journey and the day resumes afterwards.
+     */
+    allowRoutineBreak?: boolean;
+  } = {}): Promise<{
     started: boolean; message: string;
   }> {
     if (this.restoringSiteVisits)
@@ -3026,13 +3033,23 @@ export class LazySimulation {
       return this.considerAdvisorHomeReturn(residentCode);
     if (!actor.grounded || actor.indoors || actor.route.startsWith("BLOCKED:"))
       return { started: false, message: "The resident cannot leave a legally grounded outdoor position." };
-    if (!["stroll", "errand", "socialise"].includes(actor.activity))
-      return { started: false, message: "The resident has chosen to keep their current routine." };
+    if (!["stroll", "errand", "socialise"].includes(actor.activity)) {
+      // A trusted Advisor may persuade the character to set work aside once.
+      // This is still a single validated journey, not a routine rewrite.
+      if (!options.allowRoutineBreak) {
+        return { started: false, message: "The resident has chosen to keep their current routine." };
+      }
+    }
     const [{ siteTransportNetwork }, { siteVisitCorridors }] = await Promise.all([
       import("./site-transport-network.ts"),
       import("./site-visit-advice.ts"),
     ]);
-    if (tick !== this.tick)
+    // The helpers above are dynamic imports, so Fantasy Time may advance across
+    // the await. Re-resolve the actor at the CURRENT tick instead of dropping a
+    // legitimate request; tryBeginSelfDirectedSiteVisit validates at this.tick
+    // anyway, so a stale tick can never leak into the journey.
+    const freshActor = this.residentByCode(residentCode, this.tick);
+    if (!freshActor || !freshActor.grounded || freshActor.indoors || freshActor.route.startsWith("BLOCKED:"))
       return { started: false, message: "The resident's situation changed before the advice was evaluated." };
     const candidates = siteVisitCorridors(siteTransportNetwork, actor.settlement);
     if (!candidates.length)
@@ -3040,7 +3057,8 @@ export class LazySimulation {
     // A graph is only a proposal. Every trial must still pass the resident's
     // actual decision AND all Simulation final-surface evidence, or fail closed.
     for (const corridor of candidates.slice(0, 4)) {
-      if (this.tick !== tick) break;
+      // Do not abandon the whole request if time ticked while another corridor
+      // was being tried; each attempt validates against the current tick.
       const event = await this.tryBeginSelfDirectedSiteVisit(residentCode, corridor);
       if (event) return {
         started: true,

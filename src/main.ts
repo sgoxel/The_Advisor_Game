@@ -63,7 +63,7 @@ import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAcces
 import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, reliefSceneryVisible, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, installLitSurfaceDetail, localDetailWeight } from "./surface-presentation.ts";
 import { AdvisorPanel } from "./advisor-panel.ts";
 import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
-import { loadCharacter, saveCharacter } from "./character-state.ts";
+import { adviceVerdict, loadCharacter, saveCharacter } from "./character-state.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -2352,6 +2352,17 @@ async function start() {
     }
     return result;
   });
+  // The Advisor conversation panel uses the very same validated path.
+  adviseExecutor = async (code, options) => {
+    const result = await simulation.considerAdvisorSiteVisit(code, options);
+    if (result.started) {
+      saveSiteVisits();
+      residentPhaseTimings.clearPending();
+      residentQueries.clear();
+      lastSimulationRealSecond = -1;
+    }
+    return result;
+  };
   let lastResidentDetailVisible = smallDetailsVisible;
   let lastResidentInspectorOpen = !$("travel-panel").hidden;
   const labelNodes = new Map<string, HTMLElement>();
@@ -3493,6 +3504,9 @@ function countryOf(place: Place | undefined): string {
  * Header chip naming the assigned protagonist (owner request). Clicking it
  * focuses that resident at Hero scale. Camera only: nobody is moved.
  */
+/** The Simulation-backed executor for advice the character accepted. */
+let adviseExecutor: ((code: string, options?: { allowRoutineBreak?: boolean }) => Promise<{ started: boolean; message: string }>) | undefined;
+
 function mountProtagonistBar() {
   const chip = document.getElementById("protagonist-chip") as HTMLButtonElement | null;
   const name = document.getElementById("protagonist-name");
@@ -3616,6 +3630,22 @@ function mountAdvisorPanel() {
       // Saved immediately by the panel; refresh the header so a trust change is
       // visible outside the conversation panel too.
       bar.updateRelationship?.(state);
+    },
+    // The character has agreed to weigh the advice. Only the Simulation decides
+    // whether the world allows it: it validates legal ground, the site-visit
+    // corridor, every road and bridge, and then makes one bounded journey.
+    onAdviceAccepted: async (proposal, _facts) => {
+      const code = getProtagonistCode();
+      if (!code) return { started: false, message: "No protagonist is assigned." };
+      if (proposal.intent !== "advice.travel_to_place") {
+        return { started: false, message: "The character has no lawful way to act on that yet." };
+      }
+      const executor = adviseExecutor;
+      if (!executor) return { started: false, message: "The simulation is still starting." };
+      // Trust already decided the character is willing; only a well-trusted
+      // Advisor can pull them away from their work for one excursion.
+      const saved = loadCharacter(code, localDayIndex(simulation.tick, 0));
+      return executor(code, { allowRoutineBreak: adviceVerdict(saved) === "accept" });
     },
   });
   (window as unknown as { advisorDialogue?: AdvisorPanel }).advisorDialogue = panel;

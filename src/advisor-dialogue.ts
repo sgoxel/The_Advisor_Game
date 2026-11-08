@@ -35,7 +35,7 @@ import {
   type TopicId,
 } from "./dialogue-topics.ts";
 import { FOLLOWUP_BY_ID, type FollowUpId } from "./dialogue-followups.ts";
-import { effectiveMoodValue, type CharacterState } from "./character-state.ts";
+import { adviceVerdict, effectiveMoodValue, trustShortfall, type CharacterState } from "./character-state.ts";
 
 export type DialogueState = "answered" | "proposed" | "refused" | "ambiguous" | "unknown" | "pending";
 
@@ -326,22 +326,43 @@ function handleAdvice(candidate: Candidate, facts: AdvisorFacts): DialogueReply 
       );
     }
     if (facts.travelling) {
-      return refuseProposal(candidate.intent, place.name, facts, `I am already on the road — ask me again when I arrive.`, place.id);
+      return refuseProposal(candidate.intent, place.name, facts, `I am already on the road - ask me again when I arrive.`, place.id);
     }
-    return refuseProposal(
-      candidate.intent,
-      place.name,
-      facts,
-      pick(
-        [
-          `${place.name}, is it? Not before my work is done — ask me this evening.`,
-          `I hear you. I will think on ${place.name} when the day's duties are finished.`,
-          `To ${place.name}? A long walk. I will consider it, but I am not leaving my post this hour.`,
-        ],
-        place.name.length + facts.task.length,
-      ),
-      place.id,
-    );
+
+    // The relationship decides whether the suggestion is weighed at all. This is
+    // deterministic: the same trust always yields the same verdict, so a refusal
+    // cannot be rerolled by rephrasing.
+    const state = facts.character;
+    const verdict = state ? adviceVerdict(state) : "refuse";
+    if (verdict === "refuse") {
+      const missing = state ? trustShortfall(state) : 10;
+      return refuseProposal(
+        candidate.intent,
+        place.name,
+        facts,
+        pick(
+          [
+            `${place.name}, is it? Not before my work is done - ask me this evening.`,
+            `I hear you. I will think on ${place.name} when the day's duties are finished.`,
+            `I do not know you well enough to break my day for ${place.name}. Earn my trust first.`,
+          ],
+          place.name.length + facts.task.length,
+        ) + (missing > 0 && state ? ` (${missing} more trust would help.)` : ""),
+        place.id,
+      );
+    }
+
+    // Trusted enough to consider: the character agrees to weigh it. Whether the
+    // world allows it is the Simulation's decision, which the host runs next.
+    return {
+      state: "proposed",
+      text: verdict === "accept"
+        ? `${place.name}? Aye, you have not led me wrong. I will set out if the road allows it.`
+        : `${place.name}... you have been straight with me. I will consider setting out, if the day permits.`,
+      intent: candidate.intent,
+      libraryVersion: SENTENCE_LIBRARY_VERSION,
+      proposal: { intent: candidate.intent, targetId: place.id, targetName: place.name },
+    };
   }
   if (candidate.intent === "advice.rest") {
     return refuseProposal(
@@ -446,7 +467,9 @@ function replyFor(message: string, facts: AdvisorFacts, seed: number, state: Con
   const intent = reply.proposal
     ? { kind: String(reply.proposal.intent), target: reply.proposal.targetName ?? reply.proposal.targetId ?? "" }
     : undefined;
-  const exchange = tag && (reply.state === "answered" || reply.state === "refused")
+  // A character agreeing to weigh advice is a real exchange too, so the panel
+  // can hand it to the Simulation.
+  const exchange = tag && (reply.state === "answered" || reply.state === "refused" || reply.state === "proposed")
     ? { tag, day, refused: reply.state === "refused", intent }
     : undefined;
 

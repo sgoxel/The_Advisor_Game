@@ -370,3 +370,34 @@ export function loadCharacter(code: string, day = 0): CharacterState {
 export function saveCharacter(state: CharacterState): void {
   characterStore().write(state);
 }
+
+/* ------------------------------------------------------------------ */
+/* Advice acceptance                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Trust needed before the character will even weigh a suggestion to leave
+ * their routine. Below this they are not hostile, just not persuaded.
+ */
+export const ADVICE_TRUST_FLOOR = 60;
+/** At or above this, a character who can act will accept without convincing. */
+export const ADVICE_TRUST_SURE = 78;
+
+export type AdviceVerdict = "refuse" | "consider" | "accept";
+
+/**
+ * Deterministic gate: does this character weigh the Advisor's suggestion at all?
+ * A stranger is refused politely; a warm acquaintance considers it; a trusted
+ * friend is likely to act. No randomness — the same trust always decides the same
+ * way, so a decisive refusal can never be rerolled by rephrasing.
+ */
+export function adviceVerdict(state: CharacterState): AdviceVerdict {
+  if (state.trust < ADVICE_TRUST_FLOOR) return "refuse";
+  if (state.trust >= ADVICE_TRUST_SURE) return "accept";
+  return "consider";
+}
+
+/** How much trust is still missing before this character would consider advice. */
+export function trustShortfall(state: CharacterState): number {
+  return Math.max(0, Math.ceil(ADVICE_TRUST_FLOOR - state.trust));
+}
