@@ -1440,6 +1440,13 @@ body.globe-mode .travel-button {
 .npc-row b { text-align: right; color: #f3e3bd; }
 .npc-bar { display: inline-block; height: 7px; border-radius: 99px; background: rgba(255, 255, 255, 0.1); overflow: hidden; vertical-align: middle; width: 100%; min-width: 60px; }
 .npc-now .npc-bar { width: 90px; }
+/* Simulation-owned belongings: small chips, never a fabricated inventory. */
+.npc-item { display: inline-block; margin: 0 4px 4px 0; padding: 2px 7px; border-radius: 999px; border: 1px solid #d8b97944; background: #ffffff08; color: #efe4c4; font-size: 11px; }
+/* The label column is 46px; "Belongings" would wrap mid-word inside it. */
+.npc-now > div:has(.npc-item) .npc-label { width: 100%; display: block; margin-bottom: 4px; }
+.npc-item + .npc-item { margin-left: 0; }
+#npc-item-result { margin-top: 6px; }
+#npc-item-result:empty { display: none; }
 .npc-bar i { display: block; height: 100%; border-radius: 99px; }
 .npc-routine ol { list-style: none; margin: 0; padding: 0; }
 .npc-routine li { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; padding: 3px 6px; border-radius: 6px; }

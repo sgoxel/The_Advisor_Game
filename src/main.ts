@@ -2,6 +2,8 @@ import { residentFootRingGeometry } from "./resident-foot-ring.ts";
 import { separateVisibleActors } from "./actor-separation.ts";
 import { createAmbientChatter, type ChatterActor } from "./ambient-chatter.ts";
 import { setupUiShell } from "./ui-shell.ts";
+import { emptyInventory, itemsHeldBy, parseInventory, seededItems, serializeInventory, type InventoryState } from "./inventory.ts";
+import { performItemTransfer } from "./item-transfer.ts";
 import { isNightSecond, litBuildingCodes, litSetKey, mergeGlowGeometry, type LitBuilding } from "./night-lighting.ts";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
@@ -23,7 +25,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
-import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, setItemGiveAdvisor, setBelongingsReader, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -71,7 +73,7 @@ import { AdvisorPanel } from "./advisor-panel.ts";
 import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
 import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
 import { dailyPlan } from "./routines.ts";
-import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface } from "./simulation.ts";
+import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface, itemExchangeLegalBetween } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
@@ -2104,8 +2106,24 @@ async function start() {
       JSON.stringify(simulation.savedSiteVisitHistory())); }
     catch { /* no false claim of durable save when storage unavailable */ }
   };
-  const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
-  // Unlike the old DOM ring, this one shares the actual world depth buffer.
+  /**
+   * Household belongings live in one validated inventory record. SEED decides
+   * the items; only an accepted, Simulation-checked hand-over changes a holder,
+   * and the journal replays exactly once so a reload cannot move an item twice.
+   */
+  const inventorySaveKey = "advisor-game:s010:ALDERWICK:v1:inventory";
+  let inventory: InventoryState = emptyInventory();
+  try {
+    inventory = parseInventory(localStorage.getItem(inventorySaveKey)) ?? emptyInventory();
+  } catch { /* storage may be disabled; the session still works in memory */ }
+  const saveInventory = () => {
+    try { localStorage.setItem(inventorySaveKey, serializeInventory(inventory)); }
+    catch { /* session-only when storage is unavailable; never a false claim */ }
+  };
+  const holderItems = (code: string) =>
+    itemsHeldBy(inventory, code, seededItems(code).map((item) => item.code));
+  setBelongingsReader((code) => holderItems(code).map((item) => ({ name: item.name, category: item.category })));
+  const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});  // Unlike the old DOM ring, this one shares the actual world depth buffer.
   // A guard behind a real parapet cannot acquire a floating ring on its roof.
   const ring = residentFootRingGeometry();
   const footRingMesh = new pc.Mesh(app.graphicsDevice);
@@ -2442,6 +2460,34 @@ async function start() {
       lastSimulationRealSecond = -1;
     }
     return result;
+  });
+  // Handing an item over: Simulation proves the two people are physically close,
+  // the inventory record is the only thing that may change a holder, and the
+  // result is reported verbatim (accepted or refused) with nothing invented.
+  setItemGiveAdvisor(async (code) => {
+    const giver = simulation.residentByCode(code) ?? simulation.projectedResidentByCode(code);
+    if (!giver) return { accepted: false, message: "That resident could not be resolved, so nothing changed." };
+    const held = holderItems(code);
+    if (!held.length) return { accepted: false, message: "They are carrying nothing they could offer." };
+    const item = held[0];
+    // Nearest other grounded resident in the same settlement.
+    let receiverCode = "", receiverDistance = Infinity;
+    for (const resident of actorResidents.values()) {
+      if (resident.code === code || !resident.grounded || resident.settlement !== giver.settlement) continue;
+      const distance = Math.hypot(resident.position.lon - giver.position.lon,
+        resident.position.lat - giver.position.lat);
+      if (distance < receiverDistance) receiverDistance = distance, receiverCode = resident.code;
+    }
+    if (!receiverCode) return { accepted: false, message: `Nobody else is standing close enough to take the ${item.name.toLowerCase()}.` };
+    const receiver = simulation.projectedResidentByCode(receiverCode);
+    if (!receiver) return { accepted: false, message: "The other person could not be resolved, so nothing changed." };
+    const day = localDayIndex(simulation.tick, giver.position.lon);
+    const outcome = performItemTransfer(inventory, giver, receiver, day, itemExchangeLegalBetween);
+    if (outcome.accepted) {
+      inventory = outcome.state;
+      saveInventory();
+    }
+    return { accepted: outcome.accepted, message: outcome.message };
   });
   // The Advisor conversation panel uses the very same validated path.
   adviseExecutor = async (code, options) => {

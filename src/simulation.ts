@@ -25,8 +25,10 @@ import {
   normalizeLongitude,
   wrapSourceX,
   sourceToLonLat,
+  greatCircleDistance,
   type CanonicalPosition,
 } from "./planet.ts";
+import { itemExchangeLegal, type TransferVerdict } from "./inventory.ts";
 
 export type ResidentRole =
   | "innkeeper"
@@ -2139,6 +2141,25 @@ export function residentInsideRenderedService(
     yaw = building.yawRad ?? 0, c = Math.cos(yaw), s = Math.sin(yaw);
   return Math.abs(dx * c - dz * s) <= building.widthM / 2 &&
     Math.abs(dx * s + dz * c) <= building.depthM / 2;
+}
+
+/**
+ * Physical precondition for handing an item over. Simulation owns whether two
+ * people are actually close enough; the inventory module owns ownership. The
+ * two never swap roles, and a refused proposal moves nothing.
+ */
+export function itemExchangeLegalBetween(
+  giver: Pick<Resident, "code" | "settlement" | "grounded" | "position" | "indoors">,
+  receiver: Pick<Resident, "code" | "settlement" | "grounded" | "position" | "indoors">,
+): TransferVerdict {
+  if (giver.indoors || receiver.indoors)
+    return { ok: false, reason: "Step outside to hand something over." };
+  const distanceM = greatCircleDistance(giver.position, receiver.position);
+  return itemExchangeLegal(
+    { code: giver.code, settlement: giver.settlement, grounded: giver.grounded },
+    { code: receiver.code, settlement: receiver.settlement, grounded: receiver.grounded },
+    distanceM,
+  );
 }
 
 /** Readable site caption for the inspector only. Full SEED identities remain accessible. */

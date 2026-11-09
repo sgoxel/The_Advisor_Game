@@ -53,9 +53,46 @@ export function setSiteVisitAdvisor(callback: typeof siteVisitAdvisor) {
   siteVisitAdvisor = callback;
 }
 
+/**
+ * The hand-over executor. Simulation validates the physical exchange and the
+ * inventory module records accepted ownership; this popup only proposes and
+ * reports the truthful result, exactly like the site-visit advice flow.
+ */
+type ItemGiveResult = { accepted: boolean; message: string; item?: string };
+let itemGiveAdvisor: ((residentCode: string) => Promise<ItemGiveResult>) | undefined;
+let itemGivePending = false;
+let itemFeedback: { code: string; message: string } = { code: "", message: "" };
+export function setItemGiveAdvisor(callback: typeof itemGiveAdvisor) {
+  itemGiveAdvisor = callback;
+}
+/** Read-only: the belongings rows the card should show for one resident. */
+type BelongingsReader = (residentCode: string) => { name: string; category: string }[];
+let belongingsFor: BelongingsReader = () => [];
+export function setBelongingsReader(reader: BelongingsReader) {
+  belongingsFor = reader;
+}
+
 
 function placeOf(resident: Resident) {
   return places.find((place) => place.id === resident.settlement);
+}
+/**
+ * Belongings row. Items are read-only facts from the Simulation-owned inventory;
+ * the button only proposes a hand-over and every state is spelled out in words.
+ */
+function belongingsRow(resident: Resident): string {
+  const items = belongingsFor(resident.code);
+  const list = items.length
+    ? items.map((item) => `<span class="npc-item">${escape(item.name)}</span>`).join("")
+    : '<span class="npc-muted">nothing of their own</span>';
+  const canOffer = items.length > 0 && Boolean(itemGiveAdvisor) && !resident.indoors && resident.grounded;
+  const feedback = itemFeedback.code === resident.code ? itemFeedback.message : "";
+  return `<div><span class="npc-label">Belongings</span>${list}
+    ${canOffer
+      ? `<button type="button" class="info-go" data-give-item
+           ${itemGivePending ? "disabled" : ""}>Offer ${escape(items[0].name.toLowerCase())} to a neighbour · they decide</button>`
+      : ""}
+    <div id="npc-item-result" class="npc-muted" role="status" aria-live="polite">${escape(feedback)}</div></div>`;
 }
 /** Proper names of the settlement's public buildings for routine anchors. */
 export function anchorNames(resident: Resident) {
@@ -189,8 +226,7 @@ function install() {
       if (point) goTo?.(point.x, point.z, `resident:${point.code.split("/RESIDENT/")[0]}:${point.code.split("/RESIDENT/")[1]}`);
       return;
     }
-    const advice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-advice-site]");
-    if (advice && currentKind === "npc" && currentCode && siteVisitAdvisor && !advicePendingCode) {
+    const advice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-advice-site]");    if (advice && currentKind === "npc" && currentCode && siteVisitAdvisor && !advicePendingCode) {
       const code = currentCode;
       advicePendingCode = code;
       adviceFeedback = { code, message: "The resident is considering your advice…" };
@@ -210,6 +246,27 @@ function install() {
           if (feedback) feedback.textContent = adviceFeedback.message;
         }
       });
+    }
+    const give = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-give-item]");
+    if (give && currentKind === "npc" && currentCode && itemGiveAdvisor && !itemGivePending) {
+      const code = currentCode;
+      itemGivePending = true;
+      itemFeedback = { code, message: "Offering the item — they are deciding." };
+      give.disabled = true;
+      const status = root?.querySelector<HTMLElement>("#npc-item-result");
+      if (status) status.textContent = itemFeedback.message;
+      void itemGiveAdvisor(code).then(result => {
+        itemFeedback = { code, message: result.message };
+      }).catch(() => {
+        itemFeedback = { code, message: "The hand-over could not be checked; nothing changed." };
+      }).finally(() => {
+        itemGivePending = false;
+        if (currentKind === "npc" && currentCode === code && lastResident) {
+          // Re-render so the belongings list reflects the real accepted change.
+          showNpcPopup(lastResident, lastPopupTick);
+        }
+      });
+      return;
     }
     const go = (event.target as HTMLElement).closest<HTMLElement>("[data-go]"), target = go && goTo ? resolveGoTarget(go.dataset.go ?? "") : undefined;
     if (target) {
@@ -293,6 +350,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
     : active?.matches('[data-go^="home:"]') ? '[data-go^="home:"]'
     : active?.matches('[data-go^="resident:"]') ? '[data-go^="resident:"]'
     : active?.matches("[data-advice-site]") ? "[data-advice-site]"
+    : active?.matches("[data-give-item]") ? "[data-give-item]"
     : active?.matches("[data-close]") ? "[data-close]" : "";
   currentCode = resident.code;
   currentKind = "npc";
@@ -352,6 +410,7 @@ export function showNpcPopup(resident: Resident, tick: number) {
           ? goRow("Show entrance on map", `home:${resident.settlement}:${resident.index}`, "owned home entrance (camera only)")
           : '<span class="npc-muted">· No legally resolved entrance</span>'}</div>
       <div><span class="npc-label">Work</span>${escape(names.work ?? resident.workplace)}</div>
+      ${belongingsRow(resident)}
     </div>
     <details class="npc-technical"${technicalOpen ? " open" : ""}>
       <summary>Canonical SEED journey details</summary>
