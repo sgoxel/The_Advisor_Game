@@ -21,6 +21,12 @@ export type Daylight = {
   sky: RGB;
   /** 0 at night, 1 in full day: used to switch shadows and similar effects. */
   daylight: number;
+  /**
+   * Canonical darkness (22:00–05:00 local), the only window that may light an
+   * occupied building. `phase` below is the artistic label and may call dusk
+   * "night" only from 22:00, so the two never disagree about authority.
+   */
+  night: boolean;
   phase: "night" | "dawn" | "sunrise" | "day" | "golden hour" | "dusk";
 };
 
@@ -58,11 +64,12 @@ export function daylightAt(localSecondOfDay: number): Daylight {
     sunYaw = hour < 4.6 || hour >= 21 ? 180 : hour < 5.4
       ? mixAngle(180, dayYaw, smooth((hour - 4.6) / .8)) : hour > 19.8
         ? mixAngle(dayYaw, 180, smooth((hour - 19.8) / 1.2)) : dayYaw,
-    phase = hour < 5 || hour >= 20.5 ? "night" : hour < 6 ? "dawn" : hour < 8 ? "sunrise" : hour < 16.5 ? "day" : hour < 18.5 ? "golden hour" : "dusk";
+    phase = hour < 5 ? "night" : hour < 6 ? "dawn" : hour < 8 ? "sunrise" : hour < 16.5 ? "day" : hour < 18.5 ? "golden hour" : hour < 22 ? "dusk" : "night",
+    night = hour >= 22 || hour < 5;
   return {
     sunColor: mix3(a.sun, b.sun, t), sunIntensity: mix(a.intensity, b.intensity, t), sunPitch: mix(a.pitch, b.pitch, t), sunYaw,
     ambient: mix3(a.ambient, b.ambient, t), terrainTint: mix3(a.tint, b.tint, t), sky: mix3(a.sky, b.sky, t),
-    daylight: mix(a.daylight, b.daylight, t), phase,
+    daylight: mix(a.daylight, b.daylight, t), night, phase,
   };
 }
 
@@ -74,7 +81,7 @@ export function blendDaylight(a:Daylight,b:Daylight,t:number):Daylight {
  return {sunColor:mix3(a.sunColor,b.sunColor,t),sunIntensity:mix(a.sunIntensity,b.sunIntensity,t),
   sunPitch:mix(a.sunPitch,b.sunPitch,t),sunYaw:mixAngle(a.sunYaw,b.sunYaw,t),
   ambient:mix3(a.ambient,b.ambient,t),terrainTint:mix3(a.terrainTint,b.terrainTint,t),sky:mix3(a.sky,b.sky,t),
-  daylight:mix(a.daylight,b.daylight,t),phase:t<.5?a.phase:b.phase};
+  daylight:mix(a.daylight,b.daylight,t),night:t<.5?a.night:b.night,phase:t<.5?a.phase:b.phase};
 }
 /** Neighbouring zone centres blend continuously, including the longitude wrap. */
 export function daylightAtLongitude(tick:number,longitude:number):Daylight {
@@ -87,5 +94,5 @@ export function daylightAtLongitude(tick:number,longitude:number):Daylight {
 export function advanceDaylight(current:Daylight|undefined,target:Daylight,dt:number):Daylight {
  if(!current)return target;
  const result=blendDaylight(current,target,1-Math.exp(-Math.max(0,Math.min(.05,dt))/LIGHTING_RESPONSE_SECONDS));
- result.phase=target.phase;return result;
+ result.phase=target.phase;result.night=target.night;return result;
 }

@@ -193,9 +193,12 @@ test("rebasing is thresholded and cannot change canonical identity", () => {
 test("tile builder removes large source anchors before Float32 conversion", () => {
   const tile = tileAt(17, 131_068, 65_536),
     data = buildTile(tile),
-    coordinates = Object.values(data).flatMap((geometry) =>
-      Array.from(geometry.positions.filter((_, index) => index % 3 !== 1)),
-    );
+    coordinates = Object.values(data)
+      .filter((value): value is { positions: Float32Array } =>
+        !!value && !Array.isArray(value) && ArrayBuffer.isView((value as { positions?: unknown }).positions))
+      .flatMap((geometry) =>
+        Array.from(geometry.positions.filter((_, index) => index % 3 !== 1)),
+      );
   assert.ok(coordinates.length > 0);
   assert.ok(
     Math.max(...coordinates.map(Math.abs)) <= tile.size,

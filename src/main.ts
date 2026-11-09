@@ -2,6 +2,7 @@ import { residentFootRingGeometry } from "./resident-foot-ring.ts";
 import { separateVisibleActors } from "./actor-separation.ts";
 import { createAmbientChatter, type ChatterActor } from "./ambient-chatter.ts";
 import { setupUiShell } from "./ui-shell.ts";
+import { isNightSecond, litBuildingCodes, litSetKey, mergeGlowGeometry, type LitBuilding } from "./night-lighting.ts";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
@@ -60,6 +61,7 @@ import {
   type Place,
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
+import { isGeometryLayer } from "./geometry-core.ts";
 import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
@@ -268,6 +270,69 @@ type CachedTile = {
   serial: number;
 };
 const tileCache = new Map<string, CachedTile>();
+/**
+ * Occupancy-gated window glow, one merged mesh per rendered tile. `key` is the
+ * sorted set of lit building codes currently baked into the mesh, so a rebuild
+ * only happens on a real change. Presentation only; occupancy comes from the
+ * authoritative Simulation resident snapshot.
+ */
+const buildingGlowTiles = new Map<string, {
+  buildings: readonly import("./geometry-core.ts").NightGlowBuilding[];
+  entity: pc.Entity;
+  mesh: pc.Mesh;
+  key: string;
+}>();
+let buildingGlowKey = "";
+/**
+ * Re-bake the occupancy-gated window glow. Runs on a coarse timer (not every
+ * frame) and only rebuilds a tile when its lit-building set actually changed.
+ * Unknown occupancy fails dark: no snapshot, no light.
+ */
+function refreshBuildingGlow(tick: number, force = false) {
+  if (!buildingGlowTiles.size) return;
+  const now = performance.now();
+  if (!force && now - lastBuildingGlowCheck < 400) return;
+  lastBuildingGlowCheck = now;
+  const focusLon = flatToLonLat(view.x, view.z).lon,
+    second = localSecondOfDay(tick, focusLon),
+    night = isNightSecond(second),
+    visible = layers.structures && settlementDetailVisible && smallDetailsVisible &&
+      closeLightingVisible && eveningGlow > GLOW_VISIBILITY_EPSILON,
+    residents = night && visible ? (residentQueries.current?.residents ?? []) : [],
+    all: LitBuilding[] = [];
+  for (const tile of buildingGlowTiles.values()) for (const building of tile.buildings) all.push(building);
+  const lit = visible ? litBuildingCodes(residents, all, second) : new Set<string>(),
+    key = `${night ? "n" : "d"}/${visible ? "v" : "h"}/${buildingGlowTiles.size}/${[...buildingGlowTiles.keys()].join(",")}/${litSetKey(lit)}`;
+  if (key === buildingGlowKey) return;
+  buildingGlowKey = key;
+  let rendered = 0;
+  for (const [jobKey, tile] of buildingGlowTiles) {
+    if (!tile.entity.enabled && !tile.entity.parent) { buildingGlowTiles.delete(jobKey); continue; }
+    const merged = mergeGlowGeometry(
+      tile.buildings.filter((building) => lit.has(building.code)).map((building) => building.geometry));
+    if (!merged) { tile.entity.enabled = false; continue; }
+    rendered++;
+    const mesh = new pc.Mesh(app.graphicsDevice);
+    mesh.setPositions(merged.positions);
+    mesh.setNormals(merged.normals);
+    mesh.setColors32(merged.colors);
+    mesh.setIndices(merged.indices);
+    mesh.update(pc.PRIMITIVE_TRIANGLES);
+    const instance = tile.entity.render?.meshInstances[0];
+    if (!instance) { tile.entity.enabled = false; continue; }
+    instance.mesh = mesh;
+    tile.mesh = mesh;
+    tile.entity.enabled = true;
+  }
+  buildingGlowStats = { lit: lit.size, rendered, tiles: buildingGlowTiles.size, night, codes: [...lit].sort() };
+  buildingGlowEvidence = all.filter((building) => lit.has(building.code))
+    .map((building) => ({ code: building.code, kind: building.kind, x: building.x, z: building.z }));
+}
+let lastBuildingGlowCheck = 0;
+/** Read-only evidence counters for the current gated window glow. */
+let buildingGlowStats = { lit: 0, rendered: 0, tiles: 0, night: false, codes: [] as string[] };
+/** Read-only list of currently lit buildings (code + canonical source point). */
+let buildingGlowEvidence: { code: string; kind: string; x: number; z: number }[] = [];
 let revision = 0,
   inFlight = 0,
   selectionDirty = true,
@@ -1092,6 +1157,7 @@ function processStreaming(material: pc.StandardMaterial) {
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
+      if (!isGeometryLayer(g)) continue;
       const mesh = uploadGeometry(g, entity, name, name === "terrain" ?
         (next.kind === "coverage" || next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : name === "nightGlow" ? nightGlowMaterial! : name === "lampPools" ? lampPoolMaterial! : material, next.kind === "coverage");
       if (mesh) meshes.push(mesh);
@@ -1099,6 +1165,24 @@ function processStreaming(material: pc.StandardMaterial) {
     entity.enabled = false;
     applyTileRenderTransform(next.tile, entity);
     flatRoot.addChild(entity);
+    // Per-building window glow: one merged additive mesh per tile, rebuilt only
+    // when Simulation-reported occupancy changes. Empty homes stay dark.
+    const glowBuildings = (next.data as TileGeometry).nightGlowByBuilding;
+    if (glowBuildings?.length) {
+      const glowMesh = new pc.Mesh(app.graphicsDevice);
+      const glowEntity = new pc.Entity("nightGlowHomes");
+      glowEntity.addComponent("render", {
+        meshInstances: [new pc.MeshInstance(glowMesh, nightGlowMaterial!)],
+        layers: [pc.LAYERID_WORLD],
+        castShadows: false,
+        receiveShadows: false,
+      });
+      glowEntity.enabled = false;
+      entity.addChild(glowEntity);
+      buildingGlowTiles.set(next.jobKey, {
+        buildings: glowBuildings, entity: glowEntity, mesh: glowMesh, key: "",
+      });
+    }
     tileCache.set(next.jobKey, {
       kind: next.kind,
       tile: next.tile,
@@ -1220,6 +1304,7 @@ function processStreaming(material: pc.StandardMaterial) {
         // MeshInstance destruction releases its mesh reference and GPU buffers.
         record.entity.destroy();
         tileCache.delete(key);
+        buildingGlowTiles.delete(key);
         cachedGeometryBytes = Math.max(0, cachedGeometryBytes - record.bytes);
         evictions++;
       }
@@ -1836,6 +1921,7 @@ async function start() {
     if(nightGlowMaterial){nightGlowMaterial.opacity=glowOpacity;nightGlowMaterial.update();}
     if(lampPoolMaterial){lampPoolMaterial.opacity=.45*glowOpacity;lampPoolMaterial.update();}
     if(hadGlow!==(eveningGlow>GLOW_VISIBILITY_EPSILON))setLayers();
+    refreshBuildingGlow(tick);
     sun.light!.color.set(...light.sunColor);
     sun.light!.intensity=light.sunIntensity;
     sun.setEulerAngles(light.sunPitch,light.sunYaw,0);
@@ -3101,6 +3187,19 @@ async function start() {
     value: {
       seed: WORLD_SEED,
       capturePresentation,
+      /**
+       * Read-only occupancy-light evidence: which rendered buildings currently
+       * show window glow and where they are. Never an input to the decision.
+       */
+      get nightLighting() {
+        return Object.freeze({
+          night: buildingGlowStats.night,
+          lit: buildingGlowStats.lit,
+          renderedTiles: buildingGlowStats.rendered,
+          tiles: buildingGlowStats.tiles,
+          buildings: buildingGlowEvidence.slice(0, 24),
+        });
+      },
       cellAt,
       cellSeed,
       /**
@@ -3520,7 +3619,10 @@ async function start() {
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
           smallDetailsVisible,
           lighting: {displayed:displayedDaylight,target:targetDaylight},
-          closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0},
+          closeLighting: {enabled: closeLightingVisible, eveningWeight: eveningGlow, addedPointLights: 0,
+            night: displayedDaylight?.night ?? false,
+            litBuildings: buildingGlowStats.lit, renderedGlowTiles: buildingGlowStats.rendered,
+            glowTiles: buildingGlowStats.tiles, litBuildingCodes: buildingGlowStats.codes},
           visibleResidents: visualSummary.visibleActors,
           residentPresentation: {
             logicalResidents: simulation.stats.logicalResidents,

@@ -36,7 +36,31 @@ export type TileGeometry = {
   closeDetail?: Geometry;
   nightGlow?: Geometry;
   lampPools?: Geometry;
+  /** Per-building window glow (close LOD only), so occupancy can gate it. */
+  nightGlowByBuilding?: NightGlowBuilding[];
 };
+/** One rendered building's own window glow plus the facts needed to decide occupancy. */
+export type NightGlowBuilding = {
+  code: string;
+  kind: string;
+  service?: string;
+  x: number;
+  z: number;
+  widthM: number;
+  depthM: number;
+  yawRad: number;
+  geometry: Geometry;
+};
+
+/**
+ * True when a `TileGeometry` entry is renderable geometry. The per-building
+ * window-glow table is the one entry that is not a single buffer set, so every
+ * consumer filters with this instead of assuming homogeneity.
+ */
+export function isGeometryLayer(value: unknown): value is Geometry {
+  return !!value && !Array.isArray(value) &&
+    ArrayBuffer.isView((value as Geometry).positions);
+}
 const color = (r: number, g: number, b: number): [number, number, number] => [r, g, b];
 const blendColor = (a: RGB, b: RGB, amount: number): [number, number, number] => {
   const t = Math.max(0, Math.min(1, amount));

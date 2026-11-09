@@ -6,6 +6,7 @@ import {
   terrainTint as coreTerrainTint,
   type Geometry,
   type TileGeometry,
+  type NightGlowBuilding,
 } from "./geometry-core.ts";
 import { featuresFor, type Tile } from "./world.ts";
 import { elevationToRenderY } from "./render-frame.ts";
@@ -1270,7 +1271,7 @@ function addShopFront(f: Frame, w: number, d: number, wallHeight: number, shop: 
 type LayerBuilders = { structures: Builder; nature: Builder; detail: Builder; closeDetail: Builder; nightGlow: Builder; lampPools: Builder; streetTrees: Builder };
 
 /** Draws one feature into the builders (already placed at the feature origin). */
-function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
+function drawFeature(feature: any, tileSize: number, layers: LayerBuilders, windowGlow?: Builder) {
   const { structures, nature, detail, closeDetail, nightGlow, lampPools } = layers, close = tileSize <= 8;
   const x = 0, z = 0, y = 0, yaw = feature.yawRad || 0,
     width = feature.widthM ?? feature.footprintWidth ?? 8, depth = feature.depthM ?? feature.footprintDepth ?? 8, variant = feature.variant || 0;
@@ -1284,7 +1285,7 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
       closeDetail.boxYaw(p.x,window.y-.08,p.z,window.width+.16,window.height+.16,.08,angle,color(69,49,32));
       closeDetail.boxYaw(glass.x,window.y,glass.z,window.width,window.height,.025,angle,color(51,68,75));
       const q=(xx:number,yy:number):Point=>{const p=offsetLocal(lit.x,lit.z,angle,xx,0);return[p.x,yy,p.z];};
-      nightGlow.quad(q(-window.width/2,window.y),q(window.width/2,window.y),q(window.width/2,window.y+window.height),q(-window.width/2,window.y+window.height),color(255,186,82));
+      (windowGlow ?? nightGlow).quad(q(-window.width/2,window.y),q(window.width/2,window.y),q(window.width/2,window.y+window.height),q(-window.width/2,window.y+window.height),color(255,186,82));
     }
   }
   if(feature.kind==='street-lamp'){
@@ -1559,11 +1560,29 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean; skipBase
   if (options.terrainOnly) return buildTerrainOnly(tile);
   const result = coreBuildTile(tile, { skipBaseTerrain: options.skipBaseTerrain }),
     layers: LayerBuilders = { structures: new Builder(), nature: new Builder(), detail: new Builder(), closeDetail: new Builder(), nightGlow: new Builder(), lampPools: new Builder(), streetTrees: new Builder() },
-    all = Object.values(layers), originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
+    all = Object.values(layers), originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2,
+    // Close LOD glows each building's windows separately so Simulation-backed
+    // occupancy can gate them; street lamps keep the shared tile-level glow.
+    windowGlows = new Map<string, { builder: Builder; building: Omit<NightGlowBuilding, "geometry"> }>();
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
     const physical = feature.widthM !== undefined || feature.kind === "roadside-tree";
     for (const builder of all) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
-    drawFeature(feature, tile.size, layers);
+    let windowGlow: Builder | undefined;
+    if (tile.size <= 8 && ["residence", "service", "keep", "guard-post"].includes(feature.kind) && feature.code) {
+      windowGlow = new Builder();
+      windowGlow.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, true);
+      windowGlows.set(feature.code, {
+        builder: windowGlow,
+        building: {
+          code: feature.code, kind: feature.kind, service: feature.service,
+          x: feature.x, z: feature.z,
+          widthM: feature.widthM ?? feature.footprintWidth ?? 8,
+          depthM: feature.depthM ?? feature.footprintDepth ?? 8,
+          yawRad: feature.yawRad ?? 0,
+        },
+      });
+    }
+    drawFeature(feature, tile.size, layers, windowGlow);
   }
   return {
     terrain: result.terrain,
@@ -1571,6 +1590,13 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean; skipBase
     nature: mergeGeometry(result.nature, layers.nature.finish()),
     streetTrees: layers.streetTrees.finish(),
     detail: mergeGeometry(result.detail, layers.detail.finish()),
-    ...(tile.size<=8?{closeDetail:layers.closeDetail.finish(),nightGlow:layers.nightGlow.finish(),lampPools:layers.lampPools.finish()}:{}),
+    ...(tile.size<=8?{
+      closeDetail:layers.closeDetail.finish(),
+      nightGlow:layers.nightGlow.finish(),
+      lampPools:layers.lampPools.finish(),
+      nightGlowByBuilding: [...windowGlows.values()]
+        .map(({ builder, building }) => ({ ...building, geometry: builder.finish() }))
+        .filter((entry) => entry.geometry.positions.length > 0),
+    }:{}),
   };
 }

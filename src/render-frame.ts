@@ -1,5 +1,6 @@
 import type { Tile } from "./world.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
+import { isGeometryLayer } from "./geometry-core.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -200,6 +201,7 @@ export function convertTileGeometryToEnu(
   let maxHorizontalM = 0,
     maxFloat32ErrorM = 0;
   for (const [kind, geometry] of Object.entries(data)) {
+    if (!isGeometryLayer(geometry)) continue;
     const p = geometry.positions;
     for (let i = 0; i < p.length; i += 3) {
       const sourceX = originX + p[i],

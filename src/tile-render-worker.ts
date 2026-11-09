@@ -1,6 +1,7 @@
 import { appendWildernessGeometry } from "./wilderness-geometry.ts";
 import { appendCriticalSiteGeometry } from "./site-geometry.ts";
 import { buildTile } from "./geometry.ts";
+import { isGeometryLayer } from "./geometry-core.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
 import { rebuildNaturalSurface, NATURAL_MESH_LIMITS } from "./natural-surface-mesh.ts";
@@ -54,6 +55,12 @@ export async function renderTileJob(job: TileJob, started: number) {
     if(job.kind==='detail'){ appendCriticalSiteGeometry(tile,data); appendWildernessGeometry(tile,data); }
     const precision = convertTileGeometryToEnu(tile, data), transfer: Transferable[] = [];
     for (const g of Object.values(data)) {
+      if (!isGeometryLayer(g)) continue;
+      transfer.push(g.positions.buffer,g.normals.buffer,g.colors.buffer,g.indices.buffer);
+      if (g.uvs) transfer.push(g.uvs.buffer);
+    }
+    for (const glow of data.nightGlowByBuilding ?? []) {
+      const g = glow.geometry;
       transfer.push(g.positions.buffer,g.normals.buffer,g.colors.buffer,g.indices.buffer);
       if (g.uvs) transfer.push(g.uvs.buffer);
     }
