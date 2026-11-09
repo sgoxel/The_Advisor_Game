@@ -71,7 +71,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-005-002 — Enter same-world 3D services; reach legal workstations with actual occupants
 - WP-S010-005-003 — Preserve NPC identity, grounded feet & roof/depth parity across real doors
 - WP-S010-005-004 — Persist approved interior item/room/occupant changes and replay lawful exits
-- WP-S010-005-005 — Tie home lighting to actual occupancy at fantasy 22:00–05:00; keep twilight cosmetic
+- WP-S010-005-005 — Tie home lighting to actual occupancy at fantasy 22:00–05:00; keep twilight cosmetic — COMPLETED and REVIEWED at 2026-11-09
 - WP-S010-006-001 — Measure actual Galaxy A55 default-Chrome FPS, input p95, memory, thermals and GPU recovery
 
 - WP-S010-007-001 — Research deterministic local-first Sentence Library, bounded LLM commands & autonomy — COMPLETED and REVIEWED at 2026-11-07
