@@ -65,7 +65,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-003-003 — Preserve each NPC's original 2D art; ship the optional owner-GLB pipeline and permanent fallback — COMPLETED and REVIEWED at 2026-10-30 (real owner-asset mixed 3D/2D visual validation remains conditional on asset delivery; NOT claimed PASS)
 - WP-S010-004-001 — Show real SEED-resident work, gate shifts and homecoming with grounded lawful world actions
 - WP-S010-004-002 — Join SEED-owned home doors to graded streets with real final-surface collision and feet
-- WP-S010-004-003 — Make inventory playable: Simulation-owned item inspection, legal transfer & replay
+- WP-S010-004-003 — Make inventory playable: Simulation-owned item inspection, legal transfer & replay — COMPLETED and REVIEWED at 2026-11-10
 - WP-S010-004-004 — Reroute NPCs around new legal obstacles; safely rejoin or stop without teleport
 - WP-S010-005-001 — Walk physical street→owned door→same-world room→street with stable identity and no teleport
 - WP-S010-005-002 — Enter same-world 3D services; reach legal workstations with actual occupants
