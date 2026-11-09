@@ -16,6 +16,31 @@
     <title>The Advisor · World Atlas</title>
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 3l9 8.5"/><path d="M5.5 10.5V21h13V10.5"/><path d="M9.8 21v-6h4.4v6"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 2.6 4.6 5.6 4.6 9S15 18.4 12 21c-3-2.6-4.6-5.6-4.6-9S8.9 5.6 12 3Z"/></symbol>
+      <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.4 8.6-2 4.8-4.8 2 2-4.8z"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6.1"/><path d="M20 4v7h-7"/></symbol>
+      <symbol id="i-terrain" viewBox="0 0 24 24"><path d="m3 19 6-12 4 7 2.5-4L21 19z"/></symbol>
+      <symbol id="i-gate" viewBox="0 0 24 24"><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-7h6v7"/><path d="M4 21h16"/></symbol>
+      <symbol id="i-travel" viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="m10 13 4.5-4.5"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 1 1 4.4 2c-.9.7-1.9 1.2-1.9 2.6"/><path d="M12 17.4h.01"/></symbol>
+      <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></symbol>
+      <symbol id="i-seed" viewBox="0 0 24 24"><path d="M12 21v-7"/><path d="M12 14C12 9 8 6 4 6c0 4 3 8 8 8Z"/><path d="M12 12c0-4 3.2-6.5 7-6.5 0 4-2.8 6.5-7 6.5Z"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+      <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20c.6-4 3-6 6.5-6s5.9 2 6.5 6"/></symbol>
+      <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4z"/><path d="M20 4h-3a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h3z"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 3 10.5l7 2.5 2.5 7z"/><path d="m10 13 4.5-4.5"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    </svg>
+
     <canvas
       id="world"
       aria-label="Interactive 3D medieval world. Drag to pan, scroll to zoom, press Enter to inspect the nearest visible resident, or use the map controls."
@@ -33,53 +58,87 @@
         <span id="protagonist-name">—</span>
       </button>
       <a id="build-badge" class="build-badge" href="https://github.com/sgoxel/The_Advisor_Game/commits" target="_blank" rel="noopener noreferrer" hidden>release</a>
-      <a class="build-badge dialogue-map-link" href="./dialogue-map.html" target="_blank" rel="noopener" title="Open the full dialogue graph: every question, answer and condition">dialogue map</a>
+      <button id="header-help" class="icon-btn header-help" type="button" title="Help and shortcuts" aria-label="Help and shortcuts">
+        <svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>
+      </button>
+      <a class="build-badge dialogue-map-link icon-btn" href="./dialogue-map.html" target="_blank" rel="noopener" title="Open the full dialogue graph: every question, answer and condition" data-tip="Dialogue map" aria-label="Open the dialogue map"><svg class="ico" aria-hidden="true"><use href="#i-book"/></svg></a>
       <div class="world-clock">
         <span class="eyebrow">REALM TIME · 24×</span
         ><time id="fantasy-time">07.10.0126</time
         ><span class="local-time" id="local-time" title="Local time at the map focus">local —</span>
       </div>
     </header>
-    <aside class="panel region-panel minimized" id="region-panel" aria-label="Map information">
-      <button id="toggle-region-panel" type="button" aria-controls="region-panel" aria-expanded="false" aria-label="Show map information">Show information</button>
-      <div class="eyebrow">THE VERDANT MARCHES</div>
-      <h2 id="place-name">Alderwick</h2>
-      <p class="region-counts" id="region-counts">Loading canonical registry…</p>
-      <p id="map-context" aria-live="polite">Resolving political region…</p>
-      <div class="seed-block">
-        <div class="divider"></div>
-        <div class="seed-label">WORLD SEED <span>FIXED</span></div>
-        <code id="world-seed"></code>
-      </div>
-      <div class="region-actions">
-        <button id="home">⌂ Focus home village</button
-        ><button id="overview">↗ Realm view</button>
-      </div>
-      <button id="open-travel" class="travel-button">
-        Explore a country or settlement →
+
+    <aside class="panel region-panel minimized has-tabs" id="region-panel" aria-label="Map information">
+      <button id="toggle-region-panel" class="panel-collapse icon-btn" type="button" aria-controls="region-panel" aria-expanded="false" aria-label="Show map information" title="Show map information">
+        <svg class="ico" aria-hidden="true"><use href="#i-info"/></svg>
+        <span class="sr-only">Show map information</span>
       </button>
-      <div class="layer-controls flat-only">
-        <div class="divider"></div>
-        <div class="eyebrow">MAP LAYERS</div>
-        <label
-          ><input type="checkbox" id="structures" checked /> Settlements &amp;
-          keeps <span class="swatch stone"></span
-        ></label>
-        <label
-          ><input type="checkbox" id="nature" checked /> Woodland &amp; small
-          details <span class="swatch forest"></span
-        ></label>
-        <label
-          ><input type="checkbox" id="grid" /> Tile boundaries
-          <span class="swatch gold"></span
-        ></label>
-        <p class="hint">Select the landscape to inspect a canonical planet point.</p>
+      <div class="region-head">
+        <div class="eyebrow">THE VERDANT MARCHES</div>
+        <h2 id="place-name">Alderwick</h2>
+        <p class="region-counts" id="region-counts">Loading canonical registry…</p>
+        <p id="map-context" aria-live="polite">Resolving political region…</p>
+      </div>
+
+      <div class="panel-tabs" role="tablist" aria-label="Map information categories" data-ui-tabs="region">
+        <button class="panel-tab" type="button" role="tab" id="region-tab-place" data-tab="place" aria-selected="true" aria-controls="region-pane-place" title="Place">
+          <svg class="ico" aria-hidden="true"><use href="#i-map"/></svg><span>Place</span>
+        </button>
+        <button class="panel-tab" type="button" role="tab" id="region-tab-layers" data-tab="layers" aria-selected="false" aria-controls="region-pane-layers" title="Map layers">
+          <svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg><span>Layers</span>
+        </button>
+        <button class="panel-tab" type="button" role="tab" id="region-tab-seed" data-tab="seed" aria-selected="false" aria-controls="region-pane-seed" title="World seed">
+          <svg class="ico" aria-hidden="true"><use href="#i-seed"/></svg><span>Seed</span>
+        </button>
+      </div>
+
+      <div class="panel-pane" id="region-pane-place" data-pane="place" role="tabpanel" aria-labelledby="region-tab-place">
+        <div class="region-actions">
+          <button id="home" class="icon-btn" type="button" title="Focus home village" aria-label="Focus home village" data-tip="Home village">
+            <svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="sr-only">Focus home village</span>
+          </button>
+          <button id="overview" class="icon-btn" type="button" title="Realm view" aria-label="Realm view" data-tip="Realm view">
+            <svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg><span class="sr-only">Realm view</span>
+          </button>
+        </div>
+        <button id="open-travel" class="travel-button" type="button" title="Explore a country or settlement">
+          <svg class="ico ico-sm" aria-hidden="true"><use href="#i-travel"/></svg><span>Explore the realm</span>
+        </button>
+      </div>
+
+      <div class="panel-pane" id="region-pane-layers" data-pane="layers" role="tabpanel" aria-labelledby="region-tab-layers" hidden>
+        <div class="layer-controls flat-only">
+          <div class="eyebrow">MAP LAYERS</div>
+          <label
+            ><input type="checkbox" id="structures" checked /> Settlements &amp;
+            keeps <span class="swatch stone"></span
+          ></label>
+          <label
+            ><input type="checkbox" id="nature" checked /> Woodland &amp; small
+            details <span class="swatch forest"></span
+          ></label>
+          <label
+            ><input type="checkbox" id="grid" /> Tile boundaries
+            <span class="swatch gold"></span
+          ></label>
+          <p class="hint">Select the landscape to inspect a canonical planet point.</p>
+        </div>
+      </div>
+
+      <div class="panel-pane" id="region-pane-seed" data-pane="seed" role="tabpanel" aria-labelledby="region-tab-seed" hidden>
+        <div class="seed-block">
+          <div class="seed-label">WORLD SEED <span>FIXED</span></div>
+          <code id="world-seed"></code>
+        </div>
+        <p class="hint">Every place, person and road is derived from this single fixed seed.</p>
       </div>
     </aside>
-    <aside class="panel cell-panel" id="cell-panel" hidden>
+
+    <aside class="panel cell-panel" id="cell-panel" data-canonical-inspector="src/canonical-inspector.ts" hidden>
       <div class="eyebrow">
         SELECTED PLANET POINT
-        <button id="close-cell" aria-label="Close cell inspector">×</button>
+        <button id="close-cell" aria-label="Close cell inspector"><svg class="ico ico-sm" aria-hidden="true"><use href="#i-close"/></svg></button>
       </div>
       <h2 id="cell-biome">Meadow</h2>
       <div class="cell-coordinates" id="cell-coordinates"></div>
@@ -106,46 +165,79 @@
       <button id="copy-code">Copy planet ID</button
       ><span id="copy-status" role="status"></span>
     </aside>
+
     <aside class="panel travel-panel" id="travel-panel" hidden>
       <div class="eyebrow">
         EXPLORE THE REALM
-        <button id="close-travel" aria-label="Close travel menu">×</button>
+        <button id="close-travel" aria-label="Close travel menu"><svg class="ico ico-sm" aria-hidden="true"><use href="#i-close"/></svg></button>
       </div>
-      <h2>Inspect a destination</h2>
-      <p class="hint">Map preview only · focusing or selecting a route does not move the protagonist.</p>
-      <label for="continent-select">Continent</label
-      ><select id="continent-select"></select>
-      <label for="country-select">Country</label
-      ><select id="country-select"></select>
-      <label for="city-select">City</label
-      ><select id="city-select"></select>
-      <label for="village-select">Village</label
-      ><select id="village-select"></select>
-      <div class="region-actions">
-        <button id="visit-city">Focus city</button
-        ><button id="visit-village">Focus village</button>
+      <div class="panel-tabs" role="tablist" aria-label="Travel categories" data-ui-tabs="travel">
+        <button class="panel-tab" type="button" role="tab" id="travel-tab-place" data-tab="place" aria-selected="true" aria-controls="travel-pane-place" title="Destinations">
+          <svg class="ico" aria-hidden="true"><use href="#i-travel"/></svg><span>Destination</span>
+        </button>
+        <button class="panel-tab" type="button" role="tab" id="travel-tab-routes" data-tab="routes" aria-selected="false" aria-controls="travel-pane-routes" title="Walking routes">
+          <svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg><span>Routes</span>
+        </button>
+        <button class="panel-tab" type="button" role="tab" id="travel-tab-world" data-tab="world" aria-selected="false" aria-controls="travel-pane-world" title="Living world">
+          <svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg><span>World</span>
+        </button>
       </div>
-      <div class="region-actions" aria-label="Inspect canonical settlement">
-        <button id="inspect-city" type="button">Inspect selected city</button>
-        <button id="inspect-village" type="button">Inspect selected village</button>
-      </div>
-      <section class="route-block" id="route-block" aria-label="Walking routes">
-        <div class="eyebrow">
-          <span>WALKING ROUTES</span>
-          <button id="route-clear" type="button" hidden>Clear route</button>
+
+      <div class="panel-pane" id="travel-pane-place" data-pane="place" role="tabpanel" aria-labelledby="travel-tab-place">
+        <h2>Inspect a destination</h2>
+        <p class="hint">Map preview only · focusing or selecting a route does not move the protagonist.</p>
+        <label for="continent-select">Continent</label
+        ><select id="continent-select"></select>
+        <label for="country-select">Country</label
+        ><select id="country-select"></select>
+        <label for="city-select">City</label
+        ><select id="city-select"></select>
+        <label for="village-select">Village</label
+        ><select id="village-select"></select>
+        <div class="region-actions">
+          <button id="visit-city" class="icon-btn" type="button" title="Focus selected city" aria-label="Focus selected city" data-tip="Focus city">
+            <svg class="ico" aria-hidden="true"><use href="#i-locate"/></svg><span class="btn-label">Focus city</span>
+          </button>
+          <button id="visit-village" class="icon-btn" type="button" title="Focus selected village" aria-label="Focus selected village" data-tip="Focus village">
+            <svg class="ico" aria-hidden="true"><use href="#i-home"/></svg><span class="btn-label">Focus village</span>
+          </button>
         </div>
-        <p class="hint route-detail" id="route-detail" aria-live="polite"></p>
-        <ul class="route-list" id="route-list"></ul>
-      </section>
-      <p class="hint" id="travel-summary" aria-live="polite">
-        Calculating canonical route distance and fantasy travel time…
-      </p>
-      <div class="divider"></div>
-      <div class="eyebrow">LIVING WORLD</div>
-      <p id="simulation-status">
-        Focused country: live · distant countries: coarse
-      </p>
+        <div class="region-actions" aria-label="Inspect canonical settlement">
+          <button id="inspect-city" class="icon-btn" type="button" title="Inspect selected city" aria-label="Inspect selected city" data-tip="Inspect city">
+            <svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg><span class="btn-label">Inspect city</span>
+          </button>
+          <button id="inspect-village" class="icon-btn" type="button" title="Inspect selected village" aria-label="Inspect selected village" data-tip="Inspect village">
+            <svg class="ico" aria-hidden="true"><use href="#i-eye"/></svg><span class="btn-label">Inspect village</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-pane" id="travel-pane-routes" data-pane="routes" role="tabpanel" aria-labelledby="travel-tab-routes" hidden>
+        <section class="route-block" id="route-block" aria-label="Walking routes">
+          <div class="eyebrow">
+            <span>WALKING ROUTES</span>
+            <button id="route-clear" type="button" hidden>Clear route</button>
+          </div>
+          <p class="hint route-detail" id="route-detail" aria-live="polite"></p>
+          <ul class="route-list" id="route-list"></ul>
+        </section>
+        <p class="hint" id="travel-summary" aria-live="polite">
+          Calculating canonical route distance and fantasy travel time…
+        </p>
+      </div>
+
+      <div class="panel-pane" id="travel-pane-world" data-pane="world" role="tabpanel" aria-labelledby="travel-tab-world" hidden>
+        <div class="eyebrow">LIVING WORLD</div>
+        <p id="simulation-status">
+          Focused country: live · distant countries: coarse
+        </p>
+        <p class="hint">Residents follow their own seeded routines. Watch them, or ask one what they are doing.</p>
+        <button id="inspect-nearest" class="icon-btn wide" type="button" title="Inspect the nearest visible resident" aria-label="Inspect the nearest visible resident">
+          <svg class="ico" aria-hidden="true"><use href="#i-person"/></svg><span class="btn-label">Nearest resident</span>
+        </button>
+      </div>
     </aside>
+
     <nav class="map-controls" aria-label="Map navigation">
       <button
         id="compass"
@@ -155,14 +247,29 @@
       >
         <span id="compass-needle">↑</span><span>N</span>
       </button>
-      <button id="zoom-in" aria-label="Zoom in">+</button
-      ><button id="zoom-out" aria-label="Zoom out">−</button>
-      <button id="rotate" aria-label="Rotate view clockwise">↻</button>
+      <button id="zoom-in" aria-label="Zoom in" title="Zoom in" data-tip="Zoom in"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      <button id="zoom-out" aria-label="Zoom out" title="Zoom out" data-tip="Zoom out"><svg class="ico" aria-hidden="true"><use href="#i-minus"/></svg></button>
+      <button id="rotate" aria-label="Rotate view clockwise" title="Rotate view clockwise" data-tip="Rotate">↻</button>
       <button id="relief-view" class="flat-only" type="button" aria-pressed="false"
         aria-label="Inspect real 3D terrain relief at a lower camera angle"
-        title="Inspect genuine cliff and valley relief from a lower angle">3D</button>
-      <button id="focus-gate-watch" type="button" aria-label="Focus the real nearest settlement gate and its on-duty residents" title="Focus gate watch">⚔</button>
+        title="Inspect genuine cliff and valley relief from a lower angle" data-tip="Terrain relief">
+        <svg class="ico" aria-hidden="true"><use href="#i-terrain"/></svg>
+      </button>
+      <button id="focus-gate-watch" type="button" aria-label="Focus the real nearest settlement gate and its on-duty residents" title="Focus gate watch" data-tip="Gate watch"><svg class="ico" aria-hidden="true"><use href="#i-gate"/></svg></button>
     </nav>
+
+    <nav class="command-dock" aria-label="Quick actions">
+      <button id="dock-home" class="icon-btn" type="button" title="Home village (H)" aria-label="Focus home village" data-tip="Home village · H"><svg class="ico" aria-hidden="true"><use href="#i-home"/></svg></button>
+      <button id="dock-realm" class="icon-btn" type="button" title="Realm view (R)" aria-label="Realm view" data-tip="Realm view · R"><svg class="ico" aria-hidden="true"><use href="#i-globe"/></svg></button>
+      <button id="dock-travel" class="icon-btn primary" type="button" title="Explore destinations (T)" aria-label="Explore destinations" data-tip="Travel · T"><svg class="ico" aria-hidden="true"><use href="#i-travel"/></svg></button>
+      <span class="dock-sep" aria-hidden="true"></span>
+      <button id="dock-resident" class="icon-btn" type="button" title="Find the nearest resident (F)" aria-label="Find the nearest resident" data-tip="Nearest resident · F"><svg class="ico" aria-hidden="true"><use href="#i-person"/></svg></button>
+      <button id="dock-layers" class="icon-btn" type="button" title="Map layers (L)" aria-label="Map layers" data-tip="Layers · L"><svg class="ico" aria-hidden="true"><use href="#i-layers"/></svg></button>
+      <button id="dock-advisor" class="icon-btn" type="button" title="Advisor (A)" aria-label="Advisor" data-tip="Advisor · A"><svg class="ico" aria-hidden="true"><use href="#i-chat"/></svg></button>
+      <span class="dock-sep" aria-hidden="true"></span>
+      <button id="dock-help" class="icon-btn" type="button" title="Help and shortcuts (?)" aria-label="Help and shortcuts" data-tip="Help · ?"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg></button>
+    </nav>
+
     <footer class="bottom-bar">
       <label class="scale-choice" for="map-scale"
         ><span id="scale-caption">Scale</span
@@ -189,6 +296,7 @@
         <span id="scale-text">50 m</span>
       </div>
     </footer>
+
     <aside class="panel advisor-panel" id="advisor-panel" data-expanded="true" aria-label="Advisor conversation">
       <div class="advisor-head">
         <div>
@@ -197,19 +305,36 @@
           <p class="advisor-subject" data-advisor-subject>No protagonist chosen</p>
           <p class="advisor-relationship" data-advisor-relationship hidden></p>
         </div>
-        <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="true" aria-controls="advisor-log">Hide Advisor</button>
+        <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="true" aria-controls="advisor-log" title="Hide Advisor" aria-label="Hide Advisor">
+          <svg class="ico ico-sm" aria-hidden="true"><use href="#i-chat"/></svg>
+          <span class="btn-label" data-advisor-toggle-label>Hide</span>
+        </button>
       </div>
-      <p class="hint advisor-hint">You advise; the character decides. Advice is never a command.</p>
-      <div class="advisor-log" id="advisor-log" data-advisor-log role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation so far"></div>
-      <div class="advisor-suggestions" data-advisor-suggestions aria-label="Example questions"></div>
-      <div class="advisor-followups" data-advisor-followups hidden aria-label="Follow-up questions"></div>
-      <form class="advisor-form" data-advisor-form autocomplete="off">
-        <label class="sr-only" for="advisor-input">Message to the protagonist</label>
-        <input id="advisor-input" data-advisor-input type="text" name="message" maxlength="280" placeholder="Ask or advise…" enterkeyhint="send" />
-        <button type="submit">Send</button>
-      </form>
-      <p class="advisor-status" data-advisor-status role="status" aria-live="polite" data-state="idle">idle</p>
+      <div class="panel-tabs advisor-tabs" role="tablist" aria-label="Advisor categories" data-ui-tabs="advisor">
+        <button class="panel-tab" type="button" role="tab" id="advisor-tab-talk" data-tab="talk" aria-selected="true" aria-controls="advisor-pane-talk" title="Conversation">
+          <svg class="ico" aria-hidden="true"><use href="#i-chat"/></svg><span>Talk</span>
+        </button>
+        <button class="panel-tab" type="button" role="tab" id="advisor-tab-ideas" data-tab="ideas" aria-selected="false" aria-controls="advisor-pane-ideas" title="Prompt ideas">
+          <svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg><span>Ideas</span>
+        </button>
+      </div>
+      <div class="panel-pane" id="advisor-pane-talk" data-pane="talk" role="tabpanel" aria-labelledby="advisor-tab-talk">
+        <p class="hint advisor-hint">You advise; the character decides. Advice is never a command.</p>
+        <div class="advisor-log" id="advisor-log" data-advisor-log role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation so far"></div>
+        <form class="advisor-form" data-advisor-form autocomplete="off">
+          <label class="sr-only" for="advisor-input">Message to the protagonist</label>
+          <input id="advisor-input" data-advisor-input type="text" name="message" maxlength="280" placeholder="Ask or advise…" enterkeyhint="send" />
+          <button type="submit" aria-label="Send message" title="Send"><svg class="ico" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </form>
+        <p class="advisor-status" data-advisor-status role="status" aria-live="polite" data-state="idle">idle</p>
+      </div>
+      <div class="panel-pane" id="advisor-pane-ideas" data-pane="ideas" role="tabpanel" aria-labelledby="advisor-tab-ideas" hidden>
+        <p class="hint advisor-hint">Tap a question to ask it, or type your own advice.</p>
+        <div class="advisor-suggestions" data-advisor-suggestions aria-label="Example questions"></div>
+        <div class="advisor-followups" data-advisor-followups hidden aria-label="Follow-up questions"></div>
+      </div>
     </aside>
+
     <div class="telemetry">
       <span id="backend">Connecting renderer</span><b>·</b
       ><span id="tile-status">Preparing terrain</span>
@@ -220,6 +345,7 @@
     <div id="political-labels" aria-hidden="true"></div>
     <svg id="political-label-leaders" aria-hidden="true"></svg>
     <div id="map-labels" aria-hidden="true"></div>
+    <div id="ambient-chatter" aria-hidden="true"></div>
     <div id="selected-resident-marker" hidden aria-hidden="true"><span id="selected-resident-name"></span></div>
     <div id="selected-home-door-marker" hidden aria-hidden="true">Owned home entrance</div>
     <svg id="label-leaders" aria-hidden="true"></svg>
@@ -230,6 +356,46 @@
       id="focus-coordinates"
       aria-label="Focus latitude and longitude"
     ></output>
+
+    <div class="help-sheet" id="help-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="help-card">
+        <div class="eyebrow">FIELD MANUAL</div>
+        <h2 id="help-title">How to play</h2>
+        <p class="help-sub">You are the voice in the protagonist's ear. Explore the realm, follow real residents, and advise — never command.</p>
+        <div class="help-grid">
+          <div class="help-group">
+            <h3>Move around</h3>
+            <div class="help-row"><span>Pan the map</span><kbd>Drag</kbd></div>
+            <div class="help-row"><span>Zoom</span><kbd>Scroll</kbd></div>
+            <div class="help-row"><span>Rotate</span><kbd>Q</kbd><kbd>E</kbd></div>
+            <div class="help-row"><span>Keyboard pan</span><kbd>W A S D</kbd></div>
+            <div class="help-row"><span>Reset north</span><kbd>C</kbd></div>
+          </div>
+          <div class="help-group">
+            <h3>Quick actions</h3>
+            <div class="help-row"><span>Home village</span><kbd>H</kbd></div>
+            <div class="help-row"><span>Realm view</span><kbd>R</kbd></div>
+            <div class="help-row"><span>Travel menu</span><kbd>T</kbd></div>
+            <div class="help-row"><span>Nearest resident</span><kbd>F</kbd></div>
+            <div class="help-row"><span>Map layers</span><kbd>L</kbd></div>
+            <div class="help-row"><span>Advisor panel</span><kbd>A</kbd></div>
+            <div class="help-row"><span>Your protagonist</span><kbd>P</kbd></div>
+            <div class="help-row"><span>Gate watch</span><kbd>G</kbd></div>
+          </div>
+          <div class="help-group">
+            <h3>People</h3>
+            <div class="help-row"><span>Inspect nearest person</span><kbd>Enter</kbd></div>
+            <div class="help-row"><span>Click a resident</span><kbd>Click</kbd></div>
+            <div class="help-row"><span>Ambient chats</span><kbd>Watch</kbd></div>
+            <div class="help-row"><span>Make protagonist</span><kbd>Card</kbd></div>
+          </div>
+        </div>
+        <button class="icon-btn help-close" id="help-close" type="button">
+          <svg class="ico ico-sm" aria-hidden="true"><use href="#i-close"/></svg><span class="btn-label">Back to the map</span>
+        </button>
+      </div>
+    </div>
+
     <div id="loading" role="status" aria-live="polite">
       <div class="load-confetti" aria-hidden="true">
         <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>

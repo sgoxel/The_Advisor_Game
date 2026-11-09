@@ -1,4 +1,4 @@
-import { expandInformation } from "../information-panel.js";
+import { expandInformation, showRegionTab } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 
 const VIEWPORTS = [
@@ -61,8 +61,8 @@ for (const viewport of VIEWPORTS) {
       }),
     );
     await page.goto("/");
-    await expandInformation(page);
     await page.waitForFunction(() => window.advisorWorld?.state.settled);
+    await showRegionTab(page, "layers");
     await page.locator("#map-scale").selectOption("20");
     await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI - 0.001, 0.22));
     await page.waitForFunction(() => window.advisorWorld.state.settled);

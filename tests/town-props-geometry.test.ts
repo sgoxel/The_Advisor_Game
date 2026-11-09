@@ -440,7 +440,7 @@ test('playgrounds: the shade tree stands >= 1.2 m inside the fence', () => {
 });
 
 test('yard objects stay inside their footprint, within budget, close-up only and deterministic', () => {
-  const SIZES: Record<string, [number, number]> = { woodpile: [1.9, 1.1], barrels: [1.3, .9], cart: [1.5, 2.4], washline: [3.2, .5], coop: [2.6, 2.2], 'door-bench': [2.6, .6] };
+  const SIZES: Record<string, [number, number]> = { woodpile: [1.9, 1.1], barrels: [1.3, .9], cart: [1.5, 2.4], washline: [3.2, .5], coop: [2.6, 2.2], 'door-bench': [2.6, .6], beehives: [1.7, 1], trough: [1.9, .8], hayrack: [2.2, 1.1], pottery: [1.5, .9] };
   for (const [label, [w, d]] of Object.entries(SIZES)) for (const variant of [1, 7, 42, 999]) for (const yawRad of [0, .7, -2.1]) {
     const g = buildPropForTest({...base, kind: 'yard-prop', label, widthM: w, depthM: d, variant, yawRad});
     // Procedural kits stay under 120 triangles; a loaded Blender model (src/models) is drawn exactly.

@@ -1,4 +1,7 @@
 import { residentFootRingGeometry } from "./resident-foot-ring.ts";
+import { separateVisibleActors } from "./actor-separation.ts";
+import { createAmbientChatter, type ChatterActor } from "./ambient-chatter.ts";
+import { setupUiShell } from "./ui-shell.ts";
 import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
@@ -23,6 +26,7 @@ import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setP
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
+import "./ui-kit.css";
 import {
   WORLD_SEED,
   WORLD_SIZE,
@@ -2368,6 +2372,10 @@ async function start() {
   let lastResidentInspectorOpen = !$("travel-panel").hidden;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
+  // Presentation-only ambient exchange between nearby rendered residents.
+  const chatter = createAmbientChatter($("ambient-chatter"));
+  const chatterHead = new pc.Vec3(), chatterScreen = new pc.Vec3();
+  let chatterSpeakers: ChatterActor[] = [], lastChatterScan = 0;
   let labelFingerprint = "";
   let labelAnchorKey = "";
   let labelMeasurementsDirty = true;
@@ -2637,6 +2645,47 @@ async function start() {
     // All true on-world 2D illustrated residents face the current camera;
     // their feet, routes, identities and picker remain Simulation-authoritative.
     for (const actor of actors) if (actor.enabled) characterVisuals.face(actor, camera);
+    // Presentation-only crowd separation: two people can legitimately share a
+    // doorway or handover spot, but the cut-outs must never draw as one figure.
+    // Only the drawn position is nudged; Simulation coordinates are untouched.
+    const visibleActors = [...actorSources].filter(([actor]) => actor.enabled && actorResidents.has(actor));
+    if (visibleActors.length > 1) {
+      const separated = separateVisibleActors(visibleActors.map(([actor, source]) => ({
+        code: actorResidents.get(actor)!.code, x: source.x, z: source.z,
+      })));
+      for (const [actor] of visibleActors) {
+        const point = separated.get(actorResidents.get(actor)!.code);
+        if (point) positionActor(actor, point.x, point.z);
+      }
+    }
+    // Nearby people occasionally trade a short line. This is scenery, not a
+    // conversation with the Advisor and never a command or world fact. The
+    // screen scan is throttled; bubbles still follow the cached anchors.
+    if (projectionTransition <= 0.001 && camera.camera && visibleActors.length > 1) {
+      if (now - lastChatterScan > 400) {
+        lastChatterScan = now;
+        chatterSpeakers = [];
+        for (const [actor] of visibleActors) {
+          const resident = actorResidents.get(actor);
+          if (!resident) continue;
+          characterVisuals.headPoint(actor, chatterHead);
+          camera.camera.worldToScreen(chatterHead, chatterScreen);
+          if (chatterScreen.x < 12 || chatterScreen.x > innerWidth - 12 ||
+              chatterScreen.y < 100 || chatterScreen.y > innerHeight - 110) continue;
+          chatterSpeakers.push({
+            code: resident.code, name: resident.name, role: String(resident.role),
+            x: actor.getPosition().x, z: actor.getPosition().z,
+            screenX: chatterScreen.x, screenY: chatterScreen.y,
+          });
+        }
+        // Stable order keeps the pair choice identical between scans.
+        chatterSpeakers.sort((a, b) => a.code.localeCompare(b.code));
+      }
+      chatter.update(now, simulationTick, chatterSpeakers);
+    } else {
+      chatterSpeakers = [];
+      chatter.update(now, simulationTick, []);
+    }
     // Keep one screen-space marker attached to the actual enabled 3D-world actor.
     // A popup with no rendered, onscreen resident gets no invented world anchor.
     const inspectedCode = npcPopupCode();
@@ -3513,6 +3562,14 @@ async function start() {
     },
   });
   mountAdvisorPanel();
+  // Compact shell: icon dock, segmented tabs, shortcuts and the help sheet.
+  // Every action forwards to the authoritative controls above.
+  setupUiShell({
+    findNearestResident: () => {
+      canvas.focus({ preventScroll: true });
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    },
+  });
   app.start();
 }
 

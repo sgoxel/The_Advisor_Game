@@ -413,7 +413,32 @@ function addAssetMesh(f: Frame, mesh: AssetMesh) {
   for (let t = 0; t < mesh.triangles; t++)
     f.b.triangle(at(mesh.indices[t * 3]), at(mesh.indices[t * 3 + 1]), at(mesh.indices[t * 3 + 2]), [mesh.colors[t * 3], mesh.colors[t * 3 + 1], mesh.colors[t * 3 + 2]]);
 }
-/** One seeded yard object of a home, facing local +z, inside its YARD_PROP_SIZES footprint (world.ts); ≤ 90 triangles. */
+/** Stone horse trough facing local +z: four stone walls, water surface and two end blocks; ~44 triangles. */
+function addTrough(f: Frame, lx: number, lz: number, w = 1.7, d = .7) {
+  const c = sub(f, lx, lz, 0), h = .52, t = .12;
+  for (const side of [-1, 1]) {
+    cuboid(c, side * (w / 2 - t / 2), 0, 0, t, h, d, STONE);
+    cuboid(c, 0, 0, side * (d / 2 - t / 2), w - t * 2, h, t, STONE);
+  }
+  polygon(c.b, [pt(c, -w / 2 + t, h - .1, -d / 2 + t), pt(c, w / 2 - t, h - .1, -d / 2 + t),
+    pt(c, w / 2 - t, h - .1, d / 2 - t), pt(c, -w / 2 + t, h - .1, d / 2 - t)], pt(c, 0, h - .5, 0), WATER);
+  cuboid(c, -w / 2 + .06, 0, 0, .12, h + .16, d + .08, PALE_STONE);
+  cuboid(c, w / 2 - .06, 0, 0, .12, h + .16, d + .08, PALE_STONE);
+}
+/** Timber notice board with a small hood and pinned notices, facing local +z; ~46 triangles. */
+function addNoticeBoard(f: Frame, variant: number) {
+  const r = seeded(variant ^ 0x4b17);
+  for (const side of [-1, 1]) cuboid(f, side * .88, 0, -.02, .1, 2.05, .1, DARK_WOOD);
+  cuboid(f, 0, .82, 0, 1.82, .82, .09, WOOD);
+  cuboid(f, 0, 1.62, -.02, 2.02, .1, .22, DARK_WOOD);
+  cuboid(f, 0, 1.72, -.09, 2.1, .07, .38, color(104, 72, 50));
+  const notices = 2 + Math.floor(r() * 3);
+  for (let i = 0; i < notices; i++) {
+    const x = -.65 + (i + .5) * 1.3 / notices, y = .9 + r() * .55;
+    cuboid(f, x, y, .055, .26, .2, .015, pick(r, [CREAM, WHITE, PALE_STONE]));
+  }
+}
+/** One seeded yard object of a home, facing local +z, inside its YARD_PROP_SIZES footprint (world.ts); ≤ 120 triangles. */
 function addYardProp(f: Frame, kind: string, variant: number) {
   const r = seeded(variant ^ 0x7a2d);
   if (kind === "woodpile") {
@@ -466,6 +491,35 @@ function addYardProp(f: Frame, kind: string, variant: number) {
     // 2.6 m footprint: the bench on the left, room for a small flower pot on the right.
     addBench(f, -.4, 0, 0);
     if (r() < .5) addPlanter(f, .95, 0, 0, variant, .5, .5, .45);
+  } else if (kind === "trough") {
+    addTrough(f, 0, 0, 1.7, .62);
+  } else if (kind === "beehives") {
+    // A low bench of straw skeps under a little rain hood.
+    cuboid(f, 0, 0, 0, 1.5, .18, .7, WOOD);
+    for (const side of [-1, 1]) cuboid(f, side * .82, 0, 0, .1, .95, .08, DARK_WOOD);
+    cuboid(f, 0, .95, 0, 1.8, .06, .86, DARK_WOOD);
+    const skeps = 2 + Math.floor(r() * 2);
+    for (let i = 0; i < skeps; i++) {
+      const x = -.45 + i * .9 / Math.max(1, skeps - 1);
+      prism(f, x, .18, 0, .26, .34, 6, color(198, 170, 96));
+      coneAt(f, x, .5, 0, .22, .22, 6, color(178, 148, 82));
+    }
+  } else if (kind === "hayrack") {
+    // Timber drying rack with a low mound of hay beneath it.
+    for (const side of [-1, 1]) {
+      beam(f.b, pt(f, side * .9, .02, -.3), pt(f, side * .78, 1.6, 0), .07, .07, DARK_WOOD);
+      beam(f.b, pt(f, side * .9, .02, .3), pt(f, side * .78, 1.6, 0), .07, .07, DARK_WOOD);
+    }
+    for (const y of [.55, .95, 1.32]) cuboid(f, 0, y, 0, 1.75, .07, .07, WOOD);
+    coneAt(f, 0, .02, 0, .48, .6, 7, color(206, 176, 92), color(186, 156, 78));
+  } else if (kind === "pottery") {
+    // Stacked jars and a crate of kindling waiting for market.
+    addCrate(f, -.52, 0, -.05, .3, BURLAP);
+    const pots: [number, number, number, number][] = [[.3, -.1, .26, .42], [-.24, .12, .22, .5], [.42, .12, .2, .34]];
+    for (const [x, z, radius, height] of pots) {
+      prism(f, x, 0, z, radius, height, 5, color(168, 106, 74), true, color(138, 84, 58));
+      prism(f, x, height, z, radius * .42, .12, 5, color(138, 84, 58));
+    }
   }
 }
 /** Market stall facing local +z: 4 posts, counter, produce, sloping striped awning; 64 triangles. */
@@ -1373,6 +1427,10 @@ function drawFeature(feature: any, tileSize: number, layers: LayerBuilders) {
     if (close) addBench(frameOf(closeDetail, yaw), 0, 0, 0);
   } else if (feature.kind === "planter") {
     if (close) addPlanter(frameOf(closeDetail, yaw), 0, 0, 0, variant, feature.widthM ?? 1.4, feature.depthM ?? .7);
+  } else if (feature.kind === "notice-board") {
+    if (close) addNoticeBoard(frameOf(closeDetail, yaw), variant);
+  } else if (feature.kind === "trough") {
+    if (close) addTrough(frameOf(closeDetail, yaw), 0, 0, feature.widthM ?? 1.7, feature.depthM ?? .7);
   } else if (feature.kind === "yard-prop") {
     // A Blender model when one is loaded for this kind (src/models), otherwise the procedural kit.
     const asset = close ? assetFor(feature.label, variant) : undefined;

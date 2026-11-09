@@ -24,6 +24,8 @@ test("travel panel solves neighbouring routes and draws the selected route", asy
   expect(acceptance.searchBounds.maxExpansions).toBeGreaterThan(0);
 
   await page.locator("#open-travel").click();
+  // Routes are their own segment now; reveal it before reading the list.
+  await page.locator("#travel-tab-routes").click();
 
   const rows = page.locator("#route-list .route-row");
   await expect(rows.first()).toBeVisible();
@@ -90,9 +92,10 @@ test("phone route preview exposes the map and never labels map focus as travel",
   await expect(page.locator("#home")).toContainText("Focus home village");
   await expect(page.locator(".travel-hint .flat-only")).toContainText("Drag to pan");
   await page.locator("#open-travel").click();
-  await expect(page.locator("#visit-city")).toHaveText("Focus city");
-  await expect(page.locator("#visit-village")).toHaveText("Focus village");
+  await expect(page.locator("#visit-city")).toHaveAttribute("aria-label", "Focus selected city");
+  await expect(page.locator("#visit-village")).toHaveAttribute("aria-label", "Focus selected village");
   await expect(page.locator("#travel-panel")).toContainText("does not move the protagonist");
+  await page.locator("#travel-tab-routes").click();
 
   const first = page.locator("#route-list .route-row").first();
   await expect(first).toBeVisible();

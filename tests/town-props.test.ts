@@ -36,7 +36,7 @@ function townFeatures(place: Place, level: number, radius: number) {
   return [...seen.values()];
 }
 
-const TOWN_STREET_KINDS = ["bench", "planter"];
+const TOWN_STREET_KINDS = ["bench", "planter", "notice-board", "trough"];
 const city = cities[0], village = villages[0];
 const townCache = new Map<string, Feature[]>();
 /** Town features over the 5x5 size-8 tiles around a place (cached: the city is the costly one). */

@@ -1,4 +1,4 @@
-import { expandInformation } from "../information-panel.js";
+import { expandInformation, showRegionTab } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 test("desktop exploration, LOD, cell inspection and return navigation", async ({
   page,
@@ -32,8 +32,7 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
   );
   await expect(page.locator("#detail-name")).toHaveText("Realm");
   await expect(page.locator("#place-name")).toHaveText("Eldermere");
-  await expect(page.locator("#grid")).toBeHidden();
-  await expect(
+  await expect(page.locator("#grid")).toBeHidden();  await expect(
     page.locator(".map-label.continent", { hasText: "Eldermere" }),
   ).toBeVisible();
   await page.screenshot({ path: "test-results/realm-desktop.png" });
@@ -58,7 +57,9 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
   expect(flat.presentation).toBe("flat");
   expect(flat.view.x).toBeCloseTo(turned.x, 6);
   expect(flat.view.z).toBeCloseTo(turned.z, 6);
+  await showRegionTab(page, "layers");
   await expect(page.locator("#grid")).toBeVisible();
+  await page.locator("#region-tab-place").click();
   await page.locator("#home").click();
   await page.waitForFunction(
     () =>
@@ -122,8 +123,8 @@ test("layer controls hide structure details without leaving floating decorations
 }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/");
-  await expandInformation(page);
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
+  await showRegionTab(page, "layers");
   const initial = await page.evaluate(
     () => window.advisorWorld.state.visibleMeshes,
   );

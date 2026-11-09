@@ -2496,8 +2496,13 @@ export class LazySimulation {
         </dl>
         <p class="hint" id="resident-performance" aria-live="polite"></p>
       </details>`;
-    const livingWorld = document.getElementById("simulation-status")?.previousElementSibling;
-    if (livingWorld) panel.insertBefore(section, livingWorld);
+    // The travel panel is now segmented; the resident inspector belongs to the
+    // Living World segment, above its "nearest resident" action.
+    const worldPane = document.getElementById("travel-pane-world");
+    const nearestAction = document.getElementById("inspect-nearest");
+    if (worldPane && nearestAction && nearestAction.parentElement === worldPane)
+      worldPane.insertBefore(section, nearestAction);
+    else if (worldPane) worldPane.append(section);
     else panel.append(section);
     this.inspector = section;
     const select = document.getElementById("resident-select") as HTMLSelectElement | null;

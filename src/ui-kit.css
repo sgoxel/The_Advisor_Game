@@ -1,0 +1,721 @@
+/* ==========================================================================
+   UI kit: compact icon controls, segmented panels, motion and play aids.
+   Additive to style.css. Existing IDs stay intact so the Simulation-facing
+   wiring in main.ts is unchanged.
+   ========================================================================== */
+
+:root {
+  --ui-ease: cubic-bezier(.2, .7, .25, 1);
+  --ui-fast: 140ms;
+  --ui-soft: 260ms;
+  --ui-line: #d8b9793d;
+  --ui-face: #1b2f27;
+  --ui-face-hi: #274237;
+  --ui-gold: #e2c489;
+}
+
+/* -- Icon primitives ------------------------------------------------------ */
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ico {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.ico-sm { width: 15px; height: 15px; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line);
+  background: linear-gradient(180deg, #223c32, #182b24);
+  color: #e9e3d0;
+  color-scheme: dark;
+  transition:
+    transform var(--ui-fast) var(--ui-ease),
+    background var(--ui-fast) var(--ui-ease),
+    border-color var(--ui-fast) var(--ui-ease),
+    box-shadow var(--ui-fast) var(--ui-ease),
+    color var(--ui-fast) var(--ui-ease);
+  will-change: transform;
+}
+
+.icon-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #2b4a3d, #203830);
+  border-color: #d8b97970;
+  box-shadow: 0 5px 14px #07171255, inset 0 1px 0 #ffffff14;
+}
+
+.icon-btn:active {
+  transform: translateY(1px) scale(.955);
+  box-shadow: inset 0 2px 6px #0006;
+  transition-duration: 60ms;
+}
+
+.icon-btn[aria-pressed="true"],
+.icon-btn[aria-selected="true"] {
+  color: #172823;
+  background: linear-gradient(180deg, #f0d79a, #d8b979);
+  border-color: #f5e2b4;
+  box-shadow: 0 0 0 1px #d8b97933, 0 4px 14px #d8b9792e;
+}
+
+.icon-btn .ico {
+  transition: transform var(--ui-soft) var(--ui-ease);
+}
+
+.icon-btn:hover .ico { transform: scale(1.12) rotate(-2deg); }
+.icon-btn:active .ico { transform: scale(.94); }
+
+/* Text still present in a few places, but compact now. */
+.icon-btn .btn-label {
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Tooltips for the floating dock and map controls (not clipped by panels). */
+[data-tip] { position: relative; }
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  transform: translate(-50%, 4px);
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid #d8b97955;
+  background: #0f1f19f2;
+  color: #f2ead5;
+  font-size: 10px;
+  letter-spacing: .05em;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px #0007;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ui-fast) var(--ui-ease), transform var(--ui-fast) var(--ui-ease);
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* -- Panel collapse / segmented categories -------------------------------- */
+.panel-collapse {
+  position: relative;
+  z-index: 1;
+  background: #26382f;
+  border-color: #d8b9794d;
+}
+
+.region-head { min-width: 0; }
+.region-head .eyebrow { margin-bottom: 4px; }
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 10px;
+  padding: 4px;
+  border-radius: 9px;
+  background: #0f1e18cc;
+  border: 1px solid #ffffff12;
+  box-shadow: inset 0 1px 4px #0005;
+}
+
+.panel-tab {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #a9b8a8;
+  font-size: 8.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  transition:
+    color var(--ui-fast) var(--ui-ease),
+    background var(--ui-fast) var(--ui-ease),
+    transform var(--ui-fast) var(--ui-ease);
+}
+
+.panel-tab .ico { width: 14px; height: 14px; flex: 0 0 auto; }
+.panel-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.panel-tab:hover { color: #efe6cf; background: #ffffff0d; }
+
+.panel-tab[aria-selected="true"] {
+  color: #172823;
+  background: linear-gradient(180deg, #f0d79a, #d8b979);
+  box-shadow: 0 2px 7px #0005;
+  transform: translateY(-1px);
+}
+
+.panel-tab:active { transform: scale(.97); }
+
+.panel-pane { animation: pane-in var(--ui-soft) var(--ui-ease); }
+.panel-pane[hidden] { display: none !important; }
+
+/* Entrance motion only shifts the pane; opacity never starts at zero, so a
+   throttled animation in a background tab can never hide real controls. */
+@keyframes pane-in {
+  from { transform: translateY(4px); }
+  to { transform: none; }
+}
+
+/* Region panel: compact icon action row. */
+.region-panel .region-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.region-panel .region-actions .icon-btn { width: 100%; }
+
+.region-panel .travel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #2a473a, #1c3128);
+  border: 1px solid #d8b97945;
+  transition: transform var(--ui-fast) var(--ui-ease), box-shadow var(--ui-fast) var(--ui-ease), background var(--ui-fast) var(--ui-ease);
+}
+
+.region-panel .travel-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #355846, #21392e);
+  box-shadow: 0 6px 16px #07171255;
+}
+
+.region-panel .travel-button:active { transform: translateY(1px) scale(.98); }
+
+/* Layer rows feel like small switches. */
+.layer-controls label {
+  padding: 5px 6px;
+  margin-inline: -6px;
+  border-radius: 6px;
+  transition: background var(--ui-fast) var(--ui-ease);
+}
+.layer-controls label:hover { background: #ffffff0a; }
+.layer-controls input {
+  appearance: none;
+  width: 26px !important;
+  height: 15px !important;
+  border-radius: 999px;
+  border: 1px solid #d8b9794a;
+  background:
+    radial-gradient(circle at 28% 50%, #93a795 0 42%, transparent 44%),
+    #0e1c17;
+  position: relative;
+  cursor: pointer;
+  transition: background var(--ui-fast) var(--ui-ease), border-color var(--ui-fast) var(--ui-ease);
+}
+.layer-controls input:checked {
+  background:
+    radial-gradient(circle at 72% 50%, #f2e5c0 0 42%, transparent 44%),
+    #3f6b4d;
+  border-color: #a9c995;
+}
+
+/* Travel panel tabs and compact action grid. */
+.travel-panel .region-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 12px;
+}
+.travel-panel .region-actions .icon-btn { width: 100%; }
+.travel-panel .region-actions .btn-label { font-size: 9px; letter-spacing: .04em; text-transform: none; }
+.icon-btn.wide { width: 100%; margin-top: 12px; }
+.icon-btn.wide .btn-label { text-transform: none; font-size: 11px; letter-spacing: .02em; }
+.header-help { display: none; }
+@media (max-width: 939px) {
+  .header-help { display: inline-flex; }
+}
+.travel-panel select { min-height: 44px; }
+
+/* Advisor: segmented Talk / Ideas strip. */
+.advisor-tabs {
+  margin: 2px 0 0;
+}
+
+.advisor-panel[data-expanded="false"] .advisor-tabs { display: none; }
+.advisor-panel[data-expanded="false"] .advisor-pane,
+.advisor-panel[data-expanded="false"] .advisor-followups { display: none !important; }
+
+/* -- Floating command dock ------------------------------------------------- */
+.command-dock {
+  position: absolute;
+  right: calc(96px + env(safe-area-inset-right));
+  bottom: calc(140px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 12px;
+  background: #162521e8;
+  border: 1px solid #d8b97938;
+  box-shadow: 0 10px 28px #0a1a1455, inset 0 1px 0 #ffffff0f;
+  backdrop-filter: blur(12px);
+}
+
+.command-dock .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 9px;
+  background: #1c3028;
+  border-color: #ffffff14;
+}
+
+.command-dock .icon-btn:hover {
+  background: #2b4a3d;
+  border-color: #d8b97970;
+}
+
+.command-dock .icon-btn.primary {
+  color: #1a271f;
+  background: linear-gradient(180deg, #f1d99f, #d8b979);
+  border-color: #f5e3b6;
+}
+
+.command-dock .dock-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  background: #ffffff1a;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .command-dock .icon-btn.primary { animation: dock-breathe 4.5s ease-in-out infinite; }
+}
+@keyframes dock-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 #d8b97900; }
+  50% { box-shadow: 0 0 0 4px #d8b97912, 0 4px 16px #d8b97928; }
+}
+
+/* -- Help sheet ------------------------------------------------------------ */
+.help-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: #08120f9e;
+  backdrop-filter: blur(5px);
+  animation: help-fade var(--ui-soft) var(--ui-ease);
+}
+
+.help-sheet[hidden] { display: none !important; }
+
+.help-card {
+  width: min(560px, 100%);
+  max-height: min(78dvh, 620px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 14px;
+  border: 1px solid #d8b97957;
+  background: linear-gradient(180deg, #1b3128f7, #12211cf7);
+  box-shadow: 0 30px 80px #000a;
+}
+
+.help-card h2 {
+  font-size: 29px;
+  margin: 4px 0 6px;
+}
+
+.help-card .help-sub {
+  color: #a9b8a8;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.help-group h3 {
+  margin: 0 0 7px;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ui-gold);
+}
+
+.help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: #dbe3d6;
+  padding: 5px 0;
+  border-bottom: 1px dashed #ffffff12;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 22px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid #ffffff2b;
+  border-bottom-width: 2px;
+  background: #0e1c17;
+  color: #f0e6cd;
+  font: 10px/1 "DM Sans", sans-serif;
+  letter-spacing: .04em;
+}
+
+.help-close {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  margin-top: 18px;
+}
+
+@keyframes help-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* -- Ambient NPC chatter --------------------------------------------------- */
+#ambient-chatter {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.chat-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: min(230px, 42vw);
+  padding: 6px 9px 7px;
+  border-radius: 11px 11px 11px 3px;
+  border: 1px solid #e8d9ab70;
+  background: linear-gradient(180deg, #f8f0d9f2, #e9ddbcf2);
+  color: #22342c;
+  font-size: 11px;
+  line-height: 1.35;
+  box-shadow: 0 6px 18px #0006;
+  transform-origin: 10% 100%;
+  transition: opacity var(--ui-soft) var(--ui-ease);
+  will-change: transform;
+}
+
+.chat-bubble .chat-who {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #7c5c2f;
+}
+
+.chat-bubble::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: #ece0bf;
+  border-right: 1px solid #e8d9ab70;
+  border-bottom: 1px solid #e8d9ab70;
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-bubble { animation: chat-pop 260ms var(--ui-ease); }
+}
+@keyframes chat-pop {
+  from { transform: translateY(6px) scale(.94); }
+  to { transform: none; }
+}
+
+/* -- Small polish on existing controls ------------------------------------ */
+.map-controls button {
+  border-radius: 9px;
+  transition: transform var(--ui-fast) var(--ui-ease), background var(--ui-fast) var(--ui-ease), border-color var(--ui-fast) var(--ui-ease), box-shadow var(--ui-fast) var(--ui-ease);
+}
+.map-controls button:hover {
+  transform: translateY(-1px);
+  background: #274237;
+  border-color: #d8b97970;
+  box-shadow: 0 5px 14px #0717124d;
+}
+.map-controls button:active { transform: translateY(1px) scale(.95); }
+
+.advisor-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--ui-fast) var(--ui-ease), box-shadow var(--ui-fast) var(--ui-ease), filter var(--ui-fast) var(--ui-ease);
+}
+.advisor-form button:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 5px 14px #d8b97933; }
+.advisor-form button:active { transform: translateY(1px) scale(.97); }
+
+.advisor-suggestion {
+  transition: transform var(--ui-fast) var(--ui-ease), background var(--ui-fast) var(--ui-ease), border-color var(--ui-fast) var(--ui-ease);
+}
+.advisor-suggestion:hover { transform: translateY(-1px); border-color: #d8b97955; }
+.advisor-suggestion:active { transform: translateY(1px) scale(.97); }
+
+/* Injected transport entry (src/transport-inspector.ts): compact like the
+   other secondary actions instead of a half-width banner. */
+#open-transport {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 7px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid #ffffff18;
+  background: #ffffff06;
+  color: #c9d5c6;
+  font-size: 9px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  transition: background var(--ui-fast) var(--ui-ease), transform var(--ui-fast) var(--ui-ease);
+}
+#open-transport:hover { background: #ffffff12; transform: translateY(-1px); }
+#open-transport:active { transform: translateY(1px) scale(.98); }
+
+/* Keep the region panel a simple column even in globe portrait, where the
+   legacy grid assumed only a few direct children. */
+body.globe-mode .region-panel.has-tabs {
+  display: block;
+}
+
+/* The Advisor steps aside while the travel menu is open, so destination
+   pickers and route lists never sit underneath a second panel. It returns as
+   soon as the menu closes. */
+.advisor-panel {
+  transition: opacity var(--ui-soft) var(--ui-ease), transform var(--ui-soft) var(--ui-ease);
+}
+body.travel-panel-open .advisor-panel {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(10px);
+}
+
+/* Wide screens: the Advisor docks in the lower-right corner with the quick
+   dock directly beneath it, clear of the left information column, the
+   right-hand map controls and the resident popup. */
+@media (min-width: 940px) {
+  .advisor-panel {
+    left: auto;
+    right: calc(76px + env(safe-area-inset-right));
+    bottom: calc(200px + env(safe-area-inset-bottom));
+    width: clamp(300px, 27vw, 380px);
+    transform: none;
+  }
+  body.travel-panel-open .advisor-panel { transform: none; }
+  .command-dock {
+    left: auto;
+    right: calc(76px + env(safe-area-inset-right));
+    bottom: calc(140px + env(safe-area-inset-bottom));
+    transform: none;
+  }
+}
+
+/* Mid-width layouts (tablets and narrow desktops): keep the Advisor on the
+   right edge so the left information column always stays clear and clickable. */
+@media (min-width: 701px) and (max-width: 939px) {
+  .advisor-panel {
+    left: auto;
+    right: calc(17px + env(safe-area-inset-right));
+    width: min(360px, 46vw);
+  }
+  #region-panel:not(.minimized) {
+    max-height: calc(100dvh - 300px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
+/* A gentle one-time pulse on the collapsed information toggle, so the
+   smallest starting HUD still reveals where the panels live. */
+.discovery-pulse {
+  animation: discovery 2.6s var(--ui-ease) infinite;
+  border-color: #d8b97999;
+}
+@keyframes discovery {
+  0%, 100% { box-shadow: 0 0 0 0 #d8b97900; }
+  45% { box-shadow: 0 0 0 6px #d8b9791f; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .discovery-pulse { animation: none; border-color: #d8b979cc; }
+}
+
+#advisor-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#advisor-toggle .btn-label {
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+
+@media (max-width: 939px) {
+  .command-dock { display: none; }
+}
+
+@media (max-width: 700px) {
+  /* Icon-only dialogue link plus a non-wrapping title keeps the phone header
+     on one line beside the clock. */
+  .masthead { gap: 8px; }
+  .masthead-title { min-width: 0; }
+  .masthead h1 { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .masthead .eyebrow { font-size: 8px; letter-spacing: 1px; }
+  .world-clock { flex: 0 0 auto; }
+}
+
+@media (max-width: 520px) {
+  /* The smallest header keeps only what is useful: crest, title, help, clock. */
+  .masthead .dialogue-map-link { display: none; }
+  .masthead #build-badge { display: none !important; }
+  .masthead h1 { font-size: 16px; }
+  .masthead-title { flex: 1 1 auto; }
+  .masthead-title .eyebrow { display: none; }
+  .world-clock .eyebrow,
+  .world-clock .local-time { display: none; }
+  .world-clock { padding: 7px 9px; font-size: 12px; }
+  .world-clock time { font-size: 11px; }
+}
+
+.dialogue-map-link {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+}
+
+@media (max-width: 700px) {
+  /* Leave room for the Advisor bar at the bottom of the screen. */
+  #region-panel:not(.minimized) { max-height: max(150px, calc(100dvh - 400px)); }
+  .panel-tab { min-height: 44px; font-size: 8px; padding: 0 2px; }
+  .panel-tab span { display: none; }
+  .panel-tab .ico { width: 17px; height: 17px; }
+  .dialogue-map-link { min-height: 44px; min-width: 44px; }
+  .region-panel .region-actions { grid-template-columns: 1fr 1fr; }
+  .travel-panel select { min-height: 44px; }
+  .chat-bubble { font-size: 10px; max-width: 52vw; }
+
+  /* An expanded Advisor is a bounded bottom sheet; the information column
+     always ends above it so neither panel hides the other's buttons. */
+  .advisor-panel[data-expanded="true"] {
+    max-height: min(46dvh, 380px);
+    overflow-y: auto;
+  }
+  body:has(.advisor-panel[data-expanded="true"]) #region-panel:not(.minimized) {
+    max-height: max(140px, calc(100dvh - 216px - min(46dvh, 380px)));
+  }
+}
+
+@media (max-height: 620px) {
+  .panel-tabs { margin: 8px 0 6px; }
+  .command-dock { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  /* Icon-only tabs keep the short panel readable. */
+  .panel-tab { font-size: 8px; padding: 0 2px; gap: 0; }
+  .panel-tab span { display: none; }
+  .panel-tab .ico { width: 17px; height: 17px; }
+  /* Short landscape: the header keeps only the crest, title, help and clock. */
+  .masthead .live,
+  .masthead #build-badge,
+  .masthead .dialogue-map-link { display: none !important; }
+  .masthead h1 { font-size: 19px; white-space: nowrap; }
+  .masthead .eyebrow { display: none; }
+  .world-clock .eyebrow,
+  .world-clock .local-time { display: none; }
+  .world-clock { margin-left: auto; flex: 0 0 auto; padding: 6px 9px; }
+  .world-clock time { font-size: 11px; white-space: nowrap; }
+  /* Keep the clock clear of the right-hand navigation column. */
+  .masthead { right: calc(70px + env(safe-area-inset-right)); }
+  .masthead h1 { overflow: hidden; text-overflow: ellipsis; }
+  .masthead-title { min-width: 0; }
+}
+
+/* Short landscape screens: the left column owns the map information, so the
+   Advisor bar moves to the right edge instead of covering its controls. */
+@media (max-height: 620px) and (min-width: 701px) {
+  .advisor-panel {
+    left: auto;
+    right: calc(17px + env(safe-area-inset-right));
+    width: min(360px, 48vw);
+    bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+  .advisor-panel[data-expanded="true"] {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+  }
+  .advisor-panel[data-expanded="true"] .advisor-log { max-height: 84px; }
+  .command-dock { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn,
+  .icon-btn .ico,
+  .panel-tab,
+  .panel-pane,
+  .chat-bubble,
+  .map-controls button,
+  .advisor-form button,
+  .advisor-suggestion,
+  .command-dock .icon-btn.primary {
+    animation: none !important;
+    transition: none !important;
+  }
+}

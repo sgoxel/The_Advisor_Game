@@ -82,7 +82,10 @@ export class AdvisorPanel {
     }
     this.renderSuggestions();
     this.refreshRelationship();
-    this.setExpanded(true);
+    // On phones and short landscape screens the Advisor starts as a compact
+    // bar so the map and the information panel keep their space; the header
+    // button or the quick dock expands it on demand.
+    this.setExpanded(window.innerWidth > 700 && window.innerHeight >= 640);
     this.appendNotice(`Offline Advisor ready · ${SENTENCE_LIBRARY_VERSION}`);
     void ADVISOR_DIALOGUE_VERSION;
   }
@@ -95,7 +98,12 @@ export class AdvisorPanel {
   setExpanded(expanded: boolean): void {
     this.root.setAttribute("data-expanded", String(expanded));
     this.toggle.setAttribute("aria-expanded", String(expanded));
-    this.toggle.textContent = expanded ? "Hide Advisor" : "Talk to your Advisor";
+    const label = expanded ? "Hide" : "Talk";
+    const text = this.toggle.querySelector<HTMLElement>("[data-advisor-toggle-label]");
+    if (text) text.textContent = label;
+    else this.toggle.textContent = expanded ? "Hide Advisor" : "Talk to your Advisor";
+    this.toggle.setAttribute("aria-label", expanded ? "Hide Advisor" : "Talk to your Advisor");
+    this.toggle.title = expanded ? "Hide Advisor" : "Talk to your Advisor";
     this.input.disabled = !expanded;
     if (expanded) this.input.focus({ preventScroll: true });
   }

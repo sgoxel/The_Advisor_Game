@@ -21,7 +21,7 @@ import { wrapSourceX } from "./planet.ts";
 import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 import { metresToSource, sourceUnitsPerMetreAt, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
 
-type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "street-joint" | "border" | "gate" | "guard-post" | "garden" | "path" | "roadside-tree" | "street-lamp" | "bench" | "planter" | "park" | "yard-prop";
+type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "street-joint" | "border" | "gate" | "guard-post" | "garden" | "path" | "roadside-tree" | "street-lamp" | "bench" | "planter" | "notice-board" | "trough" | "park" | "yard-prop";
 type MorphologyFeature = {
   kind: MorphologyKind;
   x: number;
@@ -66,22 +66,39 @@ const ROAD_BUCKET_SIZE = 2048;
 const ROAD_CLEARANCE_SUPPORT = 64;
 /** A bend turns a street joint on only beyond this angle (2 degrees). */
 const JOINT_TURN = Math.PI / 90;
-/** Benches and planters alternate every 28 m along the main street and the first city ring. */
+/** Street furniture repeats every 28 m along the main street and the first city ring. */
 const FURNITURE_SPACING_M = 28;
+/** Street furniture cycle: bench, planter, notice board, horse trough. [across, depth, label] */
+const STREET_FURNITURE: Record<"bench" | "planter" | "notice-board" | "trough", readonly [number, number, string]> = {
+  bench: [1.8, .6, "Bench"],
+  planter: [1.4, .7, "Flower planter"],
+  "notice-board": [2.2, .38, "Notice board"],
+  trough: [1.7, .7, "Horse trough"],
+};
 /** Pavement on each side of city streets and village main streets, drawn as part of the street. */
 const PAVEMENT_WIDTH_M = 1.8;
 /** Household yard objects (metres, width across × depth along the object's own +z). Drawn by geometry.ts addYardProp. */
 const YARD_PROP_SIZES = {
   woodpile: [1.9, 1.1], barrels: [1.3, .9], cart: [1.5, 2.4], washline: [3.2, .5], coop: [2.6, 2.2], "door-bench": [2.6, .6],
+  beehives: [1.7, 1.0], trough: [1.9, .8], hayrack: [2.2, 1.1], pottery: [1.5, .9],
 } as const;
 type YardPropKind = keyof typeof YARD_PROP_SIZES;
 const YARD_PROP_NAMES: Record<YardPropKind, string> = {
   woodpile: "Woodpile and chopping block", barrels: "Barrels", cart: "Hand cart", washline: "Washing line", coop: "Chicken coop", "door-bench": "Bench by the door",
+  beehives: "Row of straw beehives", trough: "Stone water trough", hayrack: "Timber hay rack", pottery: "Stacked pots and jars",
 };
 /** Seeded yard choices per slot: [probability that the slot is used, weighted kinds]. Villages are busier than cities. */
 const YARD_SLOTS: Record<"city" | "village", Record<"front" | "side" | "back", [number, [YardPropKind, number][]]>> = {
-  village: { front: [.35, [["door-bench", 1]]], side: [.75, [["woodpile", .45], ["barrels", .3], ["cart", .25]]], back: [.7, [["washline", .45], ["coop", .35], ["cart", .2]]] },
-  city: { front: [.2, [["door-bench", 1]]], side: [.5, [["barrels", .5], ["woodpile", .3], ["cart", .2]]], back: [.5, [["washline", .7], ["cart", .2], ["coop", .1]]] },
+  village: {
+    front: [.35, [["door-bench", 1]]],
+    side: [.78, [["woodpile", .33], ["barrels", .22], ["cart", .16], ["trough", .17], ["hayrack", .12]]],
+    back: [.74, [["washline", .30], ["coop", .24], ["cart", .13], ["beehives", .20], ["pottery", .13]]],
+  },
+  city: {
+    front: [.2, [["door-bench", 1]]],
+    side: [.55, [["barrels", .40], ["woodpile", .20], ["cart", .14], ["trough", .16], ["pottery", .10]]],
+    back: [.55, [["washline", .54], ["cart", .14], ["coop", .10], ["beehives", .12], ["pottery", .10]]],
+  },
 };
 const externalRoadBuckets = new Map<string, (typeof roads)[number][]>();
 const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
@@ -545,7 +562,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
           const partStart = arc, ux = dx / length, uz = dz / length;
           arc += length;
           if (furniture) {
-            // Every 28 m along the visible street: a bench, then a planter, alternating sides. Each slot is numbered even when skipped.
+            // Every 28 m along the visible street: bench, planter, notice board and trough in turn. Each slot is numbered even when skipped.
             const offset = street.width * .5 + metresToSource(1.6);
             while (nextSlot <= arc) {
               const t = (nextSlot - partStart) / length, px = a.x + dx * t, pz = a.z + dz * t, n = slot,
@@ -556,9 +573,10 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
               if (!within(x, z) || nearGate(x, z, metresToSource(8)) || lamps.some((lamp) => lamp.candidates.some((c) => Math.hypot(wrapSourceX(c.x - x), c.z - z) < metresToSource(2)))
                 || inPark(x, z, .5) || nearOtherStreet(plan, street.id, x, z, metresToSource(1)) || overlaps(resolution.staticOccupants, x, z, metresToSource(.8))
                 || homeFootprintHit(place, plan, resolution, x, z, .6)) continue;
-              const bench = n % 2 === 1, kind = bench ? "bench" : "planter", id = `${place.id}/${kind}/${street.id}/${n}`;
+              const kind = (["bench", "planter", "notice-board", "trough"] as const)[(n - 1) % 4],
+                [widthM, depthM, label] = STREET_FURNITURE[kind], id = `${place.id}/${kind}/${street.id}/${n}`;
               // The front (depth axis) looks back at the street.
-              add(kind, x, z, digest(id), id, { yawRad: Math.atan2(uz * side, -ux * side), widthM: bench ? 1.8 : 1.4, depthM: bench ? .6 : .7, label: bench ? "Bench" : "Flower planter" });
+              add(kind, x, z, digest(id), id, { yawRad: Math.atan2(uz * side, -ux * side), widthM, depthM, label });
             }
           }
         }
