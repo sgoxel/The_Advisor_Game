@@ -500,6 +500,25 @@ Simulation remains authoritative for:
 
 The PlayCanvas scene is presentation only. Renderer state, mesh transforms, depth buffers, physics helpers or visual effects must never silently become Simulation authority.
 
+## Interface and Play Aids
+
+The HUD is compact and segmented. Panel actions are icons with an accessible name and a hover tooltip; no control needs a sentence of button copy to be understood. Every panel is split into named categories so a phone screen never has to show one long column:
+
+- **Map information**: Place, Layers, Seed.
+- **Travel**: Destination, Routes, World. The Advisor steps aside while this panel is open.
+- **Advisor**: Talk and Ideas. Follow-up questions appear with the answers they belong to.
+
+A quick-action dock (Home, Realm, Travel, Nearest resident, Layers, Advisor, Help) sits beside the Advisor on roomy screens and is replaced by the same actions in the panels on phones. Buttons animate on hover, press and focus, and honour `prefers-reduced-motion`.
+
+Keyboard shortcuts: `H` home village, `R` realm view, `T` travel, `C` reset north, `L` layers, `A` Advisor, `F` nearest resident, `P` protagonist, `G` gate watch, `?` help. All are also listed in the in-game Field Manual.
+
+Two presentation-only layers make the street feel inhabited without touching Simulation authority:
+
+- **Crowd separation** (`src/actor-separation.ts`) nudges only the drawn position when two residents legitimately share one SEED spot, so simultaneous cut-outs never merge into one figure. Canonical coordinates, routes and picking identity stay authoritative.
+- **Ambient chatter** (`src/ambient-chatter.ts`) shows a short, deterministic exchange between two nearby rendered residents. Lines come from the pair's codes and the fantasy tick, so the same seed and moment always say the same thing; a trade line is only ever spoken by that trade. This is scenery, never an Advisor fact or a command.
+
+Environment variety: street furniture cycles bench, planter, notice board and horse trough along the main street and the first city ring. Household yards can also hold beehives, a stone water trough, a hay rack or stacked pottery beside the existing woodpile, barrels, cart, washing line and chicken coop. Every prop keeps the existing street, pavement, park and house clearances.
+
 ## PlayCanvas 3D World Standard
 
 Everything in the world is rendered as 3D presentation **except character artwork**.
