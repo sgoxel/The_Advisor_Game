@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { TERRAIN_PALETTE } from "../src/climate.ts";
 
 const doc = readFileSync(new URL("../docs/FAUNA_ARCHITECTURE.md", import.meta.url), "utf8");
@@ -106,7 +107,7 @@ test("the research WP is honestly labelled and no runtime fauna code exists yet"
   assert.match(doc, /does \*\*not\*\* claim that any animal exists/i);
 
   // Guard against accidental scope creep into the follow-on implementation WP.
-  const src = new URL("../src/", import.meta.url);
+  const srcRoot = fileURLToPath(new URL("../src/", import.meta.url));
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
@@ -115,7 +116,7 @@ test("the research WP is honestly labelled and no runtime fauna code exists yet"
       else if (name.endsWith(".ts")) files.push(full);
     }
   };
-  walk(src.pathname.replace(/^\//, ""));
+  walk(srcRoot);
   const runtime = files
     .map((file) => readFileSync(file, "utf8"))
     .filter((source) => /\b(?:fauna|animalHerd|speciesPopulation|spawnAnimal)\b/.test(source));
