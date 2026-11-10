@@ -19,6 +19,7 @@ import * as pc from "playcanvas";
 import { loadDefaultCharacter, DEFAULT_CHARACTER_HEIGHT_M } from "./default-character.ts";
 import { characterDrawableMeshes, summarizeCharacterPresentations } from "./character-model-policy.ts";
 import { labelAnchorFingerprint, labelLayoutNeedsMeasurement } from "./label-layout-cache.ts";
+import { setText } from "./idle-write-guard.ts";
 import { CHARACTER_TYPES, characterHeightM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
@@ -1361,14 +1362,23 @@ function processStreaming(material: pc.StandardMaterial) {
     setLoadingProgress(100);
   }
   const detailLabel = terrainDetailLabel(coverageComplete, currentDetailSettled);
-  $("tile-status").textContent =
+  // Compose first, then write only on change. A settled, unchanged frame must do
+  // zero DOM writes (WP-S009-002-001); previously this text node was rewritten on
+  // every rendered frame even though its content was identical.
+  const tileStatusText =
     (projectionTransition >= 0.999
       ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
       : projectionTransition > 0.001
         ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${detailLabel}`
         : `${activeKeys.length || 1} tiles · ${detailLabel}`) +
     residentStatus + poleFeedback;
+  if (tileStatusText !== lastTileStatusText) {
+    lastTileStatusText = tileStatusText;
+    $("tile-status").textContent = tileStatusText;
+  }
 }
+/** Last rendered tile-status text, so a settled frame performs no DOM write. */
+let lastTileStatusText = "";
 const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post", "park"]);
 /** Centre the view on a source point, keeping the zoom unless it is too far out to see the target. */
 function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
@@ -1836,7 +1846,7 @@ function setupTravel() {
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
-  $("fantasy-time").textContent = clock.labelAt(Date.now());
+  setText($("fantasy-time"), clock.labelAt(Date.now()));
   const device = await createRenderer(canvas);
   canvas = device.canvas as HTMLCanvasElement;
   device.on("devicelost", () => {
@@ -2569,9 +2579,9 @@ async function start() {
         simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
       lastSimulationRealSecond = realSecond;
-      $("fantasy-time").textContent = clock.labelAt(now);
-      $("simulation-status").textContent =
-        `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
+      setText($("fantasy-time"), clock.labelAt(now));
+      setText($("simulation-status"),
+        `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`);
       // Logical inspection remains available before optional meshes and billboards
       // finish. Actor allocation keeps the original strict close-detail budget.
       const residentMode = residentViewQuery(view.halfHeight, residentInspectorOpen, ready);
@@ -2748,8 +2758,8 @@ async function start() {
             (selected?.code === popupCode ? selected : simulation.projectedResidentByCode(popupCode));
           if (resident) showNpcPopup(resident, simulation.tick);
         }
-        $("simulation-status").textContent =
-          `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${snapshot?.partial ? "discovering more outdoor residents" : `${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated`}.`;
+        setText($("simulation-status"),
+          `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${snapshot?.partial ? "discovering more outdoor residents" : `${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated`}.`);
       }
     }
     // Per-frame walking: interpolate along the street route between Fantasy Time samples.

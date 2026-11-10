@@ -1,3 +1,4 @@
+import { setText } from "./idle-write-guard.ts";
 import { compareText } from "./compare-text.ts";
 import { residentActorSearchContinues, residentFirstPreviewVisible } from "./resident-query.ts";
 import { climateSampleAt } from "./climate.ts";
@@ -2692,7 +2693,7 @@ export class LazySimulation {
     }
     const performance = document.getElementById("resident-performance");
     if (performance)
-      performance.textContent = `${query.candidateResidents.toLocaleString()} spatial candidates · ${query.evaluatedResidents.toLocaleString()} evaluated · ${query.returnedResidents.toLocaleString()} visible from ${countryLogicalPopulation(this.activeCountry).toLocaleString()} logical residents · ${this.residentIndexes.size} active spatial indexes`;
+      setText(performance, `${query.candidateResidents.toLocaleString()} spatial candidates · ${query.evaluatedResidents.toLocaleString()} evaluated · ${query.returnedResidents.toLocaleString()} visible from ${countryLogicalPopulation(this.activeCountry).toLocaleString()} logical residents · ${this.residentIndexes.size} active spatial indexes`);
   }
 
   setFocus(place: Place | undefined) {
