@@ -78,7 +78,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S010-007-002 — Ship accessible local-first offline Advisor dialogue, bounded LLM commands and autonomous refusal — COMPLETED and REVIEWED at 2026-11-07
 - WP-S010-007-003 — Expand lawful site-visit advice to autonomous accept/refuse→Simulation→persistent visible consequence — COMPLETED and REVIEWED at 2026-11-10
 - WP-S010-008-001 — Research accepted campaign-time/SEED authority and deterministic offline replay
-- WP-S010-008-002 — Create/resume player-SEED campaigns with real creation-time fantasy clock and persistent protagonist
+- WP-S010-008-002 — Create/resume player-SEED campaigns with real creation-time fantasy clock and persistent protagonist — COMPLETED and REVIEWED at 2026-11-11
 - WP-S010-008-003 — Replay Simulation-approved campaign events exactly once across offline browser restart
 - WP-S010-009-001 — Research SEED-faithful fauna identity, habitats, legal behavior & 3D mobile LOD — COMPLETED and REVIEWED at 2026-11-09
 - WP-S010-009-002 — Show 13 SEED-owned living 3D fauna with lawful habitats, actions and mobile LOD
