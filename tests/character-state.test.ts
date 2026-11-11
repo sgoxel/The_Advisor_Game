@@ -28,6 +28,8 @@ import {
   setCharacterStore,
   statusOf,
   storageKeyFor,
+  characterScope,
+  setCharacterScopeResolver,
   trustLabel,
   validateCharacterState,
   type CharacterState,
@@ -255,4 +257,40 @@ test("state never contains world-truth fields", () => {
   for (const forbidden of ["position", "x", "z", "rank", "title", "gold", "resources", "owner", "home", "workplace"]) {
     assert.equal(Object.hasOwn(outcome.state, forbidden), false, `state must not carry "${forbidden}"`);
   }
+});
+
+/* ---------------------------------------------------------------- */
+/* Campaign scoping (WP-S010-008-002)                                */
+/* ---------------------------------------------------------------- */
+
+test("character history is scoped per campaign, so a shared SEED cannot share a history", () => {
+  const store = installStorage();
+  setCharacterStore(undefined);
+  setCharacterScopeResolver(() => "campaignA/");
+
+  const first = applyExchange(loadCharacter(CODE, 1), { tag: "help", day: 1, moodBand: "calm" });
+  saveCharacter(first.state);
+  const scopedA = loadCharacter(CODE, 1);
+  assert.equal(scopedA.trust, first.state.trust);
+  assert.ok([...store.keys()].some((key) => key.includes("campaignA/")), "the stored key must carry the campaign scope");
+
+  // A different campaign must NOT see campaign A's relationship.
+  setCharacterScopeResolver(() => "campaignB/");
+  const scopedB = loadCharacter(CODE, 1);
+  assert.equal(scopedB.trust, TRUST_NEUTRAL, "another campaign must start this character neutral");
+  assert.notEqual(scopedB.trust, scopedA.trust);
+
+  // Returning to campaign A must find its own history intact.
+  setCharacterScopeResolver(() => "campaignA/");
+  assert.equal(loadCharacter(CODE, 1).trust, first.state.trust, "each campaign keeps its own history");
+  setCharacterScopeResolver(undefined);
+});
+
+test("with no campaign resolved the scope is empty and the demo scenario still works", () => {
+  installStorage();
+  setCharacterStore(undefined);
+  setCharacterScopeResolver(undefined);
+  (globalThis as unknown as { localStorage: Storage }).localStorage.removeItem("advisor.campaign.v1");
+  assert.equal(characterScope(), "", "no stored campaign means no scope prefix");
+  assert.equal(storageKeyFor(CODE), `advisor.character.v1.${CODE}`);
 });
