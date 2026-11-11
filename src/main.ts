@@ -25,7 +25,7 @@ import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
-import { clockLabel, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
+import { clockLabel, fantasySecondOfDay, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
 import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, setItemGiveAdvisor, setBelongingsReader, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -1377,6 +1377,15 @@ function processStreaming(material: pc.StandardMaterial) {
     $("tile-status").textContent = tileStatusText;
   }
 }
+/**
+ * Evidence-only Fantasy Time pin. Set solely by tools/screenshot_tool.py through
+ * `advisorWorld.setEvidenceTick`. Gameplay never sets it, and it is never
+ * persisted, so normal play always follows the real clock.
+ */
+let evidenceTickOverride: number | undefined;
+/** Evidence-only render-scale pin; see setEvidenceRenderScale. */
+let evidenceRenderScale: number | undefined;
+
 /** Last rendered tile-status text, so a settled frame performs no DOM write. */
 let lastTileStatusText = "";
 const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post", "park"]);
@@ -2558,13 +2567,19 @@ async function start() {
     // Adaptive resolution: average the frame time, decide every couple of seconds.
     resolutionFrames++; resolutionSeconds += dt;
     if (resolutionSeconds >= RESOLUTION_DECISION_SECONDS) {
-      const ratio = nextPixelRatio(app.graphicsDevice.maxPixelRatio, resolutionSeconds * 1000 / resolutionFrames, devicePixelRatio || 1);
+      // Adaptive resolution protects frame rate during play, but an evidence
+      // capture must show the native picture, so a pin (never set by gameplay)
+      // overrides the decision.
+      const ratio = evidenceRenderScale ?? nextPixelRatio(app.graphicsDevice.maxPixelRatio, resolutionSeconds * 1000 / resolutionFrames, devicePixelRatio || 1);
       if (ratio !== app.graphicsDevice.maxPixelRatio) { app.graphicsDevice.maxPixelRatio = ratio; app.resizeCanvas(); }
       resolutionFrames = 0; resolutionSeconds = 0;
     }
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
-    const simulationTick = clock.tickAt(now);
+    // Deterministic evidence clock: only ever set by the screenshot tool through
+    // an explicit debug hook, never by gameplay. It pins Fantasy Time so terrain
+    // and lighting evidence cannot be captured at an unreadable hour.
+    const simulationTick = evidenceTickOverride ?? clock.tickAt(now);
     if(ready)updateWilderness(view.x,view.z,view.halfHeight,scaleValueForHalfHeight(view.halfHeight),projectionTransition,projectTransportGround);
     const residentInspectorOpen = !$("travel-panel").hidden;
     if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible ||
@@ -3296,6 +3311,36 @@ async function start() {
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
       hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
+      /**
+       * Evidence-only: pin realm Fantasy Time to a specific hour so a capture
+       * cannot land at night. `hour` is 0-24 in realm time (the HUD clock).
+       * Passing `undefined` returns to the real clock. Never affects gameplay.
+       */
+      setEvidenceTick(hour: number | undefined) {
+        if (hour === undefined) { evidenceTickOverride = undefined; lastSimulationRealSecond = -1; return true; }
+        if (!Number.isFinite(hour) || hour < 0 || hour > 24) return false;
+        // Move by a whole number of fantasy days to the requested hour, keeping
+        // the same calendar day. The tick is a realm-time value, so use the
+        // realm helper rather than a longitude-adjusted one.
+        const nowTick = clock.tickAt(Date.now());
+        const currentSecond = fantasySecondOfDay(nowTick);
+        const deltaSeconds = hour * 3600 - currentSecond;
+        evidenceTickOverride = Math.max(0, nowTick + Math.round(deltaSeconds));
+        lastSimulationRealSecond = -1;
+        return true;
+      },
+      /**
+       * Evidence-only: pin the render scale so adaptive resolution cannot
+       * silently downscale a captured image. A slow software GPU legitimately
+       * lowers the ratio to protect frame rate, but evidence must show the
+       * native-resolution picture. Gameplay never calls this.
+       */
+      setEvidenceRenderScale(scale: number | undefined) {
+        if (scale === undefined) { evidenceRenderScale = undefined; return true; }
+        if (!Number.isFinite(scale) || scale <= 0 || scale > 4) return false;
+        evidenceRenderScale = scale;
+        return true;
+      },
       planet: {
         radius: CANONICAL_PLANET_RADIUS,
         circumference: CANONICAL_PLANET_CIRCUMFERENCE,
