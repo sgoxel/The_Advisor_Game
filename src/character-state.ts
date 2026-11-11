@@ -22,6 +22,7 @@
 /** Canonical SEED resident code: "<place code>/RESIDENT/<index>". */
 const RESIDENT_CODE = /^.+?\/RESIDENT\/(0|[1-9][0-9]*)$/;
 
+import { readCampaign } from "./campaign.ts";
 export const CHARACTER_STATE_STORAGE_PREFIX = "advisor.character.v1.";
 export const CHARACTER_STATE_VERSION = "character-v1";
 
@@ -325,8 +326,32 @@ export function createMemoryCharacterStore(): CharacterStore {
   };
 }
 
+/**
+ * Character history is scoped to the campaign: two campaigns may share a SEED and
+ * therefore the same resident codes, but they must never share a relationship
+ * history. When no campaign is resolvable the scope is empty, which keeps the
+ * documented demo scenario working.
+ */
+let scopeResolver: (() => string | undefined) | undefined;
+
+/** Test/embedding hook: override how the campaign scope is resolved. */
+export function setCharacterScopeResolver(resolver: (() => string | undefined) | undefined): void {
+  scopeResolver = resolver;
+  stateCache.clear();
+}
+
+export function characterScope(): string {
+  if (scopeResolver) return scopeResolver() ?? "";
+  try {
+    const { record } = readCampaign();
+    return record ? `${record.id}/` : "";
+  } catch {
+    return "";
+  }
+}
+
 export function storageKeyFor(code: string): string {
-  return `${CHARACTER_STATE_STORAGE_PREFIX}${code}`;
+  return `${CHARACTER_STATE_STORAGE_PREFIX}${characterScope()}${code}`;
 }
 
 /**

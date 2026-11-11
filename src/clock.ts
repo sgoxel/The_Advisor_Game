@@ -1,5 +1,19 @@
 /** The only wall-clock boundary. All gameplay consumes the resulting fantasy tick. */
+import { campaignEpochMs } from "./campaign.ts";
+
+/**
+ * Documented demonstration epoch. Used only when no campaign can be resolved, so
+ * the fixed reference scenario still works. A real campaign supplies its own
+ * creation instant instead (WP-S010-008-002).
+ */
 export const REAL_EPOCH_MS = Date.parse("2026-10-07T08:48:29Z");
+/**
+ * The epoch actually in force for this page load. Resolved synchronously at
+ * module init so every world module shares one timeline: a resumed campaign
+ * keeps its own creation instant, so fantasy time continues between sessions
+ * instead of restarting.
+ */
+export const ACTIVE_EPOCH_MS = campaignEpochMs() ?? REAL_EPOCH_MS;
 export const TIME_SCALE = 24;
 export const YEAR_OFFSET = 1900;
 export const WORLD_TIMEZONE = "Europe/Istanbul";
@@ -23,7 +37,7 @@ export function fantasyOrigin(realMs: number): number {
 export class FantasyClock {
   readonly origin: number;
   readonly epoch: number;
-  constructor(epoch = REAL_EPOCH_MS) {
+  constructor(epoch = ACTIVE_EPOCH_MS) {
     this.epoch = epoch;
     this.origin = fantasyOrigin(epoch);
   }
@@ -46,7 +60,7 @@ export class FantasyClock {
  * displayed Fantasy Time. Deterministic: derived from the fixed REAL_EPOCH_MS.
  */
 export const FANTASY_DAY_SECONDS = 86_400;
-const ORIGIN_SECONDS = Math.floor(fantasyOrigin(REAL_EPOCH_MS) / 1000),
+const ORIGIN_SECONDS = Math.floor(fantasyOrigin(ACTIVE_EPOCH_MS) / 1000),
   ORIGIN_SECOND_OF_DAY = ((ORIGIN_SECONDS % FANTASY_DAY_SECONDS) + FANTASY_DAY_SECONDS) % FANTASY_DAY_SECONDS,
   ORIGIN_DAY = Math.floor(ORIGIN_SECONDS / FANTASY_DAY_SECONDS);
 /** Seconds since fantasy midnight shown by the HUD clock for a simulation tick. */

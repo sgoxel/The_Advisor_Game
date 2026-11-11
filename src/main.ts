@@ -74,6 +74,7 @@ import { AdvisorPanel } from "./advisor-panel.ts";
 import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribeProtagonist } from "./protagonist.ts";
 import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
 import { dailyPlan } from "./routines.ts";
+import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface, itemExchangeLegalBetween } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -1382,6 +1383,19 @@ function processStreaming(material: pc.StandardMaterial) {
  * `advisorWorld.setEvidenceTick`. Gameplay never sets it, and it is never
  * persisted, so normal play always follows the real clock.
  */
+/** The campaign this page load belongs to (resume or fresh). */
+let campaignIdentity: CampaignRecord | undefined;
+
+/**
+ * Reports a campaign problem in the existing alert box. Honest failure surfacing
+ * is required: a campaign that cannot be remembered must not look saved.
+ */
+function showCampaignNotice(message: string): void {
+  const box = document.getElementById("error");
+  if (!box) return;
+  box.hidden = false;
+  box.textContent = message;
+}
 let evidenceTickOverride: number | undefined;
 /** Evidence-only render-scale pin; see setEvidenceRenderScale. */
 let evidenceRenderScale: number | undefined;
@@ -1855,6 +1869,17 @@ function setupTravel() {
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
+  // Resolve the campaign once at startup: resume the stored one, create the first
+  // one, or report honestly that storage refused. Never silently restart a
+  // timeline the player already has.
+  const campaignLoad = resolveCampaign();
+  campaignIdentity = campaignLoad.state === "resumed" || campaignLoad.state === "created" ? campaignLoad.record : undefined;
+  if (campaignLoad.state === "unreadable") {
+    // Deliberately do NOT create a replacement; the record is reported instead.
+    showCampaignNotice(`Saved campaign unreadable: ${campaignLoad.reason} A fresh campaign was not started automatically.`);
+  } else if (campaignLoad.state === "unavailable") {
+    showCampaignNotice(`This campaign will not persist: ${campaignLoad.reason}`);
+  }
   setText($("fantasy-time"), clock.labelAt(Date.now()));
   const device = await createRenderer(canvas);
   canvas = device.canvas as HTMLCanvasElement;
@@ -3257,6 +3282,7 @@ async function start() {
   Object.defineProperty(window, "advisorWorld", {
     value: {
       seed: WORLD_SEED,
+      campaign: () => campaignIdentity ? { id: campaignIdentity.id, seed: campaignIdentity.seed, createdAtMs: campaignIdentity.createdAtMs } : null,
       capturePresentation,
       /**
        * Read-only occupancy-light evidence: which rendered buildings currently

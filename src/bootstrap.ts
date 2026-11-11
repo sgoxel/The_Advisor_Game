@@ -21,6 +21,7 @@ import {
   type SettlementFoundationPayload,
 } from "./foundation-cache.ts";
 import { COARSE_GEOGRAPHY_VERSION, WORLD_SEED } from "./config.ts";
+import { resolveCampaign } from "./campaign.ts";
 import { mountBuildBadge } from "./build-info.ts";
 
 /** Hydration must never delay startup noticeably; a slow disk simply regenerates. */
@@ -55,6 +56,11 @@ async function hydrateSettlementFoundation(): Promise<SettlementFoundationPayloa
 
 async function start(): Promise<void> {
   mountBuildBadge();
+  // Resolve the campaign BEFORE importing any world module. `clock.ts` fixes its
+  // epoch at module init from the stored campaign, so creating the campaign only
+  // afterwards would make the first page load use the demo epoch and then jump to
+  // the real one on reload — fantasy time must never run backwards.
+  resolveCampaign();
   const restored = await hydrateSettlementFoundation();
   provideHydratedSettlements(restored);
   if (restored) {
