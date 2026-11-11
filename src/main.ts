@@ -75,6 +75,7 @@ import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribePr
 import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
 import { dailyPlan } from "./routines.ts";
 import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
+import { CampaignPanel } from "./campaign-panel.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface, itemExchangeLegalBetween } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -1387,6 +1388,51 @@ function processStreaming(material: pc.StandardMaterial) {
 let campaignIdentity: CampaignRecord | undefined;
 
 /**
+ * Shows the campaign panel and resolves once the player accepts a campaign.
+ * If the panel element is missing the game plays on, so a markup change can never
+ * leave the game permanently blocked.
+ */
+function mountCampaignPanel() {
+  const root = document.getElementById("campaign-panel");
+  if (!root) {
+    return { whenAccepted: async () => {}, panel: undefined };
+  }
+  let resolveAccepted: () => void = () => {};
+  const accepted = new Promise<void>((resolve) => { resolveAccepted = resolve; });
+  const panel = new CampaignPanel(root, {
+    onAccepted: (record, mode) => {
+      campaignIdentity = record;
+      // A newly created campaign changes the fantasy origin, so the clock must be
+      // re-anchored before the world reports time. A continued campaign keeps the
+      // epoch resolved at module load.
+      if (mode === "created") reanchorClockToCampaign(record);
+      resolveAccepted();
+    },
+  });
+  // The failure states have no accept action; let the player through once they
+  // have acknowledged, so a broken save never blocks playing.
+  if (panel.current.kind === "unreadable" || panel.current.kind === "unavailable") {
+    resolveAccepted();
+  }
+  return { whenAccepted: () => accepted, panel };
+}
+
+/**
+ * Re-anchors the displayed fantasy clock to a newly created campaign. World
+ * foundation was already generated for this page load, so only the presentation
+ * clock and HUD move; nothing about terrain, roads or residents is regenerated.
+ */
+function reanchorClockToCampaign(record: CampaignRecord): void {
+  campaignIdentity = record;
+  try {
+    const fresh = new FantasyClock(record.createdAtMs);
+    setText($("fantasy-time"), fresh.labelAt(Date.now()));
+  } catch {
+    /* presentation only: never block play on a clock label */
+  }
+}
+
+/**
  * Reports a campaign problem in the existing alert box. Honest failure surfacing
  * is required: a campaign that cannot be remembered must not look saved.
  */
@@ -1873,12 +1919,20 @@ async function start() {
   // one, or report honestly that storage refused. Never silently restart a
   // timeline the player already has.
   const campaignLoad = resolveCampaign();
-  campaignIdentity = campaignLoad.state === "resumed" || campaignLoad.state === "created" ? campaignLoad.record : undefined;
+  campaignIdentity =
+    campaignLoad.state === "resumed" || campaignLoad.state === "created" ? campaignLoad.record : undefined;
+
+  // Show the campaign panel and require an explicit accept. A silent resume is
+  // exactly the behaviour this WP removes: the player must be able to see which
+  // campaign they are in and confirm it before it becomes their session.
+  const campaignPanel = mountCampaignPanel();
+  await campaignPanel.whenAccepted();
+
   if (campaignLoad.state === "unreadable") {
     // Deliberately do NOT create a replacement; the record is reported instead.
-    showCampaignNotice(`Saved campaign unreadable: ${campaignLoad.reason} A fresh campaign was not started automatically.`);
-  } else if (campaignLoad.state === "unavailable") {
-    showCampaignNotice(`This campaign will not persist: ${campaignLoad.reason}`);
+    showCampaignNotice(
+      `Saved campaign unreadable: ${campaignLoad.reason} A fresh campaign was not started automatically.`,
+    );
   }
   setText($("fantasy-time"), clock.labelAt(Date.now()));
   const device = await createRenderer(canvas);

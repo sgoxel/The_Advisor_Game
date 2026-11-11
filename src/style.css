@@ -1868,3 +1868,97 @@ body.globe-mode .build-badge {
 .rel-trust b { color: var(--gold, #d9b874); font-family: ui-monospace, monospace; }
 .rel-status { color: #e0c08f; border-color: #d9b87455; background: #d9b87414; }
 .rel-delta { font-size: 9px; color: #8fae7f; white-space: nowrap; }
+/* Campaign panel (WP-S010-008-002): shows which campaign this session belongs to
+   and requires an explicit accept, instead of silently resuming. */
+.campaign-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  background: #0b120ee6;
+  padding: 20px;
+}
+.campaign-panel[hidden] { display: none; }
+.campaign-card {
+  width: min(520px, 100%);
+  background: #16211b;
+  border: 1px solid #2b3a30;
+  border-radius: 12px;
+  padding: 26px 28px 22px;
+  box-shadow: 0 18px 60px #00000088;
+}
+.campaign-card .eyebrow {
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #7d8f7f;
+}
+.campaign-card h2 {
+  margin: 6px 0 16px;
+  font-size: 21px;
+  font-weight: 650;
+  color: #e9e5d6;
+}
+.campaign-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 16px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+.campaign-facts dt {
+  color: #7d8f7f;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  align-self: center;
+}
+.campaign-facts dd { margin: 0; color: #e9e5d6; }
+.campaign-facts code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: #d9b874;
+  word-break: break-all;
+}
+.campaign-muted { color: #7d8f7f; font-size: 11px; }
+.campaign-note {
+  margin: 0 0 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #a8b8a6;
+}
+.campaign-reason {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #e0a987;
+}
+.campaign-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.campaign-actions button {
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #12201a;
+  background: #d9b874;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.campaign-actions button:hover { background: #e6c886; }
+.campaign-actions button:focus-visible { outline: 2px solid #d9b874; outline-offset: 2px; }
+.campaign-actions .campaign-secondary {
+  color: #e9e5d6;
+  background: #1d3128;
+  border: 1px solid #ffffff26;
+}
+.campaign-actions .campaign-secondary:hover { background: #274036; }
+@media (max-width: 520px) {
+  .campaign-card { padding: 20px 18px 18px; }
+  .campaign-card h2 { font-size: 18px; }
+}
