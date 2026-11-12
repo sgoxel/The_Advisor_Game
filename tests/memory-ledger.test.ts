@@ -54,12 +54,24 @@ test("combined equals CPU plus GPU exactly", () => {
 
 test("unmeasured resource classes are named rather than treated as zero", () => {
   const ledger = buildLedger(input());
-  assert.ok(ledger.unmeasured.length >= 4);
-  for (const expected of ["shadow-maps", "render-targets", "glb-model-textures"]) {
+  // Asset textures and meshes are measured from the live registry now, so the
+  // remaining honestly-unmeasured classes are the engine-owned ones.
+  assert.ok(ledger.unmeasured.length >= 2);
+  for (const expected of ["shadow-maps", "render-targets", "engine-internal-pools"]) {
     assert.ok(ledger.unmeasured.includes(expected), `"${expected}" must be declared unmeasured`);
   }
+  assert.equal(ledger.unmeasured.includes("glb-model-textures"), false, "assets are measured, not declared unknown");
   assert.equal(ledger.lowerBound, true, "an incomplete measurement must be labelled a lower bound");
   assert.equal(UNMEASURED_CATEGORIES.length, ledger.unmeasured.length);
+});
+
+test("measured asset bytes are counted on the GPU side", () => {
+  const withAssets = buildLedger({ ...input(), assetTextureBytes: 349_333, assetMeshBytes: 120_000 });
+  const without = buildLedger(input());
+  assert.equal(withAssets.categories["asset-textures"], 349_333);
+  assert.equal(withAssets.categories["asset-meshes"], 120_000);
+  assert.equal(withAssets.gpuBytes - without.gpuBytes, 469_333, "assets are GPU-resident");
+  assert.equal(withAssets.cpuBytes, without.cpuBytes, "no second CPU copy is assumed");
 });
 
 test("negative or non-finite inputs can never reduce the total", () => {

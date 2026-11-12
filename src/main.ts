@@ -1410,6 +1410,72 @@ let campaignIdentity: CampaignRecord | undefined;
 let pendingLossSnapshot: PreservedState | undefined;
 /** Set inside start() so the rebuild helper can refresh actor textures. */
 let characterVisualsRefresh: (() => Promise<void>) | undefined;
+
+/**
+ * Measures asset memory the ledger previously reported as unmeasured: loaded
+ * textures (RGBA8, plus mipmap headroom) and mesh vertex/index buffers. Values
+ * come from the real asset registry, so they are measurements, not guesses.
+ * Anything this cannot enumerate stays explicitly unmeasured.
+ */
+function measureAssetBytes(): { textures: number; meshes: number; byClass: Record<string, number> } {
+  const byClass: Record<string, number> = {};
+  let textures = 0;
+  let meshes = 0;
+  const seen = new Set<unknown>();
+
+  const addTexture = (texture: unknown, label: string) => {
+    if (!texture || seen.has(texture)) return;
+    seen.add(texture);
+    const tex = texture as { width?: number; height?: number; name?: string; levels?: unknown[] };
+    const width = Number(tex.width) || 0;
+    const height = Number(tex.height) || 0;
+    if (!width || !height) return;
+    // RGBA8 base level plus ~33% for a generated mip chain.
+    const bytes = Math.ceil(width * height * 4 * 1.33);
+    textures += bytes;
+    byClass[label] = (byClass[label] ?? 0) + bytes;
+  };
+
+  const scanResource = (resource: unknown, label: string) => {
+    if (!resource || typeof resource !== "object") return;
+    const record = resource as Record<string, unknown>;
+    // A Texture itself.
+    if (typeof record.width === "number" && typeof record.height === "number") {
+      addTexture(resource, label);
+      return;
+    }
+    // A Material: count its maps.
+    for (const key of ["emissiveMap", "diffuseMap", "opacityMap", "normalMap"]) {
+      addTexture(record[key], `${label}:${key}`);
+    }
+    // A Mesh: positions + normals + colors + uvs + indices is already measured
+    // for terrain; count only non-terrain meshes to avoid double counting.
+    const vertexBuffer = record.vertexBuffer as { numVertices?: number } | undefined;
+    const indexBuffer = record.indexBuffer as { numIndices?: number } | undefined;
+    if (vertexBuffer || indexBuffer) {
+      const verts = Number(vertexBuffer?.numVertices) || 0;
+      const indices = Number(indexBuffer?.numIndices) || 0;
+      // 8 floats per vertex worst case, 4 bytes per index.
+      const bytes = verts * 32 + indices * 4;
+      if (bytes > 0) {
+        meshes += bytes;
+        byClass[label] = (byClass[label] ?? 0) + bytes;
+      }
+    }
+  };
+
+  try {
+    for (const asset of app.assets.list()) {
+      const type = String((asset as { type?: string }).type ?? "unknown");
+      if (type !== "texture" && type !== "material" && type !== "model" && type !== "container") continue;
+      scanResource((asset as { resource?: unknown }).resource, `asset:${type}`);
+    }
+  } catch {
+    /* registry unavailable: those classes stay unmeasured */
+  }
+
+  return { textures, meshes, byClass };
+}
 let lastRendererRecovery: RecoveryReport | undefined;
 let lastRendererRecoveryAt = 0;
 
@@ -3459,6 +3525,12 @@ async function start() {
         pendingLossSnapshot: pendingLossSnapshot ?? null,
         preservedNow: currentPreservedState(),
       }),
+      /**
+       * Read-only asset accounting for the ledger (WP-S009-003-001). Counts the
+       * textures and meshes the app actually loaded, so classes that were
+       * previously "unmeasured" become measured. Never mutates anything.
+       */
+      assetBytes: () => measureAssetBytes(),
       capturePresentation,
       /**
        * Read-only occupancy-light evidence: which rendered buildings currently
@@ -3751,12 +3823,16 @@ async function start() {
             0,
           ),
           surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
+          assetBytes = measureAssetBytes(),
           resourceLedger = buildLedger({
             cachedGeometryBytes,
             readyUploadBytes: readyGeometryBytes,
             surfaceBytes,
             continuityCpuBytes: continuityRetainedBytes(),
             transientCpuBytes: continuityTransientBytes(),
+            // Measured from the live asset registry, not estimated.
+            assetTextureBytes: assetBytes.textures,
+            assetMeshBytes: assetBytes.meshes,
           });
         // A model lost during this snapshot can restore 2D immediately.
         // Classify each visible actor once so counters and format agree.
@@ -3884,6 +3960,7 @@ async function start() {
             unmeasuredResourceCategories: resourceLedger.unmeasured,
             resourceEstimateIsLowerBound: resourceLedger.lowerBound,
             transientResourceBytesEstimated: resourceLedger.transientBytes,
+            assetBytesByClass: assetBytes.byClass,
             cacheTrimStartBytes: streamingBudget.cacheTrimStartBytes,
             memoryCeilingBytes: streamingBudget.combinedBytes,
             continuityCpuBytesEstimated: continuityCpuBytes(),

@@ -24,7 +24,9 @@ export type ResourceCategory =
   | "surface-texture-cpu"
   | "surface-texture-gpu"
   | "continuity-worker-cpu"
-  | "transient-worker-scratch";
+  | "transient-worker-scratch"
+  | "asset-textures"
+  | "asset-meshes";
 
 export type LedgerInput = {
   /** Retained terrain/feature geometry held on the CPU. */
@@ -33,6 +35,10 @@ export type LedgerInput = {
   readonly readyUploadBytes: number;
   /** Globe surface texture pixels held on the CPU. */
   readonly surfaceBytes: number;
+  /** Measured texture bytes from the live asset registry. */
+  readonly assetTextureBytes?: number;
+  /** Measured non-terrain mesh vertex/index bytes. */
+  readonly assetMeshBytes?: number;
   /** Continuity data retained for the life of the page. */
   readonly continuityCpuBytes: number;
   /**
@@ -45,11 +51,12 @@ export type LedgerInput = {
   readonly surfaceGpuFactor?: number;
 };
 
-/** Resource classes this build genuinely cannot measure yet. Named, never faked. */
+/**
+ * Resource classes that remain genuinely unmeasured. Asset textures and meshes
+ * moved out of this list once the live asset registry was measurable; anything
+ * still here is honestly declared rather than treated as zero.
+ */
 export const UNMEASURED_CATEGORIES: readonly string[] = Object.freeze([
-  "glb-model-vertex-buffers",
-  "glb-model-textures",
-  "resident-illustration-textures",
   "shadow-maps",
   "render-targets",
   "engine-internal-pools",
@@ -100,6 +107,9 @@ export function buildLedger(input: LedgerInput): Ledger {
     "surface-texture-gpu": Math.ceil(surface * factor),
     "continuity-worker-cpu": bytes(input.continuityCpuBytes),
     "transient-worker-scratch": bytes(input.transientCpuBytes ?? 0),
+    // Measured assets live on the GPU; the CPU does not retain a second copy.
+    "asset-textures": bytes(input.assetTextureBytes ?? 0),
+    "asset-meshes": bytes(input.assetMeshBytes ?? 0),
   };
 
   const cpuBytes =
@@ -111,7 +121,9 @@ export function buildLedger(input: LedgerInput): Ledger {
   const gpuBytes =
     categories["cached-geometry-gpu"] +
     categories["ready-upload-gpu"] +
-    categories["surface-texture-gpu"];
+    categories["surface-texture-gpu"] +
+    categories["asset-textures"] +
+    categories["asset-meshes"];
 
   return {
     categories,
