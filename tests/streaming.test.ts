@@ -17,6 +17,7 @@ import {
   STREAMING_BUDGETS,
   STREAMING_MEMORY_POLICY,
   shouldTrimStreamingCache,
+  shouldTrimCombinedBytes,
   streamingMemoryReservationFits,
   streamingBudgetForViewport,
   withinStreamingBudget,
@@ -191,4 +192,23 @@ test("render resolution starts at native and steps down only when frames are slo
   assert.equal(nextPixelRatio(3, 12, 3), 3, "never above native");
   assert.equal(nextPixelRatio(1, 40, 1), 0.75, "a 1x screen may also shrink its buffer");
   assert.equal(nextPixelRatio(2.5, 21, 3), 2.5, "in the comfortable band nothing changes");
+});
+
+test("one combined-basis decision keeps the ledger and the trim policy in agreement", () => {
+  const budget = STREAMING_BUDGETS.desktop;
+  // Exactly at the ceiling: keep retained cache, exactly one byte over: trim.
+  assert.equal(shouldTrimCombinedBytes(1_000_000_000, budget), false);
+  assert.equal(shouldTrimCombinedBytes(1_000_000_001, budget), true);
+  // The combined-basis decision must equal the two-sided decision when the
+  // ledger's cpu+gpu is the same number, so no second accounting rule exists.
+  for (const [cpu, gpu] of [[600_000_000, 400_000_000], [600_000_001, 400_000_000], [0, 1_000_000_000], [0, 1_000_000_001]]) {
+    assert.equal(
+      shouldTrimCombinedBytes(cpu + gpu, budget),
+      shouldTrimStreamingCache(cpu, gpu, budget),
+      `combined basis disagrees for ${cpu}+${gpu}`,
+    );
+  }
+  // A reservation may reclaim only the space it needs.
+  assert.equal(shouldTrimCombinedBytes(950_000_000, budget, 50_000_000), false);
+  assert.equal(shouldTrimCombinedBytes(950_000_000, budget, 50_000_001), true);
 });

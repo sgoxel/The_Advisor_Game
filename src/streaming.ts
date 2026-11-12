@@ -128,6 +128,12 @@ export function withinStreamingBudget(
 /** Reusable terrain remains cached below the ceiling, irrespective of
  * patch count. A single optional reservation represents upcoming transient work. */
 export function shouldTrimStreamingCache(cpuBytes:number,gpuBytes:number,budget:StreamingBudget,reservationBytes=0){return cpuBytes+gpuBytes+reservationBytes>budget.cacheTrimStartBytes;}
+/**
+ * Same decision expressed on the authoritative combined CPU+GPU basis the
+ * resource ledger reports. Using one basis prevents the ledger from passing the
+ * ceiling while a narrower estimate still believes there is room.
+ */
+export function shouldTrimCombinedBytes(combinedBytes:number,budget:StreamingBudget,reservationBytes=0){return combinedBytes+reservationBytes>budget.cacheTrimStartBytes;}
 export function streamingMemoryReservationFits(cpuBytes:number,gpuBytes:number,reservationBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes+reservationBytes<=budget.combinedBytes;}
 
 /**

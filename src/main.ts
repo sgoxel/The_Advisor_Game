@@ -131,7 +131,7 @@ import {
 import {
   estimateGeometryBytes,
   withinStreamingBudget,
-  shouldTrimStreamingCache,
+  shouldTrimCombinedBytes,
   streamingMemoryReservationFits,
   canPrefetchStreamingJob,
   generationWorkerCount,
@@ -363,6 +363,11 @@ let revision = 0,
   cacheHits = 0,
   cacheMisses = 0,
   evictions = 0,
+  /** Real trim passes that actually released reusable cache (WP-S009-003-001). */
+  cacheTrimEvents = 0,
+  cacheTrimmedBytes = 0,
+  /** High-water mark of the combined CPU+GPU pressure the trim policy sees. */
+  peakCachePressureBytes = 0,
   cachedGeometryBytes = 0,
   meshGroupUploads = 0, detailGenerationJobs = 0, coverageGenerationJobs = 0,
   uploadsThisFrame = 0,
@@ -1063,12 +1068,29 @@ function prefetchCandidates(): Tile[] {
     for (const tile of selectTiles({ ...view, x: destination.x, z: destination.z, halfHeight: Math.min(view.halfHeight, destination.halfHeight) }, 190, 6)) push(tile, 1.5);
   return out.sort((a, b) => a.distance - b.distance).map((entry) => entry.tile).slice(0, 96);
 }
+/**
+ * Combined CPU+GPU pressure for the single admission/trim ceiling, computed on
+ * the SAME basis as the resource ledger so the two can never disagree about
+ * whether the app is inside its approved budget. Device VRAM already contains
+ * the terrain GPU buffers and the globe surface, so those narrow estimates are
+ * omitted when the device reports; they remain when it does not. See
+ * buildLedger() in memory-ledger.ts.
+ */
+function combinedResourcePressureBytes(): number {
+  const ready = uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
+  const surface = globe ? globe.stats.textureWidth * globe.stats.textureHeight * 4 : 0;
+  const vram = measureDeviceVram();
+  const assets = vram ? { textures: 0, meshes: 0 } : measureAssetBytes();
+  const cpu = cachedGeometryBytes + ready + continuityCpuBytes() + (vram ? 0 : surface);
+  const gpu = ready + (vram ? vram.total : cachedGeometryBytes + Math.ceil(surface * 4 / 3) + assets.textures + assets.meshes);
+  return cpu + gpu;
+}
 function prefetchNext(root: Tile) {
   void root;
   const fingerprint = `${wanted.map((tile) => tile.key).join(",")}|${Math.round(view.x)}|${Math.round(view.z)}`;
   if (fingerprint !== prefetchFingerprint) { prefetchFingerprint = fingerprint; prefetchQueue = prefetchCandidates(); warmSettlements(); }
-  const surfaceBytes = globe ? globe.stats.textureWidth * globe.stats.textureHeight * 4 : 0;
-  if (2 * cachedGeometryBytes + surfaceBytes + Math.ceil(surfaceBytes * 4 / 3) + continuityCpuBytes() > streamingBudget.cacheTrimStartBytes * .85) return;
+  // Leave headroom below the ceiling so optional warming can never trigger a trim.
+  if (combinedResourcePressureBytes() > streamingBudget.cacheTrimStartBytes * .85) return;
   while (prefetchQueue.length) {
     const tile = prefetchQueue.shift()!;
     if (tileCache.has(tile.key) || pending.has(tile.key)) continue;
@@ -1305,14 +1327,18 @@ function processStreaming(material: pc.StandardMaterial) {
     }
   }
   {
-    const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
     const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
     // Only urgent generation/upload may make room below the ceiling. Optional prefetch cannot evict reusable data.
     const reservationBytes = readyBytes() + (inFlight === 0 && uploads.length === 0 && nextStreamingJob(root,wanted,coverageTiles,cachedKeys) ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0);
+    // The trim trigger uses the ledger's own combined basis, so the reported
+    // budget and the eviction policy can never disagree.
+    const cachePressureBytes = () => combinedResourcePressureBytes();
+    // The high-water mark is observational only; it never feeds a decision.
+    peakCachePressureBytes = Math.max(peakCachePressureBytes, cachePressureBytes());
     const overCacheBudget = () =>
-      shouldTrimStreamingCache(cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes(),
-        cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3),streamingBudget,reservationBytes);
+      shouldTrimCombinedBytes(cachePressureBytes(), streamingBudget, reservationBytes);
     if (!captureStreamingQuiesced && overCacheBudget()) {
+      const beforeTrim = cachedGeometryBytes;
       const protect = new Set([
         ...activeKeys,
         ...(lodTransition?.oldKeys ?? []),
@@ -1332,6 +1358,8 @@ function processStreaming(material: pc.StandardMaterial) {
         cachedGeometryBytes = Math.max(0, cachedGeometryBytes - record.bytes);
         evictions++;
       }
+      const freed = beforeTrim - cachedGeometryBytes;
+      if (freed > 0) { cacheTrimEvents++; cacheTrimmedBytes += freed; }
     }
   }
   if (lodTransition) {
@@ -3978,6 +4006,9 @@ async function start() {
             cacheHits,
             cacheMisses,
             evictions,
+            cacheTrimEvents,
+            cacheTrimmedBytes,
+            peakCachePressureBytes,
             discardedPresentationJobs,
             detailGenerationJobs, coverageGenerationJobs, meshGroupUploads,
             activeDetailInstances: activeKeys.map(key=>({key,serial:tileCache.get(key)?.serial})) ,
