@@ -26,7 +26,9 @@ export type ResourceCategory =
   | "continuity-worker-cpu"
   | "transient-worker-scratch"
   | "asset-textures"
-  | "asset-meshes";
+  | "asset-meshes"
+  | "device-vram-textures"
+  | "device-vram-buffers";
 
 export type LedgerInput = {
   /** Retained terrain/feature geometry held on the CPU. */
@@ -39,6 +41,13 @@ export type LedgerInput = {
   readonly assetTextureBytes?: number;
   /** Measured non-terrain mesh vertex/index bytes. */
   readonly assetMeshBytes?: number;
+  /**
+   * Engine-reported VRAM for textures and buffers. This is the authoritative
+   * source for shadow maps, render targets and engine-internal pools, which the
+   * asset registry cannot enumerate. Absent when the engine does not expose it.
+   */
+  readonly deviceVramTextures?: number;
+  readonly deviceVramBuffers?: number;
   /** Continuity data retained for the life of the page. */
   readonly continuityCpuBytes: number;
   /**
@@ -52,14 +61,15 @@ export type LedgerInput = {
 };
 
 /**
- * Resource classes that remain genuinely unmeasured. Asset textures and meshes
- * moved out of this list once the live asset registry was measurable; anything
- * still here is honestly declared rather than treated as zero.
+ * Resource classes that remain genuinely unmeasured *by the ledger itself*.
+ * Both asset-backed textures/meshes and the engine's own texture/buffer VRAM are
+ * measured now, so what remains outside the ledger is limited to engine state it
+ * does not report (shader programs, command buffers, driver-internal padding).
+ * Those are named rather than treated as zero.
  */
 export const UNMEASURED_CATEGORIES: readonly string[] = Object.freeze([
-  "shadow-maps",
-  "render-targets",
-  "engine-internal-pools",
+  "shader-programs",
+  "driver-internal-padding",
 ]);
 
 export type Ledger = {
@@ -86,6 +96,12 @@ function bytes(value: number): number {
  * Builds the combined ledger. Cached geometry is counted once per side because it
  * genuinely exists in both places (CPU copy retained for eviction/reuse, GPU copy
  * for drawing).
+ *
+ * Texture accounting must never double count. When the engine reports its own
+ * VRAM totals those already include the globe surface, asset textures, shadow
+ * maps and render targets, so the device figure supersedes the narrower
+ * estimates. When the engine reports nothing, the narrower estimates are used
+ * and the classes they miss stay declared unmeasured.
  */
 export function buildLedger(input: LedgerInput): Ledger {
   const factor = Number.isFinite(input.surfaceGpuFactor) && (input.surfaceGpuFactor as number) > 0
@@ -95,21 +111,30 @@ export function buildLedger(input: LedgerInput): Ledger {
   const cached = bytes(input.cachedGeometryBytes);
   const ready = bytes(input.readyUploadBytes);
   const surface = bytes(input.surfaceBytes);
+  const deviceTextures = bytes(input.deviceVramTextures ?? 0);
+  const deviceBuffers = bytes(input.deviceVramBuffers ?? 0);
+  const deviceReported = deviceTextures > 0 || deviceBuffers > 0;
 
   const categories: Record<ResourceCategory, number> = {
     "cached-geometry-cpu": cached,
-    "cached-geometry-gpu": cached,
+    // The engine buffer VRAM figure already includes our terrain vertex/index
+    // buffers, so the local GPU estimate is zeroed when the device reports.
+    "cached-geometry-gpu": deviceReported ? 0 : cached,
     // A queued upload is real CPU memory now, and will be real GPU memory shortly;
     // counting it on both sides is the conservative, honest choice.
     "ready-upload-cpu": ready,
     "ready-upload-gpu": ready,
-    "surface-texture-cpu": surface,
-    "surface-texture-gpu": Math.ceil(surface * factor),
+    // The device VRAM figure already covers the surface and assets, so the
+    // narrower estimates are reported as 0 when it is available.
+    "surface-texture-cpu": deviceReported ? 0 : surface,
+    "surface-texture-gpu": deviceReported ? 0 : Math.ceil(surface * factor),
     "continuity-worker-cpu": bytes(input.continuityCpuBytes),
     "transient-worker-scratch": bytes(input.transientCpuBytes ?? 0),
     // Measured assets live on the GPU; the CPU does not retain a second copy.
-    "asset-textures": bytes(input.assetTextureBytes ?? 0),
-    "asset-meshes": bytes(input.assetMeshBytes ?? 0),
+    "asset-textures": deviceReported ? 0 : bytes(input.assetTextureBytes ?? 0),
+    "asset-meshes": deviceReported ? 0 : bytes(input.assetMeshBytes ?? 0),
+    "device-vram-textures": bytes(input.deviceVramTextures ?? 0),
+    "device-vram-buffers": bytes(input.deviceVramBuffers ?? 0),
   };
 
   const cpuBytes =
@@ -123,7 +148,9 @@ export function buildLedger(input: LedgerInput): Ledger {
     categories["ready-upload-gpu"] +
     categories["surface-texture-gpu"] +
     categories["asset-textures"] +
-    categories["asset-meshes"];
+    categories["asset-meshes"] +
+    categories["device-vram-textures"] +
+    categories["device-vram-buffers"];
 
   return {
     categories,

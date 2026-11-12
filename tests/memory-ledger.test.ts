@@ -54,13 +54,15 @@ test("combined equals CPU plus GPU exactly", () => {
 
 test("unmeasured resource classes are named rather than treated as zero", () => {
   const ledger = buildLedger(input());
-  // Asset textures and meshes are measured from the live registry now, so the
-  // remaining honestly-unmeasured classes are the engine-owned ones.
+  // Device VRAM now covers shadow maps, render targets and engine pools, and the
+  // asset registry covers GLB/illustration textures. What remains outside the
+  // ledger is engine state the engine itself does not report.
   assert.ok(ledger.unmeasured.length >= 2);
-  for (const expected of ["shadow-maps", "render-targets", "engine-internal-pools"]) {
+  for (const expected of ["shader-programs", "driver-internal-padding"]) {
     assert.ok(ledger.unmeasured.includes(expected), `"${expected}" must be declared unmeasured`);
   }
   assert.equal(ledger.unmeasured.includes("glb-model-textures"), false, "assets are measured, not declared unknown");
+  assert.equal(ledger.unmeasured.includes("shadow-maps"), false, "shadow maps are covered by device VRAM");
   assert.equal(ledger.lowerBound, true, "an incomplete measurement must be labelled a lower bound");
   assert.equal(UNMEASURED_CATEGORIES.length, ledger.unmeasured.length);
 });
@@ -132,4 +134,36 @@ test("a transient peak that is released leaves the retained total unchanged", ()
   const peak = buildLedger({ ...input(), transientCpuBytes: 200_000_000 });
   const settled = buildLedger({ ...input(), transientCpuBytes: 0 });
   assert.equal(peak.cpuBytes - peak.transientBytes, settled.cpuBytes - settled.transientBytes);
+});
+test("device VRAM supersedes the narrower texture estimates instead of double counting", () => {
+  const narrow = buildLedger({ ...input(), assetTextureBytes: 349_333 });
+  const device = buildLedger({ ...input(), assetTextureBytes: 349_333, deviceVramTextures: 17_175_788, deviceVramBuffers: 240_012 });
+
+  // The narrower estimates are zeroed: the device figure already includes them.
+  assert.equal(device.categories["asset-textures"], 0);
+  assert.equal(device.categories["surface-texture-gpu"], 0);
+  assert.equal(device.categories["device-vram-textures"], 17_175_788);
+  assert.equal(device.categories["device-vram-buffers"], 240_012);
+
+  // The total must not include both the estimate and the authoritative figure.
+  assert.ok(device.gpuBytes > narrow.gpuBytes, "device VRAM covers more than assets alone");
+  assert.ok(device.gpuBytes < narrow.gpuBytes + 349_333 + 17_175_788, "no double counting");
+});
+
+test("without device VRAM the narrower estimates are still used", () => {
+  const ledger = buildLedger({ ...input(), assetTextureBytes: 349_333 });
+  assert.equal(ledger.categories["asset-textures"], 349_333);
+  assert.equal(ledger.categories["device-vram-textures"], 0);
+  assert.ok(ledger.categories["surface-texture-gpu"] > 0);
+});
+test("terrain buffers are not counted twice when the device reports buffer VRAM", () => {
+  const estimateOnly = buildLedger(input());
+  const withDevice = buildLedger({ ...input(), deviceVramBuffers: 3_993_848 });
+  // The local GPU estimate must be zeroed: the device figure already contains it.
+  assert.equal(withDevice.categories["cached-geometry-gpu"], 0);
+  assert.equal(withDevice.categories["device-vram-buffers"], 3_993_848);
+  // The CPU copy is genuinely separate memory and must NOT be zeroed.
+  assert.equal(withDevice.categories["cached-geometry-cpu"], estimateOnly.categories["cached-geometry-cpu"]);
+  // Total GPU cannot exceed device buffers by the old estimate as well.
+  assert.ok(withDevice.gpuBytes < estimateOnly.gpuBytes + 3_993_848 + 1);
 });

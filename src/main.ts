@@ -1412,6 +1412,27 @@ let pendingLossSnapshot: PreservedState | undefined;
 let characterVisualsRefresh: (() => Promise<void>) | undefined;
 
 /**
+ * Reads the graphics device's own VRAM tracker. PlayCanvas maintains
+ * `_vram` counters for textures and buffers, which is the only truthful source
+ * for classes the asset registry cannot see (shadow maps, render targets,
+ * engine pools). Returns `undefined` when the engine does not expose it, so the
+ * ledger keeps reporting those classes as unmeasured rather than guessing.
+ */
+function measureDeviceVram(): { textures: number; buffers: number; total: number } | undefined {
+  try {
+    const device = app?.graphicsDevice as unknown as { _vram?: Record<string, number> } | undefined;
+    const vram = device?._vram;
+    if (!vram) return undefined;
+    const textures = Number(vram.tex ?? 0);
+    const buffers = Number(vram.vb ?? 0) + Number(vram.ib ?? 0) + Number(vram.sb ?? 0);
+    if (!Number.isFinite(textures) || !Number.isFinite(buffers)) return undefined;
+    return { textures, buffers, total: textures + buffers };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Measures asset memory the ledger previously reported as unmeasured: loaded
  * textures (RGBA8, plus mipmap headroom) and mesh vertex/index buffers. Values
  * come from the real asset registry, so they are measurements, not guesses.
@@ -3531,6 +3552,8 @@ async function start() {
        * previously "unmeasured" become measured. Never mutates anything.
        */
       assetBytes: () => measureAssetBytes(),
+      /** Read-only engine VRAM counters, or null when unavailable. */
+      deviceVram: () => measureDeviceVram() ?? null,
       capturePresentation,
       /**
        * Read-only occupancy-light evidence: which rendered buildings currently
@@ -3824,6 +3847,7 @@ async function start() {
           ),
           surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
           assetBytes = measureAssetBytes(),
+          deviceVram = measureDeviceVram(),
           resourceLedger = buildLedger({
             cachedGeometryBytes,
             readyUploadBytes: readyGeometryBytes,
@@ -3833,6 +3857,10 @@ async function start() {
             // Measured from the live asset registry, not estimated.
             assetTextureBytes: assetBytes.textures,
             assetMeshBytes: assetBytes.meshes,
+            // Authoritative engine VRAM when available; supersedes the
+            // narrower texture estimates so nothing is counted twice.
+            deviceVramTextures: deviceVram?.textures,
+            deviceVramBuffers: deviceVram?.buffers,
           });
         // A model lost during this snapshot can restore 2D immediately.
         // Classify each visible actor once so counters and format agree.
@@ -3961,6 +3989,7 @@ async function start() {
             resourceEstimateIsLowerBound: resourceLedger.lowerBound,
             transientResourceBytesEstimated: resourceLedger.transientBytes,
             assetBytesByClass: assetBytes.byClass,
+            deviceVramMeasured: deviceVram ?? null,
             cacheTrimStartBytes: streamingBudget.cacheTrimStartBytes,
             memoryCeilingBytes: streamingBudget.combinedBytes,
             continuityCpuBytesEstimated: continuityCpuBytes(),
