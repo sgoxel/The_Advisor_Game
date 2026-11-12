@@ -182,9 +182,13 @@ test("render resolution starts at native and steps down only when frames are slo
   const { nextPixelRatio } = await import("../src/render-resolution.ts");
   assert.equal(nextPixelRatio(3, 16, 3), 3, "smooth: stay at native");
   assert.equal(nextPixelRatio(3, 30, 3), 2.75, "slow: one step down");
-  assert.equal(nextPixelRatio(1, 40, 3), 1, "never below 1× on a high-DPI screen");
+  // #446 deliberately allows going below 1x: a software or overloaded GPU must
+  // be able to shrink its internal buffer instead of starving the compositor.
+  // The floor is 0.5, never 0, and CSS viewport/SEED/Simulation are untouched.
+  assert.equal(nextPixelRatio(1, 40, 3), 0.75, "slow at 1x may step below 1x");
+  assert.equal(nextPixelRatio(0.5, 40, 3), 0.5, "never below the 0.5 floor");
   assert.equal(nextPixelRatio(2, 12, 3), 2.25, "headroom: one step back up");
   assert.equal(nextPixelRatio(3, 12, 3), 3, "never above native");
-  assert.equal(nextPixelRatio(1, 40, 1), 1, "a 1× screen stays at 1×");
+  assert.equal(nextPixelRatio(1, 40, 1), 0.75, "a 1x screen may also shrink its buffer");
   assert.equal(nextPixelRatio(2.5, 21, 3), 2.5, "in the comfortable band nothing changes");
 });

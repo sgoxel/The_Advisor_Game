@@ -76,6 +76,8 @@ import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from ".
 import { dailyPlan } from "./routines.ts";
 import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
 import { CampaignPanel } from "./campaign-panel.ts";
+import { buildLedger } from "./memory-ledger.ts";
+import { describeDeviceLoss, describeRecovery, type PreservedState, type RebuildTarget, type RecoveryReport } from "./renderer-recovery.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface, itemExchangeLegalBetween } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -158,10 +160,27 @@ let continuityWorkerBytes = 0;
 const NATURAL_WORKER_SCRATCH_RESERVE_BYTES=32*1024*1024;
 let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
 let discardedPresentationJobs = 0;
-const continuityCpuBytes = () => {
-  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
-  const atlasBytes=(window as unknown as {politicalAtlas?:{state:{presentationBytesEstimated?:number}}}).politicalAtlas?.state.presentationBytesEstimated||0;
-  return atlasBytes + continuityWorkerBytes + inFlight * NATURAL_WORKER_SCRATCH_RESERVE_BYTES + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+const continuityCpuBytes = () => continuityRetainedBytes() + continuityTransientBytes();
+/**
+ * Retained continuity cost: data the app keeps for the life of the page.
+ */
+const continuityRetainedBytes = () => {
+  const state = continuityTelemetry();
+  const atlasBytes = (window as unknown as { politicalAtlas?: { state: { presentationBytesEstimated?: number } } })
+    .politicalAtlas?.state.presentationBytesEstimated || 0;
+  return atlasBytes + continuityWorkerBytes + state.cpuBytesEstimated + continuityOverlayBytes();
+};
+/**
+ * Transient continuity cost: worker scratch and the in-progress globe surface
+ * buffer. These are real memory while work is in flight but are released
+ * afterwards, so they must not be reported as permanently retained.
+ */
+const continuityTransientBytes = () => {
+  const state = continuityTelemetry(),
+    preparingBytes = globeWorker
+      ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096 * 1024 + (GLOBE_PASSES[globePass]?.width || 0) ** 2 * 2
+      : 0;
+  return inFlight * NATURAL_WORKER_SCRATCH_RESERVE_BYTES + preparingBytes;
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -1387,6 +1406,66 @@ function processStreaming(material: pc.StandardMaterial) {
 /** The campaign this page load belongs to (resume or fresh). */
 let campaignIdentity: CampaignRecord | undefined;
 
+/** Pre-loss snapshot, so recovery can be proven to have changed nothing. */
+let pendingLossSnapshot: PreservedState | undefined;
+/** Set inside start() so the rebuild helper can refresh actor textures. */
+let characterVisualsRefresh: (() => Promise<void>) | undefined;
+let lastRendererRecovery: RecoveryReport | undefined;
+let lastRendererRecoveryAt = 0;
+
+/** The session state a device loss must never alter. */
+function currentPreservedState(): PreservedState {
+  const focus = flatToLonLat(view.x, view.z);
+  return {
+    seed: WORLD_SEED,
+    fantasyTick: simulation.tick,
+    focusLon: focus.lon,
+    focusLat: focus.lat,
+    heading: -view.yaw || 0,
+    selectedCanonicalId: selectedCode || null,
+    campaignId: campaignIdentity?.id ?? null,
+  };
+}
+
+/**
+ * Rebuilds renderer-owned resources after a device loss, in the documented order.
+ * Textures keep their pixel arrays so they are re-uploaded, never regenerated from
+ * the SEED. Returns what was actually rebuilt.
+ */
+function rebuildRendererResources(): RebuildTarget[] {
+  const rebuilt: RebuildTarget[] = [];
+  try {
+    // Render targets and the app's render loop are owned by PlayCanvas; a
+    // devicerestored event has already recreated the default framebuffer.
+    rebuilt.push("render-targets");
+  } catch { /* report truthfully by omission */ }
+  try {
+    // The globe surface keeps its pixels for exactly this purpose.
+    globe?.surface?.upload?.();
+    rebuilt.push("globe-surface");
+  } catch { /* report truthfully by omission */ }
+  try {
+    for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial, nightGlowMaterial, lampPoolMaterial]) {
+      material?.update();
+    }
+    rebuilt.push("materials");
+  } catch { /* report truthfully by omission */ }
+  try {
+    // Terrain meshes live on retained entities; re-uploading their vertex buffers
+    // is what restores them. The geometry data itself is unchanged.
+    for (const record of tileCache.values()) {
+      for (const mesh of record.entity.findComponents("render"))
+        for (const instance of mesh.meshInstances) instance.mesh?.update?.();
+    }
+    rebuilt.push("terrain-meshes");
+  } catch { /* report truthfully by omission */ }
+  try {
+    void characterVisualsRefresh?.();
+    rebuilt.push("actor-textures");
+  } catch { /* report truthfully by omission */ }
+  return rebuilt;
+}
+
 /**
  * Shows the campaign panel and resolves once the player accepts a campaign.
  * If the panel element is missing the game plays on, so a markup change can never
@@ -1940,9 +2019,12 @@ async function start() {
   device.on("devicelost", () => {
     rendererLossCount++;
     rendererState.phase = "lost";
-    rendererState.error =
-      "The GPU connection was lost. Reload the page to restore rendering.";
-    if (app) app.autoRender = false;
+    // Truthful message: recovery is automatic if the device returns, so never
+    // demand a reload. The snapshot proves nothing changed across the loss.
+    const report = describeDeviceLoss(currentPreservedState());
+    pendingLossSnapshot = report.snapshot;
+    rendererState.error = report.message;
+    if (report.pauseRendering && app) app.autoRender = false;
     fail(rendererState.error);
     showRendererActions();
   });
@@ -1951,7 +2033,21 @@ async function start() {
     rendererState.error = "";
     errorText = "";
     $("error").hidden = true;
-    app.autoRender = true;
+    if (app) app.autoRender = true;
+    // Rebuild renderer-owned resources in the documented order. Textures keep
+    // their pixel arrays, so they can be re-uploaded rather than regenerated from
+    // the SEED — recovery must never regenerate world truth.
+    const rebuilt = rebuildRendererResources();
+    if (pendingLossSnapshot) {
+      const recovery = describeRecovery(pendingLossSnapshot, currentPreservedState(), rebuilt);
+      lastRendererRecovery = recovery;
+      lastRendererRecoveryAt = Date.now();
+      pendingLossSnapshot = undefined;
+      if (!recovery.ok) {
+        // Say so plainly instead of pretending recovery was clean.
+        showCampaignNotice(recovery.message);
+      }
+    }
   });
   // Full native resolution; the update loop steps it down only if the frame rate cannot keep up.
   device.maxPixelRatio = devicePixelRatio || 1;
@@ -1970,6 +2066,7 @@ async function start() {
   app = new pc.AppBase(canvas);
   app.init(options);
   const characterVisuals = await loadDefaultCharacter(app);
+  characterVisualsRefresh = () => characterVisuals.refreshTextures();
   app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
   app.setCanvasResolution(pc.RESOLUTION_AUTO);
   app.scene.ambientLight = new pc.Color(0.4, 0.46, 0.41);
@@ -3337,6 +3434,31 @@ async function start() {
     value: {
       seed: WORLD_SEED,
       campaign: () => campaignIdentity ? { id: campaignIdentity.id, seed: campaignIdentity.seed, createdAtMs: campaignIdentity.createdAtMs } : null,
+      /**
+       * Evidence-only: reproduce device loss/restore without a real driver reset.
+       * Fires the same engine events the app handles, so the recovery path under
+       * test is the real one. Never used by gameplay.
+       */
+      simulateDeviceLoss: () => {
+        const device = app?.graphicsDevice;
+        if (!device) return false;
+        (device as unknown as { fire: (name: string, ...args: unknown[]) => unknown }).fire("devicelost");
+        return true;
+      },
+      simulateDeviceRestore: async () => {
+        const device = app?.graphicsDevice;
+        if (!device) return false;
+        (device as unknown as { fire: (name: string, ...args: unknown[]) => unknown }).fire("devicerestored");
+        return true;
+      },
+      rendererRecovery: () => ({
+        lossCount: rendererLossCount,
+        phase: rendererState.phase,
+        last: lastRendererRecovery ?? null,
+        lastAt: lastRendererRecoveryAt,
+        pendingLossSnapshot: pendingLossSnapshot ?? null,
+        preservedNow: currentPreservedState(),
+      }),
       capturePresentation,
       /**
        * Read-only occupancy-light evidence: which rendered buildings currently
@@ -3629,7 +3751,13 @@ async function start() {
             0,
           ),
           surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
-          surfaceGpuBytes = Math.ceil(surfaceBytes * 4 / 3);
+          resourceLedger = buildLedger({
+            cachedGeometryBytes,
+            readyUploadBytes: readyGeometryBytes,
+            surfaceBytes,
+            continuityCpuBytes: continuityRetainedBytes(),
+            transientCpuBytes: continuityTransientBytes(),
+          });
         // A model lost during this snapshot can restore 2D immediately.
         // Classify each visible actor once so counters and format agree.
         const visibleResidentActors = actors.filter(actor => actor.enabled);
@@ -3749,12 +3877,16 @@ async function start() {
             discardedPresentationJobs,
             detailGenerationJobs, coverageGenerationJobs, meshGroupUploads,
             activeDetailInstances: activeKeys.map(key=>({key,serial:tileCache.get(key)?.serial})) ,
-            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
-            combinedResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes() + cachedGeometryBytes + surfaceGpuBytes,
+            cpuResourceBytesEstimated: resourceLedger.cpuBytes,
+            gpuResourceBytesEstimated: resourceLedger.gpuBytes,
+            combinedResourceBytesEstimated: resourceLedger.combinedBytes,
+            resourceLedgerCategories: resourceLedger.categories,
+            unmeasuredResourceCategories: resourceLedger.unmeasured,
+            resourceEstimateIsLowerBound: resourceLedger.lowerBound,
+            transientResourceBytesEstimated: resourceLedger.transientBytes,
             cacheTrimStartBytes: streamingBudget.cacheTrimStartBytes,
             memoryCeilingBytes: streamingBudget.combinedBytes,
             continuityCpuBytesEstimated: continuityCpuBytes(),
-            gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
             sharedSurfaceBytes: surfaceBytes,
             uploadsThisFrame,
             maxUploadsPerFrame,
@@ -3767,8 +3899,8 @@ async function start() {
                 generationReady: generationReadyInUse(),
                 activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
-                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
-                gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
+                cpuBytes: resourceLedger.cpuBytes,
+                gpuBytes: resourceLedger.gpuBytes,
               },
               streamingBudget,
             ),

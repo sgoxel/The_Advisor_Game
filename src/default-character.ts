@@ -259,5 +259,23 @@ export async function loadDefaultCharacter(app: pc.AppBase) {
     setLighting(_direction: pc.Vec3, _tint: readonly number[]) {
       // Unlit authored ink matches the inspector at day and night.
     },
+    /**
+     * Re-uploads authored cutout textures after a lost GPU device (WP-S009-003-001).
+     * The pixel data is unchanged, so this restores presentation without
+     * regenerating any SEED fact or identity.
+     */
+    async refreshTextures(): Promise<void> {
+      for (const pending of images.values()) {
+        try {
+          const shared = await pending;
+          const material = shared.value;
+          const texture = material?.emissiveMap as pc.Texture | null | undefined;
+          texture?.upload?.();
+          material?.update?.();
+        } catch {
+          // A missing illustration falls back to the authored default; never throw.
+        }
+      }
+    },
   };
 }
