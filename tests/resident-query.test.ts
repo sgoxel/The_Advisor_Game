@@ -4,7 +4,8 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_POLE_DISTANCE, lo
 import { residentGpuHitAllows } from "../src/resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "../src/resident-scene-occlusion.ts";
 import assert from "node:assert/strict";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover, activeResidentWorkers } from "../src/resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestKeyboardResident, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentQueryAreasOverlap, residentStationaryPartialCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentActorSearchContinues, residentFirstPreviewVisible, residentGateWatchFocus, selectedResidentVisibleInView, selectedResidentCurrentCarryover,
+  inspectedResidentSource, activeResidentWorkers } from "../src/resident-query.ts";
 import { LazySimulation, residentOrderFor, residentFoundationAt, residentStandSeedFor, neighbourhoodSite, routineHasAnchorChange, fieldConnectorsAllowCore } from "../src/simulation.ts";
 import { villages, cities, nearbyPlaces, type Place } from "../src/geography.ts";
 import { settlementExteriorFor, settlementHomeFor, settlementHomeAnchorFor } from "../src/settlement-exterior.ts";
@@ -1020,4 +1021,30 @@ test("WP #550: selected visible resident retains only current Simulation feet du
     "moving outside the actual camera query must not keep a phantom");
   assert.equal(selectedResidentCurrentCarryover(resident.code, undefined, view), false,
     "missing current Simulation authority cannot be replaced by a cached sprite");
+});
+
+test("an inspected resident is described by CURRENT Simulation state, never a remembered actor object", () => {
+  // The exact defect a player reported: a day-shift guard went home to sleep,
+  // yet their card kept showing "Guard duty 06:00-18:00, 80%" because the
+  // object remembered by the pooled actor (which carries no tick) was reused.
+  const remembered = { activity: "guard", grounded: true, indoors: false, x: 12.03, z: 5.99,
+    activityStart: 6 * 3600, activityEnd: 18 * 3600, activityProgress: .8 };
+  const authoritative = { activity: "sleep", grounded: true, indoors: true, x: 12.03, z: 5.99,
+    activityStart: 0, activityEnd: 5 * 3600, activityProgress: .43 };
+  const view = { x: 12, z: 6, radius: .4 };
+
+  // The card source is the authoritative projection; a remembered object is not
+  // even a fallback, because nothing can prove it is current.
+  assert.equal(inspectedResidentSource(authoritative, undefined), authoritative);
+  assert.equal(inspectedResidentSource(authoritative, remembered), authoritative,
+    "current Simulation state always wins over a remembered object");
+  assert.equal(inspectedResidentSource(undefined, remembered), remembered,
+    "the same tick's worker snapshot is the only fallback");
+
+  // Consequence: the stale actor cannot be kept on screen using remembered
+  // visibility fields, because visibility is judged on the current projection.
+  assert.equal(selectedResidentVisibleInView(remembered, view), true,
+    "the remembered object still looks clickable -- that is exactly the trap");
+  assert.equal(selectedResidentVisibleInView(authoritative, view), false,
+    "the same resident indoors is not a visible outdoor actor");
 });

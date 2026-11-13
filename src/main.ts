@@ -5,7 +5,7 @@ import { setupUiShell } from "./ui-shell.ts";
 import { emptyInventory, itemsHeldBy, parseInventory, seededItems, serializeInventory, type InventoryState } from "./inventory.ts";
 import { performItemTransfer } from "./item-transfer.ts";
 import { isNightSecond, litBuildingCodes, litSetKey, mergeGlowGeometry, type LitBuilding } from "./night-lighting.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, inspectedResidentSource, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -25,7 +25,7 @@ import { metresToSource } from "./physical-scale.ts";
 import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
-import { clockLabel, fantasySecondOfDay, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
+import { FANTASY_DAY_SECONDS, clockLabel, fantasySecondOfDay, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
 import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, setItemGiveAdvisor, setBelongingsReader, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -1452,6 +1452,9 @@ let campaignIdentity: CampaignRecord | undefined;
 let campaignJournal: CampaignJournal = emptyJournal("no-campaign");
 /** Honest state of that history, surfaced to the player and to evidence hooks. */
 let journalStatus: { saved: boolean; problem?: string; recovered?: string } = { saved: false };
+
+/** Last resident card render, so an open popup refreshes once per tick, not per frame. */
+let lastRenderedPopup: { code: string; tick: number } = { code: "", tick: -1 };
 
 /** Pre-loss snapshot, so recovery can be proven to have changed nothing. */
 let pendingLossSnapshot: PreservedState | undefined;
@@ -2980,7 +2983,11 @@ async function start() {
         simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
       lastSimulationRealSecond = realSecond;
-      setText($("fantasy-time"), clock.labelAt(now));
+      // Both clocks describe the tick actually in force: authoritative Simulation
+      // time, which every resident and schedule is evaluated at. During a pinned
+      // evidence capture that is the pinned tick, so the realm and local labels
+      // can never disagree about what the scene is showing.
+      setText($("fantasy-time"), clock.labelForTick(simulation.tick));
       setText($("simulation-status"),
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`);
       // Logical inspection remains available before optional meshes and billboards
@@ -3027,7 +3034,6 @@ async function start() {
       const existingSelected = inspectedCode
         ? actors.find(actor => actor.enabled && actorResidents.get(actor)?.code === inspectedCode)
         : undefined;
-      const knownSelected = existingSelected ? actorResidents.get(existingSelected) : undefined;
       // An in-flight view query must not erase a still-grounded selected 3D actor
       // simply because its old finite result is no longer the desired key.
       // Never retain stale time/remote scenery; no actor is invented.
@@ -3035,17 +3041,17 @@ async function start() {
         ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}/${acceptedSiteVisits ? simulation.tick : ""}` : "";
       const selectedFromSnapshot = inspectedCode && snapshot
         ? projectedResidents.find(resident => resident.code === inspectedCode) : undefined;
-      const authoritativeSelected = inspectedCode && snapshot &&
-        snapshotRevision !== lastResidentSnapshot && !selectedFromSnapshot
+      // The inspected resident is resolved from Simulation EVERY frame, never
+      // from the object remembered by a pooled actor. An open card and its actor
+      // must describe THIS Fantasy Time: a remembered object carries no tick, so
+      // a day-shift guard could keep claiming "Guard duty 06:00–18:00, 80%" long
+      // after going home to sleep, and a stale outdoor actor stayed on screen.
+      // Bounded to one resident — the same per-frame authority already spent on
+      // the real gate watch below.
+      const authoritativeSelected = inspectedCode
         ? simulation.projectedResidentByCode(inspectedCode) : undefined;
-      // On camera-only refocus, a worker can be rebuilding the current view
-      // for longer than the old two-second grace period. Re-read the SAME
-      // selected resident from Simulation instead of holding old snapshot
-      // coordinates or clearing their legal visible feet.
-      const currentSelected = inspectedCode && existingSelected &&
-        residentMode.actors && query && !snapshot
-        ? simulation.projectedResidentByCode(inspectedCode) : undefined;
-      const selected = selectedFromSnapshot ?? authoritativeSelected ?? currentSelected ?? knownSelected;
+      const currentSelected = authoritativeSelected;
+      const selected = inspectedResidentSource(authoritativeSelected, selectedFromSnapshot);
       const selectionNearby = residentMode.actors &&
         selectedResidentVisibleInView(selected, query);
       // A legally staffed gate is part of the living world, not a dependent
@@ -3151,16 +3157,22 @@ async function start() {
           actorResidents.delete(actors[i]);
           actorMotion.delete(actors[i]);
         }
-        // Keep an open character popup in step with Fantasy Time.
-        const popupCode = npcPopupCode();
-        if (popupCode) {
-          // Prefer the worker snapshot; only a resident outside it is re-evaluated on this thread.
-          const resident = residents.find((entry) => entry.code === popupCode) ??
-            (selected?.code === popupCode ? selected : simulation.projectedResidentByCode(popupCode));
-          if (resident) showNpcPopup(resident, simulation.tick);
-        }
         setText($("simulation-status"),
           `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${snapshot?.partial ? "discovering more outdoor residents" : `${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated`}.`);
+      }
+    }
+    // An open character card follows Fantasy Time even when no worker snapshot
+    // changes. It is always built from Simulation's CURRENT projection, never
+    // from a snapshot, a carry-over or an actor's remembered object, so a guard
+    // who has gone home to sleep can never keep displaying a day watch. Rendered
+    // once per Simulation tick, not once per animation frame.
+    const openPopupCode = npcPopupCode();
+    if (openPopupCode &&
+        (openPopupCode !== lastRenderedPopup.code || simulation.tick !== lastRenderedPopup.tick)) {
+      const resident = simulation.projectedResidentByCode(openPopupCode);
+      if (resident) {
+        showNpcPopup(resident, simulation.tick);
+        lastRenderedPopup = { code: openPopupCode, tick: simulation.tick };
       }
     }
     // Per-frame walking: interpolate along the street route between Fantasy Time samples.
@@ -3331,7 +3343,7 @@ async function start() {
     }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
-    applyDaylight(simulationTick,dt);
+    applyDaylight(simulation.tick,dt);
     updateHandoff(dt);
     sun.light!.castShadows =
       view.halfHeight < 500 && projectionTransition <= 0.001;
@@ -3707,6 +3719,28 @@ async function start() {
       cellAt,
       cellSeed,
       /**
+       * Read-only evidence: what Simulation says ONE resident is doing at this
+       * exact Fantasy tick, plus the tick used. Lets a card be compared with the
+       * authority instead of trusting the rendered text.
+       */
+      residentNow(code: string) {
+        const resident = simulation.projectedResidentByCode(code);
+        if (!resident) return null;
+        return {
+          tick: simulation.tick,
+          name: resident.name,
+          task: resident.task,
+          activity: resident.activity,
+          activityStart: resident.activityStart,
+          activityEnd: resident.activityEnd,
+          activityProgress: resident.activityProgress,
+          indoors: resident.indoors,
+          grounded: resident.grounded,
+          route: resident.route,
+          x: resident.x, z: resident.z,
+        };
+      },
+      /**
        * Read-only evidence hook: the evening anchors the REAL day planner will
        * use for this resident, including any Advisor preference. It resolves the
        * same plan the Simulation walks, and moves nobody.
@@ -3752,13 +3786,16 @@ async function start() {
       setEvidenceTick(hour: number | undefined) {
         if (hour === undefined) { evidenceTickOverride = undefined; lastSimulationRealSecond = -1; return true; }
         if (!Number.isFinite(hour) || hour < 0 || hour > 24) return false;
-        // Move by a whole number of fantasy days to the requested hour, keeping
-        // the same calendar day. The tick is a realm-time value, so use the
-        // realm helper rather than a longitude-adjusted one.
+        // Move FORWARD to the next occurrence of the requested hour. Authoritative
+        // Simulation time is monotonic, so a pin that asked to go backwards used to
+        // clamp while the local-time label still followed the request — producing
+        // evidence where the two clocks disagreed. Always stepping forward keeps
+        // every later capture consistent with the tick actually in force.
         const nowTick = clock.tickAt(Date.now());
         const currentSecond = fantasySecondOfDay(nowTick);
-        const deltaSeconds = hour * 3600 - currentSecond;
-        evidenceTickOverride = Math.max(0, nowTick + Math.round(deltaSeconds));
+        const targetSecond = Math.round(hour * 3600) % FANTASY_DAY_SECONDS;
+        const deltaSeconds = (targetSecond - currentSecond + FANTASY_DAY_SECONDS) % FANTASY_DAY_SECONDS;
+        evidenceTickOverride = Math.max(0, nowTick + deltaSeconds);
         lastSimulationRealSecond = -1;
         return true;
       },

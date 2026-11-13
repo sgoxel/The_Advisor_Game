@@ -17,6 +17,11 @@ export const ACTIVE_EPOCH_MS = campaignEpochMs() ?? REAL_EPOCH_MS;
 export const TIME_SCALE = 24;
 export const YEAR_OFFSET = 1900;
 export const WORLD_TIMEZONE = "Europe/Istanbul";
+/** "DD.MM.YYYY · HH:MM" for one fantasy instant, in the world timezone rules. */
+export function formatFantasyDate(d: Date): string {
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+  return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${pad(d.getUTCFullYear(), 4)} · ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
 export function fantasyOrigin(realMs: number): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: WORLD_TIMEZONE,
@@ -48,9 +53,13 @@ export class FantasyClock {
     return new Date(this.origin + this.tickAt(realMs) * 1000);
   }
   labelAt(realMs: number): string {
-    const d = this.dateAt(realMs),
-      pad = (n: number, width = 2) => String(n).padStart(width, "0");
-    return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${pad(d.getUTCFullYear(), 4)} · ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    return this.labelForTick(this.tickAt(realMs));
+  }
+  /** "DD.MM.YYYY · HH:MM" for an absolute Fantasy tick. Evidence captures pin a
+   * tick directly, so the realm label must be derived from the tick actually in
+   * force rather than from the wall clock, or the two clocks disagree. */
+  labelForTick(tick: number): string {
+    return formatFantasyDate(new Date(this.origin + tick * 1000));
   }
 }
 

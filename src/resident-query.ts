@@ -218,6 +218,23 @@ export function selectedResidentCurrentCarryover(
     selectedResidentVisibleInView(current, view);
 }
 
+/**
+ * The single source of truth for an ACTOR or an OPEN CARD describing one
+ * resident. The authoritative current Simulation projection always wins; the
+ * same tick's worker snapshot is the only fallback.
+ *
+ * A remembered object attached to a pooled actor must never be a source: it
+ * carries no tick, so nothing can prove it current. Reusing one is how a
+ * day-shift guard kept claiming "Guard duty 06:00–18:00, 80%" hours after
+ * going home to sleep, and how a stale outdoor actor stayed on screen.
+ */
+export function inspectedResidentSource<T>(
+  authoritative: T | undefined,
+  sameTickSnapshot: T | undefined,
+): T | undefined {
+  return authoritative ?? sameTickSnapshot;
+}
+
 /** Previously validated stationary NPCs may remain in the next actual
  * viewport after a wider pan. Overlap is geometric, not an arbitrary
  * quarter-radius camera-motion threshold or a new Simulation authority.
