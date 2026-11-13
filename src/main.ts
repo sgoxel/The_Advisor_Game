@@ -75,6 +75,17 @@ import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribePr
 import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
 import { dailyPlan } from "./routines.ts";
 import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
+import { WORLD_FOUNDATION_VERSION } from "./config.ts";
+import {
+  LEGACY_SITE_VISITS_KEY,
+  commitJournal,
+  emptyJournal,
+  importLegacySiteVisits,
+  loadJournal,
+  projectSiteVisits,
+  recordSiteVisits,
+  type CampaignJournal,
+} from "./campaign-journal.ts";
 import { CampaignPanel } from "./campaign-panel.ts";
 import { buildLedger } from "./memory-ledger.ts";
 import { describeDeviceLoss, describeRecovery, type PreservedState, type RebuildTarget, type RecoveryReport } from "./renderer-recovery.ts";
@@ -1433,6 +1444,14 @@ function processStreaming(material: pc.StandardMaterial) {
  */
 /** The campaign this page load belongs to (resume or fresh). */
 let campaignIdentity: CampaignRecord | undefined;
+/**
+ * The single durable history of Simulation-approved campaign changes
+ * (WP-S010-008-003). Only `commitJournal` may write it, and only after the
+ * change's identity has been derived and validated.
+ */
+let campaignJournal: CampaignJournal = emptyJournal("no-campaign");
+/** Honest state of that history, surfaced to the player and to evidence hooks. */
+let journalStatus: { saved: boolean; problem?: string; recovered?: string } = { saved: false };
 
 /** Pre-loss snapshot, so recovery can be proven to have changed nothing. */
 let pendingLossSnapshot: PreservedState | undefined;
@@ -1633,8 +1652,9 @@ function reanchorClockToCampaign(record: CampaignRecord): void {
 function showCampaignNotice(message: string): void {
   const box = document.getElementById("error");
   if (!box) return;
+  const existing = box.hidden ? "" : (box.textContent ?? "").trim();
   box.hidden = false;
-  box.textContent = message;
+  box.textContent = !existing || existing.includes(message) ? (existing || message) : `${existing} ${message}`;
 }
 let evidenceTickOverride: number | undefined;
 /** Evidence-only render-scale pin; see setEvidenceRenderScale. */
@@ -2405,16 +2425,69 @@ async function start() {
   // Saved history consists only of SEED identities, absolute ticks and edges.
   // Never hydrate a serialized actor position or validated boolean. Replay
   // runs full character/route/surface decisions; corrupted history is ignored.
-  const visitSaveKey = "advisor-game:s005:ALDERWICK:v5:site-visits";
+  //
+  // The campaign journal is the ONE durable authority for approved changes
+  // (WP-S010-008-003). It is campaign-scoped, content-addressed and checksummed,
+  // so an interrupted write can be completed but a forged or duplicated entry
+  // cannot be applied twice.
+  const journalCampaignId = campaignIdentity?.id ?? "no-campaign";
+  const journalStorage = (() => {
+    try { return globalThis.localStorage ?? undefined; } catch { return undefined; }
+  })();
+  let loadedVisits: readonly unknown[] = [];
+  /** True when every stored event arrived by migration, so rejection can discard it. */
+  let journalIsLegacyImport = false;
+  if (journalStorage) {
+    const loaded = loadJournal(journalStorage, journalCampaignId);
+    if (loaded.journal) {
+      campaignJournal = loaded.journal;
+      journalStatus = { saved: true, ...(loaded.recovered ? { recovered: loaded.recovered } : {}) };
+      // Migrate the pre-journal blob exactly once, so an existing player keeps
+      // their journeys instead of silently losing them. It is NOT promoted yet:
+      // Simulation must revalidate the replay first, otherwise a fabricated blob
+      // would be laundered into authoritative storage.
+      if (campaignJournal.events.length === 0) {
+        try {
+          const legacyRaw = journalStorage.getItem(LEGACY_SITE_VISITS_KEY);
+          if (legacyRaw && legacyRaw.length <= 24_576) {
+            const imported = importLegacySiteVisits(campaignJournal, JSON.parse(legacyRaw));
+            if (imported.imported > 0) {
+              campaignJournal = imported.journal;
+              journalIsLegacyImport = true;
+            }
+          }
+        } catch { /* an unreadable legacy blob is left untouched, never guessed at */ }
+      }
+      loadedVisits = projectSiteVisits(campaignJournal);
+    } else {
+      journalStatus = { saved: false, problem: loaded.problem };
+    }
+  } else {
+    journalStatus = { saved: false, problem: "Browser storage is unavailable; this session will not be remembered." };
+  }
+  // A history that cannot be trusted is reported in the existing alert box, so a
+  // rejected or unreadable save never looks like a saved campaign.
+  if (journalStatus.problem) showCampaignNotice(journalStatus.problem);
   let pendingSiteVisitHistory: unknown;
-  try {
-    const stored = localStorage.getItem(visitSaveKey);
-    if (stored && stored.length <= 24_576) pendingSiteVisitHistory = JSON.parse(stored);
-  } catch { /* storage may be disabled; live game remains playable */ }
+  if (loadedVisits.length) {
+    pendingSiteVisitHistory = {
+      version: 1, seed: WORLD_SEED, foundation: WORLD_FOUNDATION_VERSION, visits: loadedVisits,
+    };
+  }
+  /**
+   * Persists whatever Simulation has just approved. Recording the same approved
+   * change again adds nothing, so a reload or a repeat caller cannot move an
+   * actor or an item twice. A failed commit is reported, never glossed over.
+   */
   const saveSiteVisits = () => {
-    try { localStorage.setItem(visitSaveKey,
-      JSON.stringify(simulation.savedSiteVisitHistory())); }
-    catch { /* no false claim of durable save when storage unavailable */ }
+    if (!journalStorage) return;
+    const recorded = recordSiteVisits(campaignJournal, simulation.savedSiteVisitHistory().visits);
+    if (recorded.added === 0 && !journalStatus.problem) return;
+    campaignJournal = recorded.journal;
+    const committed = commitJournal(journalStorage, campaignJournal);
+    journalStatus = committed.ok
+      ? { saved: true }
+      : { saved: false, problem: committed.reason };
   };
   /**
    * Household belongings live in one validated inventory record. SEED decides
@@ -2755,6 +2828,28 @@ async function start() {
         residentPhaseTimings.clearPending();
         residentQueries.clear();
         lastSimulationRealSecond = -1;
+        // Only now, after Simulation has revalidated every stored journey, may
+        // the history be promoted to durable authority.
+        if (journalStorage && journalIsLegacyImport) {
+          const committed = commitJournal(journalStorage, campaignJournal);
+          if (committed.ok) {
+            journalStatus = { saved: true };
+            try { journalStorage.removeItem(LEGACY_SITE_VISITS_KEY); } catch { /* leave it; harmless */ }
+          } else {
+            journalStatus = { saved: false, problem: committed.reason };
+          }
+        }
+      } else if (campaignJournal.events.length > 0) {
+        // Stored history exists but the world refuses it. Do not apply it, do not
+        // pretend it was saved, and never repair it into something plausible.
+        if (journalIsLegacyImport) {
+          // It arrived only by migration, so discard it rather than poisoning
+          // every later session with a record the world has already rejected.
+          campaignJournal = emptyJournal(journalCampaignId);
+          journalStatus = { saved: false, problem: "A migrated journey history was rejected by Simulation and was not kept." };
+        } else {
+          journalStatus = { saved: false, problem: "The stored campaign history was rejected by Simulation and was not applied." };
+        }
       }
     });
   }
@@ -3549,6 +3644,19 @@ async function start() {
     value: {
       seed: WORLD_SEED,
       campaign: () => campaignIdentity ? { id: campaignIdentity.id, seed: campaignIdentity.seed, createdAtMs: campaignIdentity.createdAtMs } : null,
+      /**
+       * Read-only view of the durable campaign history (WP-S010-008-003). Reports
+       * what is actually stored, including whether a write failed, so a reload
+       * can be proved to replay the same changes exactly once.
+       */
+      campaignJournal: () => ({
+        campaignId: campaignJournal.campaignId,
+        eventCount: campaignJournal.events.length,
+        events: campaignJournal.events.map((event) => ({
+          id: event.id, type: event.type, tick: event.tick, subject: event.subject,
+        })),
+        status: { ...journalStatus },
+      }),
       /**
        * Evidence-only: reproduce device loss/restore without a real driver reset.
        * Fires the same engine events the app handles, so the recovery path under
