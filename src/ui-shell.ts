@@ -209,12 +209,4 @@ export function setupUiShell(options: UiShellOptions = {}): void {
 
   // A tab press in the region panel reveals the panel body on touch screens.
   document.getElementById("region-tab-layers")?.addEventListener("click", () => setRegion(true));
-
-  // Ask a suggested question from the Ideas segment, then reveal the answer.
-  document.getElementById("advisor-panel")?.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    if (!target.closest("[data-advisor-suggest], [data-advisor-followup]")) return;
-    window.setTimeout(() => showTab("advisor", "talk"), 0);
-  });
 }

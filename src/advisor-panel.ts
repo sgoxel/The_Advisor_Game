@@ -6,7 +6,6 @@
  * either answers from facts, asks a clarification, or reports a refusal.
  */
 import { ADVISOR_DIALOGUE_VERSION, Conversation, type AdvisorFacts, type DialogueReply, type FollowUpPrompt } from "./advisor-dialogue.ts";
-import { SENTENCE_LIBRARY_VERSION } from "./sentence-library.ts";
 import {
   applyExchange,
   loadCharacter,
@@ -82,11 +81,9 @@ export class AdvisorPanel {
     }
     this.renderSuggestions();
     this.refreshRelationship();
-    // On phones and short landscape screens the Advisor starts as a compact
-    // bar so the map and the information panel keep their space; the header
-    // button or the quick dock expands it on demand.
-    this.setExpanded(window.innerWidth > 700 && window.innerHeight >= 640);
-    this.appendNotice(`Offline Advisor ready · ${SENTENCE_LIBRARY_VERSION}`);
+    // The Advisor starts as a small speech bubble on every screen; the bubble
+    // or the quick dock expands the conversation on demand.
+    this.setExpanded(false);
     void ADVISOR_DIALOGUE_VERSION;
   }
 
@@ -98,21 +95,19 @@ export class AdvisorPanel {
   setExpanded(expanded: boolean): void {
     this.root.setAttribute("data-expanded", String(expanded));
     this.toggle.setAttribute("aria-expanded", String(expanded));
-    const label = expanded ? "Hide" : "Talk";
-    const text = this.toggle.querySelector<HTMLElement>("[data-advisor-toggle-label]");
-    if (text) text.textContent = label;
-    else this.toggle.textContent = expanded ? "Hide Advisor" : "Talk to your Advisor";
-    this.toggle.setAttribute("aria-label", expanded ? "Hide Advisor" : "Talk to your Advisor");
-    this.toggle.title = expanded ? "Hide Advisor" : "Talk to your Advisor";
+    const label = expanded ? "Close Advisor" : "Talk to your Advisor";
+    this.toggle.setAttribute("aria-label", label);
+    this.toggle.title = label;
     this.input.disabled = !expanded;
     if (expanded) this.input.focus({ preventScroll: true });
   }
 
-  /** Updates the panel heading to name the person being advised. */
+  /**
+   * Names the person being advised for assistive technology only; the visible
+   * panel shows the conversation, not a heading.
+   */
   setSubject(name: string | undefined): void {
-    const target = this.root.querySelector<HTMLElement>("[data-advisor-subject]");
-    if (!target) return;
-    target.textContent = name ? `Advising ${name}` : "No protagonist chosen";
+    this.root.setAttribute("aria-label", name ? `Advisor conversation with ${name}` : "Advisor conversation");
   }
 
   /** Handles one player message; safe to call from tests. */
@@ -262,7 +257,6 @@ export class AdvisorPanel {
     this.log.replaceChildren();
     this.renderSuggestions();
     this.clearFollowUps();
-    this.appendNotice(`Offline Advisor ready · ${SENTENCE_LIBRARY_VERSION}`);
   }
 
   private renderFollowUps(prompts: readonly FollowUpPrompt[] | undefined): void {

@@ -5,7 +5,7 @@ import { setupUiShell } from "./ui-shell.ts";
 import { emptyInventory, itemsHeldBy, parseInventory, seededItems, serializeInventory, type InventoryState } from "./inventory.ts";
 import { performItemTransfer } from "./item-transfer.ts";
 import { isNightSecond, litBuildingCodes, litSetKey, mergeGlowGeometry, type LitBuilding } from "./night-lighting.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, inspectedResidentSource, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentMayTakeIdleWorker, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, inspectedResidentSource, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -26,7 +26,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor, settlementExteriorFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { FANTASY_DAY_SECONDS, clockLabel, fantasySecondOfDay, localDayIndex, localSecondOfDay, localWeekday, timeZoneOffsetHours } from "./clock.ts";
-import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, setPopupNavigator, setSiteVisitAdvisor, setItemGiveAdvisor, setBelongingsReader, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
+import { anchorNames, hideNpcPopup, npcPopupCode, residentObservationPoint, residentFocusPoint, setPopupNavigator, setSiteVisitAdvisor, setItemGiveAdvisor, setBelongingsReader, popupFocusHalfHeight, popupOwnedHomeFacing, ownedDoorPinAtFocus, type OwnedDoorViewPin, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -78,6 +78,8 @@ import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
 import { WORLD_FOUNDATION_VERSION } from "./config.ts";
 import {
   LEGACY_SITE_VISITS_KEY,
+  inventoryStorageKey,
+  legacyInventoryKey,
   commitJournal,
   emptyJournal,
   importLegacySiteVisits,
@@ -87,6 +89,7 @@ import {
   type CampaignJournal,
 } from "./campaign-journal.ts";
 import { CampaignPanel } from "./campaign-panel.ts";
+import { startOverCampaign } from "./seed-dialog.ts";
 import { buildLedger } from "./memory-ledger.ts";
 import { describeDeviceLoss, describeRecovery, type PreservedState, type RebuildTarget, type RecoveryReport } from "./renderer-recovery.ts";
 import { LazySimulation, populationOf, guardCoverageAt, dutyGuardCodesNearView, residentOccupiesBuilding, residentInsideRenderedService, residentViewQuery, residentOrderFor, residentWalkableSurface, itemExchangeLegalBetween } from "./simulation.ts";
@@ -459,7 +462,10 @@ function dispatchResidentQuery() {
     generationReadyInUse(), generationLimit(), inFlight);
   if (!residentDispatchAllowed(selectionDirty, ready, idleWorkers.length, residentBatches.size > 0) && !early) return;
   if (!selectionDirty && (ready || early)) {
-    const available = early ? 1 : generationLimit() - generationReadyInUse();
+    // Terrain that the view still needs outranks a resident query for the last idle worker.
+    const terrainOutstanding = !early && nextStreamingJob(tileAt(0, 0, 0), wanted, coverageTiles,
+        { has: (key: string) => tileCache.has(key) || pending.has(key) }) !== undefined,
+      available = early ? 1 : residentMayTakeIdleWorker(idleWorkers.length, terrainOutstanding) ? generationLimit() - generationReadyInUse() : 0;
     if (available > 0) {
       const job = residentQueries.take(true);
       if (job) {
@@ -1604,48 +1610,15 @@ function rebuildRendererResources(): RebuildTarget[] {
 }
 
 /**
- * Shows the campaign panel and resolves once the player accepts a campaign.
- * If the panel element is missing the game plays on, so a markup change can never
- * leave the game permanently blocked.
+ * Shows the campaign panel only when the campaign could not be loaded (corrupt or
+ * unwritable storage). A healthy campaign needs no second confirmation: the player
+ * either just chose its seed in the new-campaign dialog or is resuming the world
+ * they already accepted. "Start a new campaign" goes through the seed dialog.
  */
-function mountCampaignPanel() {
+function showCampaignProblemPanel(): void {
   const root = document.getElementById("campaign-panel");
-  if (!root) {
-    return { whenAccepted: async () => {}, panel: undefined };
-  }
-  let resolveAccepted: () => void = () => {};
-  const accepted = new Promise<void>((resolve) => { resolveAccepted = resolve; });
-  const panel = new CampaignPanel(root, {
-    onAccepted: (record, mode) => {
-      campaignIdentity = record;
-      // A newly created campaign changes the fantasy origin, so the clock must be
-      // re-anchored before the world reports time. A continued campaign keeps the
-      // epoch resolved at module load.
-      if (mode === "created") reanchorClockToCampaign(record);
-      resolveAccepted();
-    },
-  });
-  // The failure states have no accept action; let the player through once they
-  // have acknowledged, so a broken save never blocks playing.
-  if (panel.current.kind === "unreadable" || panel.current.kind === "unavailable") {
-    resolveAccepted();
-  }
-  return { whenAccepted: () => accepted, panel };
-}
-
-/**
- * Re-anchors the displayed fantasy clock to a newly created campaign. World
- * foundation was already generated for this page load, so only the presentation
- * clock and HUD move; nothing about terrain, roads or residents is regenerated.
- */
-function reanchorClockToCampaign(record: CampaignRecord): void {
-  campaignIdentity = record;
-  try {
-    const fresh = new FantasyClock(record.createdAtMs);
-    setText($("fantasy-time"), fresh.labelAt(Date.now()));
-  } catch {
-    /* presentation only: never block play on a clock label */
-  }
+  if (!root) return;
+  new CampaignPanel(root, { onStartNew: () => startOverCampaign() });
 }
 
 /**
@@ -1670,8 +1643,10 @@ const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field"
 function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
   navigate(x, z, Math.min(view.halfHeight, maxHalfHeight));
 }
-function openSettlementCard(place: (typeof places)[number], returnFocus?: HTMLElement) {
-  centreOn(place.x, place.z, place.kind === "city" ? 60 : 25);
+/** Map scales at or closer than 1/2 are close-up inspection: clicking ground must never re-centre on the village. */
+const GROUND_CLICK_NO_RECENTRE_SCALE = 2;
+function openSettlementCard(place: (typeof places)[number], returnFocus?: HTMLElement, recentre = true) {
+  if (recentre) centreOn(place.x, place.z, place.kind === "city" ? 60 : 25);
   showSettlementPopup(place, populationOf(place), returnFocus);
 }
 /**
@@ -1705,7 +1680,8 @@ function openGameInfoAt(x: number, z: number) {
   const wild = nearbyWilderness(x,z,metresToSource(120),8).find(site=>Math.hypot(wrapSourceX(site.x-x),site.z-z)<metresToSource(site.radiusM));
   if(wild){showWildernessPopup(wild);return true;}
   if (settlement) {
-    openSettlementCard(settlement);
+    // Close zoom (1/2 or nearer): show the card but keep the camera where the player is looking.
+    openSettlementCard(settlement, undefined, scaleValueForHalfHeight(view.halfHeight) > GROUND_CLICK_NO_RECENTRE_SCALE);
     return true;
   }
   return false;
@@ -2139,11 +2115,9 @@ async function start() {
   campaignIdentity =
     campaignLoad.state === "resumed" || campaignLoad.state === "created" ? campaignLoad.record : undefined;
 
-  // Show the campaign panel and require an explicit accept. A silent resume is
-  // exactly the behaviour this WP removes: the player must be able to see which
-  // campaign they are in and confirm it before it becomes their session.
-  const campaignPanel = mountCampaignPanel();
-  await campaignPanel.whenAccepted();
+  // The seed dialog (bootstrap.ts) already made the player's choice explicit; only
+  // a broken or unwritable campaign record needs the panel, and it never blocks play.
+  if (campaignLoad.state === "unreadable" || campaignLoad.state === "unavailable") showCampaignProblemPanel();
 
   if (campaignLoad.state === "unreadable") {
     // Deliberately do NOT create a replacement; the record is reported instead.
@@ -2151,7 +2125,10 @@ async function start() {
       `Saved campaign unreadable: ${campaignLoad.reason} A fresh campaign was not started automatically.`,
     );
   }
-  setText($("fantasy-time"), clock.labelAt(Date.now()));
+  setText($("fantasy-time"), clock.labelForLocalTick(clock.tickAt(Date.now()), flatToLonLat(view.x, view.z).lon));
+  // The header only ever shows the local time at the map focus; global (realm) time stays internal.
+  const clockEyebrow = document.querySelector(".world-clock .eyebrow");
+  if (clockEyebrow) clockEyebrow.textContent = "LOCAL TIME · 24×";
   const device = await createRenderer(canvas);
   canvas = device.canvas as HTMLCanvasElement;
   device.on("devicelost", () => {
@@ -2243,10 +2220,12 @@ async function start() {
    * Local-time lighting: the light, ambient, terrain tint and backdrop follow the local clock of the
    * place at the map focus. Adjacent local zones and frame transitions blend; globe and flat terrain share the same displayed tint.
    */
-  let lastDaylightLabel = "";
+  let lastDaylightLabel = "", lastLocalDateLabel = "";
   const applyDaylight = (tick:number,dt:number) => {
     const focusLon=flatToLonLat(view.x,view.z).lon,second=localSecondOfDay(tick,focusLon),
-      phase=daylightAt(second).phase,label=`local ${clockLabel(second)} · GMT+${timeZoneOffsetHours(focusLon)} · ${phase}`;
+      phase=daylightAt(second).phase,label=`GMT+${timeZoneOffsetHours(focusLon)} · ${phase}`,
+      dateLabel=clock.labelForLocalTick(tick,focusLon);
+    if(dateLabel!==lastLocalDateLabel){setText($("fantasy-time"),dateLabel);lastLocalDateLabel=dateLabel;}
     if(label!==lastDaylightLabel){$("local-time").textContent=label;lastDaylightLabel=label;}
     targetDaylight=daylightAtLongitude(tick,focusLon);
     const light=displayedDaylight=advanceDaylight(displayedDaylight,targetDaylight,dt),hadGlow=eveningGlow>GLOW_VISIBILITY_EPSILON;
@@ -2497,10 +2476,24 @@ async function start() {
    * the items; only an accepted, Simulation-checked hand-over changes a holder,
    * and the journal replays exactly once so a reload cannot move an item twice.
    */
-  const inventorySaveKey = "advisor-game:s010:ALDERWICK:v1:inventory";
+  const inventorySaveKey = campaignIdentity
+    ? inventoryStorageKey(campaignIdentity.id)
+    : legacyInventoryKey(WORLD_SEED);
   let inventory: InventoryState = emptyInventory();
   try {
-    inventory = parseInventory(localStorage.getItem(inventorySaveKey)) ?? emptyInventory();
+    let raw = localStorage.getItem(inventorySaveKey);
+    // One-time move of the pre-campaign per-seed record into the campaign that
+    // first loads it; the old key is removed so a later campaign starts empty.
+    if (raw === null && campaignIdentity) {
+      const legacyKey = legacyInventoryKey(WORLD_SEED);
+      const legacyRaw = localStorage.getItem(legacyKey);
+      if (legacyRaw !== null && parseInventory(legacyRaw)) {
+        localStorage.setItem(inventorySaveKey, legacyRaw);
+        localStorage.removeItem(legacyKey);
+        raw = legacyRaw;
+      }
+    }
+    inventory = parseInventory(raw) ?? emptyInventory();
   } catch { /* storage may be disabled; the session still works in memory */ }
   const saveInventory = () => {
     try { localStorage.setItem(inventorySaveKey, serializeInventory(inventory)); }
@@ -2988,7 +2981,7 @@ async function start() {
       // time, which every resident and schedule is evaluated at. During a pinned
       // evidence capture that is the pinned tick, so the realm and local labels
       // can never disagree about what the scene is showing.
-      setText($("fantasy-time"), clock.labelForTick(simulation.tick));
+      // The header shows local time only (updated in applyDaylight); simulation.tick stays global.
       setText($("simulation-status"),
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`);
       // Logical inspection remains available before optional meshes and billboards
@@ -4473,9 +4466,9 @@ function mountAdvisorPanel() {
     const code = getProtagonistCode();
     if (!code) return false;
     const resident = simulation.residentByCode(code);
-    if (!resident || !resident.grounded) return false;
-    const point = residentObservationPoint(resident);
-    if (!point) return false;
+    if (!resident) return false;
+    // Always centre on the protagonist's current position, grounded/indoors or not.
+    const point = residentObservationPoint(resident) ?? residentFocusPoint(resident);
     navigate(point.x, point.z, HERO_HALF_HEIGHT);
     return true;
   };

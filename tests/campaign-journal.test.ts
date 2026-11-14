@@ -8,6 +8,9 @@ import {
   createCampaignEvent,
   emptyJournal,
   importLegacySiteVisits,
+  inventoryStorageKey,
+  legacyInventoryKey,
+  legacySiteVisitsKey,
   journalPendingKey,
   journalStorageKey,
   loadJournal,
@@ -19,6 +22,7 @@ import {
   type CampaignJournal,
   type JournalStorage,
 } from "../src/campaign-journal.ts";
+import { DEFAULT_WORLD_SEED, WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 
 const CAMPAIGN = "545b780a579db8d4";
 const OTHER = "9f8e7d6c5b4a3210";
@@ -270,4 +274,16 @@ test("two campaigns cannot see each other's history", () => {
   const other = loadJournal(storage, OTHER);
   assert.equal(other.journal?.events.length, 0);
   assert.notEqual(journalStorageKey(CAMPAIGN), journalStorageKey(OTHER));
+});
+
+test("the default seed keeps its original save keys; another seed gets its own", () => {
+  assert.equal(legacySiteVisitsKey(DEFAULT_WORLD_SEED), `advisor-game:s005:ALDERWICK:${WORLD_FOUNDATION_VERSION}:site-visits`);
+  assert.equal(legacyInventoryKey(DEFAULT_WORLD_SEED), "advisor-game:s010:ALDERWICK:v1:inventory");
+  assert.notEqual(legacySiteVisitsKey("ADVISOR-0126-THORNMERE"), legacySiteVisitsKey(DEFAULT_WORLD_SEED));
+  assert.equal(legacyInventoryKey("ADVISOR-0126-THORNMERE"), "advisor-game:s010:ADVISOR-0126-THORNMERE:v1:inventory");
+});
+
+test("each campaign owns its inventory key", () => {
+  assert.notEqual(inventoryStorageKey(CAMPAIGN), inventoryStorageKey(OTHER));
+  assert.ok(inventoryStorageKey(CAMPAIGN).endsWith(CAMPAIGN));
 });

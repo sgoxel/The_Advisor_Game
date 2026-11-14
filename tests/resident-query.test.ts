@@ -1048,3 +1048,11 @@ test("an inspected resident is described by CURRENT Simulation state, never a re
   assert.equal(selectedResidentVisibleInView(authoritative, view), false,
     "the same resident indoors is not a visible outdoor actor");
 });
+test("a resident query never takes the last idle worker while mandatory terrain is outstanding", async () => {
+  const { residentMayTakeIdleWorker } = await import("../src/resident-query.ts");
+  // One-worker device: terrain first, otherwise the screen shows only the coarse root fallback.
+  assert.equal(residentMayTakeIdleWorker(1, true), false);
+  assert.equal(residentMayTakeIdleWorker(1, false), true);
+  assert.equal(residentMayTakeIdleWorker(2, true), true);
+  assert.equal(residentMayTakeIdleWorker(0, false), false);
+});

@@ -472,6 +472,41 @@ for(const profile of populationProfiles.values()){
     if(candidate)profile.candidates.push(candidate);
   }
 }
+/**
+ * Deterministic repair for a country whose first candidate set cannot satisfy the legal minimum
+ * (few legal dry sites, or sites clustered closer than the separation rules allow). It is only
+ * called after the normal selection has already failed, so seeds that never fall short keep their
+ * exact world. Each round samples a fresh seeded disc around the country centre (plus extra
+ * freshwater-side points) and keeps what the country owns; once every round is spent the village
+ * freshwater requirement is relaxed. Returns false when nothing is left to try.
+ */
+const DENSIFY_ROUNDS=8,DENSIFY_SAMPLES=4096,DENSIFY_WATER_SAMPLES=480;
+const densifyRoundsUsed=new Map<string,number>();
+const relaxedFreshWater=new Set<string>();
+function densifyCountryCandidates(profile:CountryPopulation):boolean{
+  const {country}=profile,round=densifyRoundsUsed.get(country.code)||0;
+  if(round>=DENSIFY_ROUNDS){
+    if(relaxedFreshWater.has(country.code))return false;
+    relaxedFreshWater.add(country.code);return true;
+  }
+  densifyRoundsUsed.set(country.code,round+1);
+  const radiusRad=Math.sqrt(Math.max(1,profile.areaKm2)*1e6/Math.PI)*1.6/CANONICAL_PLANET_RADIUS,
+    address=`POPULATION/${MACRO_SETTLEMENT_VERSION}/${country.code}/DENSE/${round}`;
+  for(let attempt=0;attempt<DENSIFY_SAMPLES;attempt++){
+    const distance=Math.sqrt(addressed(`${address}/${attempt}/radius`))*radiusRad,angle=TAU*addressed(`${address}/${attempt}/angle`),
+      point=destination(country.canonicalPosition,angle,distance);
+    if(countryAtPosition(point)?.code!==country.code)continue;
+    const candidate=populationCandidate(point,country);
+    if(candidate)profile.candidates.push(candidate);
+  }
+  for(let attempt=0;attempt<DENSIFY_WATER_SAMPLES;attempt++){
+    const point=freshwaterHabitatCandidate(countryWaterSegments.get(country.code)||[],`${address}/WATER/${attempt}`);
+    if(!point||countryAtPosition(point)?.code!==country.code)continue;
+    const candidate=populationCandidate({...point,elevation:0},country);
+    if(candidate)profile.candidates.push(candidate);
+  }
+  return true;
+}
 function siteLegal(candidate:PopulationCandidate,country:Country,kind:Place["kind"]){
   const key=kind==="city"?"cityLegal":"villageLegal";
   return candidate[key]??(candidate[key]=locallyDrySettlementSite(candidate.position,kind==="city"?90:95)&&settlementEnvelopeFits(candidate.position,country,kind));
@@ -498,7 +533,7 @@ cities=(()=>{
         }
         chosen=candidate;break;
       }
-      if(!chosen){if(local.length<MIN_CITIES_PER_COUNTRY)throw new Error(`No legal minimum city capacity in ${country.code}`);break;}
+      if(!chosen){if(local.length<MIN_CITIES_PER_COUNTRY){if(densifyCountryCandidates(profile)){index--;continue;}throw new Error(`No legal minimum city capacity in ${country.code}`);}break;}
       const id=`${country.continent}/${country.id}/${index}`,code=`${country.code}/SETTLEMENT/${MACRO_SETTLEMENT_VERSION}/CITY/${index}`,
         place=withPresentation({id,code,name:seededSettlementName("city",code,country.continent,usedNames),canonicalPosition:chosen.position,
           kind:"city" as const,continent:country.continent,country:country.id,city:index});
@@ -513,7 +548,7 @@ villages=(()=>{
   for(const profile of populationProfiles.values()){
     const {country}=profile,local:Place[]=[],countryCities=cities.filter(c=>c.continent===country.continent&&c.country===country.id);
     for(let index=0;index<profile.villageTarget;index++){
-      const ranked=profile.candidates.filter(c=>c.fresh||c.dryException).map((candidate,order)=>{
+      const ranked=profile.candidates.filter(c=>c.fresh||c.dryException||relaxedFreshWater.has(country.code)).map((candidate,order)=>{
         const separation=local.length?Math.min(...local.map(v=>macroFeatureDistanceM(v.canonicalPosition,candidate.position))):30000,
           hinterland=index<countryCities.length?1/(1+macroFeatureDistanceM(candidate.position,countryCities[index].canonicalPosition)/30000):1,
           score=candidate.habitat*(.35+.65*Math.min(1,separation/28000))*hinterland*(.92+.16*addressed(`POPULATION/${country.code}/VILLAGE/${index}/${order}`));
@@ -527,7 +562,7 @@ villages=(()=>{
         if(!parent)continue;
         chosen=candidate;break;
       }
-      if(!chosen||!parent){if(local.length<MIN_VILLAGES_PER_COUNTRY)throw new Error(`No legal minimum rural capacity in ${country.code}: ${local.length}`);break;}
+      if(!chosen||!parent){if(local.length<MIN_VILLAGES_PER_COUNTRY){if(densifyCountryCandidates(profile)){index--;continue;}throw new Error(`No legal minimum rural capacity in ${country.code}: ${local.length}`);}break;}
       const child=childCounts.get(parent.id)||0;childCounts.set(parent.id,child+1);
       const code=`${parent.code}/VILLAGE/${child}`,name=result.length===0?"Alderwick":seededSettlementName("village",code,country.continent,usedNames),
         place=withPresentation({...parent,id:`${parent.id}/${child}`,code,name,kind:"village" as const,canonicalPosition:chosen.position});
@@ -542,7 +577,7 @@ macroPopulationSummary={version:MACRO_SETTLEMENT_VERSION,
     villages:villages.filter(v=>v.continent===p.country.continent&&v.country===p.country.id).length,candidateCount:p.candidates.length})),
   candidateCount:[...populationProfiles.values()].reduce((n,p)=>n+p.candidates.length,0)};
 // Candidate eligibility is disposable generation scratch, never resident scenery.
-populationProfiles.clear();countryWaterSegments.clear();
+populationProfiles.clear();countryWaterSegments.clear();densifyRoundsUsed.clear();relaxedFreshWater.clear();
 // Persist the freshly generated immutable foundation for the next browser opening.
 // Background only: this never delays the first frame and never becomes authority.
 queueSettlementFoundationSave(settlementFoundationKey(WORLD_SEED, WORLD_FOUNDATION_VERSION), currentSettlementFoundation());
@@ -576,7 +611,7 @@ const backboneEdges:[Place,Place][]=[...villageTradeEdges,...cities.filter(c=>ci
 export const ROAD_NETWORK_FINGERPRINT = roadNetworkFingerprint(WORLD_SEED, places, backboneEdges);
 export const ROAD_NETWORK_FINGERPRINT_PARTS = roadNetworkFingerprintParts(WORLD_SEED, places, backboneEdges);
 export function generateRoadNetworkLive() {
-  return createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments);
+  return createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments,true);
 }
 const generatedRoadNetwork=cachedRoadNetwork(ROAD_NETWORK_FINGERPRINT,ROAD_NETWORK_FINGERPRINT_PARTS,()=>({places:places.map(p=>p.id),links:backboneEdges.map(([a,b])=>`${a.id}>${b.id}`)})) ?? generateRoadNetworkLive();
 export const roadJunctions=generatedRoadNetwork.junctions;

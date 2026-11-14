@@ -61,6 +61,10 @@ export class FantasyClock {
   labelForTick(tick: number): string {
     return formatFantasyDate(new Date(this.origin + tick * 1000));
   }
+  /** Same label shifted into the local zone of a longitude (radians). Display only: simulation keeps using the global tick. */
+  labelForLocalTick(tick: number, lonRad: number): string {
+    return formatFantasyDate(new Date(this.origin + (tick + timeZoneOffsetHours(lonRad) * 3600) * 1000));
+  }
 }
 
 /**

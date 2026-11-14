@@ -455,6 +455,25 @@ function buildInternationalRoads() {
         break;
       }
       if (!linked) {
+        // Some countries can be entered from no connected neighbour (the owned alignment inside them
+        // is blocked) yet can still reach one themselves. Reverse the search direction before giving up.
+        const reverse = local
+          .filter((country) => !connected.has(country.code))
+          .flatMap((country) => gatewayCandidates(country)
+            .filter((gateway) => connected.has(gateway.neighbourCountryCode))
+            .map((gateway) => ({ country, gateway })))
+          .sort((a, b) => a.gateway.distanceM - b.gateway.distanceM || compareCanonical(a.country.code, b.country.code) || compareCanonical(a.gateway.neighbourCountryCode, b.gateway.neighbourCountryCode) || compareCanonical(a.gateway.id, b.gateway.id));
+        for (const candidate of reverse) {
+          const built = borderRoadFor(candidate.gateway);
+          if (!built) continue;
+          roads.push(built.road);
+          crossings.push(built.crossing);
+          connected.add(candidate.country.code);
+          linked = true;
+          break;
+        }
+      }
+      if (!linked) {
         const missing = local.filter((country) => !connected.has(country.code)).map((country) => country.code).join(", ");
         throw new Error(`No canonical international road frontier for continent ${continent}: ${missing}`);
       }

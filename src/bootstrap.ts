@@ -21,7 +21,8 @@ import {
   type SettlementFoundationPayload,
 } from "./foundation-cache.ts";
 import { COARSE_GEOGRAPHY_VERSION, WORLD_SEED } from "./config.ts";
-import { resolveCampaign } from "./campaign.ts";
+import { campaignNeedsChoice, resolveCampaign, saveNewCampaign } from "./campaign.ts";
+import { askForNewCampaign, mountNewCampaignEntry } from "./seed-dialog.ts";
 import { mountBuildBadge } from "./build-info.ts";
 
 /** Hydration must never delay startup noticeably; a slow disk simply regenerates. */
@@ -56,6 +57,17 @@ async function hydrateSettlementFoundation(): Promise<SettlementFoundationPayloa
 
 async function start(): Promise<void> {
   mountBuildBadge();
+  // A new campaign starts with the player's seed choice, before any world module
+  // is evaluated. The seed is read by config.ts at module init, so a different
+  // choice needs a reload; the reload finds the stored campaign and does not ask again.
+  // The test hook skips the dialog so automated captures keep their fixed seed.
+  if (!seedHookSet() && campaignNeedsChoice()) {
+    const chosen = await askForNewCampaign((seed) => saveNewCampaign(seed));
+    if (chosen !== WORLD_SEED) {
+      location.reload();
+      return;
+    }
+  }
   // Resolve the campaign BEFORE importing any world module. `clock.ts` fixes its
   // epoch at module init from the stored campaign, so creating the campaign only
   // afterwards would make the first page load use the demo epoch and then jump to
@@ -81,6 +93,14 @@ async function start(): Promise<void> {
   await import("./transport-inspector.ts");
   await import("./site-experience.ts");
   await import("./popup-panels.ts");
+  mountNewCampaignEntry();
+}
+
+function seedHookSet(): boolean {
+  // Automated browsers (Playwright/CI evidence, screenshot tool) keep the default
+  // campaign instead of waiting on the interactive seed dialog.
+  if (typeof navigator !== "undefined" && navigator.webdriver) return true;
+  return (globalThis as { __ADVISOR_SEED__?: unknown }).__ADVISOR_SEED__ !== undefined;
 }
 
 void start();

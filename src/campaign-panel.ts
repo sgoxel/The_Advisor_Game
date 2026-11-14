@@ -23,6 +23,12 @@ import { fantasyOrigin, YEAR_OFFSET } from "./clock.ts";
 export type CampaignPanelOptions = {
   /** Called after the player accepts a campaign (continue or new). */
   readonly onAccepted?: (record: CampaignRecord, mode: "continued" | "created") => void;
+  /**
+   * "Start a new campaign" entry. The app passes the seed dialog flow (confirm, clear,
+   * reload, choose a seed) so a new campaign is never created silently with the old
+   * seed. Without it the panel starts a campaign itself with the current seed (tests).
+   */
+  readonly onStartNew?: () => void;
   /** Supplies the current instant; injectable for tests. */
   readonly now?: () => number;
 };
@@ -158,6 +164,7 @@ export class CampaignPanel {
         </div>`;
       this.root.querySelector("[data-campaign-retry]")?.addEventListener("click", () => this.refresh());
       this.root.querySelector("[data-campaign-new]")?.addEventListener("click", () => {
+        if (this.options.onStartNew) { this.options.onStartNew(); return; }
         clearCampaign();
         this.state = { kind: "new", record: createCampaign(this.options.now?.() ?? Date.now()) };
         this.render();
@@ -187,6 +194,7 @@ export class CampaignPanel {
 
     this.root.querySelector("[data-campaign-accept]")?.addEventListener("click", () => this.accept());
     this.root.querySelector("[data-campaign-new]")?.addEventListener("click", () => {
+      if (this.options.onStartNew) { this.options.onStartNew(); return; }
       if (!globalThis.confirm?.("Start a new campaign? The current campaign record will be replaced.")) return;
       this.startNew();
     });

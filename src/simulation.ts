@@ -30,6 +30,7 @@ import {
   type CanonicalPosition,
 } from "./planet.ts";
 import { itemExchangeLegal, type TransferVerdict } from "./inventory.ts";
+import { WORLD_SEED } from "./config.ts";
 
 export type ResidentRole =
   | "innkeeper"
@@ -3168,7 +3169,7 @@ export class LazySimulation {
   /** Canonical versioned event history: rebuild original decisions AND physical
    * journeys at saved Fantasy ticks before any restored actor can move. */
   savedSiteVisitHistory() {
-    return { version: 1, seed: "ADVISOR-0126-ALDERWICK",
+    return { version: 1, seed: WORLD_SEED,
       foundation: "v5", visits: this.siteVisitJournal?.savedVisits() ?? [] };
   }
 
@@ -3183,7 +3184,7 @@ export class LazySimulation {
     const reject = (reason: string) => { this.lastReplayProblem = reason; return false; };
     if (!saved || typeof saved !== "object") return reject("The stored journey history had no readable payload.");
     const input = saved as Record<string, unknown>;
-    if (input.version !== 1 || input.seed !== "ADVISOR-0126-ALDERWICK" ||
+    if (input.version !== 1 || input.seed !== WORLD_SEED ||
         input.foundation !== "v5" || !Array.isArray(input.visits) ||
         input.visits.length > 16)
       return reject("The stored journey history was written for a different world or version.");

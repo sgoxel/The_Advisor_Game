@@ -90,6 +90,7 @@ test("phone route preview exposes the map and never labels map focus as travel",
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
 
   await expect(page.locator("#home")).toContainText("Focus home village");
+  await expect(page.locator(".travel-hint")).toBeHidden();
   await expect(page.locator(".travel-hint .flat-only")).toContainText("Drag to pan");
   await page.locator("#open-travel").click();
   await expect(page.locator("#visit-city")).toHaveAttribute("aria-label", "Focus selected city");

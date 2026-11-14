@@ -31,6 +31,7 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
     await page.evaluate(() => window.advisorWorld.planet.radius),
   );
   await expect(page.locator("#detail-name")).toHaveText("Realm");
+  await expect(page.locator("#detail-name")).toBeHidden();
   await expect(page.locator("#place-name")).toHaveText("Eldermere");
   await expect(page.locator("#grid")).toBeHidden();  await expect(
     page.locator(".map-label.continent", { hasText: "Eldermere" }),

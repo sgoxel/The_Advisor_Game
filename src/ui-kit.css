@@ -270,12 +270,7 @@
 }
 .travel-panel select { min-height: 44px; }
 
-/* Advisor: segmented Talk / Ideas strip. */
-.advisor-tabs {
-  margin: 2px 0 0;
-}
-
-.advisor-panel[data-expanded="false"] .advisor-tabs { display: none; }
+/* Advisor: a collapsed panel shows only its bubble. */
 .advisor-panel[data-expanded="false"] .advisor-pane,
 .advisor-panel[data-expanded="false"] .advisor-followups { display: none !important; }
 

@@ -99,6 +99,7 @@ test("the Realm globe renders through WebGL2 and returns to the flat village", a
     "webgl2",
   );
   await expect(page.locator("#detail-name")).toHaveText("Realm");
+  await expect(page.locator("#detail-name")).toBeHidden();
   await expect(page.locator("#error")).toBeHidden();
   // The compact phone panel leaves the globe uncovered.
   await page.getByRole("button", { name: "Minimize map information", exact: true }).click();

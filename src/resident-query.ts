@@ -63,6 +63,14 @@ export function residentDispatchAllowed(
   return !selectionDirty && worldReady;
 }
 
+/** Mandatory terrain/coverage jobs always outrank a resident query for the LAST idle worker.
+ * Without this a resident batch (tens of seconds on a one-worker device) took the only worker the
+ * moment the view settled, no terrain tile could be generated, and the screen showed only the
+ * coarse world-root fallback: a flat single-colour field with no meshes or textures. */
+export function residentMayTakeIdleWorker(idleWorkerCount: number, terrainWorkOutstanding: boolean): boolean {
+  return idleWorkerCount > (terrainWorkOutstanding ? 1 : 0);
+}
+
 /** Before first coherent terrain, use one idle worker for the first actual
  * resident query. If a terrain worker is already generating required coverage,
  * that worker remains untouched; otherwise reserve one idle worker AND one

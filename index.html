@@ -50,7 +50,6 @@
       <div class="crest" aria-hidden="true">♜</div>
       <div class="masthead-title">
         <div class="eyebrow">THE ADVISOR</div>
-        <h1>Atlas of the realm</h1>
       </div>
       <span class="live"><i></i> WORLD EXPLORER</span>
       <button id="protagonist-chip" class="protagonist-chip" type="button" hidden>
@@ -275,14 +274,14 @@
         ><span id="scale-caption">Scale</span
         ><select id="map-scale" aria-label="Map scale"></select
       ></label>
-      <div class="detail">
+      <div class="detail" hidden>
         <span class="eyebrow">VIEW DETAIL</span
         ><strong id="detail-name">Village</strong>
         <div class="detail-dots" aria-hidden="true">
           <i></i><i></i><i></i><i></i><i></i>
         </div>
       </div>
-      <div class="travel-hint">
+      <div class="travel-hint" hidden>
         <span class="flat-only"
           >Drag to pan <b>·</b> Scroll to explore <b>·</b> Q / E to
           rotate</span
@@ -297,41 +296,26 @@
       </div>
     </footer>
 
-    <aside class="panel advisor-panel" id="advisor-panel" data-expanded="true" aria-label="Advisor conversation">
+    <aside class="panel advisor-panel" id="advisor-panel" data-expanded="false" aria-label="Advisor conversation">
       <div class="advisor-head">
-        <div>
-          <div class="eyebrow">YOUR ADVISOR VOICE</div>
-          <h2>Speak with the protagonist</h2>
-          <p class="advisor-subject" data-advisor-subject>No protagonist chosen</p>
+        <div class="advisor-titles">
           <p class="advisor-relationship" data-advisor-relationship hidden></p>
         </div>
-        <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="true" aria-controls="advisor-log" title="Hide Advisor" aria-label="Hide Advisor">
-          <svg class="ico ico-sm" aria-hidden="true"><use href="#i-chat"/></svg>
-          <span class="btn-label" data-advisor-toggle-label>Hide</span>
+        <button id="advisor-toggle" type="button" data-advisor-toggle aria-expanded="false" aria-controls="advisor-pane-talk" title="Talk to your Advisor" aria-label="Talk to your Advisor">
+          <svg class="ico ico-chat" aria-hidden="true"><use href="#i-chat"/></svg>
+          <svg class="ico ico-close" aria-hidden="true"><use href="#i-close"/></svg>
         </button>
       </div>
-      <div class="panel-tabs advisor-tabs" role="tablist" aria-label="Advisor categories" data-ui-tabs="advisor">
-        <button class="panel-tab" type="button" role="tab" id="advisor-tab-talk" data-tab="talk" aria-selected="true" aria-controls="advisor-pane-talk" title="Conversation">
-          <svg class="ico" aria-hidden="true"><use href="#i-chat"/></svg><span>Talk</span>
-        </button>
-        <button class="panel-tab" type="button" role="tab" id="advisor-tab-ideas" data-tab="ideas" aria-selected="false" aria-controls="advisor-pane-ideas" title="Prompt ideas">
-          <svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg><span>Ideas</span>
-        </button>
-      </div>
-      <div class="panel-pane" id="advisor-pane-talk" data-pane="talk" role="tabpanel" aria-labelledby="advisor-tab-talk">
-        <p class="hint advisor-hint">You advise; the character decides. Advice is never a command.</p>
+      <div class="panel-pane advisor-pane" id="advisor-pane-talk" data-pane="talk">
         <div class="advisor-log" id="advisor-log" data-advisor-log role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation so far"></div>
         <form class="advisor-form" data-advisor-form autocomplete="off">
           <label class="sr-only" for="advisor-input">Message to the protagonist</label>
           <input id="advisor-input" data-advisor-input type="text" name="message" maxlength="280" placeholder="Ask or advise…" enterkeyhint="send" />
           <button type="submit" aria-label="Send message" title="Send"><svg class="ico" aria-hidden="true"><use href="#i-send"/></svg></button>
         </form>
-        <p class="advisor-status" data-advisor-status role="status" aria-live="polite" data-state="idle">idle</p>
-      </div>
-      <div class="panel-pane" id="advisor-pane-ideas" data-pane="ideas" role="tabpanel" aria-labelledby="advisor-tab-ideas" hidden>
-        <p class="hint advisor-hint">Tap a question to ask it, or type your own advice.</p>
         <div class="advisor-suggestions" data-advisor-suggestions aria-label="Example questions"></div>
         <div class="advisor-followups" data-advisor-followups hidden aria-label="Follow-up questions"></div>
+        <p class="advisor-status sr-only" data-advisor-status role="status" aria-live="polite" data-state="idle"></p>
       </div>
     </aside>
 

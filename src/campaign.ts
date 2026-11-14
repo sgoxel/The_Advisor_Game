@@ -16,13 +16,16 @@
  *    fabricate a different campaign.
  */
 
-import { WORLD_SEED } from "./config.ts";
+import { CAMPAIGN_STORAGE_KEY, WORLD_SEED, isValidSeedCode } from "./config.ts";
 
-export const CAMPAIGN_STORAGE_KEY = "advisor.campaign.v1";
+export { CAMPAIGN_STORAGE_KEY };
 export const CAMPAIGN_VERSION = "campaign-v1";
 /** A campaign id is derived from the seed and creation instant. */
 const CAMPAIGN_ID = /^[A-Za-z0-9-]{1,96}$/;
-const MAX_SEED_LENGTH = 96;
+export const SEED_MAX_LENGTH = 96;
+/** Mirrors clock.ts (WORLD_TIMEZONE, YEAR_OFFSET). Not imported: clock.ts reads this module at init. */
+const FANTASY_TIMEZONE = "Europe/Istanbul";
+const FANTASY_YEAR_OFFSET = 1900;
 
 export type CampaignRecord = {
   readonly version: string;
@@ -46,7 +49,7 @@ export function validateCampaign(value: unknown): value is CampaignRecord {
   const record = value as Partial<CampaignRecord>;
   if (record.version !== CAMPAIGN_VERSION) return false;
   if (typeof record.id !== "string" || !CAMPAIGN_ID.test(record.id)) return false;
-  if (typeof record.seed !== "string" || record.seed.length === 0 || record.seed.length > MAX_SEED_LENGTH) return false;
+  if (!isValidSeedCode(record.seed)) return false;
   if (typeof record.createdAtMs !== "number" || !Number.isFinite(record.createdAtMs)) return false;
   // A campaign cannot begin before this project existed, nor in the far future.
   if (record.createdAtMs < 0 || record.createdAtMs > Date.now() + 86_400_000) return false;
@@ -74,6 +77,85 @@ export function createCampaign(createdAtMs: number, seed = WORLD_SEED): Campaign
     seed,
     createdAtMs,
   };
+}
+
+/* ---------------------------------------------------------------- */
+/* Seed codes chosen by the player                                   */
+/* ---------------------------------------------------------------- */
+
+export type SeedInputResult = { readonly seed: string; readonly error?: undefined } | { readonly seed?: undefined; readonly error: string };
+
+/**
+ * Normalises what the player typed into a seed code: trimmed, upper-cased, runs of
+ * whitespace become a single hyphen. Anything that cannot be a seed is refused
+ * with a message the dialog can show.
+ */
+export function normaliseSeedInput(text: string): SeedInputResult {
+  const seed = String(text ?? "").trim().toUpperCase().replace(/\s+/g, "-");
+  if (seed.length === 0) return { error: "Enter a seed code, or press New suggestion." };
+  if (seed.length > SEED_MAX_LENGTH) return { error: `Keep the seed to ${SEED_MAX_LENGTH} characters or fewer.` };
+  if (!isValidSeedCode(seed)) return { error: "Use only letters, numbers and hyphens." };
+  return { seed };
+}
+
+/**
+ * The fantasy year a campaign begins in: the real year in the world timezone minus
+ * 1900. Same rule as clock.ts `fantasyOrigin` (checked by tests/seed-dialog.test.ts).
+ */
+export function fantasyYearAt(realMs: number): number {
+  const part = new Intl.DateTimeFormat("en-GB", { timeZone: FANTASY_TIMEZONE, year: "numeric" })
+    .formatToParts(realMs)
+    .find((p) => p.type === "year");
+  return Number(part!.value) - FANTASY_YEAR_OFFSET;
+}
+
+const NAME_HEADS = ["ALDER", "ASH", "BRIAR", "BRAM", "CAER", "CRAG", "DUN", "ELDER", "FERN", "GLEN", "HAW", "HOLLOW", "IRON", "KEST", "LARK", "MOOR", "OAK", "RAVEN", "REED", "SILVER", "STONE", "THORN", "TAR", "WREN", "WYN", "ELM", "GILT", "HARROW", "IVY", "SALT"];
+const NAME_TAILS = ["WICK", "MERE", "FORD", "HOLM", "DALE", "BURY", "TON", "WOLD", "HAVEN", "STEAD", "CROSS", "LEY", "HAM", "BRIDGE", "GATE", "THORPE", "FELL", "BROOK", "WORTH", "FIELD"];
+const NAME_SOLO = ["ODRIN", "CAELWEN", "BRANOC", "VELTHAR", "MORWEN", "ELDRATH", "TALVEN", "ISRAEN", "KERRAN", "LYSSAN", "DRAVEN", "OSWYN", "TEVARA", "HALIVEN", "SOLVANE", "AUDRIC"];
+
+/** Chooses one entry with the supplied random source (0 <= r < 1). */
+const pickWith = <T>(list: readonly T[], random: () => number): T =>
+  list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+
+/**
+ * A random fantasy place or person name in UPPERCASE ASCII letters only, at least
+ * three letters. Used only for the player's suggestion; the world itself is never
+ * built from this randomness.
+ */
+export function generateFantasyName(random: () => number = Math.random): string {
+  if (random() < 0.25) return pickWith(NAME_SOLO, random);
+  return pickWith(NAME_HEADS, random) + pickWith(NAME_TAILS, random);
+}
+
+/**
+ * A suggested seed in the project's seed style, `ADVISOR-<YYYY>-<NAME>`, where YYYY
+ * is the four-digit fantasy year the campaign starts in and NAME is a generated name.
+ * Examples: ADVISOR-0126-THORNMERE, ADVISOR-0126-ODRIN, ADVISOR-0127-BRAMHOLM.
+ */
+export function suggestSeed(nowMs: number = Date.now(), random: () => number = Math.random): string {
+  const year = String(fantasyYearAt(nowMs)).padStart(4, "0");
+  return `ADVISOR-${year}-${generateFantasyName(random)}`;
+}
+
+/**
+ * Stores a player's new campaign with the given seed and reads it back. Returns
+ * false unless the exact seed is what storage now holds, so the caller never
+ * reloads into a world that storage did not keep.
+ */
+export function saveNewCampaign(seed: string, createdAtMs: number = Date.now()): boolean {
+  const record = createCampaign(createdAtMs, seed);
+  if (!writeCampaign(record)) return false;
+  return readCampaign().record?.seed === seed;
+}
+
+/**
+ * True when browser storage works and holds no campaign yet: the player must choose
+ * a seed first. Unavailable or unreadable storage is not a reason to ask (the page
+ * keeps its current behaviour), and neither is an existing record.
+ */
+export function campaignNeedsChoice(): boolean {
+  const { record, problem } = readCampaign();
+  return !record && !problem;
 }
 
 function storage(): Storage | undefined {

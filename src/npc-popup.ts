@@ -130,6 +130,10 @@ export function residentObservationPoint(resident: Pick<Resident, "grounded" | "
   return resident.grounded && !resident.indoors
     ? lonLatToSource(resident.position.lon, resident.position.lat) : undefined;
 }
+/** Camera target for the protagonist bar: always the resident's current canonical position (indoors or not), never skipped. */
+export function residentFocusPoint(resident: Pick<Resident, "position">) {
+  return lonLatToSource(resident.position.lon, resident.position.lat);
+}
 export function popupFocusHalfHeight(ref: string, heroHalfHeight: number, viewportHeight = 1920): number {
   // The actual screenshot-tool portrait shows the SEED character head-up but
   // too small to inspect on the ground. Keep the proven landscape footprint

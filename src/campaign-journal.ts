@@ -19,7 +19,7 @@
  *    rather than silently dropped. This is honest verified promotion, not a
  *    claim of transactional durability.
  */
-import { WORLD_FOUNDATION_VERSION } from "./config.ts";
+import { DEFAULT_WORLD_SEED, WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 
 export const JOURNAL_VERSION = "campaign-journal-v1";
 export const EVENT_VERSION = "campaign-event-v1";
@@ -292,11 +292,30 @@ export function journalPendingKey(campaignId: string): string {
   return `advisor.campaign.journal.v1.${campaignId}.pending`;
 }
 
+/** Storage name of a world SEED inside the old per-seed keys. The default seed keeps its original "ALDERWICK" name. */
+export function legacySeedTag(seed: string): string {
+  return seed === DEFAULT_WORLD_SEED ? "ALDERWICK" : seed;
+}
+
 /**
  * Legacy single-blob site-visit key, kept only so an existing player's history
- * is imported once instead of silently discarded.
+ * is imported once instead of silently discarded. It names the SEED, so a campaign
+ * in another world never finds the default world's blob.
  */
-export const LEGACY_SITE_VISITS_KEY = `advisor-game:s005:ALDERWICK:${WORLD_FOUNDATION_VERSION}:site-visits`;
+export function legacySiteVisitsKey(seed: string): string {
+  return `advisor-game:s005:${legacySeedTag(seed)}:${WORLD_FOUNDATION_VERSION}:site-visits`;
+}
+export const LEGACY_SITE_VISITS_KEY = legacySiteVisitsKey(WORLD_SEED);
+
+/** Per-seed inventory key used before inventories were campaign-scoped. */
+export function legacyInventoryKey(seed: string): string {
+  return `advisor-game:s010:${legacySeedTag(seed)}:v1:inventory`;
+}
+
+/** Each campaign owns its inventory, so a new campaign never inherits the previous one's belongings. */
+export function inventoryStorageKey(campaignId: string): string {
+  return `advisor-game:s010:v1:inventory.${campaignId}`;
+}
 
 export type CommitResult =
   | { readonly ok: true; readonly recovered?: boolean }

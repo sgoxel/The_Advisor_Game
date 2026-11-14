@@ -5,6 +5,7 @@ import {CANONICAL_PLANET_RADIUS, CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDi
 
 export const MACRO_ROAD_VERSION='macro-roads-v2';
 export const MACRO_ROAD_LIMITS=Object.freeze({stages:12,lanes:7,maximumStations:26,junctionGroupsPerPlace:32,junctionDepth:3,corridorAttempts:3});
+const FORD_PENALTY=60000,OVERRUN_FACTOR=40;
 export const ROAD_FORK_POLICY=Object.freeze({minimumAngleDegrees:45,preferredMinimumDegrees:45,preferredMaximumDegrees:70,hardNearParallelDegrees:20,separationM:300,maximumRegenerationAttempts:12});
 export type RoadNode={id:string;code:string;canonicalPosition:CanonicalPosition;x:number;z:number;continent:number;country:number;kind:'city'|'village'|'junction'};
 export type RoadPoint={x:number;z:number;position:LonLat};
@@ -24,7 +25,7 @@ const angleDifference=(a:number,b:number)=>Math.abs(Math.atan2(Math.sin(a-b),Mat
 /** Finite coarse graph only. No final cells, buildings or scenery are prepared.
  * Shared approaches become one physical trunk; connection records reference it.
  * Layered terrain search penalizes climb, high relief, obstacles and sharp turns. */
-export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly (readonly [RoadNode,RoadNode])[],ownerAt:(p:LonLat)=>string|undefined,seed:string,sample:typeof macroSampleAt=macroSampleAt,waterSegments:readonly CoarseWater[]=[]){
+export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly (readonly [RoadNode,RoadNode])[],ownerAt:(p:LonLat)=>string|undefined,seed:string,sample:typeof macroSampleAt=macroSampleAt,waterSegments:readonly CoarseWater[]=[],allowOverrun=false){
  let coarseSamples=0,maxStates=0,fallbacks=0,unbridgeableCrossings=0;
 
  const waterBuckets=new Map<string,CoarseWater[]>(),waterSize=8192;
@@ -126,7 +127,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   };
   for(const group of groups)register(group,[hub]);
  }
- function routeTerrain(from:RoadNode,to:RoadNode,id:string,attempt=0):{points:RoadPoint[];fallback:boolean}{
+ function routeTerrain(from:RoadNode,to:RoadNode,id:string,attempt=0,relax:0|1|2=0):{points:RoadPoint[];fallback:boolean}{
   const a=from.canonicalPosition,b=to.canonicalPosition,length=greatCircleDistance(a,b),az=bearing(a,b),stages=Math.max(4,Math.min(MACRO_ROAD_LIMITS.stages,Math.ceil(length/4000)+attempt*2)),
    width=Math.min(20000,Math.max(1000,length*.18)*(1+attempt)),key=ownerKey(from),rows=[] as {lane:number;point:RoadPoint;height:number;mountain:number;legal:boolean}[][];
   for(let stage=0;stage<=stages;stage++){
@@ -134,7 +135,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
    for(const lane of stage===0||stage===stages?[0]:[-3,-2,-1,0,1,2,3]){
     const position=lane===0?base:destination(base,az+(lane<0?-Math.PI/2:Math.PI/2),Math.abs(lane)/3*width*Math.sin(Math.PI*t)),
      source=lonLatToSource(position.lon,position.lat),m=terrain(position);
-    row.push({lane,point:{x:from.x+wrapSourceX(source.x-from.x),z:source.z,position:{lon:position.lon,lat:position.lat}},height:m.reliefM,mountain:m.mountainIntensity,legal:m.land&&m.domain!=='Lake'&&ownerAt(position)===key&&!inWater(position)});
+    row.push({lane,point:{x:from.x+wrapSourceX(source.x-from.x),z:source.z,position:{lon:position.lon,lat:position.lat}},height:m.reliefM,mountain:m.mountainIntensity,legal:m.land&&m.domain!=='Lake'&&ownerAt(position)===key&&(relax>=1||!inWater(position))});
    }
    rows.push(row);
   }
@@ -146,7 +147,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     const qx=ax-a.x,qz=r.az-a.z,t=(qx*vz-qz*vx)/det,u=(qx*dz-qz*dx)/det;
     if(t<0||t>1||u<0||u>1)continue;
     const sine=Math.abs(det)/(Math.hypot(dx,dz)*Math.hypot(vx,vz)||1),span=2*r.width*CANONICAL_METRES_PER_SOURCE_UNIT/Math.max(.001,sine);
-    if(span>120){unbridgeableCrossings++;return Infinity;}
+    if(span>120){unbridgeableCrossings++;if(relax<1)return Infinity;cost+=FORD_PENALTY+span*30;continue;}
     cost+=1500+span*30;
    }return cost;
   };
@@ -155,13 +156,13 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   for(let stage=1;stage<=stages;stage++){
    const next=new Map<string,State>(),edgeCosts=new Map<string,number>();
    for(const state of states)for(const node of rows[stage]){
-    if(!node.legal)continue;
+    if(!node.legal&&relax<2)continue;
     const edgeKey=`${state.lane}/${node.lane}`;
     let cost=edgeCosts.get(edgeKey);
     if(cost===undefined){
      const distance=greatCircleDistance(state.node.point.position,node.point.position),mid=sourceToLonLat((state.node.point.x+node.point.x)/2,(state.node.point.z+node.point.z)/2),m=terrain(mid),
       grade=Math.max(Math.abs(node.height-state.node.height),Math.abs(m.reliefM-state.node.height)*2,Math.abs(node.height-m.reliefM)*2)/Math.max(1,distance);
-     cost=!m.land||m.domain==='Lake'||ownerAt(mid)!==key?Infinity:distance*(1+m.mountainIntensity*3+Math.max(0,m.reliefM-25)*.006+Math.pow(grade/.06,2)*5)+crossingCost(state.node.point,node.point);
+     cost=(!m.land||m.domain==='Lake'||ownerAt(mid)!==key)&&relax<2?Infinity:distance*(1+m.mountainIntensity*3+Math.max(0,m.reliefM-25)*.006+Math.pow(grade/.06,2)*5)+crossingCost(state.node.point,node.point)+(!m.land||m.domain==='Lake'||ownerAt(mid)!==key?distance*OVERRUN_FACTOR:0);
      edgeCosts.set(edgeKey,cost);
     }
     if(!Number.isFinite(cost))continue;
@@ -178,7 +179,16 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   let best=states.sort((a,b)=>a.cost-b.cost||a.lane-b.lane)[0];
   // Three finite corridors widen/refine only when necessary. Never emit a known
   // illegal straight road when the terrain search cannot connect its endpoints.
-  if(!best||best.node!==rows[stages][0]){if(attempt+1<MACRO_ROAD_LIMITS.corridorAttempts)return routeTerrain(from,to,id,attempt+1);throw new RangeError(`No legal coarse road corridor: ${id}`);}
+  if(!best||best.node!==rows[stages][0]){
+   if(attempt+1<MACRO_ROAD_LIMITS.corridorAttempts)return routeTerrain(from,to,id,attempt+1,relax);
+   // Last resorts, reached only when every dry corridor is blocked, so any SEED still yields a connected
+   // world; seeds whose corridors all resolve earlier never take these branches. First allow river
+   // crossings too wide to bridge as heavily penalised fords, then, only for callers that opt in
+   // (the canonical world), allow brief overruns of lake, sea or neighbouring land (penalised per metre)
+   // where the coarse legality samples were too sparse. Generic callers still fail explicitly.
+   if(relax<(allowOverrun?2:1)){fallbacks++;return routeTerrain(from,to,id,MACRO_ROAD_LIMITS.corridorAttempts-1,(relax+1) as 1|2);}
+   throw new RangeError(`No legal coarse road corridor: ${id}`);
+  }
   const path:RoadPoint[]=[];for(let state:State|undefined=best;state;state=state.previous)path.push(state.node.point);path.reverse();
   // Remove near-collinear stations only. Keep terrain-selected deviations.
   for(let i=path.length-2;i>0;i--){const a=path[i-1],p=path[i],b=path[i+1],dx=b.x-a.x,dz=b.z-a.z,t=((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz||1),deviation=Math.hypot(p.x-a.x-dx*t,p.z-a.z-dz*t)*CANONICAL_METRES_PER_SOURCE_UNIT;
@@ -190,7 +200,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
    const p=path[i],a=path[i-1],b=path[i+1],point=(q:RoadPoint,t:number)=>{const x=p.x+(q.x-p.x)*t,z=p.z+(q.z-p.z)*t;return{x,z,position:sourceToLonLat(x,z)};},u=point(a,.18),v=point(b,.18);
    if(!inWater(u.position)&&!inWater(v.position)&&Number.isFinite(crossingCost(u,v))&&legal(u.position,key)&&legal(v.position,key)&&legal(sourceToLonLat((u.x+v.x)/2,(u.z+v.z)/2),key))smooth.push(u,v);else smooth.push(p);
   }
-  smooth.push(path.at(-1)!);return {points:smooth,fallback:false};
+  smooth.push(path.at(-1)!);return {points:smooth,fallback:relax>0};
  }
  const edges=new Map<string,MacroRoadEdge>();
  function edge(from:RoadNode,to:RoadNode,kind:MacroRoadEdge['kind']){

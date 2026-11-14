@@ -1,0 +1,148 @@
+/* New-campaign seed dialog and its entry point in the Seed tab. Colours follow the
+   game's panel (#162521) and gold (--gold) so the dialog reads as part of the same UI. */
+
+.seed-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: radial-gradient(circle at 50% 35%, #1d3a32 0%, #0b1a16 70%);
+  backdrop-filter: blur(3px);
+}
+
+.seed-dialog {
+  width: min(460px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid #d8b97960;
+  border-radius: 8px;
+  background: #162521f5;
+  box-shadow: 0 18px 50px #00000080;
+  color: #efece1;
+  box-sizing: border-box;
+}
+
+.seed-dialog-eyebrow {
+  margin: 0;
+  color: var(--gold, #d8b979);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.seed-dialog h2 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.seed-dialog-hint {
+  margin: 0;
+  color: #a8b5a8;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.seed-dialog label {
+  color: var(--gold, #d8b979);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.seed-dialog-input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #d8b97966;
+  border-radius: 5px;
+  background: #0f201c;
+  color: #efece1;
+  /* 16px prevents the mobile browser from zooming when the field is focused. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.seed-dialog-input[aria-invalid="true"] {
+  border-color: #e07b6a;
+}
+
+.seed-dialog-error {
+  margin: 0;
+  color: #f0a897;
+  font-size: 14px;
+}
+
+.seed-dialog-error[hidden] {
+  display: none;
+}
+
+.seed-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.seed-dialog-actions button {
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.seed-dialog-suggest {
+  color: #efece1;
+  border-color: #d8b97966;
+  background: #ffffff10;
+}
+
+.seed-dialog-suggest:hover {
+  background: #ffffff1f;
+}
+
+.seed-dialog-start {
+  border-color: var(--gold, #d8b979) !important;
+  background: var(--gold, #d8b979) !important;
+  color: var(--ink, #172823) !important;
+  font-weight: 600;
+}
+
+.seed-dialog-start:hover {
+  filter: brightness(1.06);
+}
+
+/* Entry point in the Seed tab of the map panel. */
+.seed-new-campaign {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  color: var(--gold, #d8b979);
+  border-color: #d8b97966;
+}
+
+@media (max-width: 480px) {
+  .seed-dialog {
+    padding: 18px 16px;
+  }
+
+  .seed-dialog h2 {
+    font-size: 26px;
+  }
+
+  .seed-dialog-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .seed-dialog-actions button {
+    width: 100%;
+  }
+}

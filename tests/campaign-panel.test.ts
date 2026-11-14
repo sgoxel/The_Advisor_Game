@@ -263,3 +263,25 @@ test("accepting with storage unavailable fails honestly rather than claiming suc
   click("campaign-accept");
   assert.equal(panel.isAccepted, false, "a campaign that cannot be saved is not accepted silently");
 });
+
+test("with a new-campaign entry supplied, Start a new campaign defers to it and changes nothing itself", () => {
+  const store = installStorage();
+  new CampaignPanel(makeDom().root, { now: () => T0 }).accept();
+  const stored = store.get(CAMPAIGN_STORAGE_KEY);
+  const { root, click } = makeDom();
+  let calls = 0;
+  new CampaignPanel(root, { now: () => T0 + 60_000, onStartNew: () => { calls++; } });
+  click("campaign-new");
+  assert.equal(calls, 1);
+  assert.equal(store.get(CAMPAIGN_STORAGE_KEY), stored, "the seed dialog flow, not the panel, replaces the campaign");
+});
+
+test("after a broken save the new-campaign entry is the same seed-dialog path", () => {
+  const store = installStorage({ [CAMPAIGN_STORAGE_KEY]: "{broken" });
+  const { root, click } = makeDom();
+  let calls = 0;
+  new CampaignPanel(root, { now: () => T0, onStartNew: () => { calls++; } });
+  click("campaign-new");
+  assert.equal(calls, 1);
+  assert.equal(store.get(CAMPAIGN_STORAGE_KEY), "{broken");
+});
