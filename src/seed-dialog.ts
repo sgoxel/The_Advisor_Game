@@ -21,7 +21,12 @@ const STORAGE_REFUSED =
  * the campaign and return true only when it is really kept; until then the dialog
  * stays open, so the page never loads a world the browser did not remember.
  */
-export function askForNewCampaign(save: (seed: string) => boolean, doc: Document = document): Promise<string> {
+export function askForNewCampaign(
+  save: (seed: string) => boolean,
+  doc: Document = document,
+  /** Shown above the hint, e.g. after the previous seed failed to form a world. */
+  notice?: { readonly message: string; readonly detail?: string },
+): Promise<string> {
   return new Promise<string>((resolve) => {
     const overlay = doc.createElement("div");
     overlay.className = "seed-dialog-backdrop";
@@ -29,6 +34,10 @@ export function askForNewCampaign(save: (seed: string) => boolean, doc: Document
       <form class="seed-dialog" role="dialog" aria-modal="true" aria-labelledby="seed-dialog-title" aria-describedby="seed-dialog-hint" novalidate>
         <p class="seed-dialog-eyebrow">NEW CAMPAIGN</p>
         <h2 id="seed-dialog-title">Choose your world</h2>
+        <div id="seed-dialog-notice" class="seed-dialog-notice" role="alert" hidden>
+          <p id="seed-dialog-notice-message" class="seed-dialog-notice-message"></p>
+          <p id="seed-dialog-notice-detail" class="seed-dialog-notice-detail" hidden></p>
+        </div>
         <p id="seed-dialog-hint" class="seed-dialog-hint">
           The seed code fixes every place, person and road: the same code always rebuilds the same world.
           Your campaign begins in fantasy year <span id="seed-dialog-year"></span>.
@@ -48,6 +57,15 @@ export function askForNewCampaign(save: (seed: string) => boolean, doc: Document
     const suggest = overlay.querySelector("#seed-dialog-suggest") as HTMLButtonElement;
     const start = overlay.querySelector("#seed-dialog-start") as HTMLButtonElement;
     const yearLabel = overlay.querySelector("#seed-dialog-year") as HTMLElement;
+    if (notice) {
+      overlay.querySelector<HTMLElement>("#seed-dialog-notice")!.hidden = false;
+      overlay.querySelector<HTMLElement>("#seed-dialog-notice-message")!.textContent = notice.message;
+      if (notice.detail) {
+        const detail = overlay.querySelector<HTMLElement>("#seed-dialog-notice-detail")!;
+        detail.textContent = notice.detail;
+        detail.hidden = false;
+      }
+    }
 
     const showError = (message?: string) => {
       error.textContent = message ?? "";

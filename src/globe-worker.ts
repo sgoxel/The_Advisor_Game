@@ -1,3 +1,4 @@
+import { WORLD_SEED } from "./config.ts";
 import { buildGlobeSurface } from "./globe-surface.ts";
 type Request = {
   id: number;
@@ -11,7 +12,7 @@ self.onmessage = (event: MessageEvent<Request>) => {
   try {
     const { pixels } = buildGlobeSurface(width, height, { samples, relief });
     self.postMessage(
-      { id, width, height, pixels },
+      { id, width, height, pixels, seed: WORLD_SEED },
       { transfer: [pixels.buffer] },
     );
   } catch (error) {

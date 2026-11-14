@@ -4,6 +4,9 @@
  *
  * The SEED is the single authority for world foundation. Its value is chosen
  * before any world module is evaluated, in this order:
+ *   0. inside a Web Worker: the seed the page passed in the worker's `name`
+ *      (workers have no localStorage and no page globals, so without this they
+ *      would silently build the DEFAULT world while the page shows another),
  *   1. `globalThis.__ADVISOR_SEED__` (test hook, when it is a valid seed),
  *   2. the SEED of the stored campaign record (the player's chosen world),
  *   3. DEFAULT_WORLD_SEED (the reference scenario, used when nothing is stored).
@@ -22,8 +25,24 @@ export function isValidSeedCode(value: unknown): value is string {
   return typeof value === "string" && SEED_PATTERN.test(value);
 }
 
+const WORKER_NAME_PREFIX = "advisor-seed:";
+
+/** The `name` option the page gives every Worker it creates, so the worker builds the page's world. */
+export function workerNameForSeed(seed: string): string {
+  return `${WORKER_NAME_PREFIX}${seed}`;
+}
+
+/** The seed carried by a worker `name`, or undefined when the name carries none. */
+export function seedFromWorkerName(name: unknown): string | undefined {
+  if (typeof name !== "string" || !name.startsWith(WORKER_NAME_PREFIX)) return undefined;
+  const seed = name.slice(WORKER_NAME_PREFIX.length);
+  return isValidSeedCode(seed) ? seed : undefined;
+}
+
 /** Pure seed resolution (see the module comment for precedence). */
-export function resolveWorldSeed(hook: unknown, storedRaw: string | null | undefined): string {
+export function resolveWorldSeed(hook: unknown, storedRaw: string | null | undefined, workerName?: unknown): string {
+  const fromWorker = seedFromWorkerName(workerName);
+  if (fromWorker !== undefined) return fromWorker;
   if (isValidSeedCode(hook)) return hook;
   if (typeof storedRaw === "string" && storedRaw.length > 0 && storedRaw.length <= MAX_STORED_RECORD_LENGTH) {
     try {
@@ -44,10 +63,19 @@ function readStoredRaw(): string | null {
   }
 }
 
-/** The SEED every world module is generated from in this page load. */
+/** `self.name` when running inside a dedicated worker; undefined on the page and in Node. */
+function workerScopeName(): unknown {
+  const scope = globalThis as { WorkerGlobalScope?: new () => unknown; name?: unknown };
+  return typeof scope.WorkerGlobalScope === "function" && globalThis instanceof scope.WorkerGlobalScope
+    ? scope.name
+    : undefined;
+}
+
+/** The SEED every world module is generated from in this page load (and in each of its workers). */
 export const WORLD_SEED: string = resolveWorldSeed(
   (globalThis as { __ADVISOR_SEED__?: unknown }).__ADVISOR_SEED__,
   readStoredRaw(),
+  workerScopeName(),
 );
 
 /** Seeded macro-geography + canonical climate/material foundation. Backward compatibility is intentionally not retained. */

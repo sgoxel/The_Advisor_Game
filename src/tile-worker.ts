@@ -1,3 +1,4 @@
+import { WORLD_SEED } from "./config.ts";
 import type { TileJob } from "./streaming-coverage.ts";
 import type { ResidentQueryJob } from "./resident-query.ts";
 
@@ -82,4 +83,5 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
       error:String(error) });
   }
 };
-self.postMessage({ready:true});
+// `seed` proves the worker builds the same world as the page (main.ts checks it).
+self.postMessage({ready:true, seed:WORLD_SEED});

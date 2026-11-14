@@ -75,7 +75,8 @@ import { getProtagonistCode, restoreProtagonist, setProtagonistCode, subscribePr
 import { adviceVerdict, eveningAdviceFor, loadCharacter, saveCharacter } from "./character-state.ts";
 import { dailyPlan } from "./routines.ts";
 import { resolveCampaign, type CampaignRecord } from "./campaign.ts";
-import { WORLD_FOUNDATION_VERSION } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, workerNameForSeed } from "./config.ts";
+import { WORLD_FAILURE_EVENT } from "./seed-recovery.ts";
 import {
   LEGACY_SITE_VISITS_KEY,
   inventoryStorageKey,
@@ -504,6 +505,8 @@ function dispatchResidentQuery() {
 }
 const workers: Worker[] = [], idleWorkers: Worker[] = [], continuityBytesByWorker = new Map<Worker, number>();
 let readyWorkers = 0;
+/** The seed each worker reported building, by worker; diagnostic proof that workers share the page's world. */
+const workerSeeds = new Map<string, unknown>();
 /** Shared device-class admission for tile generation + meshes awaiting upload. */
 const generationLimit = () => streamingBudget.generationReady;
 const layers = { structures: true, nature: true, grid: false };
@@ -718,6 +721,8 @@ function updateNavigationHud() {
 
 function fail(message: string) {
   errorText = message;
+  // bootstrap.ts listens until the world is ready: a seed that cannot form a world is recovered there.
+  try { window.dispatchEvent(new CustomEvent(WORLD_FAILURE_EVENT, { detail: message })); } catch { /* reporting only */ }
   $("loading").hidden = true;
   $("error").hidden = false;
   $("error").textContent = message;
@@ -761,6 +766,7 @@ function prepareGlobe() {
   if (globeWorker || globePass >= GLOBE_PASSES.length || !globe) return;
   globeWorker = new Worker(new URL("./globe-worker.ts", import.meta.url), {
     type: "module",
+    name: workerNameForSeed(WORLD_SEED),
   });
   const request = () => {
     const { width, samples } = GLOBE_PASSES[globePass];
@@ -775,6 +781,11 @@ function prepareGlobe() {
   globeWorker.onmessage = (event) => {
     if (event.data.error) {
       fail(`Globe surface failed: ${event.data.error}`);
+      return;
+    }
+    workerSeeds.set("globe", event.data.seed);
+    if (event.data.seed !== WORLD_SEED) {
+      fail(`Globe worker built seed ${event.data.seed}, but this page uses ${WORLD_SEED}`);
       return;
     }
     globe!.setSurface(event.data);
@@ -2303,10 +2314,15 @@ async function start() {
   // The first worker starts alone so the first screen loads as fast as with a single worker; the
   // rest of the pool starts once it is ready, instead of all competing for the CPU at start-up.
   const startWorker = () => {
-    const worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module" });
+    const worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module", name: workerNameForSeed(WORLD_SEED) });
     workers.push(worker);
     worker.onmessage = (event) => {
       if(event.data.ready){
+        workerSeeds.set(`tile-${workers.indexOf(worker)}`, event.data.seed);
+        if (event.data.seed !== WORLD_SEED) {
+          fail(`World worker built seed ${event.data.seed}, but this page uses ${WORLD_SEED}`);
+          return;
+        }
         if(++readyWorkers===1){
           workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);
           for (let index = 1; index < generationWorkers; index++) startWorker();
@@ -3649,6 +3665,7 @@ async function start() {
   Object.defineProperty(window, "advisorWorld", {
     value: {
       seed: WORLD_SEED,
+      workerSeeds: () => Object.fromEntries(workerSeeds),
       campaign: () => campaignIdentity ? { id: campaignIdentity.id, seed: campaignIdentity.seed, createdAtMs: campaignIdentity.createdAtMs } : null,
       /**
        * Read-only view of the durable campaign history (WP-S010-008-003). Reports

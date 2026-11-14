@@ -60,3 +60,11 @@ Not verified: frame rate, surface build time and memory on real phones and GPUs.
 - [Globe, phone landscape](evidence/globe-phone-landscape.png)
 - [Globe on real WebGPU](evidence/globe-webgpu.png)
 - [Village after returning from the globe](evidence/village-after-globe.png)
+
+## Seed failure recovery (no frozen seed)
+
+A player-chosen seed that cannot form a world never leaves the game on a loading screen. `src/bootstrap.ts` watches startup (world import throws, uncaught errors, rejected promises, and worker/tile/globe failures reported through the `advisor-world-failure` event) until `advisorWorld.state.ready`. On a non-default, non-hook seed it clears the stored campaign, remembers the seed in a capped list (`advisor.failedSeeds.v1`, 20 entries, used by `suggestSeed`), sets a one-shot `sessionStorage` flag and reloads; the seed dialog then says "The seed X could not form a world. Please choose another." with a different suggestion. The default seed, a hook-fixed seed, device/network failures and more than 5 recoveries per tab only show the error, so no reload loop is possible. Pure rules: `src/seed-recovery.ts`, `tests/seed-recovery.test.ts`.
+
+Test hook: set `globalThis.__ADVISOR_FORCE_GENERATION_FAILURE__` before load (Playwright `addInitScript`) to `true`/`"sync"` (throw while the world modules load), `"async"` (uncaught error shortly after load starts) or a seed code (fail only that seed). The default seed never fails on purpose. Use a fresh context with `navigator.webdriver` overridden to `false`, otherwise automated browsers skip the seed dialog.
+
+Workers have no `localStorage`, so the page passes its seed in each worker's `name` (`workerNameForSeed`); `config.ts` reads it inside a worker scope. Workers report the seed they built (`advisorWorld.workerSeeds()`), and main.ts fails loudly on a mismatch.

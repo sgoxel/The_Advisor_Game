@@ -17,6 +17,7 @@
  */
 
 import { CAMPAIGN_STORAGE_KEY, WORLD_SEED, isValidSeedCode } from "./config.ts";
+import { readFailedSeeds } from "./seed-recovery.ts";
 
 export { CAMPAIGN_STORAGE_KEY };
 export const CAMPAIGN_VERSION = "campaign-v1";
@@ -131,10 +132,34 @@ export function generateFantasyName(random: () => number = Math.random): string 
  * A suggested seed in the project's seed style, `ADVISOR-<YYYY>-<NAME>`, where YYYY
  * is the four-digit fantasy year the campaign starts in and NAME is a generated name.
  * Examples: ADVISOR-0126-THORNMERE, ADVISOR-0126-ODRIN, ADVISOR-0127-BRAMHOLM.
+ *
+ * Seeds in `avoid` (by default the seeds that failed to form a world in this browser)
+ * are never suggested: a few random attempts first, then every head+tail name in
+ * order, then a numeric suffix, so a suggestion is always found.
  */
-export function suggestSeed(nowMs: number = Date.now(), random: () => number = Math.random): string {
+export function suggestSeed(
+  nowMs: number = Date.now(),
+  random: () => number = Math.random,
+  avoid: readonly string[] = readFailedSeeds(),
+): string {
   const year = String(fantasyYearAt(nowMs)).padStart(4, "0");
-  return `ADVISOR-${year}-${generateFantasyName(random)}`;
+  const blocked = new Set(avoid.map((seed) => seed.toUpperCase()));
+  const free = (name: string): string | undefined => {
+    const seed = `ADVISOR-${year}-${name}`;
+    return blocked.has(seed) ? undefined : seed;
+  };
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const seed = free(generateFantasyName(random));
+    if (seed) return seed;
+  }
+  for (const head of NAME_HEADS) for (const tail of NAME_TAILS) {
+    const seed = free(head + tail);
+    if (seed) return seed;
+  }
+  for (let n = 2; ; n++) {
+    const seed = free(`${NAME_HEADS[0]}${NAME_TAILS[0]}-${n}`);
+    if (seed) return seed;
+  }
 }
 
 /**

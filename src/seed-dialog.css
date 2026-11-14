@@ -59,6 +59,7 @@
 .seed-dialog-input {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid #d8b97966;
   border-radius: 5px;
@@ -145,4 +146,36 @@
   .seed-dialog-actions button {
     width: 100%;
   }
+}
+
+/* Shown when the previously chosen seed could not form a world. */
+.seed-dialog-notice {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #d9806060;
+  border-left: 3px solid #d98060;
+  border-radius: 6px;
+  background: #3a1d1740;
+}
+
+.seed-dialog-notice-message {
+  margin: 0;
+  color: #f2d5c8;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.seed-dialog-notice-detail {
+  margin: 0;
+  color: #a8b5a8;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.seed-dialog-notice[hidden],
+.seed-dialog-notice-detail[hidden] {
+  display: none;
 }
