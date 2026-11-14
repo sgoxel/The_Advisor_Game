@@ -2317,12 +2317,12 @@ async function start() {
     const worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module", name: workerNameForSeed(WORLD_SEED) });
     workers.push(worker);
     worker.onmessage = (event) => {
-      if(event.data.ready){
+      if (event.data.kind === "worker-seed") {
         workerSeeds.set(`tile-${workers.indexOf(worker)}`, event.data.seed);
-        if (event.data.seed !== WORLD_SEED) {
-          fail(`World worker built seed ${event.data.seed}, but this page uses ${WORLD_SEED}`);
-          return;
-        }
+        if (event.data.seed !== WORLD_SEED) fail(`World worker built seed ${event.data.seed}, but this page uses ${WORLD_SEED}`);
+        return;
+      }
+      if(event.data.ready){
         if(++readyWorkers===1){
           workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);
           for (let index = 1; index < generationWorkers; index++) startWorker();

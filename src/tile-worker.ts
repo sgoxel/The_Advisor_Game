@@ -1,4 +1,3 @@
-import { WORLD_SEED } from "./config.ts";
 import type { TileJob } from "./streaming-coverage.ts";
 import type { ResidentQueryJob } from "./resident-query.ts";
 
@@ -84,4 +83,6 @@ self.onmessage = async (event: MessageEvent<TileJob | ResidentQueryJob>) => {
   }
 };
 // `seed` proves the worker builds the same world as the page (main.ts checks it).
-self.postMessage({ready:true, seed:WORLD_SEED});
+self.postMessage({ready:true});
+// The seed check loads config lazily so this bootstrap keeps no eager runtime imports.
+void import("./config.ts").then(({ WORLD_SEED }) => self.postMessage({kind:"worker-seed", seed:WORLD_SEED}));
