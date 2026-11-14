@@ -195,3 +195,25 @@ test("trust, not luck, decides acceptance", async () => {
     assert.equal(adviceVerdict({ ...neutralState(code, 1), trust: ADVICE_TRUST_SURE }), "accept");
   }
 });
+
+test("a refused history replay explains itself instead of silently returning false", async () => {
+  const place = villages.find((candidate) => siteVisitCorridors(siteTransportNetwork, candidate.id).length > 0)!;
+  const sim = new LazySimulation();
+  sim.setFocus(place);
+  sim.advance(tickAtLocalTime(2, 12 * 3600, place.canonicalPosition.lon));
+
+  // A payload from a different world/version is refused with a reason.
+  const wrongWorld = await sim.restoreSiteVisitHistory({ version: 1, seed: "OTHER-SEED", foundation: "v5", visits: [] });
+  assert.equal(wrongWorld, false);
+  assert.match(sim.lastReplayProblem ?? "", /different world or version/i);
+
+  // A structurally plausible visit for a resident who has no legal journey is
+  // refused, and the reason names the check that failed rather than guessing.
+  const bogus = await sim.restoreSiteVisitHistory({ version: 1, seed: "ADVISOR-0126-ALDERWICK", foundation: "v5", visits: [{
+    residentCode: "ADVISOR-0126-ALDERWICK/v4/CONT/0/COUNTRY/11/SETTLEMENT/v2/CITY/1/VILLAGE/2/RESIDENT/999",
+    decidedTick: 0, from: "made-up-from", to: "made-up-to", edgeCodes: ["edge/one", "edge/two"],
+  }] });
+  assert.equal(bogus, false);
+  assert.ok((sim.lastReplayProblem ?? "").length > 0, "a refusal must state why it was refused");
+  assert.equal(sim.acceptedSiteVisitCount, 0, "nothing was applied");
+});

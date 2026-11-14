@@ -3172,13 +3172,22 @@ export class LazySimulation {
       foundation: "v5", visits: this.siteVisitJournal?.savedVisits() ?? [] };
   }
 
+  /**
+   * Why the most recent replay was refused, in plain language. A rejection that
+   * only returns `false` cannot be diagnosed by a player or an evidence script.
+   */
+  lastReplayProblem: string | undefined;
+
   async restoreSiteVisitHistory(saved: unknown): Promise<boolean> {
-    if (!saved || typeof saved !== "object") return false;
+    this.lastReplayProblem = undefined;
+    const reject = (reason: string) => { this.lastReplayProblem = reason; return false; };
+    if (!saved || typeof saved !== "object") return reject("The stored journey history had no readable payload.");
     const input = saved as Record<string, unknown>;
     if (input.version !== 1 || input.seed !== "ADVISOR-0126-ALDERWICK" ||
         input.foundation !== "v5" || !Array.isArray(input.visits) ||
-        input.visits.length > 16) return false;
-    if (this.restoringSiteVisits) return false;
+        input.visits.length > 16)
+      return reject("The stored journey history was written for a different world or version.");
+    if (this.restoringSiteVisits) return reject("Saved journeys were already being revalidated.");
     const replayTick = this.tick;
     this.restoringSiteVisits = true;
     try {
@@ -3187,7 +3196,7 @@ export class LazySimulation {
         (code, atTick) => this.residentByCode(code, atTick));
       const seen = new Set<string>();
       for (const raw of input.visits) {
-        if (!raw || typeof raw !== "object") return false;
+        if (!raw || typeof raw !== "object") return reject("A stored journey record was malformed.");
         const record = raw as Record<string, unknown>;
         if (typeof record.residentCode !== "string" || seen.has(record.residentCode) ||
             typeof record.from !== "string" || typeof record.to !== "string" ||
@@ -3195,17 +3204,18 @@ export class LazySimulation {
             (record.decidedTick as number) > replayTick || !Array.isArray(record.edgeCodes) ||
             record.edgeCodes.length < 2 || record.edgeCodes.length > 12 ||
             !record.edgeCodes.every(code => typeof code === "string" && code.length < 256))
-          return false;
+          return reject("A stored journey record had an impossible field (time, place or road list).");
         seen.add(record.residentCode);
         const accepted = await this.verifySiteVisitAt(record.residentCode,
           { from: record.from, to: record.to, edgeCodes: record.edgeCodes },
           record.decidedTick as number);
-        if (!accepted) return false;
+        if (!accepted)
+          return reject(`A stored journey for ${record.residentCode.split("/").slice(-1)[0]} no longer passes the current road, bridge, grade or resident-decision check.`);
         if (record.homeReturnTick !== undefined) {
           if (!Number.isSafeInteger(record.homeReturnTick) ||
               (record.homeReturnTick as number) > replayTick ||
               !await this.verifyHomeReturnAt(record.residentCode, record.homeReturnTick as number))
-            return false;
+            return reject("A stored homeward journey no longer passes the door, street or grade check.");
         }
       }
       // Publish once all sixteen-or-fewer original decisions and every
@@ -3213,8 +3223,8 @@ export class LazySimulation {
       // and workers never see a partially accepted imported journey.
       this.siteVisitJournal = this.replaySiteVisitJournal;
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      return reject(`Saved journeys could not be revalidated: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.replaySiteVisitJournal = undefined;
       this.restoringSiteVisits = false;

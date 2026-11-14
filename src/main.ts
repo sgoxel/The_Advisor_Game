@@ -2851,7 +2851,8 @@ async function start() {
           campaignJournal = emptyJournal(journalCampaignId);
           journalStatus = { saved: false, problem: "A migrated journey history was rejected by Simulation and was not kept." };
         } else {
-          journalStatus = { saved: false, problem: "The stored campaign history was rejected by Simulation and was not applied." };
+          journalStatus = { saved: false, problem: simulation.lastReplayProblem
+            ?? "The stored campaign history was rejected by Simulation and was not applied." };
         }
       }
     });
@@ -3669,6 +3670,8 @@ async function start() {
         })),
         status: { ...journalStatus },
       }),
+      /** Read-only: why the last stored history replay was refused, if it was. */
+      journalReplayProblem: () => simulation.lastReplayProblem ?? null,
       /**
        * Evidence-only: reproduce device loss/restore without a real driver reset.
        * Fires the same engine events the app handles, so the recovery path under
@@ -3739,6 +3742,18 @@ async function start() {
           route: resident.route,
           x: resident.x, z: resident.z,
         };
+      },
+      /**
+       * Evidence-only: run the SAME advice the "Suggest a site visit" control
+       * runs — `simulation.considerAdvisorSiteVisit(code)` through the host
+       * executor that also persists the result — and report the truthful
+       * message. It grants no new authority: Simulation validates the corridor,
+       * every road leg and the resident's own choice exactly as it does for a
+       * player tap. Used only by evidence scripts; gameplay never calls it.
+       */
+      async evidenceSuggestSiteVisit(code: string) {
+        if (!adviseExecutor) return { started: false, message: "The simulation is still starting." };
+        return adviseExecutor(code);
       },
       /**
        * Read-only evidence hook: the evening anchors the REAL day planner will
