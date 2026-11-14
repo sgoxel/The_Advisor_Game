@@ -286,3 +286,26 @@ export function activityAt(plan: readonly Activity[], secondOfDay: number) {
   for (let i = 0; i < plan.length; i++) if (plan[i].start <= secondOfDay) index = i;
   return { index, activity: plan[index], previous: plan[index - 1] };
 }
+
+/**
+ * The second of the day an entry actually ends on, in the day it started.
+ *
+ * A plan opens with whatever the resident is doing at midnight, so the last
+ * entry of a day keeps running while the next day repeats the same activity at
+ * the same anchor: a watch standing 18:00 through midnight to 06:00, or a
+ * night's sleep. Reporting midnight as the end would show a 12-hour watch as a
+ * six-hour one, reset its progress bar at 00:00 and imply the resident was free
+ * while on duty. Returns a value above 24 hours when the span wraps; callers
+ * that print a clock time must wrap it.
+ */
+export function scheduledActivitySpanEnd(plan: readonly Activity[], index: number): number {
+  const activity = plan[index];
+  const next = plan[index + 1];
+  if (next) return next.start;
+  const dayEnd = 24 * 3600;
+  for (const entry of plan) {
+    if (entry.kind === activity.kind && entry.anchor === activity.anchor) continue;
+    return dayEnd + entry.start;
+  }
+  return 2 * dayEnd;
+}

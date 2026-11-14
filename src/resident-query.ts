@@ -464,18 +464,28 @@ export class ResidentQueryQueue {
 }
 
 /** Previously validated stationary outdoor actors keep their physical
- * post only within the same original local day and schedule interval.
+ * post only within the same schedule interval. A duty that runs past midnight
+ * keeps the post into the next local day, because the interval itself continues
+ * there; every other case stays inside its original local day.
  * Moving/blocked/indoor facts cannot be reused as stationary scenery. */
 export function residentStationaryWithinActivity(
   resident: Pick<Resident, "grounded" | "indoors" | "activity" | "activityStart" | "activityEnd" | "travelProgress" | "route">,
   originalDay: number, currentDay: number, currentLocalSecond: number,
 ): boolean {
-  return originalDay === currentDay &&
-    resident.grounded && !resident.indoors &&
+  if (!(originalDay === currentDay ||
+      // `activityEnd` beyond a day is the schedule's own statement that this
+      // interval continues after midnight, so the following day is still inside
+      // it. Without the wrap the guard would be dropped from a post they never
+      // left, or kept on one they should have.
+      (resident.activityEnd > 86_400 && currentDay === originalDay + 1))) return false;
+  // Measured in the interval's own day: after midnight the elapsed local second
+  // is small again, so it is read as the continuation of the previous day.
+  const second = currentDay > originalDay ? currentLocalSecond + 86_400 : currentLocalSecond;
+  return resident.grounded && !resident.indoors &&
     resident.activity !== "commute" && resident.travelProgress === undefined &&
     !resident.route.startsWith("BLOCKED:") &&
-    currentLocalSecond >= resident.activityStart &&
-    currentLocalSecond < resident.activityEnd;
+    second >= resident.activityStart &&
+    second < resident.activityEnd;
 }
 
 /** Count only actually running resident shards in the shared streaming queue.

@@ -1643,9 +1643,31 @@ function showCampaignNotice(message: string): void {
   box.hidden = false;
   box.textContent = !existing || existing.includes(message) ? (existing || message) : `${existing} ${message}`;
 }
-let evidenceTickOverride: number | undefined;
+/**
+ * Evidence-only Fantasy Time control. `evidenceTickShift` is a constant offset
+ * added to the real clock; `evidenceTickPinned` freezes an exact tick for a
+ * reproducible capture. Both exist so that EVERY consumer — Simulation advance,
+ * the displayed clock, local daylight, resident queries and their freshness
+ * test — reads one timeline through `effectiveTick`.
+ *
+ * Releasing a pin converts the frozen instant into an equivalent offset instead
+ * of dropping it. Simulation time can never move backward, so simply removing
+ * the pin would strand the world ahead of the clock it is displayed against:
+ * a day-watch guard could then be photographed standing its post long after
+ * its 06:00-18:00 watch had ended.
+ */
+let evidenceTickShift = 0;
+let evidenceTickPinned: number | undefined;
 /** Evidence-only render-scale pin; see setEvidenceRenderScale. */
 let evidenceRenderScale: number | undefined;
+
+/**
+ * The single Fantasy Time authority: the tick the world is actually running.
+ * No displayed time may be derived from the browser clock directly.
+ */
+function effectiveTick(realMs: number) {
+  return evidenceTickPinned ?? clock.tickAt(realMs) + evidenceTickShift;
+}
 
 /** Last rendered tile-status text, so a settled frame performs no DOM write. */
 let lastTileStatusText = "";
@@ -2340,7 +2362,7 @@ async function start() {
         // Preview does not make this worker idle or finish a shard. Final
         // actor membership and all streaming admission remain unchanged.
         if (batch && !$("travel-panel").hidden && !batch.completed.has(event.data.shard) &&
-            residentQueries.acceptsPreview(event.data.id, Math.max(simulation.tick, clock.tickAt(Date.now())))) {
+            residentQueries.acceptsPreview(event.data.id, effectiveTick(Date.now()))) {
           const first = simulation.projectResidentView([event.data.resident as Resident], batch.job.tick, batch.job);
           if (first.length) {
             simulation.acceptResidentQuery(first, {
@@ -2359,7 +2381,7 @@ async function start() {
         const retained = batch && prior && prior.id !== event.data.id
           ? stationaryForView(prior, batch.job) : [];
         if (residentQueries.appendPartial(event.data.id, event.data.residents as Resident[],
-            Math.max(simulation.tick, clock.tickAt(Date.now())), retained)) {
+            effectiveTick(Date.now()), retained)) {
           if (firstResidentFactMs === null && firstResidentQueryOfferedAt !== null)
             firstResidentFactMs = performance.now() - firstResidentQueryOfferedAt;
           residentResultReady();
@@ -2381,7 +2403,7 @@ async function start() {
               residentBatch.job.actors ? Infinity : residentBatch.job.limit,
               resident => residentOrder.get(resident.settlement)!(resident.index));
             residentBatches.delete(residentBatch.job.id);
-            const accepted = residentQueries.complete(event.data.id, merged, Math.max(simulation.tick, clock.tickAt(Date.now())));
+            const accepted = residentQueries.complete(event.data.id, merged, effectiveTick(Date.now()));
             const answeredAt = performance.now();
             residentPhaseTimings.complete(event.data.id, accepted, answeredAt, event.data.residentTiming, wasWarm);
             if (accepted) {
@@ -2419,7 +2441,7 @@ async function start() {
   setupControls();
   updateCamera();
   simulation.setFocus(villages[0]);
-  simulation.advance(clock.tickAt(Date.now()));
+  simulation.advance(effectiveTick(Date.now()));
   // Saved history consists only of SEED identities, absolute ticks and edges.
   // Never hydrate a serialized actor position or validated boolean. Replay
   // runs full character/route/surface decisions; corrupted history is ignored.
@@ -2978,7 +3000,7 @@ async function start() {
     // Deterministic evidence clock: only ever set by the screenshot tool through
     // an explicit debug hook, never by gameplay. It pins Fantasy Time so terrain
     // and lighting evidence cannot be captured at an unreadable hour.
-    const simulationTick = evidenceTickOverride ?? clock.tickAt(now);
+    const simulationTick = effectiveTick(now);
     if(ready)updateWilderness(view.x,view.z,view.halfHeight,scaleValueForHalfHeight(view.halfHeight),projectionTransition,projectTransportGround);
     const residentInspectorOpen = !$("travel-panel").hidden;
     if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible ||
@@ -3804,23 +3826,34 @@ async function start() {
       hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
       /**
-       * Evidence-only: pin realm Fantasy Time to a specific hour so a capture
-       * cannot land at night. `hour` is 0-24 in realm time (the HUD clock).
-       * Passing `undefined` returns to the real clock. Never affects gameplay.
+       * Evidence-only: pin Fantasy Time to a specific hour so a capture cannot
+       * land at night. `hour` is 0-24 in realm time. Passing `undefined` resumes
+       * flowing time. Never affects gameplay and is never persisted.
        */
       setEvidenceTick(hour: number | undefined) {
-        if (hour === undefined) { evidenceTickOverride = undefined; lastSimulationRealSecond = -1; return true; }
+        if (hour === undefined) {
+          // Release: keep the instant the world reached, expressed as an offset on
+          // the real clock, so Fantasy Time resumes flowing from there instead of
+          // the world being stranded ahead of the clock it is displayed against.
+          const nowTick = clock.tickAt(Date.now()), reached = effectiveTick(Date.now());
+          evidenceTickShift = Math.max(evidenceTickShift, reached - nowTick);
+          evidenceTickPinned = undefined;
+          lastSimulationRealSecond = -1;
+          return true;
+        }
         if (!Number.isFinite(hour) || hour < 0 || hour > 24) return false;
         // Move FORWARD to the next occurrence of the requested hour. Authoritative
         // Simulation time is monotonic, so a pin that asked to go backwards used to
         // clamp while the local-time label still followed the request — producing
         // evidence where the two clocks disagreed. Always stepping forward keeps
-        // every later capture consistent with the tick actually in force.
-        const nowTick = clock.tickAt(Date.now());
-        const currentSecond = fantasySecondOfDay(nowTick);
+        // every later capture consistent with the tick actually in force. The
+        // delta is measured from the tick the world is RUNNING (a previous pin
+        // included), or a second pin silently does nothing.
+        const baseTick = effectiveTick(Date.now());
+        const currentSecond = fantasySecondOfDay(baseTick);
         const targetSecond = Math.round(hour * 3600) % FANTASY_DAY_SECONDS;
         const deltaSeconds = (targetSecond - currentSecond + FANTASY_DAY_SECONDS) % FANTASY_DAY_SECONDS;
-        evidenceTickOverride = Math.max(0, nowTick + deltaSeconds);
+        evidenceTickPinned = Math.max(0, baseTick + deltaSeconds);
         lastSimulationRealSecond = -1;
         return true;
       },
@@ -3879,8 +3912,14 @@ async function start() {
       gateWatchEvidence() {
         const place = nearestPlace(view.x, view.z);
         if (!place) return null;
+        // The duty radius must be the one that decided which residents were
+        // streamed at all (see residentRequestForView): the longitude-adjusted
+        // viewport, not the raw source bounds. Using the unadjusted bounds made
+        // a watch member standing a visible post report itself off duty at close
+        // zoom, contradicting the coverage the same call returns.
         const bounds = viewBounds(view),
-          radius = Math.hypot(bounds.rx, bounds.rz),
+          lonScale = Math.max(.02, Math.abs(Math.cos(flatToLonLat(view.x, view.z).lat))),
+          radius = Math.hypot(bounds.rx / lonScale, bounds.rz) * 1.1,
           dutyCodes = dutyGuardCodesNearView(place, simulation.tick, view.x, view.z, radius),
           displayed = actors.filter(actor => actor.enabled)
             .map(actor => ({ actor, resident: actorResidents.get(actor) }))
@@ -3890,12 +3929,42 @@ async function start() {
               x: entry.resident!.x, z: entry.resident!.z,
               mesh: hasResidentMesh(entry.actor),
             }));
+        // Every actually drawn watch member, on duty or not, with the schedule
+        // interval it was drawn from and the world's own local second. A guard
+        // standing at a post outside its duty window is a defect the roster
+        // alone cannot reveal, so it is reported here instead of hidden by the
+        // duty-code filter above.
+        const localSecond = localSecondOfDay(simulation.tick, place.canonicalPosition.lon);
+        const renderedGuards = actors.filter(actor => actor.enabled)
+          .map(actor => actorResidents.get(actor))
+          .filter(resident => resident?.role === "guard")
+          .map(resident => ({
+            code: resident!.code,
+            shift: resident!.guardShift ?? null,
+            task: resident!.task,
+            activity: resident!.activity,
+            indoors: resident!.indoors,
+            activityStart: resident!.activityStart,
+            activityEnd: resident!.activityEnd,
+            activityProgress: resident!.activityProgress,
+            onDuty: dutyCodes.includes(resident!.code),
+            // A watch may run past midnight; its interval then continues at the
+            // start of the next local day, so a wrapped end must be tested as a
+            // wrap and not as an earlier cut-off.
+            inDutyWindow: resident!.activity === "guard"
+              ? resident!.activityEnd > 86_400
+                ? localSecond >= resident!.activityStart ||
+                  localSecond < resident!.activityEnd - 86_400
+                : localSecond >= resident!.activityStart && localSecond < resident!.activityEnd
+              : undefined,
+          }));
         return { place: place.name, tick: simulation.tick,
+          localSecond, localClock: clockLabel(localSecond),
           halfHeight: view.halfHeight, viewport: { width: innerWidth, height: innerHeight },
           coverage: guardCoverageAt(place, simulation.tick).map(gate => ({
             gateIndex: gate.gateIndex, required: gate.required,
             onDuty: gate.onDuty, missing: gate.missing,
-          })), dutyCodes, displayed };
+          })), dutyCodes, displayed, renderedGuards };
       },
       /** The same real selected resident/feet and depth-tested mesh that the
        * screenshot tool photographs. No DOM proxy or camera-owned position.
