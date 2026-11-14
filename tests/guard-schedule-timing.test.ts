@@ -5,7 +5,8 @@ import {
   timeZoneOffsetHours,
 } from "../src/clock.ts";
 import { activityAt, dailyPlan, personalityFor, scheduledActivitySpanEnd, traitsFor } from "../src/routines.ts";
-import { residentStationaryWithinActivity } from "../src/resident-query.ts";
+import { residentStationaryWithinActivity, residentSnapshotDisplayTick,
+  RESIDENT_SNAPSHOT_MAX_LAG_TICKS } from "../src/resident-query.ts";
 import { cities } from "../src/geography.ts";
 
 const HOUR = 3600;
@@ -128,4 +129,47 @@ test("a stale day-watch resident can never be reused as stationary night scenery
     "and it is released once 06:00 has passed");
   assert.equal(residentStationaryWithinActivity(night, 10, 12, 2 * HOUR), false,
     "two days later needs freshly validated Simulation facts");
+});
+
+test("drawn residents keep their verified instant for ordinary worker lag", () => {
+  // A slow query legitimately lags by seconds to minutes of fantasy time. Those
+  // already-validated facts must still be drawn unchanged, at their own instant.
+  for (const lag of [0, 1, 24, 300, 600, RESIDENT_SNAPSHOT_MAX_LAG_TICKS]) {
+    const snapshotTick = 100_000, currentTick = snapshotTick + lag;
+    assert.equal(residentSnapshotDisplayTick(snapshotTick, currentTick), snapshotTick,
+      `a ${lag}-tick lag is worker latency and must not be re-derived`);
+  }
+});
+
+test("a snapshot left behind across a shift boundary is re-derived at the current tick", () => {
+  // A discontinuous jump can leave the drawn facts behind a whole duty interval.
+  const snapshotTick = 100_000;
+  for (const lag of [RESIDENT_SNAPSHOT_MAX_LAG_TICKS + 1, 4 * 3600, 8 * 3600])
+    assert.equal(residentSnapshotDisplayTick(snapshotTick, snapshotTick + lag), snapshotTick + lag,
+      `a ${lag}-tick lag would describe another part of the day`);
+  // Time can never run backward, so an older world cannot resurrect old facts.
+  assert.equal(residentSnapshotDisplayTick(100_000, 99_000), 100_000);
+  for (const [a, b] of [[NaN, 5], [5, NaN], [undefined as unknown as number, 5]] as const)
+    assert.equal(residentSnapshotDisplayTick(a, b), a, "an unreadable instant must change nothing");
+});
+
+test("the re-derived instant is the one where a day-watch guard is genuinely off duty", () => {
+  // The consequence that matters: a snapshot taken minutes before the 18:00
+  // handover, drawn after it. Drawing the snapshot instant shows a guard on duty;
+  // drawing the bound's chosen instant shows the same person off duty.
+  const dayShift = guard(0);
+  const before = 17 * HOUR + 30 * 60, after = 18 * HOUR + 42 * 60;
+  const stale = activityAt(dayShift, before), fresh = activityAt(dayShift, after);
+  assert.equal(stale.activity.kind, "guard", "at 17:30 the day watch is legitimately on duty");
+  assert.notEqual(fresh.activity.kind, "guard", "at 18:42 the same resident is off duty");
+  assert.notEqual(fresh.activity.anchor, stale.activity.anchor, "and has physically left the post");
+
+  // The bound selects which instant the screen represents, so it decides the outcome.
+  const chosen = residentSnapshotDisplayTick(before, after);
+  assert.equal(chosen, after, "a jump past the bound must represent the current instant");
+  const shown = activityAt(dayShift, chosen);
+  assert.equal(shown.activity.kind, fresh.activity.kind,
+    "the drawn activity is the world's, not the stale snapshot's");
+  assert.equal(activityAt(dayShift, residentSnapshotDisplayTick(before, before + 300)).activity.kind,
+    "guard", "while the world is still inside the same watch, the verified facts stand");
 });

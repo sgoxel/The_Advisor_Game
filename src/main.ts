@@ -5,7 +5,7 @@ import { setupUiShell } from "./ui-shell.ts";
 import { emptyInventory, itemsHeldBy, parseInventory, seededItems, serializeInventory, type InventoryState } from "./inventory.ts";
 import { performItemTransfer } from "./item-transfer.ts";
 import { isNightSecond, litBuildingCodes, litSetKey, mergeGlowGeometry, type LitBuilding } from "./night-lighting.ts";
-import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentMayTakeIdleWorker, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, inspectedResidentSource, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
+import { ResidentQueryQueue, mergeResidentQueries, currentResidentSnapshot, residentDispatchAllowed, residentMayTakeIdleWorker, residentColdQueryCanStart, residentActorSnapshotMayMarkPresented, residentWorkerShardPlan, terrainWorkerIndexAvoidingWarmResident, residentActorPickDistance, residentActorPaintedTapFraction, residentActorPickPrefersFront, residentActorInFront, nearestPickableKeyboardResident, residentMotionFraction, residentWalkingPolyline, residentWalkingHeadingDelta, residentStationaryWithinActivity, residentStationaryPartialCarryover, selectedResidentVisibleInView, selectedResidentCurrentCarryover, inspectedResidentSource, residentLabelRightOfActor, ownedDoorLabelClearOfResident, residentQueryLimitForView, residentGateWatchFocus, residentSnapshotDisplayTick, RESIDENT_SNAPSHOT_MAX_LAG_TICKS, activeResidentWorkers, type ResidentQuery, type ResidentQueryJob, type ResidentQueryResult } from "./resident-query.ts";
 import { TIME_SCALE } from "./clock.ts";
 import { createWildernessOverlay } from "./wilderness-overlay.ts";
 import { nearbyWilderness } from "./wilderness.ts";
@@ -3056,11 +3056,17 @@ async function start() {
       // NOT the last routine-worker query timestamp. A slow worker may return a
       // snapshot from earlier in the walk: project the same original actor at
       // current authoritative tick instead of drawing stale road/door positions.
-      // Ordinary routine residents keep their unchanged worker-owned snapshot.
+      // Ordinary routine residents keep their unchanged worker-owned snapshot,
+      // unless the snapshot has fallen so far behind that it no longer describes
+      // the same part of the day: a worker's normal lag is seconds, while a time
+      // jump can leave it past a shift boundary and keep a guard visibly on duty
+      // hours after its watch ended. Then the same identities are re-derived at
+      // the current tick, because routines are analytical from absolute time.
       const acceptedSiteVisits = simulation.acceptedSiteVisitCount > 0;
+      const displayTick = acceptedSiteVisits ? simulation.tick
+        : residentSnapshotDisplayTick(snapshot?.tick ?? simulation.tick, simulation.tick);
       const projectedResidents = snapshot
-        ? simulation.projectResidentView(snapshot.residents,
-            acceptedSiteVisits ? simulation.tick : snapshot.tick, snapshot)
+        ? simulation.projectResidentView(snapshot.residents, displayTick, snapshot)
         : [];
       const inspectedCode = npcPopupCode();
       const existingSelected = inspectedCode
@@ -3070,7 +3076,7 @@ async function start() {
       // simply because its old finite result is no longer the desired key.
       // Never retain stale time/remote scenery; no actor is invented.
       const snapshotRevision = snapshot
-        ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}/${acceptedSiteVisits ? simulation.tick : ""}` : "";
+        ? `${snapshot.id}/${snapshot.residents.length}/${snapshot.partial ? "partial" : "complete"}/${displayTick !== snapshot.tick ? displayTick : ""}` : "";
       const selectedFromSnapshot = inspectedCode && snapshot
         ? projectedResidents.find(resident => resident.code === inspectedCode) : undefined;
       // The inspected resident is resolved from Simulation EVERY frame, never
@@ -3960,6 +3966,14 @@ async function start() {
           }));
         return { place: place.name, tick: simulation.tick,
           localSecond, localClock: clockLabel(localSecond),
+          // How far the drawn actor facts lag behind authoritative time, against
+          // the bound beyond which they are re-derived at the current tick. A lag
+          // inside the bound is worker latency; a lag past it would have been able
+          // to display a duty the world has already left.
+          snapshotTick: residentQueries.latest?.tick ?? null,
+          snapshotLagTicks: residentQueries.latest === undefined ? null
+            : simulation.tick - residentQueries.latest.tick,
+          snapshotMaxLagTicks: RESIDENT_SNAPSHOT_MAX_LAG_TICKS,
           halfHeight: view.halfHeight, viewport: { width: innerWidth, height: innerHeight },
           coverage: guardCoverageAt(place, simulation.tick).map(gate => ({
             gateIndex: gate.gateIndex, required: gate.required,

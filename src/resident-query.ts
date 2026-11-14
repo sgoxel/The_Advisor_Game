@@ -463,6 +463,30 @@ export class ResidentQueryQueue {
   }
 }
 
+/** Bound, in fantasy ticks, for how far a worker-owned actor snapshot may lag
+ * behind authoritative Fantasy Time before the presentation layer must re-derive
+ * the same residents at the current tick instead of drawing them at the snapshot's
+ * own instant.
+ *
+ * A snapshot normally lags by the seconds its query takes, which on a slow device
+ * is a few minutes of fantasy time: drawing those verified facts unchanged is the
+ * reviewed behaviour. A discontinuous jump (an evidence time hop, or a long
+ * offline catch-up) can leave it behind a whole shift boundary, and then a watch
+ * member would keep standing at a post the world has already left. Re-deriving
+ * the SAME identities at the current tick is safe because routines are analytical
+ * from absolute Fantasy Time; nothing is invented, moved by the camera or teleported. */
+export const RESIDENT_SNAPSHOT_MAX_LAG_TICKS = 3_600;
+
+/** The instant the drawn residents must represent: their snapshot's own tick while
+ * the snapshot still tracks the world, otherwise the authoritative current tick. */
+export function residentSnapshotDisplayTick(
+  snapshotTick: number, currentTick: number,
+  maxLagTicks: number = RESIDENT_SNAPSHOT_MAX_LAG_TICKS,
+): number {
+  if (!Number.isFinite(snapshotTick) || !Number.isFinite(currentTick)) return snapshotTick;
+  return currentTick - snapshotTick > maxLagTicks ? currentTick : snapshotTick;
+}
+
 /** Previously validated stationary outdoor actors keep their physical
  * post only within the same schedule interval. A duty that runs past midnight
  * keeps the post into the next local day, because the interval itself continues
