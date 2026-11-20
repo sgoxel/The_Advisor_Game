@@ -63,6 +63,13 @@ PROFILES: dict[str, tuple[int, int]] = {
 # Verify the displayed point against the exact composed source queried through
 # its reported canonical coordinates. This detects nearby-cell snapping and
 # submerged-bed/deck confusion without redefining the world in the capture tool.
+# WP-S003-004-001 terrain evidence: pin daylight and native render scale so a
+# capture never lands at night (wall-clock Fantasy Time) or at the adaptive
+# half-resolution a software GPU falls back to. Evidence-only hooks.
+EVIDENCE_PINS = (
+    "eval:window.advisorWorld.setEvidenceRenderScale(1);"
+    "eval:window.advisorWorld.setEvidenceTick(10);"
+)
 POINT_INSPECTION = (
     "tap:50%,50%;visible:#cell-panel;"
     "eval:window.hit=document.getElementById('cell-height').title.match(/lon ([^,]+), lat ([^,]+), elevation ([^ ]+) m/);"
@@ -167,6 +174,7 @@ SCENARIOS: dict[str, str] = {
         "shot:owned-home-front-relief"
     ),
     "s003-hero-close-slope": (
+        EVIDENCE_PINS +
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
@@ -175,6 +183,7 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(8);settle;shot:legal-steep-relief-context"
     ),
     "s003-hero-close-cliff": (
+        EVIDENCE_PINS +
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "select:#map-scale=0.5;settle;" + POINT_INSPECTION +
@@ -188,6 +197,7 @@ SCENARIOS: dict[str, str] = {
     # from consuming the entire bounded original landscape capture. Original
     # selected resident, door and close-up PNGs remain preserved separately.
     "s003-hero-close-cliff-context": (
+        EVIDENCE_PINS +
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "eval:window.advisorWorld.setHalfHeight(8);settle;" + POINT_INSPECTION +
@@ -199,6 +209,7 @@ SCENARIOS: dict[str, str] = {
         "select:#map-scale=0.5;settle;shot:blocked-cliff-close"
     ),
     "s003-hero-close-slope-context": (
+        EVIDENCE_PINS +
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "eval:window.advisorWorld.setHalfHeight(8);settle;" + POINT_INSPECTION +

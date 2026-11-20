@@ -57,16 +57,32 @@ test("WP #550 rock detail stays in continuous 3D metre space across tessellated 
     const rock = declaration.slice(declaration.indexOf("sdRock3D("), declaration.indexOf("sdBlocks("));
     assert.ok(!rock.includes("vein =") && !rock.includes("0.075 * vein"),
       "rock must not draw repeating closed noise-contour lines across the real cliff");
-    assert.ok(rock.includes("0.20 * visible") && rock.includes("0.12 * sdVis(0.4, fp)"),
-      "WebGL2 and WebGPU retain the same continuous gentle metre-scale rock grain");
+    assert.ok(!/abs\([^)]*-\s*0\.5\)/.test(rock),
+      "no narrow abs(n - 0.5) iso-line threshold in rock (those read as closed contour rings)");
+    assert.ok(rock.includes("0.26 * visBroad") && rock.includes("0.20 * visMid") && rock.includes("0.14 * visFine"),
+      "rock carries three visibility-faded grain octaves, not an airbrushed single tone");
+    assert.ok(rock.includes("1.0 - smoothstep(0.08, 0.38, mid * 0.65 + fine * 0.35)"),
+      "crevices are a soft, wide filled darkening");
+    assert.ok(rock.includes("strataY = p.y + (warp - 0.5) * 5.0") && rock.includes("sdStrataTone(band)"),
+      "sedimentary strata follow warped world height with per-band tone");
+    assert.ok(rock.includes("strata = (1.0 - smoothstep(0.2, 0.5, ny)) * sdVis(0.8, fp)"),
+      "strata are weighted by steepness, so flat rock never shows height contour rings");
+    assert.ok(rock.includes("bandTone * strata - 0.22 * crevice") && rock.includes("bandTone * strata * 0.1"),
+      "strata tint the tone and raise small ledges in the bump height");
+    assert.equal((rock.match(/sdNoise3\(/g) ?? []).length, 4, "mobile budget: at most four 3D noise samples per rock pixel");
   }
+  // Normalise declarations/types away; what remains (every expression) must match line for line.
+  const rockBody = (decl: string) => decl.slice(decl.indexOf("sdStrataTone("), decl.lastIndexOf("}", decl.indexOf("sdBlocks(")) + 1);
+  const maths = (src: string) => src.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//"))
+    .map((l) => l.replace(/\b(?:float|let|vec[34]|fn)\s+/g, "").replace(/vec([234])f\(/g, "vec$1(").replace(/: (?:f32|vec3f)| -> (?:vec4f|f32)/g, ""));
+  assert.deepEqual(maths(rockBody(terrain.wgslDeclaration)), maths(rockBody(terrain.glslDeclaration)), "GLSL and WGSL rock maths are identical");
   for (const code of [terrain.glslMainStart, terrain.wgslMainStart]) {
-    assert.ok(code.includes("sdUv = sdP.xz;") && code.includes("sdPat = sdRock3D(sdP, sdFp)"),
-      "only canonical rock samples continuous 3D; other terrain retains XZ UVs");
+    assert.ok(code.includes("sdUv = sdP.xz;") && code.includes("sdPat = sdRock3D(sdP, sdFp, sdNy)"),
+      "only canonical rock samples continuous 3D (with the face steepness); other terrain retains XZ UVs");
     assert.ok(!code.includes("mix(sdP.xz, sdWallUv"),
       "triangle-dependent UV interpolation must not split rock cells into shard seams");
-    assert.ok(code.includes("sdCliffFacets") && code.includes("mix(0.55, 0.32, sdCliffFacets)"),
-      "both shader backends soften steep rock-face facet contrast while preserving broad nonrock sunlight");
+    assert.ok(code.includes("sdCliffFacets") && code.includes("mix(0.55, 0.40, sdCliffFacets)"),
+      "both shader backends keep steep rock facets moderated (no harsh polygon outlines) while preserving broad nonrock sunlight");
   }
   const lit = surfaceDetailChunks("lit");
   for (const code of [lit.glslMainStart, lit.wgslMainStart])
