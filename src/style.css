@@ -235,6 +235,18 @@ h2 {
   color: var(--gold);
   border-color: var(--gold);
 }
+/* The map controls hug the right screen edge: a tip centred above a button
+   is cut off by the viewport, so these tips open to the button's left. */
+.map-controls [data-tip]::after {
+  left: auto;
+  right: calc(100% + 9px);
+  bottom: 50%;
+  transform: translate(4px, 50%);
+}
+.map-controls [data-tip]:hover::after,
+.map-controls [data-tip]:focus-visible::after {
+  transform: translate(0, 50%);
+}
 .compass {
   height: 63px;
   display: flex;
