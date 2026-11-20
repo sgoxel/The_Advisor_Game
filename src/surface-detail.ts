@@ -106,14 +106,34 @@ vec2 sdCells(vec2 p) {
 }
 float sdVis(float size, float fp) { return smoothstep(1.5, 4.0, size / fp); }
 float sdGroove(float edge, float width, float fp) { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
-vec4 sdRock3D(vec3 p, float fp) {
-  float broad = sdNoise3(p * 0.28), grain = sdNoise3(p * 1.7);
-  float visible = sdVis(2.5, fp);
-  // Smooth, world-anchored rock grain without dark closed noise contours:
-  // those repeated cells read as a tile grid in the original Close cliff.
-  float tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
-  return vec4(vec3(1.0 + tone),
-    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
+// Per-layer tone of one sedimentary band: alternating light/dark plus a hashed offset (about +-15%).
+float sdStrataTone(float b) {
+  return (b - 2.0 * floor(b * 0.5) - 0.5) * 0.11 + (sdHash(vec2(b, 7.13)) - 0.5) * 0.13;
+}
+vec4 sdRock3D(vec3 p, float fp, float ny) {
+  // Four 3D metre-space octaves: 14 m warp, 3.6 m broad, vertical-joint mid, 0.23 m fine.
+  float warp = sdNoise3(p * 0.07); float broad = sdNoise3(p * 0.28);
+  float mid = sdNoise3(p * vec3(1.3, 0.4, 1.3)); float fine = sdNoise3(p * 4.3);
+  float visBroad = sdVis(2.5, fp); float visMid = sdVis(0.5, fp); float visFine = sdVis(0.12, fp);
+  // Strata: bands of world height, gently warped, thickness 0.8-2.9 m from 1D value noise of height.
+  // Steep faces only: on flat rock the same bands would become closed contour rings.
+  float strataY = p.y + (warp - 0.5) * 5.0 + (broad - 0.5) * 0.6;
+  float layerQ = strataY * 0.45; float layerI = floor(layerQ); float layerF = fract(layerQ);
+  float layer = mix(sdHash(vec2(layerI, 3.31)), sdHash(vec2(layerI + 1.0, 3.31)), layerF * layerF * (3.0 - 2.0 * layerF));
+  float strataS = strataY * 0.8 + layer * 0.67; float band = floor(strataS);
+  float bandEdge = smoothstep(1.0 - clamp(0.15 + fp * 3.0, 0.15, 0.6), 1.0, fract(strataS));
+  float bandTone = mix(sdStrataTone(band), sdStrataTone(band + 1.0), bandEdge);
+  float strata = (1.0 - smoothstep(0.2, 0.5, ny)) * sdVis(0.8, fp);
+  // Crevices: soft wide darkening where the joint and fine octaves dip (filled, never an iso-line).
+  float crevice = (1.0 - smoothstep(0.08, 0.38, mid * 0.65 + fine * 0.35)) * visMid;
+  float tone = (broad - 0.5) * 0.26 * visBroad + (mid - 0.5) * 0.20 * visMid + (fine - 0.5) * 0.14 * visFine
+    + bandTone * strata - 0.22 * crevice;
+  float cool = clamp(broad * 0.6 + warp * 0.4 - bandTone * strata * 2.0, 0.0, 1.0);
+  vec3 tint = mix(vec3(1.0), mix(vec3(1.03, 1.0, 0.95), vec3(0.96, 0.99, 1.04), cool), visBroad);
+  // Height: light (harder) layers stand out as small ledges so the sun picks up the layering.
+  return vec4(vec3(1.0 + tone) * tint,
+    (broad - 0.5) * 0.02 + (mid - 0.5) * 0.014 * visMid + (fine - 0.5) * 0.006 * visFine
+    - crevice * 0.012 + bandTone * strata * 0.1);
 }
 vec4 sdBlocks(vec2 uv, vec2 size, float joint, float fp, float toneAmp) {
   vec2 b = uv / size; float row = floor(b.y); b.x += 0.5 * (row - 2.0 * floor(row * 0.5));
@@ -273,7 +293,7 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   vec4 sdPat = vec4(1.0, 1.0, 1.0, 0.0);
   if (sdFp < 0.45 && sdKind > 0.5 && sdStrength > 0.0) {
     ${mode === "terrain"
-      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
+      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp, sdNy); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
       : "sdPat = sdPattern(sdKind, sdUv, sdFp);"}
   }
   float sdFade = (1.0 - smoothstep(0.2, 0.45, sdFp)) * sdStrength;
@@ -302,7 +322,7 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   // Attenuate ONLY steep rock facets, retaining geometric shading elsewhere.
   float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
-  float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  float sdFacetGain = mix(0.55, 0.40, sdCliffFacets);
   sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
@@ -358,12 +378,29 @@ fn sdCells(p: vec2f) -> vec2f {
 }
 fn sdVis(size: f32, fp: f32) -> f32 { return smoothstep(1.5, 4.0, size / fp); }
 fn sdGroove(edge: f32, width: f32, fp: f32) -> f32 { return 1.0 - smoothstep(width * 0.5, width * 0.5 + fp, edge); }
-fn sdRock3D(p: vec3f, fp: f32) -> vec4f {
-  let broad = sdNoise3(p * 0.28); let grain = sdNoise3(p * 1.7);
-  let visible = sdVis(2.5, fp);
-  let tone = (broad - 0.5) * 0.20 * visible + (grain - 0.5) * 0.12 * sdVis(0.4, fp);
-  return vec4f(vec3f(1.0 + tone),
-    (broad - 0.5) * 0.012 + (grain - 0.5) * 0.008);
+// Same strata/grain/crevice rock as GLSL, identical maths.
+fn sdStrataTone(b: f32) -> f32 {
+  return (b - 2.0 * floor(b * 0.5) - 0.5) * 0.11 + (sdHash(vec2f(b, 7.13)) - 0.5) * 0.13;
+}
+fn sdRock3D(p: vec3f, fp: f32, ny: f32) -> vec4f {
+  let warp = sdNoise3(p * 0.07); let broad = sdNoise3(p * 0.28);
+  let mid = sdNoise3(p * vec3f(1.3, 0.4, 1.3)); let fine = sdNoise3(p * 4.3);
+  let visBroad = sdVis(2.5, fp); let visMid = sdVis(0.5, fp); let visFine = sdVis(0.12, fp);
+  let strataY = p.y + (warp - 0.5) * 5.0 + (broad - 0.5) * 0.6;
+  let layerQ = strataY * 0.45; let layerI = floor(layerQ); let layerF = fract(layerQ);
+  let layer = mix(sdHash(vec2f(layerI, 3.31)), sdHash(vec2f(layerI + 1.0, 3.31)), layerF * layerF * (3.0 - 2.0 * layerF));
+  let strataS = strataY * 0.8 + layer * 0.67; let band = floor(strataS);
+  let bandEdge = smoothstep(1.0 - clamp(0.15 + fp * 3.0, 0.15, 0.6), 1.0, fract(strataS));
+  let bandTone = mix(sdStrataTone(band), sdStrataTone(band + 1.0), bandEdge);
+  let strata = (1.0 - smoothstep(0.2, 0.5, ny)) * sdVis(0.8, fp);
+  let crevice = (1.0 - smoothstep(0.08, 0.38, mid * 0.65 + fine * 0.35)) * visMid;
+  let tone = (broad - 0.5) * 0.26 * visBroad + (mid - 0.5) * 0.20 * visMid + (fine - 0.5) * 0.14 * visFine
+    + bandTone * strata - 0.22 * crevice;
+  let cool = clamp(broad * 0.6 + warp * 0.4 - bandTone * strata * 2.0, 0.0, 1.0);
+  let tint = mix(vec3f(1.0), mix(vec3f(1.03, 1.0, 0.95), vec3f(0.96, 0.99, 1.04), cool), visBroad);
+  return vec4f(vec3f(1.0 + tone) * tint,
+    (broad - 0.5) * 0.02 + (mid - 0.5) * 0.014 * visMid + (fine - 0.5) * 0.006 * visFine
+    - crevice * 0.012 + bandTone * strata * 0.1);
 }
 fn sdBlocks(uv: vec2f, size: vec2f, joint: f32, fp: f32, toneAmp: f32) -> vec4f {
   var b = uv / size; let row = floor(b.y); b.x = b.x + 0.5 * (row - 2.0 * floor(row * 0.5));
@@ -524,7 +561,7 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   var sdPat = vec4f(1.0, 1.0, 1.0, 0.0);
   if (sdFp < 0.45 && sdKind > 0.5 && uniform.sdStrength > 0.0) {
     ${mode === "terrain"
-      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
+      ? "if (sdKind > 2.5 && sdKind < 3.5) { sdPat = sdRock3D(sdP, sdFp, sdNy); } else { sdPat = sdPattern(sdKind, sdUv, sdFp); }"
       : "sdPat = sdPattern(sdKind, sdUv, sdFp);"}
   }
   let sdFade = (1.0 - smoothstep(0.2, 0.45, sdFp)) * uniform.sdStrength;
@@ -546,7 +583,7 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
   let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
-  let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
+  let sdFacetGain = mix(0.55, 0.40, sdCliffFacets);
   sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
