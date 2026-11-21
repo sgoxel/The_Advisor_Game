@@ -263,13 +263,21 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   vec3 sdN = cross(sdDx, sdDy); sdN = sdN / max(length(sdN), 1e-12);
   ${mode === "terrain" ? "if (sdN.y < 0.0) { sdN = -sdN; }" : ""}
   float sdNy = abs(sdN.y);
+  // Terrain: the smooth welded vertex normal (render-frame.ts) decides slope
+  // material and macro sun shading, so large Close triangles do not switch
+  // rock/grass or light level at their flat-face edges.
+  ${mode === "terrain" ? `vec3 sdNs = sdN;
+#ifdef LIT_NEEDS_NORMAL
+  sdNs = normalize(vNormalW);
+  if (sdNs.y < 0.0) { sdNs = -sdNs; }
+#endif` : ""}
   vec2 sdT = vec2(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
   // Terrain keeps stable XZ texture for nonrock ground; rock alone receives
   // world-metre 3D noise, so neighboring cliff triangles cannot rotate its UV.
   vec2 sdWallUv = vec2(dot(sdP.xz, sdT), sdNy > 0.2 ? sdP.y / max(length(sdN.xz), 0.2) : sdP.y);
   vec2 sdUv = ${mode === "terrain" ? "sdP.xz" : "sdNy > 0.975 ? sdP.xz : sdWallUv"};
   vec3 sdC = pow(max(vVertexColor.rgb, vec3(0.0)), vec3(1.0 / 2.2));
-  float sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
+  float sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), abs(sdNs.y))" : "sdKindLit(sdC, sdNy)"};
   vec4 sdPat = vec4(1.0, 1.0, 1.0, 0.0);
   if (sdFp < 0.45 && sdKind > 0.5 && sdStrength > 0.0) {
     ${mode === "terrain"
@@ -300,10 +308,10 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   // Continuous 3D rock grain is already world-space; the actual Close cliff
   // screenshot's heavy polygon outlines come from per-face sun contrast.
   // Attenuate ONLY steep rock facets, retaining geometric shading elsewhere.
-  float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+  float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, abs(sdNs.y))) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
@@ -513,6 +521,11 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   var sdN = cross(sdDx, sdDy); sdN = sdN / max(length(sdN), 1e-12);
   ${mode === "terrain" ? "if (sdN.y < 0.0) { sdN = -sdN; }" : ""}
   let sdNy = abs(sdN.y);
+  ${mode === "terrain" ? `var sdNs = sdN;
+#ifdef LIT_NEEDS_NORMAL
+  sdNs = normalize(vNormalW);
+  if (sdNs.y < 0.0) { sdNs = -sdNs; }
+#endif` : ""}
   var sdT = vec2f(-sdN.z, sdN.x); sdT = sdT / max(length(sdT), 1e-6);
   let sdWallV = select(sdP.y, sdP.y / max(length(sdN.xz), 0.2), sdNy > 0.2);
   // Physical rock pattern uses continuous 3D position; other terrain retains
@@ -520,7 +533,7 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdWallUv = vec2f(dot(sdP.xz, sdT), sdWallV);
   let sdUv = ${mode === "terrain" ? "sdP.xz" : "select(sdWallUv, sdP.xz, sdNy > 0.975)"};
   let sdC = pow(max(vVertexColor.rgb, vec3f(0.0)), vec3f(1.0 / 2.2));
-  let sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), sdNy)" : "sdKindLit(sdC, sdNy)"};
+  let sdKind = ${mode === "terrain" ? "sdKindTerrain(sdC, smoothstep(0.68, 0.84, vVertexColor.a), abs(sdNs.y))" : "sdKindLit(sdC, sdNy)"};
   var sdPat = vec4f(1.0, 1.0, 1.0, 0.0);
   if (sdFp < 0.45 && sdKind > 0.5 && uniform.sdStrength > 0.0) {
     ${mode === "terrain"
@@ -544,10 +557,10 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdL = normalize(uniform.sdSunDir);
   let sdNb = normalize(sdN - sdGrad);
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
-  let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
+  let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, abs(sdNs.y))) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);

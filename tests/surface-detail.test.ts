@@ -69,6 +69,15 @@ test("WP #550 rock detail stays in continuous 3D metre space across tessellated 
       "both shader backends soften steep rock-face facet contrast while preserving broad nonrock sunlight");
   }
   const lit = surfaceDetailChunks("lit");
+  for (const code of [terrain.glslMainStart, terrain.wgslMainStart]) {
+    assert.ok(code.includes("#ifdef LIT_NEEDS_NORMAL") && code.includes("sdNs = normalize(vNormalW)"),
+      "terrain macro facet term reads the smooth welded vertex normal in both shader languages");
+    assert.ok(code.includes("sdFacetGain * (dot(sdNs, sdL) - sdL.y)"),
+      "macro sun facet term uses the smooth normal, not the screen-derivative face normal");
+  }
+  for (const code of [lit.glslMainStart, lit.wgslMainStart])
+    assert.ok(!code.includes("vNormalW") && !code.includes("sdNs"),
+      "lit (non-terrain) materials keep the face-normal pipeline");
   for (const code of [lit.glslMainStart, lit.wgslMainStart])
     assert.ok(!code.includes("sdPat = sdRock3D"),
       "unchanged building, roof, prop and optional GLB materials keep their existing patterns");
@@ -92,7 +101,7 @@ test("both shader languages carry the same detail pipeline, and only materials t
       if (mode === "terrain") {
         // Physical polygon normals must influence both WebGL2 and WebGPU
         // terrain emission, without adding a fake height or changing flat land.
-        assert.ok(main.includes("dot(sdN, sdL) - sdL.y"), "broad relief responds to actual surface slope");
+        assert.ok(main.includes("dot(sdNs, sdL) - sdL.y"), "broad relief responds to actual surface slope");
         assert.ok(main.includes("dot(sdNb, sdL) - dot(sdN, sdL)"), "micro detail remains additive");
       }
       assert.equal(main.includes("sdGlint ="), mode === "terrain", "terrain adds its own sun glints (water, mud, snow)");
