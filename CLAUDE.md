@@ -39,6 +39,7 @@ Full rules: `docs/AGENTS.md` (short). Product vision: `docs/README.md` (long, do
 - CI logs/artifacts redirect to blob.core.windows.net and are blocked; read failing steps in the built-in browser pane (signed in to GitHub).
 - Captures are slow (2-core software GL). Kill stale captures first (`kill -9 <pid>`; `pkill -f` can match your own shell). Some desktop views near the start village stay at "pending=8" in this sandbox even on clean main: pick a view that settles.
 - screenshot_tool.py needs `python3 -m pip install playwright` and `ADVISOR_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome` (pip Playwright's own browser revision is not installed). fullhd-portrait does not settle locally (main thread not responding); use `phone`/`tablet-portrait` for local portrait checks and CI for full HD.
+- Render units are not metres: 1 source/render unit = ~15.27 m (`CANONICAL_METRES_PER_SOURCE_UNIT`). The local ortho camera eye sits ~1.5 km above the focus, so terrain (max ~356 m) never clips it.
 - No WebGPU adapter locally; WebGPU evidence comes from CI.
 - Pages workflow `pages.yml` is one long serial job; runs queue behind other agents. Check once with a scheduled reminder, never poll in a loop. Never disable CI.
 - Commit trailers: see the session attribution reminder. Claim comment format: `CLAIMED by <AGENT #n, model> at <UTC ISO 8601>`.
