@@ -6,6 +6,7 @@ import {
   WORLD_MIN,
   WORLD_SIZE,
   selectTiles,
+  cameraSideReliefReach,
   tileAt,
   type View,
 } from "../src/world.ts";
@@ -211,4 +212,39 @@ test("one combined-basis decision keeps the ledger and the trim policy in agreem
   // A reservation may reclaim only the space it needs.
   assert.equal(shouldTrimCombinedBytes(950_000_000, budget, 50_000_000), false);
   assert.equal(shouldTrimCombinedBytes(950_000_000, budget, 50_000_001), true);
+});
+test("camera-side relief reach widens fine selection only toward the camera", () => {
+  // Equator focus, yaw 0: camera side is +z; tiles are 4 units so probe the next tile past the legacy ring.
+  const fx = 0.1,
+    fz = 0.1,
+    view: View = { x: fx, z: fz, halfHeight: 2.09, aspect: 16 / 9, yaw: 0, pixels: 720, elevationAngle: Math.PI / 6 },
+    hz = view.halfHeight / Math.sin(Math.PI / 6),
+    flat = () => 130.9,
+    plateau = (_x: number, _z: number) => 217,
+    limit = STREAMING_BUDGETS.desktop.activePatches;
+  assert.equal(cameraSideReliefReach(view, flat, 130.9), 0, "flat ground adds no reach");
+  const reach = cameraSideReliefReach(view, plateau, 130.9);
+  assert.ok(reach > 0 && reach <= 24, `plateau reach ${reach}`);
+  assert.equal(cameraSideReliefReach(view, plateau, 130.9), reach, "deterministic");
+  assert.equal(cameraSideReliefReach({ ...view, halfHeight: 200 }, plateau, 0), 0, "wide scales skip");
+  const base = selectTiles(view, 190, limit).map((t) => t.key),
+    zero = selectTiles({ ...view, cameraSideReach: 0 }, 190, limit).map((t) => t.key);
+  assert.deepEqual(zero, base, "zero reach is identical to the legacy selection");
+  const far = hz + reach * 0.9,
+    px = fx + Math.sin(view.yaw) * far,
+    pz = fz + Math.cos(view.yaw) * far;
+  const contains = (tiles: ReturnType<typeof selectTiles>) =>
+    tiles.some((t) => px >= t.minX && px <= t.minX + t.size && pz >= t.minZ && pz <= t.minZ + t.size);
+  assert.equal(contains(selectTiles(view, 190, limit)), false, "legacy ring misses the camera-side point");
+  const widened = selectTiles({ ...view, cameraSideReach: reach }, 190, limit);
+  assert.ok(contains(widened), "widened ring covers the camera-side point");
+  const baseSet = new Set(base);
+  assert.ok(widened.some((t) => !baseSet.has(t.key)) && base.every((k) => widened.some((t) => t.key === k)), "widened is a strict superset");
+  assert.deepEqual(
+    widened.map((t) => t.key),
+    selectTiles({ ...view, cameraSideReach: reach }, 190, limit).map((t) => t.key),
+  );
+  // Away from the camera nothing is added: far-side tiles are unchanged.
+  const maxBack = (tiles: ReturnType<typeof selectTiles>) => Math.min(...tiles.map((t) => t.minZ));
+  assert.equal(maxBack(widened), maxBack(selectTiles(view, 190, limit)));
 });

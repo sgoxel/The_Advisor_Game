@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-004-001 — Hero/Close physical 3D: first-hit cliffs, canonical mesh/feet parity, legal graded street→owned door — 2026-11-06: rock contour shader fix + portrait inspector gutter + Close-stop cliff capture shipped; relief-view Close camera dips under terrain (open); 2026-11-20: map-control tooltip clipping fixed (deployed), Close relief strata-through-plateau overlap reproduced (open); 2026-11-21: camera-under-terrain cause ruled out (eye ~1.5 km above focus, terrain max 356 m); cell-stepped rock colour boundary FIXED (ridge pathPosition relief seam + riverbank tint edge; relief context 8/10); 2026-11-21: Close view flat-shaded triangle X pattern below the bank (7/10, open)
+- WP-S003-004-001 — Hero/Close physical 3D: first-hit cliffs, canonical mesh/feet parity, legal graded street→owned door — 2026-11-06: rock contour shader fix + portrait inspector gutter + Close-stop cliff capture shipped; relief-view Close camera dips under terrain (open); 2026-11-20: map-control tooltip clipping fixed (deployed), Close relief strata-through-plateau overlap reproduced (open); 2026-11-21: camera-under-terrain cause ruled out (eye ~1.5 km above focus, terrain max 356 m); cell-stepped rock colour boundary FIXED (ridge pathPosition relief seam + riverbank tint edge; relief context 8/10); 2026-11-21: Close view flat-shaded triangle X pattern below the bank (7/10, open); 2026-11-21: Close bottom skirt band/X fixed (camera-side relief tile reach), phone UI overlaps + tile seams open
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 

@@ -949,6 +949,8 @@ export type View = {
   pixels: number;
   /** Optional explicit, presentation-only low-angle terrain inspection. */
   elevationAngle?: number;
+  /** Source units of extra selection toward the camera (tall ground in front of the focus). */
+  cameraSideReach?: number;
 };
 /** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
 /** Local presentation angle is a player-view state, not a function of zoom.
@@ -982,6 +984,39 @@ const POLE_ACTIVE_PATCH_LIMIT = 16;
  * the source-domain search so the tangent view receives a complete ring of
  * canonical coverage instead of a narrow equirectangular wedge.
  */
+const CAMERA_SIDE_MAX_REACH = 24;
+const CAMERA_SIDE_MAX_HALF_HEIGHT = 64;
+const CAMERA_SIDE_SAMPLES = 12;
+/**
+ * Extra camera-side source reach needed because ground standing above the focus
+ * height stays on screen farther toward the camera in the tilted ortho view:
+ * visible iff t*sin(a) - dh*cos(a) <= halfHeight. Bounded (<= 12 samples).
+ */
+export function cameraSideReliefReach(
+  view: View,
+  heightAt: (x: number, z: number) => number,
+  focusHeightM: number,
+): number {
+  if (!(view.halfHeight <= CAMERA_SIDE_MAX_HALF_HEIGHT)) return 0;
+  const focus = sourceToLonLat(view.x, view.z);
+  if (Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12) return 0;
+  const angle = view.elevationAngle ?? cameraElevationForHalfHeight(view.halfHeight),
+    sinA = Math.sin(angle),
+    cosA = Math.cos(angle),
+    hz = view.halfHeight / sinA,
+    longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
+    sx = Math.sin(view.yaw) / longitudeScale,
+    cz = Math.cos(view.yaw),
+    step = CAMERA_SIDE_MAX_REACH / CAMERA_SIDE_SAMPLES;
+  let reach = 0;
+  for (let i = 1; i <= CAMERA_SIDE_SAMPLES; i++) {
+    const t = hz + i * step,
+      dh = (heightAt(view.x + sx * t, view.z + cz * t) - focusHeightM) / CANONICAL_METRES_PER_SOURCE_UNIT;
+    if (t * sinA - dh * cosA <= view.halfHeight) reach = Math.max(reach, i * step);
+  }
+  return reach > 0 ? Math.min(CAMERA_SIDE_MAX_REACH, reach + step) : 0;
+}
+
 export function selectTiles(
   view: View,
   threshold = 190,
@@ -998,15 +1033,20 @@ export function selectTiles(
       : activeLimit,
     streamX = atPole ? 0 : view.x,
     longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
+    reach = atPole ? 0 : Math.max(0, view.cameraSideReach ?? 0),
+    reachX = (Math.sin(view.yaw) * reach) / 2 / longitudeScale,
+    reachZ = (Math.cos(view.yaw) * reach) / 2,
     rx = atPole
       ? WORLD_SIZE / 2
-      : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
-    rz = bounds.rz,
+      : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale + Math.abs(reachX)),
+    rz = bounds.rz + Math.abs(reachZ),
+    boxX = streamX + reachX,
+    boxZ = view.z + reachZ,
     selected = new Map<string, Tile>(),
-    centres = [streamX];
+    centres = [boxX];
 
-  if (streamX - rx < WORLD_MIN) centres.push(streamX + WORLD_SIZE);
-  if (streamX + rx > -WORLD_MIN) centres.push(streamX - WORLD_SIZE);
+  if (boxX - rx < WORLD_MIN) centres.push(boxX + WORLD_SIZE);
+  if (boxX + rx > -WORLD_MIN) centres.push(boxX - WORLD_SIZE);
 
   const visit = (t: Tile, centreX: number) => {
     const maxZ = t.minZ + t.size;
@@ -1024,8 +1064,8 @@ export function selectTiles(
     if (
       t.minX > centreX + rx ||
       t.minX + t.size < centreX - rx ||
-      t.minZ > view.z + rz ||
-      maxZ < view.z - rz
+      t.minZ > boxZ + rz ||
+      maxZ < boxZ - rz
     )
       return;
     const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);

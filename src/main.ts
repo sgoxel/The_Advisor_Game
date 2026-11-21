@@ -41,6 +41,7 @@ import {
   resolvedSettlementHomeDoorFor,
   finalSurfaceEvidenceAnchors,
   selectTiles,
+  cameraSideReliefReach,
   featuresFor,
   tileForPosition,
   cameraElevationForHalfHeight,
@@ -1093,7 +1094,7 @@ function prefetchCandidates(): Tile[] {
     ...nearbyCriticalSites(view.x, view.z, metresToSource(30_000), 2).map((site) => ({ x: site.x, z: site.z, halfHeight: 25 })),
   ];
   for (const destination of destinations)
-    for (const tile of selectTiles({ ...view, x: destination.x, z: destination.z, halfHeight: Math.min(view.halfHeight, destination.halfHeight) }, 190, 6)) push(tile, 1.5);
+    for (const tile of selectTiles({ ...view, cameraSideReach: 0, x: destination.x, z: destination.z, halfHeight: Math.min(view.halfHeight, destination.halfHeight) }, 190, 6)) push(tile, 1.5);
   return out.sort((a, b) => a.distance - b.distance).map((entry) => entry.tile).slice(0, 96);
 }
 /**
@@ -1167,6 +1168,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
 }
 function refreshSelection() {
   // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
+  view.cameraSideReach = cameraSideReliefReach(view, (x, z) => localVisibleSurfaceHeight(x, z), localVisibleSurfaceHeight(view.x, view.z));
   wanted = selectTiles(view, 190, Math.floor(streamingBudget.activePatches / 2));
   coverageTiles = selectTiles(view, Math.max(512,view.pixels*.75), 16);
   coverageComplete = false; coverageStartedAt = performance.now(); coverageDurationMs = 0;
