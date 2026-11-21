@@ -303,15 +303,7 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  // Close adaptive meshes carry smooth indexed vertex normals. Light the macro
-  // slope with them so large Close triangles do not show a flat-shaded X/fan
-  // pattern; wider footprints fade back to the face normal (no seam at LOD).
-  vec3 sdNs = sdN;
-  #ifdef LIT_NEEDS_NORMAL
-  vec3 sdNv = normalize(vNormalW); if (sdNv.y < 0.0) { sdNv = -sdNv; }
-  sdNs = normalize(mix(sdN, sdNv, 1.0 - smoothstep(0.2, 0.45, sdFp)));
-  #endif
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
@@ -555,12 +547,7 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  var sdNs = sdN;
-  #ifdef LIT_NEEDS_NORMAL
-  var sdNv = normalize(vNormalW); if (sdNv.y < 0.0) { sdNv = -sdNv; }
-  sdNs = normalize(mix(sdN, sdNv, 1.0 - smoothstep(0.2, 0.45, sdFp)));
-  #endif
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);

@@ -92,12 +92,7 @@ test("both shader languages carry the same detail pipeline, and only materials t
       if (mode === "terrain") {
         // Physical polygon normals must influence both WebGL2 and WebGPU
         // terrain emission, without adding a fake height or changing flat land.
-        assert.ok(main.includes("dot(sdNs, sdL) - sdL.y"), "broad relief responds to actual surface slope");
-        // Close triangles light from the interpolated smooth vertex normal (no
-        // flat-shaded X/fan pattern); wide footprints fade back to the face normal.
-        assert.ok(main.includes("#ifdef LIT_NEEDS_NORMAL") && main.includes("normalize(vNormalW)") &&
-          main.includes("mix(sdN, sdNv, 1.0 - smoothstep(0.2, 0.45, sdFp))"),
-          "Close macro shading uses the smooth vertex normal, blended to the face normal with distance");
+        assert.ok(main.includes("dot(sdN, sdL) - sdL.y"), "broad relief responds to actual surface slope");
         assert.ok(main.includes("dot(sdNb, sdL) - dot(sdN, sdL)"), "micro detail remains additive");
       }
       assert.equal(main.includes("sdGlint ="), mode === "terrain", "terrain adds its own sun glints (water, mud, snow)");
