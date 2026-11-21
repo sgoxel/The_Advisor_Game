@@ -82,6 +82,60 @@ test("ENU conversion smooths shared terrain slopes without shifting canonical he
     "normal reconstruction must never modify canonical terrain height");
 });
 
+test("terrain normals weld across non-indexed triangles but skirts and other layers stay flat", () => {
+  const tile = tileAt(12, 2048, 2048);
+  const make = () => ({
+    // Triangles A (0-2) and B (3-5) share the edge (-1,0,-1)-(-1,0,1) with
+    // different slopes; skirt S (6-8) hangs straight down from that top edge.
+    positions: new Float32Array([
+      -1, 0, -1,  -1, 0, 1,  1, 30, 1,
+      -1, 0, -1,  1, 30, 1,  1, 0, -1,
+      -1, 0, -1,  -1, -100, -1,  -1, 0, 1,
+    ]),
+    normals: new Float32Array(27),
+    indices: new Uint32Array([0, 1, 2, 3, 4, 5, 6, 7, 8]),
+    colors: new Uint8Array(36),
+  });
+  const terrain = make();
+  convertTileGeometryToEnu(tile, { terrain } as ReturnType<typeof buildTile>);
+  const n = (g: ReturnType<typeof make>, v: number) => [0, 1, 2].map(a => g.normals[v * 3 + a]);
+  // (a) shared-edge vertices (0,3) and (1,4) get identical smooth normals.
+  for (const [a, b] of [[0, 3], [2, 4]] as const)
+    for (let axis = 0; axis < 3; axis++)
+      close(n(terrain, a)[axis], n(terrain, b)[axis], 1e-6, `welded vertices ${a}/${b} axis ${axis}`);
+  // vertex 1 (A) and vertex 8 (skirt) are coincident top points; only the
+  // non-vertical faces may contribute, so the top normal has no skirt bend.
+  const face = (g: ReturnType<typeof make>, a: number, b: number, c: number) => {
+    const p = g.positions, i = a * 3, j = b * 3, k = c * 3;
+    const ux = p[j] - p[i], uy = p[j + 1] - p[i + 1], uz = p[j + 2] - p[i + 2];
+    const vx = p[k] - p[i], vy = p[k + 1] - p[i + 1], vz = p[k + 2] - p[i + 2];
+    const f = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx], l = Math.hypot(...f);
+    return f.map(v => v / l);
+  };
+  const A = face(terrain, 0, 1, 2), B = face(terrain, 3, 4, 5);
+  assert.ok(Math.hypot(...A.map((v, i) => v - B[i])) > 0.05, "fixture needs distinct slopes");
+  // Vertex 0 touches A and B only among top faces (area-weighted by cross product).
+  const crossA = (() => { const p = terrain.positions; const u = [p[3]-p[0], p[4]-p[1], p[5]-p[2]], w = [p[6]-p[0], p[7]-p[1], p[8]-p[2]]; return [u[1]*w[2]-u[2]*w[1], u[2]*w[0]-u[0]*w[2], u[0]*w[1]-u[1]*w[0]]; })();
+  const crossB = (() => { const p = terrain.positions; const u = [p[12]-p[9], p[13]-p[10], p[14]-p[11]], w = [p[15]-p[9], p[16]-p[10], p[17]-p[11]]; return [u[1]*w[2]-u[2]*w[1], u[2]*w[0]-u[0]*w[2], u[0]*w[1]-u[1]*w[0]]; })();
+  const sum = crossA.map((v, i) => v + crossB[i]), sumLen = Math.hypot(...sum);
+  for (let axis = 0; axis < 3; axis++)
+    close(n(terrain, 0)[axis], sum[axis] / sumLen, 1e-5, `top vertex normal axis ${axis} ignores the skirt`);
+  // (b) the skirt triangle keeps its own horizontal face normal.
+  const S = face(terrain, 6, 7, 8);
+  assert.ok(Math.abs(S[1]) < 1e-6 && Math.abs(Math.hypot(S[0], S[2]) - 1) < 1e-6, "skirt face is vertical");
+  for (const v of [6, 7, 8])
+    for (let axis = 0; axis < 3; axis++)
+      close(n(terrain, v)[axis], S[axis], 1e-5, `skirt vertex ${v} keeps its horizontal face normal`);
+  // (c) other layers retain exact per-face normals for coincident non-indexed vertices.
+  const nature = make();
+  convertTileGeometryToEnu(tile, { nature } as unknown as ReturnType<typeof buildTile>);
+  const fA = face(nature, 0, 1, 2), fB = face(nature, 3, 4, 5);
+  for (let axis = 0; axis < 3; axis++) {
+    close(n(nature, 0)[axis], fA[axis], 1e-5, "non-terrain vertex keeps flat face normal A");
+    close(n(nature, 3)[axis], fB[axis], 1e-5, "non-terrain vertex keeps flat face normal B");
+  }
+});
+
 test("worker mesh winding and rebased patch placement use the same south axis", () => {
   const tile = tileAt(12, 2047, 2300),
     x = tile.minX + tile.size / 2,

@@ -293,6 +293,13 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   ${mode === "terrain" ? `
   vec3 sdL = normalize(sdSunDir);
   vec3 sdNb = normalize(sdN - sdGrad);
+  // Smooth interpolated vertex normal (welded in render-frame.ts) drives the
+  // macro sun facet term so base-grid triangles do not show a flat-shaded X.
+  vec3 sdNs = sdN;
+#ifdef LIT_NEEDS_NORMAL
+  sdNs = normalize(vNormalW);
+  if (sdNs.y < 0.0) { sdNs = -sdNs; }
+#endif
   float sdDay = smoothstep(-0.05, 0.25, sdL.y);
   // Physical slope faces catch daylight before micro-bump shading. A flat
   // patch has dot(sdN, sdL) == sdL.y, so existing level roads and fields
@@ -303,7 +310,7 @@ const glslMainStart = (mode: SurfaceDetailMode) => `
   float sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   float sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   // Sun glints on water, wet mud and snow (the terrain is unlit, so the highlight is added here).
   vec3 sdV = normalize(view_position - vPositionW);
@@ -543,11 +550,16 @@ const wgslMainStart = (mode: SurfaceDetailMode) => `
   ${mode === "terrain" ? `
   let sdL = normalize(uniform.sdSunDir);
   let sdNb = normalize(sdN - sdGrad);
+  var sdNs = sdN;
+#ifdef LIT_NEEDS_NORMAL
+  sdNs = normalize(vNormalW);
+  if (sdNs.y < 0.0) { sdNs = -sdNs; }
+#endif
   let sdDay = smoothstep(-0.05, 0.25, sdL.y);
   let sdCliffFacets = (1.0 - smoothstep(0.25, 0.65, sdNy)) *
     (1.0 - step(0.5, abs(sdKind - 3.0)));
   let sdFacetGain = mix(0.55, 0.32, sdCliffFacets);
-  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdN, sdL) - sdL.y) +
+  sdShade = clamp(1.0 + (sdFacetGain * (dot(sdNs, sdL) - sdL.y) +
     1.3 * (dot(sdNb, sdL) - dot(sdN, sdL))) * sdDay, 0.55, 1.45);
   let sdV = normalize(uniform.view_position - vPositionW);
   let sdSpecDot = max(dot(reflect(-sdL, sdNb), sdV), 0.0);

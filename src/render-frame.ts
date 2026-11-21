@@ -144,14 +144,36 @@ function surfacePositionFromEnu(
   return enuToPosition({ east, north, up }, origin);
 }
 
-/** Recompute normals in the right-handed render frame: east, up, south. */
-function recomputeNormals(geometry: Geometry) {
+/** Faces with |ny| / length below this are tile skirts / walls, never top surface. */
+const VERTICAL_FACE_RATIO = 0.05;
+
+/**
+ * Recompute normals in the right-handed render frame: east, up, south.
+ *
+ * Non-terrain layers accumulate area-weighted face normals per vertex INDEX, so
+ * indexed meshes smooth and non-indexed meshes stay flat.
+ *
+ * Terrain (`weld`) is built non-indexed (each triangle owns its 3 vertices), which
+ * would render flat-shaded with a hard light/dark "X" where the base-grid centre
+ * fans meet. Coincident vertices from adjacent triangles carry bit-identical
+ * Float32 positions, so terrain additionally welds by exact position (typed-array
+ * open-addressing hash, no string keys) and shares one smooth area-weighted
+ * normal across the group. Near-vertical faces (skirts) are excluded from the
+ * shared sum so they keep their own face normal and never bend the top surface.
+ */
+function recomputeNormals(geometry: Geometry, weld = false) {
   const { positions, normals, indices } = geometry;
   normals.fill(0);
+  const vertexCount = positions.length / 3;
+  // Per-index accumulation of every face (current behaviour), plus a second
+  // accumulation of non-vertical faces only when welding.
+  const top = weld ? new Float32Array(vertexCount * 3) : null;
+  const hasTop = weld ? new Uint8Array(vertexCount) : null;
   for (let i = 0; i < indices.length; i += 3) {
-    const ia = indices[i] * 3,
-      ib = indices[i + 1] * 3,
-      ic = indices[i + 2] * 3,
+    const a = indices[i], b = indices[i + 1], c = indices[i + 2],
+      ia = a * 3,
+      ib = b * 3,
+      ic = c * 3,
       ux = positions[ib] - positions[ia],
       uy = positions[ib + 1] - positions[ia + 1],
       uz = positions[ib + 2] - positions[ia + 2],
@@ -175,6 +197,15 @@ function recomputeNormals(geometry: Geometry) {
     normals[ic] += nx;
     normals[ic + 1] += ny;
     normals[ic + 2] += nz;
+    if (top && hasTop) {
+      const length = Math.hypot(nx, ny, nz);
+      if (length > 0 && Math.abs(ny) / length >= VERTICAL_FACE_RATIO) {
+        top[ia] += nx; top[ia + 1] += ny; top[ia + 2] += nz;
+        top[ib] += nx; top[ib + 1] += ny; top[ib + 2] += nz;
+        top[ic] += nx; top[ic + 1] += ny; top[ic + 2] += nz;
+        hasTop[a] = 1; hasTop[b] = 1; hasTop[c] = 1;
+      }
+    }
   }
   for (let i = 0; i < normals.length; i += 3) {
     const length = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
@@ -182,6 +213,55 @@ function recomputeNormals(geometry: Geometry) {
     normals[i] /= length;
     normals[i + 1] /= length;
     normals[i + 2] /= length;
+  }
+  if (!top || !hasTop) return;
+
+  // Weld: open-addressing hash over the exact Float32 bit pattern of positions.
+  // -0 is canonicalised to +0 so equal coordinates always share a group.
+  const bits = new Uint32Array(positions.buffer, positions.byteOffset, positions.length);
+  const coord = (k: number) => (bits[k] === 0x80000000 ? 0 : bits[k]);
+  let capacity = 16;
+  while (capacity < vertexCount * 2) capacity <<= 1;
+  const mask = capacity - 1;
+  const slots = new Int32Array(capacity).fill(-1); // representative vertex per slot
+  const group = new Int32Array(vertexCount);
+  const sum = new Float32Array(vertexCount * 3); // indexed by representative
+  for (let v = 0; v < vertexCount; v++) {
+    const k = v * 3,
+      x = coord(k), y = coord(k + 1), z = coord(k + 2);
+    let h = Math.imul(x, 0x9e3779b1) ^ Math.imul(y, 0x85ebca6b) ^ Math.imul(z, 0xc2b2ae35);
+    h ^= h >>> 15;
+    h = Math.imul(h, 0x2c1b3c6d);
+    h ^= h >>> 13;
+    let slot = h & mask;
+    for (;;) {
+      const rep = slots[slot];
+      if (rep < 0) {
+        slots[slot] = v;
+        group[v] = v;
+        break;
+      }
+      const r = rep * 3;
+      if (coord(r) === x && coord(r + 1) === y && coord(r + 2) === z) {
+        group[v] = rep;
+        break;
+      }
+      slot = (slot + 1) & mask;
+    }
+    const g = group[v] * 3;
+    sum[g] += top[k];
+    sum[g + 1] += top[k + 1];
+    sum[g + 2] += top[k + 2];
+  }
+  for (let v = 0; v < vertexCount; v++) {
+    if (!hasTop[v]) continue;
+    const g = group[v] * 3,
+      length = Math.hypot(sum[g], sum[g + 1], sum[g + 2]);
+    if (length === 0) continue;
+    const k = v * 3;
+    normals[k] = sum[g] / length;
+    normals[k + 1] = sum[g + 1] / length;
+    normals[k + 2] = sum[g + 2] / length;
   }
 }
 
@@ -222,7 +302,7 @@ export function convertTileGeometryToEnu(
       if(kind === "terrain") p[i + 1] = Math.fround(elevationToRenderY(p[i + 1]));
       p[i + 2] = fz;
     }
-    recomputeNormals(geometry);
+    recomputeNormals(geometry, kind === "terrain");
   }
   return { maxHorizontalM, maxFloat32ErrorM };
 }
