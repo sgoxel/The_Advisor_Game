@@ -118,7 +118,14 @@
   transition: opacity var(--ui-fast) var(--ui-ease), transform var(--ui-fast) var(--ui-ease);
 }
 
-[data-tip]:hover::after,
+/* Touch screens keep :hover after a tap, which would leave the tip stuck
+   over neighbouring panels; only real hover devices show tips on hover. */
+@media (hover: hover) {
+  [data-tip]:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
 [data-tip]:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
