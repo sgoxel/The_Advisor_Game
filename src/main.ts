@@ -158,6 +158,7 @@ import { nextPixelRatio, RESOLUTION_DECISION_SECONDS } from "./render-resolution
 import { residentGpuHitAllows } from "./resident-gpu-pick.ts";
 import { structuralMeshBlocksSegment, residentOcclusionReachDepth } from "./resident-scene-occlusion.ts";
 import { BoundedTimingSamples, ResidentQueryPhaseSamples, TileWorkerPhaseSamples } from "./streaming-metrics.ts";
+import { reliefFacingYaw } from "./relief-view.ts";
 
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
@@ -1812,6 +1813,8 @@ function inspectCell(screenX: number, screenY: number) {
 function setTerrainReliefView(enabled: boolean, updateNow = true) {
   bridgeInspectionAngle = enabled;
   view.elevationAngle = enabled ? Math.PI / 6 : undefined;
+  if (enabled)
+    view.yaw = reliefFacingYaw((sx, sz) => localVisibleSurfaceHeight(sx, sz), view.x, view.z, Math.max(4, view.halfHeight * 2), view.yaw, 10, 2 * view.halfHeight * CANONICAL_METRES_PER_SOURCE_UNIT);
   residentSearchWindow = undefined;
   const control = document.getElementById("relief-view");
   if (control) {
