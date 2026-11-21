@@ -223,6 +223,9 @@ function smooth01(value: number) {
   const t = Math.max(0, Math.min(1, value));
   return t * t * (3 - 2 * t);
 }
+const PATH_BLEND_BAND = 0.2;
+let segmentScratchD = new Float64Array(64),
+  segmentScratchT = new Float64Array(64);
 type MountainHit = { system: MountainSystem; reliefM: number; intensity: number } | null;
 function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): MountainHit {
   const continent = plan.continents[continentId],
@@ -239,18 +242,37 @@ function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): Moun
         local.north - system.localPath[0][1],
       );
     } else {
-      for (let i = 0; i < system.localPath.length - 1; i++) {
+      const segments = system.localPath.length - 1;
+      if (segments > segmentScratchD.length) {
+        segmentScratchD = new Float64Array(segments);
+        segmentScratchT = new Float64Array(segments);
+      }
+      for (let i = 0; i < segments; i++) {
         const hit = segmentDistance(
           local.east,
           local.north,
           ...system.localPath[i],
           ...system.localPath[i + 1],
         );
-        if (hit.distance < distance) {
-          distance = hit.distance;
-          pathPosition = i + hit.t;
-        }
+        segmentScratchD[i] = hit.distance;
+        segmentScratchT[i] = hit.t;
+        if (hit.distance < distance) distance = hit.distance;
       }
+      // Nearest-segment pathPosition jumps at the bisector on the inner side of a ridge
+      // bend, which steps width/ridge variation and relief. Blend positions of segments
+      // within a small band of the minimum (compact support: a lone nearest segment keeps
+      // its exact position) so pathPosition, and thus relief, is continuous.
+      const band = Math.max(width * PATH_BLEND_BAND, 1e-9);
+      let weightSum = 0,
+        positionSum = 0;
+      for (let i = 0; i < segments; i++) {
+        const falloff = 1 - (segmentScratchD[i] - distance) / band;
+        if (falloff <= 0) continue;
+        const weight = falloff * falloff;
+        weightSum += weight;
+        positionSum += weight * (i + segmentScratchT[i]);
+      }
+      pathPosition = positionSum / weightSum;
     }
     const pathT =
         system.localPath.length === 1

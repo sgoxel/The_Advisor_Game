@@ -175,3 +175,20 @@ test("macro sampling is order-independent and globe/local presentation reads the
     assert.deepEqual(globeSurfaceColor(x, z), flatBytes);
   }
 });
+
+test("mountain relief stays continuous across the inner side of a ridge bend", () => {
+  // Regression: pathPosition used to snap to the nearest polyline segment, so relief
+  // stepped ~6 m across the bisector of a concave ridge bend near this seam.
+  const x = -26793.3,
+    step = 0.0005,
+    relief = (z: number) => macroSampleAt(sourceToLonLat(x, z)).reliefM;
+  let previous = relief(27319.2);
+  for (let i = 1; i <= 60; i++) {
+    const current = relief(27319.2 + i * step);
+    assert.ok(
+      Math.abs(current - previous) < 0.05,
+      `relief jumped ${Math.abs(current - previous)} m at z=${27319.2 + i * step}`,
+    );
+    previous = current;
+  }
+});
