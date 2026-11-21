@@ -372,7 +372,8 @@ export function terrainTint(
   if(surface.groundMaterial==='Riverbank'){
     const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
     result=blendColor(result,color(151,143,99),bankWeight*.75);
-    result=blendColor(result,TERRAIN_PALETTE.cliff,smoothstep(.25,.68,natural.slope)*.6);
+    // Fade the cliff tint to 0 with bankWeight so the bank's constant slope estimate leaves no colour step at its outer edge.
+    result=blendColor(result,TERRAIN_PALETTE.cliff,smoothstep(.25,.68,natural.slope)*.6*smoothstep(0,.25,bankWeight));
   }
   if(surface.water.kind==='river'){
     // A sub-texel channel occupies a fraction of a coarse albedo texel; it must

@@ -86,3 +86,14 @@ test('road representation uses canonical cartography at 1/50–1/100, close grou
  for(const d of [50,100])assert.equal(roadRepresentationAtScale(d),'cartographic');
  for(const d of [101,250,1000])assert.equal(roadRepresentationAtScale(d),'hidden');
 });
+
+test('riverbank outer edge fades the cliff tint continuously instead of stepping against neighbouring terrain',()=>{
+  const z=27331.75066655874;
+  let prev: number[]|undefined, worst=0;
+  for(let i=0;i<=14;i++){
+    const x=-26811.0+i*0.05, cur=[...new Uint8Array(terrainTint(x,z))];
+    if(prev) worst=Math.max(worst,...cur.map((c,k)=>Math.abs(c-prev![k])));
+    prev=cur;
+  }
+  assert.ok(worst<6,`max per-channel step along the bank edge was ${worst}`);
+});
