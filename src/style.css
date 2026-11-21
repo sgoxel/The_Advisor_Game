@@ -243,7 +243,11 @@ h2 {
   bottom: 50%;
   transform: translate(4px, 50%);
 }
-.map-controls [data-tip]:hover::after,
+@media (hover: hover) {
+  .map-controls [data-tip]:hover::after {
+    transform: translate(0, 50%);
+  }
+}
 .map-controls [data-tip]:focus-visible::after {
   transform: translate(0, 50%);
 }
@@ -1532,9 +1536,22 @@ body.globe-mode .travel-button {
   body:has(#npc-popup:not([hidden])) .telemetry,
   body:has(#npc-popup:not([hidden])) .map-controls { visibility: hidden; pointer-events: none; }
   .region-panel .eyebrow, .world-clock .eyebrow { font-size: 11px; }
-  #focus-coordinates { font-size: 11px; }
-  .telemetry { font-size: 10px; }
+  #focus-coordinates { font-size: 11px; bottom: calc(96px + env(safe-area-inset-bottom)); }
+  /* One status line: wrapping grew the chip up under the coordinate pill. */
+  .telemetry { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The inspected point is the screen centre: keep the inspector in the
+     upper half (it scrolls) so the point and the terrain below stay visible
+     and the panel stays clear of the Advisor bubble and map controls.
+     The id outranks popup-panels.css's shared .panel max-height. */
+  #cell-panel {
+    top: calc(144px + env(safe-area-inset-top));
+    bottom: auto;
+    max-height: calc(50dvh - 160px - env(safe-area-inset-top));
+  }
 }
+/* Map-control tips open leftwards, over the inspector or the Advisor bubble
+   beside it; with the inspector open the native title still names the button. */
+body:has(#cell-panel:not([hidden])) .map-controls [data-tip]::after { display: none; }
 /* A full-HD portrait Hero view places the selected actor at canvas centre.
    Keep the readable inspector to its right rather than covering his body.
    Only presentation placement changes; source picking and feet remain intact. */
@@ -2076,6 +2093,12 @@ footer.bottom-bar > * { pointer-events: auto; }
     right: auto;
     bottom: calc(124px + env(safe-area-inset-bottom));
   }
+}
+/* popup-panels.css makes every .panel a scroll box with a stable gutter;
+   on the collapsed bubble that clipped the round shadow into a square. */
+.advisor-panel[data-expanded="false"] {
+  overflow: visible !important;
+  scrollbar-gutter: auto;
 }
 .advisor-panel[data-expanded="false"] .advisor-titles { display: none; }
 .advisor-head #advisor-toggle {
